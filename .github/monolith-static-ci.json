@@ -181,6 +181,18 @@
         }
       },
       {
+        "name": "AICapability",
+        "script": "Scripts/ai_capability_benchmark.py",
+        "manifest": "Benchmarks/AICapability/manifest.json",
+        "tasks": "Benchmarks/AICapability/tasks.jsonl",
+        "manifest_count_field": "task_count",
+        "manifest_path_field": "task_file",
+        "default_path_attrs": {
+          "DEFAULT_TASKS": "tasks",
+          "DEFAULT_MANIFEST": "manifest"
+        }
+      },
+      {
         "name": "SchemaCompleteness",
         "script": "Scripts/schema_completeness_benchmark.py",
         "manifest": "Benchmarks/SchemaCompleteness/manifest.json",
@@ -224,6 +236,46 @@
       {
         "name": "AssetEditing",
         "script": "Scripts/test_asset_editing_benchmark.py"
+      },
+      {
+        "name": "AICapability",
+        "script": "Scripts/test_ai_capability_benchmark.py"
+      },
+      {
+        "name": "OfflineParity",
+        "script": "Scripts/test_offline_parity_benchmark.py"
+      },
+      {
+        "name": "ActionGuidanceRoutingWeight",
+        "script": "Scripts/tests/test_action_guidance_routing_weight.py"
+      },
+      {
+        "name": "BenchmarkCommonPagination",
+        "script": "Scripts/tests/test_benchmark_common_pagination.py"
+      },
+      {
+        "name": "BenchmarkCommonTransportGate",
+        "script": "Scripts/tests/test_benchmark_common_transport_gate.py"
+      },
+      {
+        "name": "BenchmarkCommonTaskCorpus",
+        "script": "Scripts/tests/test_benchmark_common_task_corpus.py"
+      },
+      {
+        "name": "InvocationLogBenchmarkNoise",
+        "script": "Scripts/tests/test_invocation_log_benchmark_noise.py"
+      },
+      {
+        "name": "SchemaCompletenessEnumeration",
+        "script": "Scripts/tests/test_schema_completeness_enumeration.py"
+      },
+      {
+        "name": "SchemaCompletenessValueDomain",
+        "script": "Scripts/tests/test_schema_completeness_value_domain.py"
+      },
+      {
+        "name": "BenchmarkCIInventory",
+        "script": "Scripts/tests/test_benchmark_ci_inventory.py"
       }
     ]
   },

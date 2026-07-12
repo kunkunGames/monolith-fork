@@ -76,15 +76,51 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
-from benchmark_common import attach_benchmark_inputs, build_benchmark_inputs, display_path, resolve_plugin_path
+from benchmark_common import (
+    benchmark_routing_context,
+    DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
+    DEFAULT_MAX_TRANSPORT_FAILED_FRACTION,
+    DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES,
+    TaskCorpus,
+    TaskCorpusContractError,
+    TransportFailureTracker,
+    attach_benchmark_inputs,
+    build_benchmark_inputs,
+    classify_mcp_protocol_failure,
+    display_path,
+    load_task_corpus,
+    resolve_plugin_path,
+    status_identity,
+    status_identity_mismatches,
+    task_corpus_metadata,
+    validate_mcp_status_response,
+)
 
 
 DEFAULT_MCP_URL = "http://localhost:9316/mcp"
 DEFAULT_TASKS = pathlib.Path("Benchmarks/AICapability/tasks.jsonl")
 DEFAULT_MANIFEST = pathlib.Path("Benchmarks/AICapability/manifest.json")
 DEFAULT_RESULTS_ROOT = pathlib.Path("Saved/Monolith/Benchmarks/AICapability")
+
+RUN_OUTPUT_FILENAMES = (
+    "summary.json",
+    "partial_summary.json",
+    "per_task.json",
+    "per_task.jsonl",
+    "run_failure.json",
+)
+
+AI_TASK_CATEGORIES = {
+    "compile_gate",
+    "discovery",
+    "duplicate_reject",
+    "edit_execute",
+    "edit_schema",
+    "error_path",
+    "read_schema",
+}
 
 # The MCP tool name for the ai namespace (verified: Skills/unreal-ai/SKILL.md "245 actions via
 # ai_query(action, params)"). All ai.* actions are dispatched through this single tool.
@@ -128,15 +164,27 @@ FIXTURE_ROOT = "/Game/Benchmarks/AI"
 BB_PATH = f"{FIXTURE_ROOT}/BB_BenchAI"
 BT_PATH = f"{FIXTURE_ROOT}/BT_BenchAI"
 EQS_PATH = f"{FIXTURE_ROOT}/EQS_BenchAI"
-# A throwaway, EMPTY Behavior Tree used ONLY by the compile_gate NEGATIVE validate probe. A
-# `create_behavior_tree` with no nodes has a root with no children, so validate_behavior_tree always
-# reports valid==false with an error-severity issue "Root has no children — empty Behavior Tree".
-# (StateTree lint is unavailable on WITH_STATETREE=0, so the negative gate is a BT validate, not a
-# StateTree lint.)
-BT_EMPTY_SCRATCH = f"{FIXTURE_ROOT}/BT_BenchEmptyScratch"
-# A throwaway, well-formed Behavior Tree used ONLY by the compile_gate POSITIVE validate probe
-# (Selector root child + a linked Blackboard -> validate_behavior_tree reports valid==true).
-BT_VALIDATE_SCRATCH = f"{FIXTURE_ROOT}/BT_BenchValidateScratch"
+# Throwaway Behavior Trees owned entirely by the two compile-gate tasks. They deliberately do not
+# reuse the historical source-controlled BT_BenchEmptyScratch/BT_BenchValidateScratch fixtures: each
+# gate resets its package, creates the exact topology under test, validates it, and deletes it before
+# the task can pass. This makes the positive and negative verdicts independent of earlier runs.
+BT_EMPTY_SCRATCH = f"{FIXTURE_ROOT}/BT_BenchNegativeGateScratch"
+BT_VALIDATE_SCRATCH = f"{FIXTURE_ROOT}/BT_BenchPositiveGateScratch"
+# Throwaway scaffold-template outputs used ONLY by the create_bt_from_template edit_execute chain.
+# HandleCreateBTFromTemplate derives the companion Blackboard path from the BT name (BT_ -> BB_,
+# MonolithAIScaffoldActions.cpp), so both paths are pinned here and the chain delete-first resets
+# them for idempotent re-runs.
+BT_TEMPLATE_SCRATCH = f"{FIXTURE_ROOT}/BT_BenchTemplateScratch"
+BB_TEMPLATE_SCRATCH = f"{FIXTURE_ROOT}/BB_BenchTemplateScratch"
+
+# Duplicate-rejection probes must own their lifecycle instead of reusing persistent benchmark
+# fixtures. The historical BB/BT/EQS_BenchDup packages are source-controlled fixtures in another
+# changelist, so deleting them is neither a valid benchmark precondition nor safe. These dedicated
+# scratch packages are reset before the first create and deleted after the second create, leaving no
+# generated package behind after a successful run.
+BB_DUPLICATE_SCRATCH = f"{FIXTURE_ROOT}/BB_BenchDuplicateScratch"
+BT_DUPLICATE_SCRATCH = f"{FIXTURE_ROOT}/BT_BenchDuplicateScratch"
+EQS_DUPLICATE_SCRATCH = f"{FIXTURE_ROOT}/EQS_BenchDuplicateScratch"
 
 # Blackboard keys seeded by setup_fixtures (name -> key_type, exact tokens accepted by
 # CreateKeyTypeFromString: Bool/Int/Float/String/Name/Vector/Rotator/Object/Class/Enum/NativeEnum —
@@ -358,6 +406,39 @@ AI_EDIT_EXECUTE_TASKS: List[Dict[str, Any]] = [
                                               "generator_class": "EnvQueryGenerator_ActorsOfClass"}}],
      "verify": {"read_action": "get_eqs_query", "read_args": {"asset_path": EQS_PATH},
                 "contains": ["ActorsOfClass"]}},
+
+    # --- Scaffold: create_bt_from_template must complete its INTERNAL set_bt_blackboard linkage ---
+    # Guards cross-action param-contract drift inside composite scaffolds (2026-07-10 handoff N3: a
+    # scaffold that dispatches set_bt_blackboard with drifted param names fails the whole template
+    # create with "Failed to link BT to Blackboard"). The delete-first steps reset both scaffold
+    # outputs so re-runs stay idempotent; the read-back proves the internal linkage actually landed.
+    # The task then deletes both generated packages and proves both public reads report explicit
+    # absence, so a successful benchmark cannot leave transient assets or Perforce adds behind.
+    {"subsystem": "behavior_tree", "edit_action": "create_bt_from_template",
+     "description": "create_bt_from_template(patrol) scaffolds BT+BB; get_behavior_tree must read the "
+                    "internal Blackboard linkage back (guards internal set_bt_blackboard contract)",
+     "chain": [
+         {"op": "delete_behavior_tree", "allow_absent": True,
+          "args": {"action": "delete_behavior_tree",
+                                                  "asset_path": BT_TEMPLATE_SCRATCH}},
+         {"op": "delete_blackboard", "allow_absent": True,
+          "args": {"action": "delete_blackboard",
+                                               "asset_path": BB_TEMPLATE_SCRATCH}},
+         {"op": "create_bt_from_template", "args": {"action": "create_bt_from_template",
+                                                    "save_path": BT_TEMPLATE_SCRATCH,
+                                                    "template": "patrol"}}],
+      "verify": {"read_action": "get_behavior_tree", "read_args": {"asset_path": BT_TEMPLATE_SCRATCH},
+                 "contains": ["BB_BenchTemplateScratch"]},
+      "cleanup_chain": [
+          {"op": "delete_behavior_tree", "allow_absent": True,
+           "args": {"action": "delete_behavior_tree", "asset_path": BT_TEMPLATE_SCRATCH}},
+          {"op": "delete_blackboard", "allow_absent": True,
+           "args": {"action": "delete_blackboard", "asset_path": BB_TEMPLATE_SCRATCH}}],
+      "cleanup_verify": [
+          {"action": "get_behavior_tree", "asset_path": BT_TEMPLATE_SCRATCH,
+           "expect_not_found": True},
+          {"action": "get_blackboard", "asset_path": BB_TEMPLATE_SCRATCH,
+           "expect_not_found": True}]},
 ]
 
 
@@ -428,30 +509,44 @@ AI_ERROR_PATH_TASKS: List[Dict[str, Any]] = [
 # ---------------------------------------------------------------------------
 # duplicate_reject tasks — calling a create_*/add_bb_key action TWICE with the same name must be
 # REFUSED on the second call with a duplicate-specific isError (not a silent suffix or no-op).
-# Each `arguments` is a create with a fixed name; `cleanup` (optional, run first) deletes a prior
-# run's leftover so the first call is a CLEAN create. Verified duplicate wording in METRICS.md.
+# Each `arguments` is a create with a benchmark-owned scratch name. `setup_arguments` removes only a
+# prior interrupted run's leftover, while `cleanup_arguments` removes the entity created by this
+# task. A setup error is tolerated only when it explicitly says the entity is absent; arbitrary
+# delete failures are not a clean precondition. Verified duplicate wording in METRICS.md.
 # ---------------------------------------------------------------------------
 AI_DUPLICATE_REJECT_TASKS: List[Dict[str, Any]] = [
     {"action": "add_bb_key", "subsystem": "blackboard",
      "description": "add_bb_key must reject a duplicate key name on BB_BenchAI",
      "setup_arguments": [{"action": "remove_bb_key", "asset_path": BB_PATH, "key_name": "BenchDupKey"}],
+     "cleanup_arguments": [{"action": "remove_bb_key", "asset_path": BB_PATH, "key_name": "BenchDupKey"}],
+     "cleanup_verify": {"action": "get_blackboard", "asset_path": BB_PATH,
+                        "absent": ["BenchDupKey"]},
      "arguments": {"action": "add_bb_key", "asset_path": BB_PATH,
                    "key_name": "BenchDupKey", "key_type": "Bool"}},
     {"action": "create_blackboard", "subsystem": "blackboard",
      "description": "create_blackboard must reject creating a Blackboard at an occupied path",
-     "setup_arguments": [{"action": "delete_blackboard", "asset_path": f"{FIXTURE_ROOT}/BB_BenchDup"}],
-     "arguments": {"action": "create_blackboard", "save_path": f"{FIXTURE_ROOT}/BB_BenchDup",
-                   "name": "BB_BenchDup"}},
+     "setup_arguments": [{"action": "delete_blackboard", "asset_path": BB_DUPLICATE_SCRATCH}],
+     "cleanup_arguments": [{"action": "delete_blackboard", "asset_path": BB_DUPLICATE_SCRATCH}],
+     "cleanup_verify": {"action": "get_blackboard", "asset_path": BB_DUPLICATE_SCRATCH,
+                        "expect_not_found": True},
+     "arguments": {"action": "create_blackboard", "save_path": BB_DUPLICATE_SCRATCH,
+                    "name": "BB_BenchDuplicateScratch"}},
     {"action": "create_behavior_tree", "subsystem": "behavior_tree",
      "description": "create_behavior_tree must reject creating a BT at an occupied path",
-     "setup_arguments": [{"action": "delete_behavior_tree", "asset_path": f"{FIXTURE_ROOT}/BT_BenchDup"}],
-     "arguments": {"action": "create_behavior_tree", "save_path": f"{FIXTURE_ROOT}/BT_BenchDup",
-                   "name": "BT_BenchDup"}},
+     "setup_arguments": [{"action": "delete_behavior_tree", "asset_path": BT_DUPLICATE_SCRATCH}],
+     "cleanup_arguments": [{"action": "delete_behavior_tree", "asset_path": BT_DUPLICATE_SCRATCH}],
+     "cleanup_verify": {"action": "get_behavior_tree", "asset_path": BT_DUPLICATE_SCRATCH,
+                        "expect_not_found": True},
+     "arguments": {"action": "create_behavior_tree", "save_path": BT_DUPLICATE_SCRATCH,
+                    "name": "BT_BenchDuplicateScratch"}},
     {"action": "create_eqs_query", "subsystem": "eqs",
      "description": "create_eqs_query must reject creating an EQS query at an occupied path",
-     "setup_arguments": [{"action": "delete_eqs_query", "asset_path": f"{FIXTURE_ROOT}/EQS_BenchDup"}],
-     "arguments": {"action": "create_eqs_query", "save_path": f"{FIXTURE_ROOT}/EQS_BenchDup",
-                   "name": "EQS_BenchDup"}},
+     "setup_arguments": [{"action": "delete_eqs_query", "asset_path": EQS_DUPLICATE_SCRATCH}],
+     "cleanup_arguments": [{"action": "delete_eqs_query", "asset_path": EQS_DUPLICATE_SCRATCH}],
+     "cleanup_verify": {"action": "get_eqs_query", "asset_path": EQS_DUPLICATE_SCRATCH,
+                        "expect_not_found": True},
+     "arguments": {"action": "create_eqs_query", "save_path": EQS_DUPLICATE_SCRATCH,
+                    "name": "EQS_BenchDuplicateScratch"}},
 ]
 
 
@@ -472,8 +567,9 @@ AI_DUPLICATE_REJECT_TASKS: List[Dict[str, Any]] = [
 #             always reports valid==false FAILS.
 # Verified shape: validate_behavior_tree -> {valid:bool, issue_count:int, issues:[...]} (BT L4164);
 #                 empty-BT error issue at BT L4097.
-# Each probe owns its own scratch asset; setup is tolerant of "already exists" so the gate is
-# idempotent across re-runs (the scratch assets are left in place — they are isolated and harmless).
+# Each probe owns its scratch asset from reset through cleanup. Only an explicit "not found" reset is
+# tolerated; create/edit failures and cleanup failures fail the task. No generated package remains
+# after a passing gate.
 # A `gate` field selects the scorer's verdict mode: "validate_invalid" or "validate_valid".
 # ---------------------------------------------------------------------------
 AI_COMPILE_GATE_TASKS: List[Dict[str, Any]] = [
@@ -481,23 +577,38 @@ AI_COMPILE_GATE_TASKS: List[Dict[str, Any]] = [
      "description": "An empty Behavior Tree (root with no children) must make "
                     "validate_behavior_tree report valid==false with an error-severity issue",
      "asset_path": BT_EMPTY_SCRATCH,
-     "setup_chain": [],
+     "setup_chain": [
+         {"op": "delete_behavior_tree", "allow_absent": True,
+          "args": {"action": "delete_behavior_tree", "asset_path": BT_EMPTY_SCRATCH}},
+         {"op": "create_behavior_tree",
+          "args": {"action": "create_behavior_tree", "save_path": BT_EMPTY_SCRATCH,
+                   "name": "BT_BenchNegativeGateScratch"}}],
      "gate_args": {"action": "validate_behavior_tree", "asset_path": BT_EMPTY_SCRATCH},
-     "cleanup_chain": [],
+     "cleanup_chain": [
+         {"op": "delete_behavior_tree",
+          "args": {"action": "delete_behavior_tree", "asset_path": BT_EMPTY_SCRATCH}}],
+     "cleanup_verify": {"action": "get_behavior_tree", "asset_path": BT_EMPTY_SCRATCH,
+                        "expect_not_found": True},
      "expect_valid": False},
     {"polarity": "positive", "subsystem": "behavior_tree", "gate": "validate_valid",
      "description": "A well-formed Behavior Tree (Selector root child + linked Blackboard) must make "
                     "validate_behavior_tree report valid==true",
      "asset_path": BT_VALIDATE_SCRATCH,
      "setup_chain": [
-         {"op": "set_bt_blackboard",
-          "args": {"action": "set_bt_blackboard", "asset_path": BT_VALIDATE_SCRATCH,
-                   "blackboard_path": BB_PATH}},
+         {"op": "delete_behavior_tree", "allow_absent": True,
+          "args": {"action": "delete_behavior_tree", "asset_path": BT_VALIDATE_SCRATCH}},
+         {"op": "create_behavior_tree",
+          "args": {"action": "create_behavior_tree", "save_path": BT_VALIDATE_SCRATCH,
+                   "name": "BT_BenchPositiveGateScratch", "blackboard_path": BB_PATH}},
          {"op": "add_bt_node",
           "args": {"action": "add_bt_node", "asset_path": BT_VALIDATE_SCRATCH,
                    "node_class": "BTComposite_Selector"}}],
      "gate_args": {"action": "validate_behavior_tree", "asset_path": BT_VALIDATE_SCRATCH},
-     "cleanup_chain": [],
+     "cleanup_chain": [
+         {"op": "delete_behavior_tree",
+          "args": {"action": "delete_behavior_tree", "asset_path": BT_VALIDATE_SCRATCH}}],
+     "cleanup_verify": {"action": "get_behavior_tree", "asset_path": BT_VALIDATE_SCRATCH,
+                        "expect_not_found": True},
      "expect_valid": True},
 ]
 
@@ -539,6 +650,22 @@ def write_jsonl(path: pathlib.Path, rows: Iterable[Dict[str, Any]]) -> None:
             handle.write("\n")
 
 
+def clear_run_outputs(output_dir: pathlib.Path) -> None:
+    """Remove only known run outputs so a failed rerun cannot expose stale success."""
+    for filename in RUN_OUTPUT_FILENAMES:
+        path = output_dir / filename
+        if path.exists():
+            path.unlink()
+
+
+def write_run_failure(output_dir: pathlib.Path, payload: Dict[str, Any]) -> None:
+    """Persist one machine-readable invalid-run record; never write summary.json."""
+    payload.setdefault("created_at", utc_now())
+    payload["run_valid"] = False
+    payload["metrics_valid"] = False
+    write_json(output_dir / "run_failure.json", payload)
+
+
 def read_http_body(response: Any, timeout_s: float) -> str:
     content_type = str(response.headers.get("Content-Type", "")).lower()
     if "text/event-stream" not in content_type:
@@ -571,12 +698,18 @@ def extract_sse_data(raw: str) -> str:
     return "\n".join(data_lines) if data_lines else raw
 
 
+# Declares this traffic as synthetic benchmark fixtures so the invocation-log
+# analyzer does not report deliberate negative probes as real, unmet demand.
+_BENCHMARK_ROUTING_CONTEXT = benchmark_routing_context("AICapability")
+
+
 def mcp_call(url: str, tool: str, arguments: Dict[str, Any], timeout_s: float = 45.0) -> Dict[str, Any]:
     body = {
         "jsonrpc": "2.0",
         "id": int(time.time() * 1000) % 1000000000,
         "method": "tools/call",
         "params": {"name": tool, "arguments": arguments},
+        "_monolith_routing_context": _BENCHMARK_ROUTING_CONTEXT,
     }
     data = json.dumps(body, separators=(",", ":")).encode("utf-8")
     request = urllib.request.Request(
@@ -606,6 +739,13 @@ def mcp_call(url: str, tool: str, arguments: Dict[str, Any], timeout_s: float = 
         parsed = json.loads(raw)
     except json.JSONDecodeError:
         parsed = {"parse_error": True, "raw": raw}
+    if not isinstance(parsed, dict):
+        return {
+            "protocol_error": True,
+            "raw": raw,
+            "error": "MCP response top-level JSON must be an object",
+            "request": body,
+        }
     parsed["request"] = body
     return parsed
 
@@ -654,6 +794,20 @@ def result_data(response: Dict[str, Any]) -> Dict[str, Any]:
     return structured if structured else payload
 
 
+def searchable_text(response: Dict[str, Any]) -> str:
+    """Token-search surface for a response: content[0].text plus the structured
+    payload JSON. The live server returns a terse text ("OK; see
+    structuredContent.") with the real data in structuredContent, so text-only
+    token checks silently fail on healthy responses (observed 2026-07-11: the
+    blackboard fixture preflight missed BenchTargetActor although
+    get_blackboard returned all keys in structuredContent)."""
+    text = result_text(response)
+    data = result_data(response)
+    if isinstance(data, dict) and data:
+        return f"{text}\n{json.dumps(data, ensure_ascii=False, sort_keys=True)}"
+    return text
+
+
 def count_by(rows: Iterable[Dict[str, Any]], field: str) -> Dict[str, int]:
     out: Dict[str, int] = {}
     for row in rows:
@@ -673,7 +827,7 @@ def avg(values: List[float]) -> float:
 def is_valid_non_error_response(data: Dict[str, Any], response: Dict[str, Any]) -> bool:
     if response.get("transport_error"):
         return False
-    if response.get("parse_error"):
+    if classify_protocol_failure(response):
         return False
     if result_payload(response).get("isError"):
         return False
@@ -694,14 +848,97 @@ def _is_error(response: Dict[str, Any]) -> bool:
     return bool(result_payload(response).get("isError"))
 
 
+def _is_expected_absence_error(response: Dict[str, Any], action: str) -> bool:
+    """Return true only for an explicit remove/delete "already absent" result.
+
+    Setup reset steps may legitimately encounter a missing scratch entity. They must not accept a
+    generic failure merely because the action name starts with ``remove_`` or ``delete_``: doing so
+    can make the subsequent first create fail while the benchmark incorrectly claims setup passed.
+    """
+    if not _is_error(response) or not action.startswith(("remove_", "delete_")):
+        return False
+    text_l = result_text(response).lower()
+    return any(token in text_l for token in ("not found", "does not exist", "no such"))
+
+
+def classify_protocol_failure(response: Any) -> str:
+    """Classify malformed JSON-RPC/MCP envelopes without conflating valid isError results."""
+    return classify_mcp_protocol_failure(response)
+
+
 def classify_mcp_failure(response: Dict[str, Any]) -> str:
     if response.get("transport_error"):
         return "transport_error"
-    if response.get("parse_error"):
-        return "parse_error"
+    if classify_protocol_failure(response):
+        return "protocol_error"
     if _is_error(response):
         return "server_error"
     return ""
+
+
+def validate_status_response(response: Any) -> Dict[str, Any]:
+    """Validate the mandatory status boundary before any scored task executes."""
+    return validate_mcp_status_response(
+        response,
+        result_payload=result_payload,
+        result_data=result_data,
+    )
+
+
+class TaskMcpRecorder:
+    """Record every MCP transport/protocol event produced while scoring one task."""
+
+    def __init__(self) -> None:
+        self.transport_events: List[Dict[str, Any]] = []
+        self.protocol_events: List[Dict[str, Any]] = []
+
+    def call(
+        self,
+        url: str,
+        tool: str,
+        arguments: Dict[str, Any],
+        timeout_s: float = 45.0,
+    ) -> Dict[str, Any]:
+        response = mcp_call(url, tool, arguments, timeout_s=timeout_s)
+        if not isinstance(response, dict):
+            response = {
+                "protocol_error": True,
+                "raw": str(response)[:500],
+                "error": "MCP response top-level JSON must be an object",
+            }
+        event = {
+            "tool": tool,
+            "action": str(arguments.get("action", "")),
+            "raw": str(response.get("raw", response))[:500],
+        }
+        if response.get("transport_error"):
+            status = response.get("status")
+            event["status"] = (
+                status if isinstance(status, int) and not isinstance(status, bool) else None
+            )
+            self.transport_events.append(event)
+        elif classify_protocol_failure(response):
+            self.protocol_events.append(event)
+        return response
+
+    def decorate(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        last_transport = self.transport_events[-1] if self.transport_events else {}
+        last_protocol = self.protocol_events[-1] if self.protocol_events else {}
+        row["transport_error"] = bool(self.transport_events)
+        row["transport_status"] = last_transport.get("status")
+        row["transport_error_raw"] = str(last_transport.get("raw", ""))
+        row["transport_failure_call_count"] = len(self.transport_events)
+        row["last_transport_tool"] = str(last_transport.get("tool", ""))
+        row["last_transport_action"] = str(last_transport.get("action", ""))
+        row["protocol_error"] = bool(self.protocol_events)
+        row["protocol_error_raw"] = str(last_protocol.get("raw", ""))
+        row["protocol_failure_call_count"] = len(self.protocol_events)
+        row["last_protocol_tool"] = str(last_protocol.get("tool", ""))
+        row["last_protocol_action"] = str(last_protocol.get("action", ""))
+        row["failure_kind"] = "protocol_error" if self.protocol_events else ""
+        if self.transport_events or self.protocol_events:
+            row["direct_success"] = False
+        return row
 
 
 def _count_results(data: Dict[str, Any]) -> int:
@@ -724,7 +961,7 @@ def _count_results(data: Dict[str, Any]) -> int:
 
 
 def _response_text_contains_all(response: Dict[str, Any], tokens: List[str]) -> bool:
-    text = result_text(response)
+    text = searchable_text(response)
     return all(tok and str(tok) in text for tok in tokens)
 
 
@@ -785,7 +1022,12 @@ def _collect_names(obj: Any) -> set:
     return names
 
 
-def _verify_readback(url: str, verify: Dict[str, Any], timeout_s: float) -> Tuple[bool, Dict[str, Any]]:
+def _verify_readback(
+    url: str,
+    verify: Dict[str, Any],
+    timeout_s: float,
+    call_fn: Callable[..., Dict[str, Any]],
+) -> Tuple[bool, Dict[str, Any]]:
     """Run a read action and assert the edit is observable.
 
     verify verbs (all optional; all present must hold):
@@ -800,13 +1042,17 @@ def _verify_readback(url: str, verify: Dict[str, Any], timeout_s: float) -> Tupl
         return True, {"skipped": "no_read_action"}
     read_call = {"action": read_action}
     read_call.update(verify.get("read_args", {}))
-    resp = mcp_call(url, AI_TOOL, read_call, timeout_s=timeout_s)
-    if resp.get("transport_error") or resp.get("parse_error") or _is_error(resp):
+    resp = call_fn(url, AI_TOOL, read_call, timeout_s=timeout_s)
+    if (
+        resp.get("transport_error")
+        or classify_protocol_failure(resp)
+        or _is_error(resp)
+    ):
         return False, {"read_action": read_action, "read_failed": True,
-                       "snippet": result_text(resp)[:200]}
+                       "snippet": str(resp.get("raw") or result_text(resp))[:200]}
     ok = True
     detail: Dict[str, Any] = {"read_action": read_action}
-    text = result_text(resp)
+    text = searchable_text(resp)
     data = result_data(resp)
 
     tokens = verify.get("contains")
@@ -829,24 +1075,92 @@ def _verify_readback(url: str, verify: Dict[str, Any], timeout_s: float) -> Tupl
     return ok, detail
 
 
+def _verify_cleanup_state(
+    url: str,
+    verify: Dict[str, Any],
+    timeout_s: float,
+    call_fn: Callable[..., Dict[str, Any]],
+) -> Tuple[bool, Dict[str, Any]]:
+    """Prove cleanup from the public read surface instead of trusting a delete return value."""
+    action = str(verify.get("action", ""))
+    args = {
+        key: value for key, value in verify.items()
+        if key not in {"expect_not_found", "absent"}
+    }
+    response = call_fn(url, AI_TOOL, args, timeout_s=timeout_s)
+    protocol_ok = not response.get("transport_error") and not classify_protocol_failure(response)
+    text_l = result_text(response).lower()
+    detail: Dict[str, Any] = {
+        "action": action,
+        "is_error": _is_error(response),
+        "snippet": result_text(response)[:200],
+    }
+
+    if verify.get("expect_not_found") is True:
+        asset_path = str(verify.get("asset_path", ""))
+        explicit_absence = (
+            protocol_ok
+            and _is_error(response)
+            and asset_path.lower() in text_l
+            and any(token in text_l for token in ("not found", "does not exist", "no such"))
+        )
+        detail.update({"expect_not_found": True, "asset_path": asset_path,
+                       "explicit_absence": explicit_absence})
+        return explicit_absence, detail
+
+    absent = verify.get("absent")
+    if isinstance(absent, list) and absent:
+        data = result_data(response)
+        present_names = _collect_names(data)
+        still_present = [str(name) for name in absent if str(name) in present_names]
+        ok = protocol_ok and not _is_error(response) and not still_present
+        detail.update({"absent": [str(name) for name in absent],
+                       "still_present": still_present})
+        return ok, detail
+
+    detail["reason"] = "cleanup_verify has no supported assertion"
+    return False, detail
+
+
+def _verify_cleanup_contract(
+    url: str,
+    verify: Any,
+    timeout_s: float,
+    call_fn: Callable[..., Dict[str, Any]],
+) -> Tuple[bool, Dict[str, Any]]:
+    """Verify one or more cleanup postconditions without weakening the single-check contract."""
+    if isinstance(verify, dict):
+        return _verify_cleanup_state(url, verify, timeout_s, call_fn)
+    if not isinstance(verify, list) or not verify or not all(isinstance(item, dict) for item in verify):
+        return False, {"reason": "cleanup_verify must be a non-empty object or object list"}
+
+    checks: List[Dict[str, Any]] = []
+    all_ok = True
+    for item in verify:
+        check_ok, detail = _verify_cleanup_state(url, item, timeout_s, call_fn)
+        all_ok = all_ok and check_ok
+        checks.append({"ok": check_ok, **detail})
+    return all_ok, {"checks": checks}
+
+
 # ---------------------------------------------------------------------------
 # Scorers
 # ---------------------------------------------------------------------------
 
 def _run_chain_step(url: str, op_args: Dict[str, Any], captured: Dict[str, str],
-                    timeout_s: float, tolerant: bool) -> Tuple[bool, Dict[str, Any], Dict[str, Any]]:
+                    timeout_s: float, tolerant: bool,
+                    call_fn: Callable[..., Dict[str, Any]]) -> Tuple[bool, Dict[str, Any], Dict[str, Any]]:
     """Run one chain step. Returns (step_ok, evidence, raw_response). In tolerant mode a leading
     remove_*/delete_* reporting "not found" and an "already exists" create are accepted (they only
     construct the precondition); the scored signal is the final read-back."""
     args = _subst_ids(dict(op_args), captured)
-    resp = mcp_call(url, AI_TOOL, args, timeout_s=timeout_s)
+    resp = call_fn(url, AI_TOOL, args, timeout_s=timeout_s)
     action = str(args.get("action", ""))
-    transport_ok = not resp.get("transport_error") and not resp.get("parse_error")
+    transport_ok = not resp.get("transport_error") and not classify_protocol_failure(resp)
     is_err = _is_error(resp)
     text_l = result_text(resp).lower()
     already = is_err and ("exist" in text_l or "already" in text_l)
-    remove_missing = (is_err and action.startswith(("remove_", "delete_"))
-                      and any(t in text_l for t in ("not found", "does not exist", "no such")))
+    remove_missing = _is_expected_absence_error(resp, action)
     step_ok = transport_ok and (not is_err or (tolerant and (already or remove_missing)))
     evidence = {"action": action, "is_error": is_err, "already": already,
                 "remove_missing": remove_missing, "ok": step_ok,
@@ -854,7 +1168,12 @@ def _run_chain_step(url: str, op_args: Dict[str, Any], captured: Dict[str, str],
     return step_ok, evidence, resp
 
 
-def _score_edit_execute_chain(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, Any]:
+def _score_edit_execute_chain(
+    url: str,
+    task: Dict[str, Any],
+    timeout_s: float,
+    call_fn: Callable[..., Dict[str, Any]],
+) -> Dict[str, Any]:
     """Score an edit_execute task: run each chain step (tolerant on the leading delete-first /
     already-exists construction), capturing returned ids into ${label}, then require the final
     read-back to observe the end state. A flat task is normalized to a one-step chain by the builder."""
@@ -866,7 +1185,14 @@ def _score_edit_execute_chain(url: str, task: Dict[str, Any], timeout_s: float) 
         # The leading construction ops (remove/delete to reset, or a re-add of a host entity) are
         # tolerant; the FINAL mutating op of the chain is the one under test and must succeed
         # cleanly — but "already exists" is still an idempotent success because the read-back gates.
-        step_ok, ev, resp = _run_chain_step(url, step.get("args", {}), captured, timeout_s, tolerant=True)
+        step_ok, ev, resp = _run_chain_step(
+            url,
+            step.get("args", {}),
+            captured,
+            timeout_s,
+            tolerant=True,
+            call_fn=call_fn,
+        )
         steps_evidence.append(ev)
         capture = step.get("capture")
         if capture:
@@ -885,8 +1211,35 @@ def _score_edit_execute_chain(url: str, task: Dict[str, Any], timeout_s: float) 
     if ok:
         verify = _subst_ids(task.get("verify", {}), captured)
         if isinstance(verify, dict) and verify.get("read_action"):
-            v_ok, verify_detail = _verify_readback(url, verify, timeout_s)
+            v_ok, verify_detail = _verify_readback(url, verify, timeout_s, call_fn)
             ok = ok and v_ok
+
+    primary_ok = ok
+    cleanup_ok = True
+    cleanup_evidence: List[Dict[str, Any]] = []
+    cleanup_steps = task.get("cleanup_chain", [])
+    cleanup_attempted = isinstance(cleanup_steps, list) and bool(cleanup_steps)
+    for step in cleanup_steps if cleanup_attempted else []:
+        cleanup_args = _subst_ids(dict(step.get("args", {})), captured)
+        cleanup_step_ok, cleanup_detail, _ = _run_chain_step(
+            url,
+            cleanup_args,
+            captured,
+            timeout_s,
+            tolerant=bool(step.get("allow_absent", False)),
+            call_fn=call_fn,
+        )
+        cleanup_ok = cleanup_ok and cleanup_step_ok
+        cleanup_evidence.append(cleanup_detail)
+
+    cleanup_verify = task.get("cleanup_verify")
+    cleanup_verify_attempted = cleanup_attempted and cleanup_ok and cleanup_verify is not None
+    cleanup_verify_ok = cleanup_verify is None
+    cleanup_verify_evidence: Dict[str, Any] = {}
+    if cleanup_verify_attempted:
+        cleanup_verify_ok, cleanup_verify_evidence = _verify_cleanup_contract(
+            url, cleanup_verify, timeout_s, call_fn)
+    ok = primary_ok and cleanup_ok and cleanup_verify_ok
 
     return {
         "task_id": task.get("id"),
@@ -897,7 +1250,14 @@ def _score_edit_execute_chain(url: str, task: Dict[str, Any], timeout_s: float) 
         "edit_action": task.get("edit_action", ""),
         "direct_success": ok,
         "planning_signals": False,
-        "evidence": {"steps": steps_evidence, "captured": captured, "verify": verify_detail},
+        "evidence": {"steps": steps_evidence, "captured": captured, "verify": verify_detail,
+                     "primary_ok": primary_ok,
+                     "cleanup_attempted": cleanup_attempted,
+                     "cleanup_ok": cleanup_ok,
+                     "cleanup_steps": cleanup_evidence,
+                     "cleanup_verify_attempted": cleanup_verify_attempted,
+                     "cleanup_verify_ok": cleanup_verify_ok,
+                     "cleanup_verify": cleanup_verify_evidence},
         "transport_error": False,
         "transport_error_raw": "",
         "response_is_error": not ok,
@@ -905,39 +1265,122 @@ def _score_edit_execute_chain(url: str, task: Dict[str, Any], timeout_s: float) 
     }
 
 
-def _score_duplicate_reject(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, Any]:
-    """Call the create action TWICE; the SECOND identical call must be refused with a
-    duplicate-specific isError. The first must be a CLEAN create (a leading setup delete resets a
-    prior run), so a reject-everything server fails first_ok."""
+def _score_duplicate_reject(
+    url: str,
+    task: Dict[str, Any],
+    timeout_s: float,
+    call_fn: Callable[..., Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Call the create action twice and require a duplicate-specific second-call error.
+
+    The first call must start from a demonstrably clean benchmark-owned scratch entity. A reset
+    error is accepted only when it explicitly reports that the entity is already absent. After the
+    assertion, cleanup must succeed so a valid run cannot leave mutable benchmark state behind.
+    """
     args = dict(task.get("arguments", {}))
 
     setup_ok = True
+    setup_evidence: List[Dict[str, Any]] = []
     for s in task.get("setup_arguments", []) or []:
-        s_resp = mcp_call(url, AI_TOOL, dict(s), timeout_s=timeout_s)
+        s_resp = call_fn(url, AI_TOOL, dict(s), timeout_s=timeout_s)
         s_action = str(s.get("action", ""))
         s_err = _is_error(s_resp)
-        s_tolerable = (s_action.startswith(("remove_", "delete_"))
-                       or "exist" in result_text(s_resp).lower()
-                       or "not found" in result_text(s_resp).lower())
-        setup_ok = setup_ok and (not s_resp.get("transport_error") and not s_resp.get("parse_error")
-                                 and (not s_err or s_tolerable))
+        expected_absence = _is_expected_absence_error(s_resp, s_action)
+        step_ok = (
+            not s_resp.get("transport_error")
+            and not classify_protocol_failure(s_resp)
+            and (not s_err or expected_absence)
+        )
+        setup_ok = setup_ok and step_ok
+        setup_evidence.append({
+            "action": s_action,
+            "ok": step_ok,
+            "is_error": s_err,
+            "expected_absence": expected_absence,
+            "snippet": result_text(s_resp)[:200],
+        })
+        if not step_ok:
+            break
 
-    first = mcp_call(url, AI_TOOL, dict(args), timeout_s=timeout_s)
-    second = mcp_call(url, AI_TOOL, dict(args), timeout_s=timeout_s)
+    if not setup_ok:
+        return {
+            "task_id": task.get("id"),
+            "category": "duplicate_reject",
+            "namespace": "ai",
+            "action": task.get("action"),
+            "subsystem": task.get("subsystem", ""),
+            "direct_success": False,
+            "planning_signals": False,
+            "evidence": {
+                "setup_ok": False,
+                "setup_steps": setup_evidence,
+                "first_call_attempted": False,
+                "second_call_attempted": False,
+                "cleanup_attempted": False,
+            },
+            "transport_error": False,
+            "transport_error_raw": "",
+            "response_is_error": True,
+            "response_text": "duplicate probe skipped because scratch reset failed",
+        }
 
-    transport_error = bool(second.get("transport_error"))
-    parse_error = bool(second.get("parse_error"))
-    server_handled = not transport_error and not parse_error
-    second_is_error = _is_error(second)
-
+    first = call_fn(url, AI_TOOL, dict(args), timeout_s=timeout_s)
     first_is_error = _is_error(first)
-    first_ok = (not first.get("transport_error") and not first.get("parse_error") and not first_is_error)
+    first_ok = (
+        not first.get("transport_error")
+        and not classify_protocol_failure(first)
+        and not first_is_error
+    )
+
+    # A second call is meaningful only after a confirmed clean first create. If the first response
+    # is unavailable or failed, skip the assertion call and proceed directly to cleanup: the server
+    # may still have applied a request whose response was lost, so cleanup remains mandatory.
+    second_attempted = first_ok
+    second = call_fn(url, AI_TOOL, dict(args), timeout_s=timeout_s) if second_attempted else {}
+
+    cleanup_ok = True
+    cleanup_evidence: List[Dict[str, Any]] = []
+    for cleanup in task.get("cleanup_arguments", []) or []:
+        cleanup_resp = call_fn(url, AI_TOOL, dict(cleanup), timeout_s=timeout_s)
+        cleanup_action = str(cleanup.get("action", ""))
+        cleanup_step_ok = (
+            not cleanup_resp.get("transport_error")
+            and not classify_protocol_failure(cleanup_resp)
+            and not _is_error(cleanup_resp)
+        )
+        cleanup_ok = cleanup_ok and cleanup_step_ok
+        cleanup_evidence.append({
+            "action": cleanup_action,
+            "ok": cleanup_step_ok,
+            "is_error": _is_error(cleanup_resp),
+            "snippet": result_text(cleanup_resp)[:200],
+        })
+
+    cleanup_verify = task.get("cleanup_verify")
+    cleanup_verify_attempted = cleanup_ok and isinstance(cleanup_verify, dict)
+    cleanup_verify_ok = not isinstance(cleanup_verify, dict)
+    cleanup_verify_evidence: Dict[str, Any] = {}
+    if cleanup_verify_attempted:
+        cleanup_verify_ok, cleanup_verify_evidence = _verify_cleanup_contract(
+            url, cleanup_verify, timeout_s, call_fn)
+
+    transport_error = bool(second.get("transport_error")) if second_attempted else False
+    parse_error = bool(classify_protocol_failure(second)) if second_attempted else False
+    server_handled = second_attempted and not transport_error and not parse_error
+    second_is_error = _is_error(second) if second_attempted else False
 
     second_text = result_text(second).lower()
     second_is_duplicate = second_is_error and any(
         tok in second_text for tok in ("already", "exist", "duplicate", "in use", "taken"))
 
-    direct_success = setup_ok and first_ok and server_handled and second_is_duplicate
+    direct_success = (
+        setup_ok
+        and first_ok
+        and server_handled
+        and second_is_duplicate
+        and cleanup_ok
+        and cleanup_verify_ok
+    )
 
     return {
         "task_id": task.get("id"),
@@ -949,17 +1392,24 @@ def _score_duplicate_reject(url: str, task: Dict[str, Any], timeout_s: float) ->
         "planning_signals": False,
         "evidence": {
             "setup_ok": setup_ok,
+            "setup_steps": setup_evidence,
             "first_call_ok": first_ok,
             "first_call_is_error": first_is_error,
+            "second_call_attempted": second_attempted,
             "second_call_handled": server_handled,
             "second_call_is_error": second_is_error,
             "second_is_duplicate": second_is_duplicate,
+            "cleanup_ok": cleanup_ok,
+            "cleanup_steps": cleanup_evidence,
+            "cleanup_verify_attempted": cleanup_verify_attempted,
+            "cleanup_verify_ok": cleanup_verify_ok,
+            "cleanup_verify": cleanup_verify_evidence,
             "response_snippet": result_text(second)[:200],
         },
         "transport_error": transport_error,
         "transport_error_raw": str(second.get("raw", ""))[:300] if transport_error else "",
-        "response_is_error": second_is_error,
-        "response_text": result_text(second)[:500],
+        "response_is_error": second_is_error or first_is_error,
+        "response_text": result_text(second if second_attempted else first)[:500],
     }
 
 
@@ -969,7 +1419,7 @@ def _validate_is_valid(response: Dict[str, Any]) -> Tuple[Optional[bool], Dict[s
     validate_behavior_tree is verified to return Success with {valid:bool, issue_count:int,
     issues:[{severity,message}]}. detail.has_error_issue records whether an error-severity issue is
     present (used by the negative gate to assert the empty-BT error issue, not just valid==false)."""
-    if response.get("transport_error") or response.get("parse_error") or _is_error(response):
+    if response.get("transport_error") or classify_protocol_failure(response) or _is_error(response):
         return None, {"reason": "transport_parse_or_iserror_not_a_validate_signal",
                       "snippet": result_text(response)[:200]}
     data = result_data(response)
@@ -985,7 +1435,12 @@ def _validate_is_valid(response: Dict[str, Any]) -> Tuple[Optional[bool], Dict[s
                  "has_error_issue": has_error_issue}
 
 
-def _score_compile_gate(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, Any]:
+def _score_compile_gate(
+    url: str,
+    task: Dict[str, Any],
+    timeout_s: float,
+    call_fn: Callable[..., Dict[str, Any]],
+) -> Dict[str, Any]:
     """Score the falsifiable quality gate. Two real, isolated probes (StateTree lint is unavailable
     on WITH_STATETREE=0, so both are Behavior Tree validate):
       validate_invalid (negative): an EMPTY Behavior Tree must make validate_behavior_tree report
@@ -994,24 +1449,49 @@ def _score_compile_gate(url: str, task: Dict[str, Any], timeout_s: float) -> Dic
       validate_valid   (positive): a well-formed Behavior Tree must make validate_behavior_tree
                                    report valid==true — a reject-everything stub that always says
                                    invalid fails.
-    The setup_chain (tolerant: already-exists is fine) constructs the scratch asset; the scored
-    signal is the gate response. A None verdict (the call errored, not produced a verdict) never
-    passes — that's the anti-reject-everything guard."""
+    The setup_chain constructs a task-owned scratch asset. Only steps explicitly marked
+    ``allow_absent`` may accept a missing remove/delete target; creates and edits are strict. The
+    gate is skipped after setup failure, and a created scratch package must be deleted before the
+    task can pass. A None verdict (the call errored, not produced a verdict) never passes — that's
+    the anti-reject-everything guard."""
     gate = str(task.get("gate", ""))
     captured: Dict[str, str] = {}
     steps_evidence: List[Dict[str, Any]] = []
+    setup_ok = True
+    has_lifecycle_create = any(
+        str(step.get("args", {}).get("action", "")).startswith("create_")
+        for step in task.get("setup_chain", [])
+    )
+    lifecycle_created = False
     for step in task.get("setup_chain", []):
-        _ok, ev, resp = _run_chain_step(url, step.get("args", {}), captured, timeout_s, tolerant=True)
+        step_ok, ev, resp = _run_chain_step(
+            url,
+            step.get("args", {}),
+            captured,
+            timeout_s,
+            tolerant=bool(step.get("allow_absent", False)),
+            call_fn=call_fn,
+        )
+        step_action = str(step.get("args", {}).get("action", ""))
+        if step_action.startswith("create_") and step_ok and not _is_error(resp):
+            lifecycle_created = True
         capture = step.get("capture")
         if capture:
             op_action = str(step.get("args", {}).get("action", ""))
             nid = _extract_id(resp, _CAPTURE_KEYS.get(op_action, ("state_id", "node_id", "id")))
             if nid:
                 captured[capture] = nid
+            else:
+                step_ok = False
+                ev["no_captured_id"] = True
+        setup_ok = setup_ok and step_ok
         steps_evidence.append(ev)
+        if not step_ok:
+            break
 
     gate_args = _subst_ids(dict(task.get("gate_args", {})), captured)
-    gate_resp = mcp_call(url, AI_TOOL, gate_args, timeout_s=timeout_s)
+    gate_attempted = setup_ok
+    gate_resp = call_fn(url, AI_TOOL, gate_args, timeout_s=timeout_s) if gate_attempted else {}
 
     if gate == "validate_invalid":
         # Negative gate: an EMPTY Behavior Tree must validate valid==false with an error-severity
@@ -1020,13 +1500,13 @@ def _score_compile_gate(url: str, task: Dict[str, Any], timeout_s: float) -> Dic
         valid, gdet = _validate_is_valid(gate_resp)
         expect_valid = bool(task.get("expect_valid"))  # False for this gate
         has_error_issue = bool(gdet.get("has_error_issue"))
-        direct_success = (valid is not None) and (valid == expect_valid) and has_error_issue
+        direct_success = setup_ok and (valid is not None) and (valid == expect_valid) and has_error_issue
         gate_action = str(gate_args.get("action", "validate_behavior_tree"))
         gdet = {**gdet, "expect_valid": expect_valid, "requires_error_issue": True}
     elif gate == "validate_valid":
         valid, gdet = _validate_is_valid(gate_resp)
         expect_valid = bool(task.get("expect_valid"))
-        direct_success = (valid is not None) and (valid == expect_valid)
+        direct_success = setup_ok and (valid is not None) and (valid == expect_valid)
         gate_action = str(gate_args.get("action", "validate_behavior_tree"))
         gdet = {**gdet, "expect_valid": expect_valid}
     else:
@@ -1034,11 +1514,39 @@ def _score_compile_gate(url: str, task: Dict[str, Any], timeout_s: float) -> Dic
         gate_action = str(gate_args.get("action", ""))
         gdet = {"reason": "unknown_gate_mode", "gate": gate}
 
-    for step in task.get("cleanup_chain", []):
-        try:
-            mcp_call(url, AI_TOOL, _subst_ids(dict(step.get("args", {})), captured), timeout_s=timeout_s)
-        except Exception:
-            pass
+    cleanup_ok = True
+    cleanup_evidence: List[Dict[str, Any]] = []
+    cleanup_attempted = not has_lifecycle_create or lifecycle_created
+    cleanup_steps = task.get("cleanup_chain", []) if cleanup_attempted else []
+    for step in cleanup_steps:
+        cleanup_args = _subst_ids(dict(step.get("args", {})), captured)
+        cleanup_resp = call_fn(
+            url,
+            AI_TOOL,
+            cleanup_args,
+            timeout_s=timeout_s,
+        )
+        cleanup_step_ok = (
+            not cleanup_resp.get("transport_error")
+            and not classify_protocol_failure(cleanup_resp)
+            and not _is_error(cleanup_resp)
+        )
+        cleanup_ok = cleanup_ok and cleanup_step_ok
+        cleanup_evidence.append({
+            "action": str(cleanup_args.get("action", "")),
+            "ok": cleanup_step_ok,
+            "is_error": _is_error(cleanup_resp),
+            "snippet": str(cleanup_resp.get("raw") or result_text(cleanup_resp))[:120],
+        })
+
+    cleanup_verify = task.get("cleanup_verify")
+    cleanup_verify_attempted = cleanup_attempted and cleanup_ok and isinstance(cleanup_verify, dict)
+    cleanup_verify_ok = not isinstance(cleanup_verify, dict)
+    cleanup_verify_evidence: Dict[str, Any] = {}
+    if cleanup_verify_attempted:
+        cleanup_verify_ok, cleanup_verify_evidence = _verify_cleanup_contract(
+            url, cleanup_verify, timeout_s, call_fn)
+    direct_success = direct_success and cleanup_ok and cleanup_verify_ok
 
     return {
         "task_id": task.get("id"),
@@ -1050,7 +1558,15 @@ def _score_compile_gate(url: str, task: Dict[str, Any], timeout_s: float) -> Dic
         "gate": gate,
         "direct_success": direct_success,
         "planning_signals": False,
-        "evidence": {"setup_steps": steps_evidence, "gate_detail": gdet,
+        "evidence": {"setup_ok": setup_ok, "setup_steps": steps_evidence,
+                     "gate_attempted": gate_attempted,
+                     "lifecycle_created": lifecycle_created,
+                     "cleanup_attempted": cleanup_attempted,
+                     "cleanup_ok": cleanup_ok, "cleanup_steps": cleanup_evidence,
+                     "cleanup_verify_attempted": cleanup_verify_attempted,
+                     "cleanup_verify_ok": cleanup_verify_ok,
+                     "cleanup_verify": cleanup_verify_evidence,
+                     "gate_detail": gdet,
                      "gate_snippet": result_text(gate_resp)[:300]},
         "transport_error": bool(gate_resp.get("transport_error")),
         "transport_error_raw": str(gate_resp.get("raw", ""))[:300] if gate_resp.get("transport_error") else "",
@@ -1061,18 +1577,24 @@ def _score_compile_gate(url: str, task: Dict[str, Any], timeout_s: float) -> Dic
 
 def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, Any]:
     category = task.get("category", "")
+    recorder = TaskMcpRecorder()
     if category == "edit_execute":
-        return _score_edit_execute_chain(url, task, timeout_s)
+        return recorder.decorate(_score_edit_execute_chain(url, task, timeout_s, recorder.call))
     if category == "duplicate_reject":
-        return _score_duplicate_reject(url, task, timeout_s)
+        return recorder.decorate(_score_duplicate_reject(url, task, timeout_s, recorder.call))
     if category == "compile_gate":
-        return _score_compile_gate(url, task, timeout_s)
+        return recorder.decorate(_score_compile_gate(url, task, timeout_s, recorder.call))
 
-    response = mcp_call(url, str(task["tool"]), dict(task.get("arguments", {})), timeout_s=timeout_s)
+    response = recorder.call(
+        url,
+        str(task["tool"]),
+        dict(task.get("arguments", {})),
+        timeout_s=timeout_s,
+    )
     data = result_data(response)
 
     transport_error = bool(response.get("transport_error"))
-    parse_error = bool(response.get("parse_error"))
+    parse_error = bool(classify_protocol_failure(response))
     server_is_error = _is_error(response)
     server_handled = not transport_error and not parse_error
 
@@ -1131,7 +1653,7 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
     else:
         evidence = {"unsupported_category": category}
 
-    return {
+    return recorder.decorate({
         "task_id": task.get("id"),
         "category": category,
         "namespace": "ai",
@@ -1144,7 +1666,7 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
         "transport_error_raw": str(response.get("raw", ""))[:300] if transport_error else "",
         "response_is_error": server_is_error,
         "response_text": result_text(response)[:500],
-    }
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -1211,7 +1733,12 @@ def _build_edit_execute_task(spec: Dict[str, Any]) -> Dict[str, Any]:
         "action": spec.get("edit_action", ""), "description": spec["description"],
     }
     if "chain" in spec:
-        return {**base, "chain": spec["chain"], "verify": spec["verify"]}
+        task = {**base, "chain": spec["chain"], "verify": spec["verify"]}
+        if "cleanup_chain" in spec:
+            task["cleanup_chain"] = spec["cleanup_chain"]
+        if "cleanup_verify" in spec:
+            task["cleanup_verify"] = spec["cleanup_verify"]
+        return task
     return {**base,
             "chain": [{"op": spec["edit_action"], "args": spec["arguments"]}],
             "verify": spec["verify"]}
@@ -1228,6 +1755,17 @@ def _verify_is_meaningful(verify: Any) -> bool:
         if isinstance(v, list) and len(v) > 0:
             return True
     return False
+
+
+def _cleanup_verify_is_meaningful(verify: Any) -> bool:
+    checks = verify if isinstance(verify, list) else [verify]
+    if not checks or not all(isinstance(check, dict) for check in checks):
+        return False
+    return all(
+        check.get("expect_not_found") is True
+        or (isinstance(check.get("absent"), list) and bool(check.get("absent")))
+        for check in checks
+    )
 
 
 def validate_task_integrity(tasks: List[Dict[str, Any]]) -> None:
@@ -1248,9 +1786,55 @@ def validate_task_integrity(tasks: List[Dict[str, Any]]) -> None:
         if previous:
             raise RuntimeError(f"duplicate action+description for {previous} and {task_id}: {key}")
         seen_action_desc[key] = task_id
-        if task.get("category") == "edit_execute" and not _verify_is_meaningful(task.get("verify")):
+        category = task.get("category")
+        if category == "edit_execute" and not _verify_is_meaningful(task.get("verify")):
             raise RuntimeError(f"{task_id} edit_execute has a read_action verify with no assertion verb "
                                f"(content-free no-op read-back): {task.get('verify')}")
+        if category == "edit_execute" and any(
+            str(step.get("args", {}).get("action", "")).startswith("create_")
+            for step in task.get("chain", [])
+        ):
+            cleanup_chain = task.get("cleanup_chain")
+            if not isinstance(cleanup_chain, list) or not cleanup_chain:
+                raise RuntimeError(f"{task_id} create edit_execute must declare cleanup actions")
+            if not _cleanup_verify_is_meaningful(task.get("cleanup_verify")):
+                raise RuntimeError(f"{task_id} create edit_execute must verify every cleaned state")
+        if category == "duplicate_reject":
+            setup = task.get("setup_arguments")
+            cleanup = task.get("cleanup_arguments")
+            if not isinstance(setup, list) or not setup or not isinstance(cleanup, list) or not cleanup:
+                raise RuntimeError(f"{task_id} duplicate_reject must declare reset and cleanup actions")
+            if setup != cleanup:
+                raise RuntimeError(f"{task_id} duplicate_reject reset and cleanup targets must match")
+            cleanup_verify = task.get("cleanup_verify")
+            if not _cleanup_verify_is_meaningful(cleanup_verify):
+                raise RuntimeError(f"{task_id} duplicate_reject must verify the cleaned state")
+            save_path = str(task.get("arguments", {}).get("save_path", ""))
+            if save_path in {BB_PATH, BT_PATH, EQS_PATH}:
+                raise RuntimeError(f"{task_id} duplicate_reject cannot mutate persistent fixture {save_path}")
+        if category == "compile_gate":
+            setup_chain = task.get("setup_chain")
+            cleanup_chain = task.get("cleanup_chain")
+            if not isinstance(setup_chain, list) or not setup_chain:
+                raise RuntimeError(f"{task_id} compile_gate must create its scratch asset")
+            if not isinstance(cleanup_chain, list) or not cleanup_chain:
+                raise RuntimeError(f"{task_id} compile_gate must delete its scratch asset")
+            cleanup_verify = task.get("cleanup_verify")
+            if not _cleanup_verify_is_meaningful(cleanup_verify):
+                raise RuntimeError(f"{task_id} compile_gate must verify scratch deletion")
+            create_steps = [
+                step for step in setup_chain
+                if str(step.get("args", {}).get("action", "")).startswith("create_")
+            ]
+            if len(create_steps) != 1:
+                raise RuntimeError(f"{task_id} compile_gate must contain exactly one scratch create step")
+            asset_path = str(task.get("asset_path", ""))
+            create_path = str(create_steps[0].get("args", {}).get("save_path", ""))
+            cleanup_path = str(cleanup_chain[-1].get("args", {}).get("asset_path", ""))
+            if not asset_path or create_path != asset_path or cleanup_path != asset_path:
+                raise RuntimeError(f"{task_id} compile_gate create/gate/cleanup paths must match")
+            if asset_path in {BB_PATH, BT_PATH, EQS_PATH}:
+                raise RuntimeError(f"{task_id} compile_gate cannot mutate persistent fixture {asset_path}")
 
 
 def build_static_tasks() -> List[Dict[str, Any]]:
@@ -1320,6 +1904,10 @@ def build_static_tasks() -> List[Dict[str, Any]]:
         }
         if "setup_arguments" in spec:
             task["setup_arguments"] = spec["setup_arguments"]
+        if "cleanup_arguments" in spec:
+            task["cleanup_arguments"] = spec["cleanup_arguments"]
+        if "cleanup_verify" in spec:
+            task["cleanup_verify"] = spec["cleanup_verify"]
         tasks.append(task)
 
     # --- compile_gate (falsifiable validate gate: an empty BT must validate valid==false; a
@@ -1332,6 +1920,7 @@ def build_static_tasks() -> List[Dict[str, Any]]:
             "asset_path": spec["asset_path"], "polarity": spec["polarity"], "gate": spec["gate"],
             "setup_chain": spec["setup_chain"], "gate_args": spec["gate_args"],
             "cleanup_chain": spec["cleanup_chain"],
+            "cleanup_verify": spec.get("cleanup_verify"),
             "safety": "mutating_fixture", "subsystem": spec["subsystem"],
             "description": spec["description"],
         }
@@ -1386,12 +1975,28 @@ def generate_tasks(tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dic
         "weights": dict(WEIGHTS),
         "fixture_paths": {
             "blackboard": BB_PATH, "behavior_tree": BT_PATH, "eqs": EQS_PATH,
-            "empty_scratch": BT_EMPTY_SCRATCH, "validate_scratch": BT_VALIDATE_SCRATCH,
+        },
+        "task_owned_scratch_paths": {
+            "template_behavior_tree": BT_TEMPLATE_SCRATCH,
+            "template_blackboard": BB_TEMPLATE_SCRATCH,
+            "negative_compile_gate": BT_EMPTY_SCRATCH,
+            "positive_compile_gate": BT_VALIDATE_SCRATCH,
+            "duplicate_blackboard": BB_DUPLICATE_SCRATCH,
+            "duplicate_behavior_tree": BT_DUPLICATE_SCRATCH,
+            "duplicate_eqs": EQS_DUPLICATE_SCRATCH,
         },
         "fixture_root": FIXTURE_ROOT,
         "setup_fixtures_command": "python Scripts/ai_capability_benchmark.py setup_fixtures --mcp-url http://localhost:9316/mcp",
         "run_command": "python Scripts/ai_capability_benchmark.py run --mcp-url http://localhost:9316/mcp --output-dir Saved/Monolith/Benchmarks/AICapability/<label> --label <label>",
         "score_dimensions": list(SCORE_DIMENSIONS),
+        "run_gates": {
+            "max_transport_failed_fraction": DEFAULT_MAX_TRANSPORT_FAILED_FRACTION,
+            "max_consecutive_transport_failures": DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
+            "min_transport_fraction_sample": DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES,
+            "status_transport_failure_aborts_before_tasks": True,
+            "invalid_status_response_aborts_before_tasks": True,
+            "invalid_run_writes_summary": False,
+        },
         "catalog_version_verified": "ai-182-actions (Saved/Monolith/LogAnalysis/_ai_catalog.txt + Source/MonolithAI RegisterAction verified 2026-06-18; StateTree create/lint registered but stubbed on WITH_STATETREE=0)",
         "task_file": display_path(tasks_path),
     }
@@ -1404,14 +2009,29 @@ def generate_tasks(tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dic
 # ---------------------------------------------------------------------------
 
 def endpoint_preflight(url: str, timeout_s: float) -> Dict[str, Any]:
-    response = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
-    failure_kind = classify_mcp_failure(response)
-    ok = not failure_kind
+    try:
+        response = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
+    except Exception as exc:  # noqa: BLE001 - preflight must return structured diagnostics.
+        response = {
+            "runner_exception": True,
+            "raw": f"{type(exc).__name__}: {exc}",
+        }
+    validation = validate_status_response(response)
+    if isinstance(response, dict) and response.get("runner_exception"):
+        validation = {
+            "ok": False,
+            "failure_kind": "runner_exception",
+            "raw": str(response.get("raw", ""))[:500],
+            "transport_status": None,
+        }
+    ok = bool(validation.get("ok"))
+    failure_kind = str(validation.get("failure_kind", ""))
     return {
         "ok": ok, "phase": "endpoint", "failure_kind": failure_kind,
         "message": "MCP endpoint reachable" if ok else "MCP endpoint did not return a usable monolith_status response",
-        "status": result_data(response) if ok else None,
-        "raw": str(response.get("raw", ""))[:300] if response.get("transport_error") or response.get("parse_error") else result_text(response)[:300],
+        "status": validation.get("status") if ok else None,
+        "raw": str(validation.get("raw", ""))[:300],
+        "transport_status": validation.get("transport_status"),
     }
 
 
@@ -1420,10 +2040,6 @@ _FIXTURE_READINESS: List[Tuple[str, str, str, List[str]]] = [
     (BB_PATH, "get_blackboard", "blackboard", [k for k, _ in FIXTURE_BB_KEYS][:1]),
     (BT_PATH, "get_behavior_tree", "behavior_tree", []),
     (EQS_PATH, "get_eqs_query", "eqs", []),
-    # The compile_gate scratch Behavior Trees — the empty BT drives the negative validate gate, the
-    # Selector-rooted BT drives the positive gate. Existence/contract checked via get_behavior_tree.
-    (BT_EMPTY_SCRATCH, "get_behavior_tree", "behavior_tree", []),
-    (BT_VALIDATE_SCRATCH, "get_behavior_tree", "behavior_tree", []),
 ]
 
 
@@ -1439,9 +2055,15 @@ def fixture_readiness_preflight(url: str, timeout_s: float, require_fixtures: bo
         resp = mcp_call(url, AI_TOOL, {"action": read_action, "asset_path": asset_path}, timeout_s=timeout_s)
         failure = classify_mcp_failure(resp)
         ok = (not failure) and ((not contains) or _response_text_contains_all(resp, contains))
+        transport_status = resp.get("status")
         fixture = {"subsystem": subsystem, "asset_path": asset_path, "read_action": read_action,
                    "ok": ok, "failure_kind": failure or ("" if ok else "fixture_contract_missing"),
-                   "snippet": result_text(resp)[:200]}
+                   "transport_status": (
+                       transport_status
+                       if isinstance(transport_status, int) and not isinstance(transport_status, bool)
+                       else None
+                   ),
+                   "snippet": str(resp.get("raw") or result_text(resp))[:200]}
         fixtures.append(fixture)
         if not ok and first_failure is None:
             first_failure = {"phase": "fixtures", "failure_kind": fixture["failure_kind"],
@@ -1468,11 +2090,12 @@ def print_preflight_summary(preflight: Dict[str, Any]) -> None:
         print(f"  [{f_status}] {fixture.get('subsystem')} {fixture.get('asset_path')}{kind}", flush=True)
 
 
-def _setup_step(url: str, args: Dict[str, Any], timeout_s: float, tolerate_exists: bool = True) -> Dict[str, Any]:
-    resp = mcp_call(url, AI_TOOL, dict(args), timeout_s=timeout_s)
+def _setup_step(url: str, args: Dict[str, Any], timeout_s: float, tolerate_exists: bool = True,
+                tool: str = AI_TOOL) -> Dict[str, Any]:
+    resp = mcp_call(url, tool, dict(args), timeout_s=timeout_s)
     is_err = _is_error(resp)
     already = is_err and ("exist" in result_text(resp).lower() or "already" in result_text(resp).lower())
-    success = (not resp.get("transport_error") and not resp.get("parse_error")
+    success = (not resp.get("transport_error") and not classify_protocol_failure(resp)
                and (not is_err or (tolerate_exists and already)))
     return {"action": str(args.get("action", "")), "success": success, "already_exists": already,
             "is_error": is_err, "failure_kind": classify_mcp_failure(resp),
@@ -1481,8 +2104,8 @@ def _setup_step(url: str, args: Dict[str, Any], timeout_s: float, tolerate_exist
 
 def setup_fixtures(url: str, timeout_s: float) -> Dict[str, Any]:
     """Create the AICapability fixtures at /Game/Benchmarks/AI/: a Blackboard (with seed keys), a
-    Behavior Tree (linked to the Blackboard), an EQS query, an EMPTY scratch Behavior Tree for the
-    negative validate gate, and a well-formed scratch Behavior Tree for the positive validate gate.
+    Behavior Tree (linked to the Blackboard), and an EQS query. The compile-gate Behavior Trees are
+    task-owned transient packages and are intentionally not persistent setup fixtures.
     Safe to re-run (already-exists tolerated). NOTE: StateTree is compiled out on this build
     (WITH_STATETREE=0), so no StateTree fixture is seeded; StateTree is covered by schema tasks only
     and the falsifiable gate uses Behavior Tree validate."""
@@ -1499,27 +2122,19 @@ def setup_fixtures(url: str, timeout_s: float) -> Dict[str, Any]:
     for key_name, key_type in FIXTURE_BB_KEYS:
         steps.append(_setup_step(url, {"action": "add_bb_key", "asset_path": BB_PATH,
                                        "key_name": key_name, "key_type": key_type}, timeout_s))
+    # Persist the seeded keys: add_bb_key edits the loaded asset in memory only,
+    # and an editor restart reverts the Blackboard to its on-disk state
+    # (observed 2026-07-11: BB_BenchAI came back SelfActor-only after a crash,
+    # failing the fixture preflight until re-seeded). create_* actions save
+    # themselves; the key edits need an explicit save.
+    steps.append(_setup_step(url, {"action": "save_asset", "asset_path": BB_PATH}, timeout_s,
+                             tool="asset_query"))
 
     # 2. Behavior Tree (link the Blackboard)
     steps.append(_setup_step(url, {"action": "create_behavior_tree", "save_path": BT_PATH,
                                    "name": "BT_BenchAI", "blackboard_path": BB_PATH}, timeout_s))
 
-    # 3. Empty-scratch Behavior Tree (compile_gate NEGATIVE probe): create_behavior_tree with NO
-    #    nodes leaves the root with no children, so validate_behavior_tree reports valid==false with
-    #    an error-severity "Root has no children — empty Behavior Tree" issue. (StateTree lint is
-    #    unavailable on WITH_STATETREE=0, so the negative gate is a BT validate, not a ST lint.)
-    #    Intentionally NO add_bt_node here — the tree must stay empty for the gate to fire.
-    steps.append(_setup_step(url, {"action": "create_behavior_tree", "save_path": BT_EMPTY_SCRATCH,
-                                   "name": "BT_BenchEmptyScratch"}, timeout_s))
-
-    # 4. Validate-scratch Behavior Tree (compile_gate POSITIVE probe): a Selector root child + the
-    #    linked Blackboard make validate_behavior_tree report valid==true with no error issues.
-    steps.append(_setup_step(url, {"action": "create_behavior_tree", "save_path": BT_VALIDATE_SCRATCH,
-                                   "name": "BT_BenchValidateScratch", "blackboard_path": BB_PATH}, timeout_s))
-    steps.append(_setup_step(url, {"action": "add_bt_node", "asset_path": BT_VALIDATE_SCRATCH,
-                                   "node_class": "BTComposite_Selector"}, timeout_s))
-
-    # 5. EQS query
+    # 3. EQS query
     steps.append(_setup_step(url, {"action": "create_eqs_query", "save_path": EQS_PATH, "name": "EQS_BenchAI"}, timeout_s))
 
     for s in steps:
@@ -1543,38 +2158,458 @@ def setup_fixtures(url: str, timeout_s: float) -> Dict[str, Any]:
 # Run
 # ---------------------------------------------------------------------------
 
-def run_benchmark(url: str, tasks_path: pathlib.Path, output_dir: pathlib.Path,
-                  label: str, timeout_s: float) -> Dict[str, Any]:
-    tasks_path = resolve_plugin_path(tasks_path)
-    tasks = load_jsonl(tasks_path)
+def runner_exception_task_row(task: Dict[str, Any], error: str) -> Dict[str, Any]:
+    """Preserve the task that exposed a benchmark implementation failure."""
+    return {
+        "task_id": task.get("id"),
+        "category": task.get("category"),
+        "namespace": task.get("namespace", "ai"),
+        "action": task.get("action"),
+        "subsystem": task.get("subsystem", ""),
+        "direct_success": False,
+        "planning_signals": False,
+        "evidence": {"runner_exception": error},
+        "transport_error": False,
+        "transport_status": None,
+        "transport_error_raw": "",
+        "transport_failure_call_count": 0,
+        "last_transport_tool": "",
+        "last_transport_action": "",
+        "protocol_error": False,
+        "protocol_error_raw": "",
+        "protocol_failure_call_count": 0,
+        "last_protocol_tool": "",
+        "last_protocol_action": "",
+        "response_is_error": False,
+        "response_text": "",
+        "failure_kind": "runner_exception",
+        "error": error,
+    }
+
+
+def attach_run_context(
+    payload: Dict[str, Any],
+    corpus: TaskCorpus,
+    start_identity: Dict[str, str],
+    end_identity: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    payload["task_corpus"] = task_corpus_metadata(corpus)
+    payload["comparison_valid"] = corpus.comparable
+    payload["status_identity_start"] = start_identity
+    if end_identity is not None:
+        payload["status_identity_end"] = end_identity
+    return payload
+
+
+def build_attempt_failure(
+    label: str,
+    status: Dict[str, Any],
+    tasks: List[Dict[str, Any]],
+    rows: List[Dict[str, Any]],
+    tracker: TransportFailureTracker,
+    benchmark_inputs: Dict[str, Any],
+    corpus: TaskCorpus,
+    start_identity: Dict[str, str],
+    fields: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Build partial diagnostics without letting aggregate defects hide the invalid run."""
+    try:
+        failure = aggregate(label, status, tasks[:len(rows)], rows)
+    except Exception as exc:  # noqa: BLE001 - retain a minimal invalid artifact.
+        failure = {
+            "label": label,
+            "created_at": utc_now(),
+            "task_count": len(rows),
+            "aggregate_error": f"{type(exc).__name__}: {exc}",
+        }
+    failure.update(fields)
+    failure["run_valid"] = False
+    failure["metrics_valid"] = False
+    failure.update(tracker.snapshot())
+    attach_benchmark_inputs(failure, benchmark_inputs)
+    attach_run_context(failure, corpus, start_identity)
+    return failure
+
+
+def run_benchmark(
+    url: str,
+    tasks_path: pathlib.Path,
+    output_dir: pathlib.Path,
+    label: str,
+    timeout_s: float,
+    *,
+    require_fixtures: bool = True,
+    allow_subset: bool = False,
+    max_transport_failed_fraction: float = DEFAULT_MAX_TRANSPORT_FAILED_FRACTION,
+    max_consecutive_transport_failures: int = DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
+    min_transport_fraction_sample: int = DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES,
+) -> Dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    status_response = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
-    status = result_data(status_response)
-    benchmark_inputs = build_benchmark_inputs("AICapability", tasks_path=tasks_path, mcp_status=status)
+    clear_run_outputs(output_dir)
+
+    try:
+        corpus = load_task_corpus(
+            tasks_path,
+            suite="AICapability",
+            canonical_tasks_path=DEFAULT_TASKS,
+            canonical_manifest_path=DEFAULT_MANIFEST,
+            allow_subset=allow_subset,
+            allowed_categories=AI_TASK_CATEGORIES,
+            require_arguments=False,
+        )
+        tasks_path = resolve_plugin_path(tasks_path)
+        tasks = corpus.tasks
+        validate_task_integrity(tasks)
+    except Exception as exc:  # noqa: BLE001 - invalid inputs must invalidate stale baselines.
+        failure = {
+            "label": label,
+            "completion_status": "aborted_input_preflight",
+            "failure_stage": "input_preflight",
+            "failure_kind": "runner_exception",
+            "metrics_scope": "not_started",
+            "completed_task_count": 0,
+            "total_task_count": 0,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+        write_run_failure(output_dir, failure)
+        return failure
+
+    try:
+        transport_tracker = TransportFailureTracker(
+            max_failed_fraction=max_transport_failed_fraction,
+            max_consecutive_failures=max_consecutive_transport_failures,
+            min_fraction_samples=min_transport_fraction_sample,
+        )
+    except ValueError as exc:
+        failure = {
+            "label": label,
+            "completion_status": "aborted_invalid_configuration",
+            "failure_stage": "configuration",
+            "failure_kind": "invalid_configuration",
+            "metrics_scope": "not_started",
+            "completed_task_count": 0,
+            "total_task_count": len(tasks),
+            "error": str(exc),
+        }
+        write_run_failure(output_dir, failure)
+        return failure
+
+    try:
+        status_response: Any = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
+        status_validation = validate_status_response(status_response)
+    except Exception as exc:  # noqa: BLE001 - status defects must create invalid artifacts.
+        status_validation = {
+            "ok": False,
+            "failure_kind": "runner_exception",
+            "raw": f"{type(exc).__name__}: {exc}",
+            "transport_status": None,
+        }
+
+    if not status_validation.get("ok"):
+        failure_kind = str(status_validation.get("failure_kind", "protocol_error"))
+        raw = str(status_validation.get("raw", ""))[:500]
+        failure = {
+            "label": label,
+            "completion_status": (
+                "aborted_status_transport_failure"
+                if failure_kind == "transport_error"
+                else "aborted_status_preflight"
+            ),
+            "failure_stage": "status_preflight",
+            "failure_kind": failure_kind,
+            "metrics_scope": "not_started",
+            "completed_task_count": 0,
+            "total_task_count": len(tasks),
+            "transport_failure_count": 1 if failure_kind == "transport_error" else 0,
+            "last_transport_status": status_validation.get("transport_status"),
+            "last_transport_error_raw": raw if failure_kind == "transport_error" else "",
+            "protocol_error_raw": raw if failure_kind != "transport_error" else "",
+            "max_transport_failed_fraction": max_transport_failed_fraction,
+            "max_consecutive_transport_failures": max_consecutive_transport_failures,
+            "min_transport_fraction_sample": min_transport_fraction_sample,
+        }
+        write_run_failure(output_dir, failure)
+        return failure
+
+    status = dict(status_validation["status"])
+    start_identity = status_identity(status, endpoint=url)
+    benchmark_inputs = build_benchmark_inputs(
+        "AICapability", tasks_path=tasks_path, mcp_status=status
+    )
+
+    if require_fixtures:
+        try:
+            fixture_preflight = fixture_readiness_preflight(
+                url, timeout_s, require_fixtures=True
+            )
+        except Exception as exc:  # noqa: BLE001 - fixture runner defects invalidate the run.
+            fixture_preflight = {
+                "ok": False,
+                "phase": "fixtures",
+                "failure_kind": "runner_exception",
+                "message": f"{type(exc).__name__}: {exc}",
+            }
+        if not fixture_preflight.get("ok"):
+            failure_kind = str(fixture_preflight.get(
+                "failure_kind", "fixture_readiness_failed"
+            ))
+            first_failure = fixture_preflight.get("first_failure")
+            first_fixture = (
+                first_failure.get("fixture", {})
+                if isinstance(first_failure, dict)
+                else {}
+            )
+            failure_diagnostic = first_fixture or (
+                fixture_preflight.get("endpoint", {})
+                if isinstance(fixture_preflight.get("endpoint"), dict)
+                else {}
+            )
+            failure = {
+                "label": label,
+                "completion_status": "aborted_fixture_preflight",
+                "failure_stage": "fixture_preflight",
+                "failure_kind": failure_kind,
+                "metrics_scope": "not_started",
+                "completed_task_count": 0,
+                "total_task_count": len(tasks),
+                "transport_failure_count": 1 if failure_kind == "transport_error" else 0,
+                "last_transport_status": failure_diagnostic.get("transport_status"),
+                "last_transport_error_raw": (
+                    str(failure_diagnostic.get("snippet", failure_diagnostic.get("raw", "")))
+                    if failure_kind == "transport_error" else ""
+                ),
+                "protocol_error_raw": (
+                    str(failure_diagnostic.get("snippet", failure_diagnostic.get("raw", "")))
+                    if failure_kind == "protocol_error" else ""
+                ),
+                "preflight": fixture_preflight,
+            }
+            attach_benchmark_inputs(failure, benchmark_inputs)
+            attach_run_context(failure, corpus, start_identity)
+            write_run_failure(output_dir, failure)
+            return failure
 
     rows: List[Dict[str, Any]] = []
     per_task_jsonl = output_dir / "per_task.jsonl"
-    if per_task_jsonl.exists():
-        per_task_jsonl.unlink()
 
     for index, task in enumerate(tasks, 1):
-        row = score_task(url, task, timeout_s)
+        runner_exception = ""
+        try:
+            row = score_task(url, task, timeout_s)
+        except Exception as exc:  # noqa: BLE001 - preserve the triggering task and abort.
+            runner_exception = f"{type(exc).__name__}: {exc}"
+            row = runner_exception_task_row(task, runner_exception)
         rows.append(row)
+        transport_decision = transport_tracker.observe(
+            transport_error=bool(row.get("transport_error")),
+            item_id=str(row.get("task_id", "")),
+            status=(
+                row.get("transport_status")
+                if isinstance(row.get("transport_status"), int)
+                and not isinstance(row.get("transport_status"), bool)
+                else None
+            ),
+            raw=str(row.get("transport_error_raw", "")),
+        )
         with per_task_jsonl.open("a", encoding="utf-8", newline="\n") as handle:
             handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
             handle.write("\n")
-        print(f"[{index}/{len(tasks)}] {row['task_id']} category={row['category']} success={row['direct_success']}", flush=True)
+        print(
+            f"[{index}/{len(tasks)}] {row['task_id']} category={row['category']} "
+            f"success={row['direct_success']}",
+            flush=True,
+        )
+
+        if runner_exception:
+            failure = build_attempt_failure(
+                label,
+                status,
+                tasks,
+                rows,
+                transport_tracker,
+                benchmark_inputs,
+                corpus,
+                start_identity,
+                {
+                    "completion_status": "aborted_runner_exception",
+                    "failure_stage": "task_scoring",
+                    "failure_kind": "runner_exception",
+                    "metrics_scope": "attempted_prefix_runner_exception",
+                    "completed_task_count": index,
+                    "total_task_count": len(tasks),
+                    "last_task_id": str(task.get("id", "")),
+                    "exception": runner_exception,
+                },
+            )
+            write_run_failure(output_dir, failure)
+            write_json(output_dir / "partial_summary.json", failure)
+            return failure
+
+        if row.get("failure_kind") == "protocol_error":
+            failure = build_attempt_failure(
+                label,
+                status,
+                tasks,
+                rows,
+                transport_tracker,
+                benchmark_inputs,
+                corpus,
+                start_identity,
+                {
+                    "completion_status": "aborted_protocol_error",
+                    "failure_stage": "task_response",
+                    "failure_kind": "protocol_error",
+                    "metrics_scope": "attempted_prefix_protocol_error",
+                    "completed_task_count": index,
+                    "total_task_count": len(tasks),
+                    "last_task_id": str(task.get("id", "")),
+                    "protocol_error_raw": str(row.get("protocol_error_raw", "")),
+                },
+            )
+            write_run_failure(output_dir, failure)
+            write_json(output_dir / "partial_summary.json", failure)
+            return failure
+
+        if transport_decision:
+            failure = build_attempt_failure(
+                label,
+                status,
+                tasks,
+                rows,
+                transport_tracker,
+                benchmark_inputs,
+                corpus,
+                start_identity,
+                {
+                    "completion_status": "aborted_transport_failure_budget",
+                    "failure_stage": "task_scoring",
+                    "failure_kind": "transport_error",
+                    "metrics_scope": "attempted_prefix_including_transport_failures",
+                    "completed_task_count": index,
+                    "total_task_count": len(tasks),
+                    "transport_gate_reason": transport_decision.reason,
+                    "last_task_id": transport_decision.item_id,
+                },
+            )
+            write_run_failure(output_dir, failure)
+            write_json(output_dir / "partial_summary.json", failure)
+            return failure
+
         if index == 1 or index == len(tasks) or index % 10 == 0:
             partial = aggregate(label, status, tasks[:index], rows)
-            partial["completed_task_count"] = index
-            partial["total_task_count"] = len(tasks)
+            partial.update({
+                "completed_task_count": index,
+                "total_task_count": len(tasks),
+                "run_valid": None,
+                "metrics_valid": False,
+                "metrics_scope": "attempted_prefix",
+                "completion_status": "in_progress",
+            })
+            partial.update(transport_tracker.snapshot())
             attach_benchmark_inputs(partial, benchmark_inputs)
+            attach_run_context(partial, corpus, start_identity)
             write_json(output_dir / "partial_summary.json", partial)
 
-    summary = aggregate(label, status, tasks, rows)
+    try:
+        summary = aggregate(label, status, tasks, rows)
+    except Exception as exc:  # noqa: BLE001 - aggregate defects invalidate the run.
+        error = f"{type(exc).__name__}: {exc}"
+        failure = build_attempt_failure(
+            label,
+            status,
+            tasks,
+            rows,
+            transport_tracker,
+            benchmark_inputs,
+            corpus,
+            start_identity,
+            {
+                "completion_status": "aborted_runner_exception",
+                "failure_stage": "final_aggregate",
+                "failure_kind": "runner_exception",
+                "metrics_scope": "complete_run_invalid",
+                "completed_task_count": len(rows),
+                "total_task_count": len(tasks),
+                "exception": error,
+            },
+        )
+        write_run_failure(output_dir, failure)
+        write_json(output_dir / "partial_summary.json", failure)
+        return failure
+
+    final_transport_decision = transport_tracker.finalize()
+    summary.update({
+        "run_valid": True,
+        "metrics_valid": True,
+        "metrics_scope": "complete_run" if corpus.comparable else "complete_subset_run",
+        "completion_status": "completed",
+    })
+    summary.update(transport_tracker.snapshot())
     attach_benchmark_inputs(summary, benchmark_inputs)
+    attach_run_context(summary, corpus, start_identity)
+    if final_transport_decision:
+        summary.update({
+            "run_valid": False,
+            "metrics_valid": False,
+            "metrics_scope": "complete_run_invalid",
+            "completion_status": "completed_transport_failure_budget_exceeded",
+            "failure_kind": "transport_error",
+            "transport_gate_reason": final_transport_decision.reason,
+            "last_task_id": final_transport_decision.item_id,
+        })
+        write_run_failure(output_dir, summary)
+        write_json(output_dir / "partial_summary.json", summary)
+        return summary
+
+    try:
+        end_status_response: Any = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
+        end_status_validation = validate_status_response(end_status_response)
+    except Exception as exc:  # noqa: BLE001 - postflight must invalidate the run.
+        end_status_validation = {
+            "ok": False,
+            "failure_kind": "runner_exception",
+            "raw": f"{type(exc).__name__}: {exc}",
+            "transport_status": None,
+        }
+    if not end_status_validation.get("ok"):
+        failure_kind = str(end_status_validation.get("failure_kind", "protocol_error"))
+        summary.update({
+            "run_valid": False,
+            "metrics_valid": False,
+            "metrics_scope": "complete_run_invalid",
+            "completion_status": "aborted_status_postflight",
+            "failure_stage": "status_postflight",
+            "failure_kind": failure_kind,
+            "postflight_status_raw": str(end_status_validation.get("raw", ""))[:500],
+            "postflight_transport_status": end_status_validation.get("transport_status"),
+        })
+        write_run_failure(output_dir, summary)
+        write_json(output_dir / "partial_summary.json", summary)
+        return summary
+
+    end_status = dict(end_status_validation["status"])
+    end_identity = status_identity(end_status, endpoint=url)
+    identity_drift = status_identity_mismatches(start_identity, end_identity)
+    attach_run_context(summary, corpus, start_identity, end_identity)
+    if identity_drift:
+        summary.update({
+            "run_valid": False,
+            "metrics_valid": False,
+            "metrics_scope": "complete_run_invalid",
+            "completion_status": "aborted_status_identity_drift",
+            "failure_stage": "status_postflight",
+            "failure_kind": "status_identity_drift",
+            "status_identity_mismatches": identity_drift,
+        })
+        write_run_failure(output_dir, summary)
+        write_json(output_dir / "partial_summary.json", summary)
+        return summary
+
     write_json(output_dir / "summary.json", summary)
     write_json(output_dir / "per_task.json", rows)
+    partial_path = output_dir / "partial_summary.json"
+    if partial_path.exists():
+        partial_path.unlink()
     return summary
 
 
@@ -1655,7 +2690,37 @@ def main(argv: Optional[List[str]] = None) -> int:
     run_cmd.add_argument("--output-dir", type=pathlib.Path, required=True)
     run_cmd.add_argument("--label", required=True)
     run_cmd.add_argument("--request-timeout-s", type=float, default=20.0)
-    run_cmd.add_argument("--skip-preflight", action="store_true")
+    run_cmd.add_argument(
+        "--allow-subset",
+        action="store_true",
+        help="Permit an explicit non-canonical diagnostic corpus; output is marked non-comparable.",
+    )
+    run_cmd.add_argument(
+        "--skip-preflight",
+        action="store_true",
+        help=(
+            "Skip fixture readiness checks only; mandatory monolith_status validation "
+            "always runs."
+        ),
+    )
+    run_cmd.add_argument(
+        "--max-transport-failed-fraction",
+        type=float,
+        default=DEFAULT_MAX_TRANSPORT_FAILED_FRACTION,
+        help="Abort without summary when transport failures exceed this fraction after 20 tasks.",
+    )
+    run_cmd.add_argument(
+        "--max-consecutive-transport-failures",
+        type=int,
+        default=DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
+        help="Abort without summary after this many consecutive transport-failed tasks.",
+    )
+    run_cmd.add_argument(
+        "--min-transport-fraction-sample",
+        type=int,
+        default=DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES,
+        help="Minimum attempted tasks before applying the transport-fraction gate.",
+    )
 
     cmp_cmd = sub.add_parser("compare", help="Compare two run summary files")
     cmp_cmd.add_argument("--baseline", type=pathlib.Path, required=True)
@@ -1683,15 +2748,20 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0 if result.get("ok") else 1
 
     if args.cmd == "run":
-        if not args.skip_preflight:
-            preflight = fixture_readiness_preflight(args.mcp_url, args.request_timeout_s, require_fixtures=True)
-            print_preflight_summary(preflight)
-            if not preflight.get("ok"):
-                sys.stdout.buffer.write((json.dumps({"preflight": preflight}, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
-                return 1
-        summary = run_benchmark(args.mcp_url, args.tasks, args.output_dir, args.label, args.request_timeout_s)
+        summary = run_benchmark(
+            args.mcp_url,
+            args.tasks,
+            args.output_dir,
+            args.label,
+            args.request_timeout_s,
+            require_fixtures=not args.skip_preflight,
+            allow_subset=args.allow_subset,
+            max_transport_failed_fraction=args.max_transport_failed_fraction,
+            max_consecutive_transport_failures=args.max_consecutive_transport_failures,
+            min_transport_fraction_sample=args.min_transport_fraction_sample,
+        )
         sys.stdout.buffer.write((json.dumps(summary, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
-        return 0
+        return 0 if summary.get("run_valid") else 1
 
     if args.cmd == "compare":
         comparison = compare_runs(args.baseline, args.current, args.output_dir)

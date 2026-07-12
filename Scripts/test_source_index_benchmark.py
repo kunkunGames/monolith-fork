@@ -1,18 +1,29 @@
 #!/usr/bin/env python3
 """Offline unit tests for the SourceIndex benchmark scoring branches.
 
-No live editor / MCP server is touched.  Each test fabricates an MCP
-``tools/call`` response in the real envelope shape::
+No live editor / MCP server is touched.  Each test fabricates an MCP ``tools/call``
+response in one of the TWO real envelope shapes and asserts the SAME verdict from both,
+so the scorer stays envelope-invariant:
 
-    {"result": {"content": [{"type": "text", "text": <text>}], "isError": <bool>},
-     "request": {...}}
+  legacy (``bEnableStructuredToolResults=False``) -- payload serialized into the text::
 
-and asserts the NEW scoring behaviour:
+      {"result": {"content": [{"type": "text", "text": <payload json>}], "isError": <bool>}}
+
+  structured (the live contract, checked in at ``Config/DefaultMonolith.ini``) -- payload
+  ONLY in ``structuredContent``; ``content[0].text`` is the constant stub
+  "OK; see structuredContent."::
+
+      {"result": {"isError": false, "structuredContent": {<payload>},
+                  "_meta": {"result_kind": "structured"},
+                  "content": [{"type": "text", "text": "OK; see structuredContent."}]}}
+
+and asserts the scoring behaviour:
 
   * an empty ``find_callers`` response on a require_results task scores LOW,
   * a correct multi-result response scores HIGH,
   * a not-found symbol that returns a structured, identifier-naming error passes
-    the negative_recovery category, while a transport crash / silent empty does not.
+    the negative_recovery category, while a transport crash / silent empty does not,
+  * ergonomics grades the action's answer text, never the transport stub.
 
 Run::
 
@@ -22,8 +33,10 @@ Run::
 from __future__ import annotations
 
 import importlib.util
+import json
 import pathlib
 import sys
+import tempfile
 from typing import Any, Dict, List, Optional
 
 _SCRIPTS_DIR = pathlib.Path(__file__).resolve().parent
@@ -57,6 +70,64 @@ def _transport_crash() -> Dict[str, Any]:
     return {"transport_error": True, "status": None, "raw": "timeout", "request": {}}
 
 
+# --- Structured tool results (bEnableStructuredToolResults=True, the live contract) ---
+#
+# On SUCCESS the payload lives ONLY in ``structuredContent`` and ``content[0].text`` is
+# a constant stub.  On ERROR the compact envelope keeps a human message in
+# ``content[0].text`` but moves hints/related_actions into ``structuredContent``.
+# Contract: Docs/specs/SPEC_MonolithStructuredToolResults.md.
+
+_STRUCTURED_STUB = "OK; see structuredContent."
+
+
+def _structured_ok(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "result": {
+            "isError": False,
+            "structuredContent": payload,
+            "_meta": {"result_kind": "structured", "content_text_mode": "compact_status"},
+            "content": [{"type": "text", "text": _STRUCTURED_STUB}],
+        },
+        "request": {},
+    }
+
+
+def _structured_ok_text(text: str) -> Dict[str, Any]:
+    """Structured success whose action payload nests the handler's own text blob.
+
+    The source handlers put ``{"content":[{"type":"text","text": <blob>}]}`` inside the
+    action payload, so under structured results that object IS ``structuredContent``.
+    """
+    return _structured_ok({"content": [{"type": "text", "text": text}]})
+
+
+def _structured_error(text: str, hints: Optional[List[str]] = None,
+                      related: Optional[List[str]] = None,
+                      error_code: str = "not_found") -> Dict[str, Any]:
+    payload: Dict[str, Any] = {"ok": False, "error": text, "error_code": error_code}
+    if hints:
+        payload["hints"] = list(hints)
+    if related:
+        payload["related_actions"] = list(related)
+    return {
+        "result": {
+            "isError": True,
+            "structuredContent": payload,
+            "_meta": {"result_kind": "structured", "content_text_mode": "compact_status"},
+            "content": [{"type": "text", "text": f"{text}; see structuredContent."}],
+        },
+        "request": {},
+    }
+
+
+def _legacy_json(payload: Dict[str, Any], *, is_error: bool = False) -> Dict[str, Any]:
+    """Legacy envelope (flag off): the action payload is SERIALIZED into content[0].text."""
+    return {
+        "result": {"content": [{"type": "text", "text": json.dumps(payload)}], "isError": is_error},
+        "request": {},
+    }
+
+
 # A populated find_callers response: lines are "FromName — path:line" (em-dash blob).
 _POPULATED_CALLERS = (
     "AMyActor::Start — Source/MyActor.cpp:42\n"
@@ -85,6 +156,89 @@ def _score(task: Dict[str, Any], response: Dict[str, Any]) -> Dict[str, Any]:
         return sib.score_task("http://unused", task, timeout_s=1.0)
     finally:
         sib.mcp_call = original
+
+
+def _status_response() -> Dict[str, Any]:
+    return _ok_text('{"server_running":true,"catalog_version":"sha256:test"}')
+
+
+def _run_task(index: int) -> Dict[str, Any]:
+    return {
+        "id": f"SIB-R-{index}",
+        "category": "symbol_lookup",
+        "namespace": "source",
+        "action": "search_source",
+        "tool": "source_query",
+        "arguments": {"action": "search_source", "query": "AActor"},
+        "expected": {"min_results": 1, "require_results": True},
+    }
+
+
+def _run_row(
+    task: Dict[str, Any],
+    *,
+    transport: bool = False,
+    status: Any = None,
+    raw: str = "",
+    protocol: bool = False,
+) -> Dict[str, Any]:
+    return {
+        "task_id": task["id"],
+        "category": task["category"],
+        "namespace": task["namespace"],
+        "action": task["action"],
+        "direct_success": not transport and not protocol,
+        "action_selection_score": 0.0 if transport or protocol else 1.0,
+        "param_correction_score": None,
+        "hallucinated_workflow_risk": None,
+        "negative_quality_score": None,
+        "expected_nonempty": True,
+        "results_count": 0 if transport or protocol else 1,
+        "field_complete_count": 0 if transport or protocol else 1,
+        "evidence": {},
+        "transport_error": transport,
+        "transport_status": status,
+        "transport_error_raw": raw if transport else "",
+        "protocol_error": protocol,
+        "protocol_error_raw": raw if protocol else "",
+        "failure_kind": "protocol_error" if protocol else "",
+        "response_is_error": False,
+        "response_text": "",
+    }
+
+
+def _run_with_fake_rows(
+    tasks: List[Dict[str, Any]],
+    fake_score: Any,
+    *,
+    output_dir: pathlib.Path,
+    status_response: Any = None,
+    **kwargs: Any,
+) -> Dict[str, Any]:
+    tasks_path = output_dir.parent / "tasks.jsonl"
+    tasks_path.write_text(
+        "".join(json.dumps(task) + "\n" for task in tasks),
+        encoding="utf-8",
+    )
+    original_call = sib.mcp_call
+    original_score = sib.score_task
+    sib.mcp_call = lambda url, tool, arguments, timeout_s=45.0: (
+        _status_response() if status_response is None else status_response
+    )
+    sib.score_task = fake_score
+    try:
+        return sib.run_benchmark(
+            "http://unused",
+            tasks_path,
+            output_dir,
+            "selftest",
+            1.0,
+            allow_subset=True,
+            **kwargs,
+        )
+    finally:
+        sib.mcp_call = original_call
+        sib.score_task = original_score
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +308,47 @@ def _negative_resolve_task() -> Dict[str, Any]:
         "expected": {"expect_error": False, "offending_identifier": "BeginPlay",
                      "pass_threshold": 0.7},
     }
+
+
+def _negative_search_task() -> Dict[str, Any]:
+    return {
+        "id": "T-neg-search",
+        "category": "negative_recovery",
+        "namespace": "source",
+        "action": "search_source",
+        "tool": "source_query",
+        "arguments": {"action": "search_source", "query": "UTotallyMadeUpClass_ZZZ999"},
+        "expected": {"expect_error": True, "require_identifier": True,
+                     "offending_identifier": "UTotallyMadeUpClass_ZZZ999",
+                     "pass_threshold": 0.7},
+    }
+
+
+def _ergonomics_task() -> Dict[str, Any]:
+    return {
+        "id": "T-ergo",
+        "category": "ergonomics_text",
+        "namespace": "source",
+        "action": "get_signature",
+        "tool": "source_query",
+        "arguments": {"action": "get_signature", "symbol": "FString::Printf"},
+        "expected": {},
+    }
+
+
+def _health_task() -> Dict[str, Any]:
+    return {
+        "id": "T-health",
+        "category": "health_check",
+        "namespace": "source",
+        "action": "health",
+        "tool": "source_query",
+        "arguments": {"action": "health", "include_counts": True},
+        "expected": {},
+    }
+
+
+_SIGNATURE_TEXT = "static FString FString::Printf(const FmtType& Fmt, Types... Args)"
 
 
 # ---------------------------------------------------------------------------
@@ -257,6 +452,536 @@ def test_negative_resolve_rejected_fails() -> None:
     row = _score(_negative_resolve_task(), resp)
     check("negative-resolve: rejecting a resolvable input scores 0.0",
           row["negative_quality_score"] == 0.0, f"q={row['negative_quality_score']}")
+
+
+# ---------------------------------------------------------------------------
+# Structured-tool-results regressions (payload only in structuredContent).
+#
+# Every one of these FAILS on the pre-fix scorer, which scanned the transport
+# content[0].text stub: the empty-result gate went dead (silent inflation to 1.0),
+# the negative-recovery partial-credit rungs became unreachable (silent 0.0), and
+# ergonomics degenerated into "1 - isError rate".  Each case asserts the SAME verdict
+# as its legacy-envelope twin above, so the scorer is envelope-invariant.
+# ---------------------------------------------------------------------------
+
+def test_structured_empty_require_results_callers_scores_low() -> None:
+    resp = _structured_ok_text(
+        "No direct C++ callers found for 'FString::Printf'. This function may be called "
+        "via delegates, Blueprints, input bindings, or reflection."
+    )
+    row = _score(_require_results_callers_task(), resp)
+    check("structured: empty find_callers (require_results) is NOT a hit",
+          row["direct_success"] is False, f"direct_success={row['direct_success']}")
+    check("structured: empty find_callers contributes 0 action_selection",
+          row["action_selection_score"] == 0.0, f"sel={row['action_selection_score']}")
+    check("structured: empty find_callers is flagged expected_nonempty",
+          row["expected_nonempty"] is True)
+    check("structured: empty find_callers has_data is False",
+          row["evidence"]["has_data"] is False, f"evidence={row['evidence']}")
+
+
+def test_structured_empty_payload_is_never_a_hit() -> None:
+    # An empty structuredContent ({}) carries no data at all and must not pass the
+    # require_results gate on the strength of the non-empty transport stub.
+    row = _score(_require_results_search_task(), _structured_ok({}))
+    check("structured: empty {} payload is NOT a lookup hit",
+          row["direct_success"] is False and row["results_count"] == 0,
+          f"direct_success={row['direct_success']} count={row['results_count']}")
+
+
+def test_structured_populated_lookups_score_high() -> None:
+    callers = _score(_require_results_callers_task(), _structured_ok_text(_POPULATED_CALLERS))
+    check("structured: populated find_callers (require_results) is a hit",
+          callers["direct_success"] is True, f"direct_success={callers['direct_success']}")
+
+    search = _score(_require_results_search_task(), _structured_ok_text(_POPULATED_SEARCH))
+    check("structured: populated search_source is a hit", search["direct_success"] is True)
+    check("structured: populated search_source parses >=1 structured row",
+          search["results_count"] >= 1, f"results_count={search['results_count']}")
+    check("structured: populated search_source rows are field-complete",
+          search["field_complete_count"] >= 1, f"complete={search['field_complete_count']}")
+
+
+def test_structured_review_context_empty_sentinel_is_a_miss() -> None:
+    task = {
+        "id": "T-review",
+        "category": "review_context_lookup",
+        "namespace": "source",
+        "action": "review_context",
+        "tool": "source_query",
+        "arguments": {"action": "review_context", "symbol": "AActor"},
+        "expected": {"min_results": 1, "require_results": True},
+    }
+    row = _score(task, _structured_ok_text("No results found for 'AActor'."))
+    check("structured: empty review_context (require_results) is NOT a hit",
+          row["direct_success"] is False and row["action_selection_score"] == 0.0,
+          f"direct_success={row['direct_success']} sel={row['action_selection_score']}")
+
+    populated = _score(task, _structured_ok({
+        "risk": {"name": "AActor", "kind": "class", "file": "Engine/Actor.h", "line": 256},
+        "top_risks": [{"name": "AActor::Tick", "kind": "function",
+                       "file": "Engine/Actor.cpp", "line": 1200}],
+    }))
+    check("structured: populated review_context is a hit",
+          populated["direct_success"] is True and populated["results_count"] >= 1,
+          f"direct_success={populated['direct_success']} count={populated['results_count']}")
+
+
+def test_structured_negative_non_error_sentinel_scores_half() -> None:
+    # isError=false + "No results found for '<bad symbol>'" names the problem without
+    # erroring: the 0.5 partial-credit rung, unreachable while only the stub was scanned.
+    row = _score(_negative_search_task(),
+                 _structured_ok_text("No results found for 'UTotallyMadeUpClass_ZZZ999'."))
+    check("structured: non-error response naming the bad symbol scores 0.5",
+          row["negative_quality_score"] == 0.5, f"q={row['negative_quality_score']}")
+    check("structured: 0.5 still FAILS the 0.7 pass threshold",
+          row["direct_success"] is False, f"direct_success={row['direct_success']}")
+
+
+def test_structured_negative_silent_success_still_scores_zero() -> None:
+    # A clean success that drops the identifier must stay at 0.0 (no rung inflation).
+    row = _score(_negative_search_task(), _structured_ok({"results": [], "note": "done"}))
+    check("structured: silent non-error success on bad input scores 0.0",
+          row["negative_quality_score"] == 0.0, f"q={row['negative_quality_score']}")
+
+
+def test_structured_negative_error_with_structured_hints_scores_one() -> None:
+    # Compact+structured errors keep a human message but move hints/related_actions
+    # into structuredContent; reading only the result top level capped this at 0.7.
+    resp = _structured_error(
+        "No results found for 'UTotallyMadeUpClass_ZZZ999'.",
+        hints=["Run source.search_source first to discover the indexed symbol name."],
+        related=["source.search_source"],
+        error_code="coverage_miss",
+    )
+    row = _score(_negative_search_task(), resp)
+    check("structured: error carrying structuredContent hints scores 1.0",
+          row["negative_quality_score"] == 1.0, f"q={row['negative_quality_score']}")
+    check("structured: self-correcting error PASSES the negative task",
+          row["direct_success"] is True)
+    check("structured: hint flag is set from the structured payload",
+          row["evidence"]["has_hint"] is True and row["evidence"]["names_identifier"] is True,
+          f"evidence={row['evidence']}")
+
+
+def test_structured_negative_error_without_hint_stays_partial() -> None:
+    # No hint anywhere -> still 0.7, i.e. the structured payload must not manufacture one.
+    row = _score(_negative_search_task(),
+                 _structured_error("No results found for 'UTotallyMadeUpClass_ZZZ999'."))
+    check("structured: identifier-naming error without a hint scores 0.7",
+          row["negative_quality_score"] == 0.7, f"q={row['negative_quality_score']}")
+
+
+def test_structured_negative_resolve_empty_scores_zero() -> None:
+    # expect_error=false: an unqualified name answered with the truthful empty sentinel
+    # is a FAILURE, not a pass.  The stub-scanning scorer inflated this to 1.0.
+    row = _score(_negative_resolve_task(),
+                 _structured_ok_text("No direct C++ callers found for 'BeginPlay'."))
+    check("structured: truthfully-empty unqualified resolve scores 0.0",
+          row["negative_quality_score"] == 0.0, f"q={row['negative_quality_score']}")
+    check("structured: empty unqualified resolve FAILS the negative task",
+          row["direct_success"] is False)
+
+    populated = _score(_negative_resolve_task(), _structured_ok_text(_POPULATED_CALLERS))
+    check("structured: unqualified resolve WITH data still scores 1.0",
+          populated["negative_quality_score"] == 1.0 and populated["direct_success"] is True,
+          f"q={populated['negative_quality_score']}")
+
+
+def test_structured_ergonomics_scores_the_answer_not_the_stub() -> None:
+    ok = _score(_ergonomics_task(), _structured_ok_text(_SIGNATURE_TEXT))
+    check("structured: ergonomics answer text passes",
+          ok["direct_success"] is True, f"direct_success={ok['direct_success']}")
+    check("structured: ergonomics evidence reports the ANSWER, not the 26-char stub",
+          ok["evidence"]["response_len"] == len(_SIGNATURE_TEXT)
+          and ok["evidence"]["response_preview"].startswith("static FString"),
+          f"evidence={ok['evidence']}")
+
+    empty = _score(_ergonomics_task(), _structured_ok({}))
+    check("structured: ergonomics with an EMPTY payload fails",
+          empty["direct_success"] is False and empty["results_count"] == 0,
+          f"direct_success={empty['direct_success']}")
+
+    errored = _score(_ergonomics_task(), _structured_ok_text("Error: symbol is not indexed."))
+    check("structured: ergonomics answer starting with 'Error' fails",
+          errored["direct_success"] is False, f"direct_success={errored['direct_success']}")
+
+
+def test_structured_health_check_is_envelope_invariant() -> None:
+    payload = {"status": "ok", "row_counts": {"symbols": 1234}}
+    structured = _score(_health_task(), _structured_ok(payload))
+    legacy = _score(_health_task(), _legacy_json(payload))
+    check("structured: health with status + counts passes",
+          structured["direct_success"] is True, f"row={structured['evidence']}")
+    check("health: structured and legacy envelopes agree",
+          structured["direct_success"] == legacy["direct_success"]
+          and structured["evidence"]["symbol_count"] == legacy["evidence"]["symbol_count"] == 1234,
+          f"structured={structured['evidence']} legacy={legacy['evidence']}")
+
+    empty = _score(_health_task(), _structured_ok({}))
+    check("structured: health with an EMPTY payload fails",
+          empty["direct_success"] is False, f"evidence={empty['evidence']}")
+
+
+def test_legacy_serialized_json_envelope_still_scores() -> None:
+    # The flag can be off in other checkouts: the REAL legacy wire shape serializes the
+    # action payload into content[0].text.  Both verdicts must match structured mode.
+    empty = _score(
+        _require_results_callers_task(),
+        _legacy_json({"content": [{"type": "text",
+                                   "text": "No direct C++ callers found for 'FString::Printf'."}]}),
+    )
+    check("legacy JSON: empty find_callers (require_results) is NOT a hit",
+          empty["direct_success"] is False, f"direct_success={empty['direct_success']}")
+
+    populated = _score(
+        _require_results_search_task(),
+        _legacy_json({"content": [{"type": "text", "text": _POPULATED_SEARCH}]}),
+    )
+    check("legacy JSON: populated search_source is a hit with structured rows",
+          populated["direct_success"] is True and populated["results_count"] >= 1,
+          f"direct_success={populated['direct_success']} count={populated['results_count']}")
+
+    ergonomics = _score(
+        _ergonomics_task(),
+        _legacy_json({"content": [{"type": "text", "text": _SIGNATURE_TEXT}]}),
+    )
+    check("legacy JSON: ergonomics scores the answer text",
+          ergonomics["direct_success"] is True
+          and ergonomics["evidence"]["response_len"] == len(_SIGNATURE_TEXT),
+          f"evidence={ergonomics['evidence']}")
+
+    negative = _score(
+        _negative_search_task(),
+        _error_text("No results found for 'UTotallyMadeUpClass_ZZZ999'.",
+                    hints=["Run source.search_source first."]),
+    )
+    check("legacy: top-level hints still reach the 1.0 rung",
+          negative["negative_quality_score"] == 1.0, f"q={negative['negative_quality_score']}")
+
+
+def test_mcp_call_non_object_json_is_protocol_error() -> None:
+    class FakeResponse:
+        headers: Dict[str, str] = {}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b"[]"
+
+    original = sib.urllib.request.urlopen
+    sib.urllib.request.urlopen = lambda request, timeout=45.0: FakeResponse()
+    try:
+        response = sib.mcp_call("http://unused", "monolith_status", {}, 1.0)
+    finally:
+        sib.urllib.request.urlopen = original
+    check(
+        "mcp_call: non-object JSON becomes protocol_error",
+        response.get("protocol_error") is True and "top-level JSON" in response.get("error", ""),
+        f"response={response}",
+    )
+
+
+def test_protocol_errors_cannot_false_pass_empty_or_ergonomics_tasks() -> None:
+    rpc_error = {"error": {"code": -32603, "message": "gateway failed"}}
+    lookup = _score(_legacy_min0_callers_task(), rpc_error)
+    ergonomics_task = {
+        "id": "SIB-PROTO",
+        "category": "ergonomics_text",
+        "namespace": "source",
+        "action": "get_signature",
+        "tool": "source_query",
+        "arguments": {"action": "get_signature", "symbol": "AActor"},
+        "expected": {},
+    }
+    ergonomics = _score(ergonomics_task, rpc_error)
+    check(
+        "protocol: min_results=0 empty lookup cannot pass",
+        lookup["direct_success"] is False and lookup["failure_kind"] == "protocol_error",
+        f"row={lookup}",
+    )
+    check(
+        "protocol: JSON-RPC error text cannot pass ergonomics",
+        ergonomics["direct_success"] is False and ergonomics["protocol_error"] is True,
+        f"row={ergonomics}",
+    )
+
+
+def test_status_failures_clear_stale_outputs_and_write_no_summary() -> None:
+    calls = 0
+
+    def fake_score(url, task, timeout_s):
+        nonlocal calls
+        calls += 1
+        return _run_row(task)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        output = root / "run"
+        output.mkdir()
+        for name in sib.RUN_OUTPUT_FILENAMES:
+            (output / name).write_text("stale", encoding="utf-8")
+        result = _run_with_fake_rows(
+            [_run_task(1)],
+            fake_score,
+            output_dir=output,
+            status_response={"parse_error": True, "raw": "not-json"},
+        )
+        check(
+            "status protocol failure aborts before tasks",
+            result["failure_stage"] == "status_preflight"
+            and result["failure_kind"] == "protocol_error",
+            f"stage={result.get('failure_stage')} kind={result.get('failure_kind')}",
+        )
+        check("status failure writes run_failure", (output / "run_failure.json").exists())
+        check("status failure writes no summary", not (output / "summary.json").exists())
+        check("status failure removes stale partial", not (output / "partial_summary.json").exists())
+        check("status failure removes stale per_task", not (output / "per_task.json").exists())
+
+        invalid_output = root / "invalid-status"
+        invalid = _run_with_fake_rows(
+            [_run_task(1)],
+            fake_score,
+            output_dir=invalid_output,
+            status_response=_ok_text("{}"),
+        )
+        check(
+            "status payload requires server_running=true",
+            invalid["failure_kind"] == "invalid_status_payload"
+            and not (invalid_output / "summary.json").exists(),
+            f"kind={invalid.get('failure_kind')}",
+        )
+
+        transport_output = root / "transport-status"
+        transport = _run_with_fake_rows(
+            [_run_task(1)],
+            fake_score,
+            output_dir=transport_output,
+            status_response={"transport_error": True, "status": 503, "raw": "status down"},
+        )
+        check(
+            "status transport failure aborts before tasks",
+            transport["failure_kind"] == "transport_error"
+            and transport["last_transport_status"] == 503
+            and not (transport_output / "summary.json").exists(),
+            f"kind={transport.get('failure_kind')} status={transport.get('last_transport_status')}",
+        )
+
+        rpc_output = root / "rpc-status"
+        rpc = _run_with_fake_rows(
+            [_run_task(1)],
+            fake_score,
+            output_dir=rpc_output,
+            status_response={"error": {"code": -32603, "message": "gateway failed"}},
+        )
+        check(
+            "status JSON-RPC error aborts before tasks",
+            rpc["failure_kind"] == "protocol_error"
+            and not (rpc_output / "summary.json").exists(),
+            f"kind={rpc.get('failure_kind')}",
+        )
+        check("all invalid statuses execute zero tasks", calls == 0, f"calls={calls}")
+
+
+def test_three_consecutive_transport_failures_abort_on_third_task() -> None:
+    tasks = [_run_task(index) for index in range(1, 7)]
+    calls: List[str] = []
+
+    def fake_score(url, task, timeout_s):
+        calls.append(task["id"])
+        return _run_row(task, transport=True, status=503, raw="down")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        output = pathlib.Path(tmp) / "run"
+        result = _run_with_fake_rows(tasks, fake_score, output_dir=output)
+        check(
+            "transport: three consecutive failures abort on third",
+            result["transport_gate_reason"] == "consecutive_transport_failures"
+            and result["completed_task_count"] == 3
+            and len(calls) == 3,
+            f"gate={result.get('transport_gate_reason')} completed={result.get('completed_task_count')} calls={len(calls)}",
+        )
+        check("transport abort writes no summary", not (output / "summary.json").exists())
+
+
+def test_fraction_gate_aborts_at_twentieth_and_keeps_transport_identity() -> None:
+    tasks = [_run_task(index) for index in range(1, 23)]
+    calls = 0
+
+    def fake_score(url, task, timeout_s):
+        nonlocal calls
+        calls += 1
+        failed = calls in {1, 6}
+        return _run_row(
+            task,
+            transport=failed,
+            status=503 if failed else None,
+            raw=f"down-{calls}" if failed else "",
+        )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        result = _run_with_fake_rows(
+            tasks, fake_score, output_dir=pathlib.Path(tmp) / "run"
+        )
+        check(
+            "transport: cumulative fraction aborts at sample 20",
+            result["transport_gate_reason"] == "transport_failed_fraction"
+            and result["completed_task_count"] == 20,
+            f"gate={result.get('transport_gate_reason')} completed={result.get('completed_task_count')}",
+        )
+        check(
+            "transport: success-triggered fraction gate keeps last failure identity",
+            result["last_task_id"] == "SIB-R-6"
+            and result["last_transport_status"] == 503
+            and result["last_transport_error_raw"] == "down-6",
+            f"last={result.get('last_task_id')} status={result.get('last_transport_status')}",
+        )
+
+
+def test_exact_five_percent_succeeds_and_cleans_partial_failure() -> None:
+    tasks = [_run_task(index) for index in range(1, 21)]
+    calls = 0
+
+    def fake_score(url, task, timeout_s):
+        nonlocal calls
+        calls += 1
+        return _run_row(task, transport=calls == 1, status=503, raw="one-down")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        output = pathlib.Path(tmp) / "run"
+        output.mkdir()
+        (output / "run_failure.json").write_text("stale", encoding="utf-8")
+        (output / "partial_summary.json").write_text("stale", encoding="utf-8")
+        result = _run_with_fake_rows(tasks, fake_score, output_dir=output)
+        check(
+            "transport: exact 5 percent is allowed",
+            result["run_valid"] is True and result["transport_failure_count"] == 1,
+            f"valid={result.get('run_valid')} failures={result.get('transport_failure_count')}",
+        )
+        check("success writes summary", (output / "summary.json").exists())
+        check("success removes partial", not (output / "partial_summary.json").exists())
+        check("success removes stale failure", not (output / "run_failure.json").exists())
+
+
+def test_short_population_transport_fraction_fails_at_finalize() -> None:
+    tasks = [_run_task(index) for index in range(1, 11)]
+    calls = 0
+
+    def fake_score(url, task, timeout_s):
+        nonlocal calls
+        calls += 1
+        return _run_row(task, transport=calls == 1, status=503, raw="one-down")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        output = pathlib.Path(tmp) / "run"
+        result = _run_with_fake_rows(
+            tasks,
+            fake_score,
+            output_dir=output,
+            max_consecutive_transport_failures=20,
+        )
+        check(
+            "transport: short population is rejected at finalize",
+            result["completion_status"] == "completed_transport_failure_budget_exceeded"
+            and result["transport_gate_reason"] == "final_transport_failed_fraction"
+            and result["last_task_id"] == "SIB-R-1",
+            f"completion={result.get('completion_status')} gate={result.get('transport_gate_reason')}",
+        )
+        check("short invalid run writes no summary", not (output / "summary.json").exists())
+
+
+def test_nontransport_response_resets_transport_streak() -> None:
+    tasks = [_run_task(index) for index in range(1, 6)]
+    failures = {1, 2, 4, 5}
+    calls = 0
+
+    def fake_score(url, task, timeout_s):
+        nonlocal calls
+        calls += 1
+        row = _run_row(task, transport=calls in failures, raw="down")
+        if calls == 3:
+            row["response_is_error"] = True
+            row["direct_success"] = True
+        return row
+
+    with tempfile.TemporaryDirectory() as tmp:
+        result = _run_with_fake_rows(
+            tasks,
+            fake_score,
+            output_dir=pathlib.Path(tmp) / "run",
+            max_transport_failed_fraction=1.0,
+        )
+        check(
+            "transport: valid semantic error resets consecutive streak",
+            result["run_valid"] is True and result["consecutive_transport_failures"] == 2,
+            f"valid={result.get('run_valid')} consecutive={result.get('consecutive_transport_failures')}",
+        )
+
+
+def test_task_protocol_and_runner_exception_write_invalid_artifacts() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        protocol_output = root / "protocol"
+        protocol = _run_with_fake_rows(
+            [_run_task(1)],
+            lambda url, task, timeout_s: _run_row(task, protocol=True, raw="bad envelope"),
+            output_dir=protocol_output,
+        )
+        check(
+            "task protocol error invalidates run",
+            protocol["completion_status"] == "aborted_protocol_error"
+            and not (protocol_output / "summary.json").exists(),
+            f"completion={protocol.get('completion_status')}",
+        )
+
+        exception_output = root / "exception"
+
+        def explode(url, task, timeout_s):
+            raise RuntimeError("score exploded")
+
+        exception = _run_with_fake_rows(
+            [_run_task(1)], explode, output_dir=exception_output
+        )
+        row = json.loads((exception_output / "per_task.jsonl").read_text(encoding="utf-8"))
+        check(
+            "runner exception preserves trigger row and invalidates run",
+            exception["completion_status"] == "aborted_runner_exception"
+            and row["failure_kind"] == "runner_exception"
+            and "score exploded" in row["error"]
+            and not (exception_output / "summary.json").exists(),
+            f"completion={exception.get('completion_status')} row_kind={row.get('failure_kind')}",
+        )
+
+
+def test_manifest_run_gates_match_runner_defaults() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        manifest = sib.generate_tasks(
+            "http://unused", 0, root / "tasks.jsonl", root / "manifest.json"
+        )
+        gates = manifest["run_gates"]
+        check(
+            "manifest run gates match runner defaults",
+            gates["max_transport_failed_fraction"] == sib.DEFAULT_MAX_TRANSPORT_FAILED_FRACTION
+            and gates["max_consecutive_transport_failures"] == sib.DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES
+            and gates["min_transport_fraction_sample"] == sib.DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES
+            and gates["invalid_run_writes_summary"] is False,
+            f"gates={gates}",
+        )
+
+
+def test_main_returns_nonzero_for_invalid_run() -> None:
+    original = sib.run_benchmark
+    sib.run_benchmark = lambda *args, **kwargs: {"run_valid": False}
+    try:
+        rc = sib.main(["run", "--output-dir", "unused", "--label", "invalid"])
+    finally:
+        sib.run_benchmark = original
+    check("main returns nonzero for invalid run", rc == 1, f"rc={rc}")
 
 
 def test_aggregate_weights_sum_to_one_and_react() -> None:

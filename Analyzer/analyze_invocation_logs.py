@@ -657,7 +657,12 @@ class Analyzer:
         for tag in event.tags:
             self.tag_by_action[(event.action_key, tag)] += 1
 
-        if event.retry_signature:
+        # A retry finding represents repeated failures, not merely repeated calls.
+        # v3 loggers stamp a stable retry signature on successful calls as well, so
+        # counting every signature labels healthy polling and batch work as retry
+        # loops. Canonical status is the success source of truth; agent_signal is
+        # only a diagnostic hint and must not override it here.
+        if event.retry_signature and event.is_error:
             retry_key = (event.action_key, event.retry_signature)
             self.retry_counts[retry_key] += 1
             self.retry_evidence[retry_key].add(event)
@@ -1166,10 +1171,10 @@ class Analyzer:
                     severity=severity,
                     confidence=0.74,
                     score=count * 4.0,
-                    title="{0} repeats the same retry signature".format(action_key),
+                    title="{0} repeats the same failed retry signature".format(action_key),
                     recommendation=(
-                        "Check whether the caller is polling intentionally, retrying without new evidence, "
-                        "or missing a cached/freshness-aware action."
+                        "Check why the caller is retrying the same failure without new evidence, and make "
+                        "the action self-correcting or return a stronger recovery hint."
                     ),
                     sample={"count": count, "retry_signature": retry_signature},
                     action_key=action_key,
@@ -1408,6 +1413,7 @@ def normalize_event(raw: Dict[str, Any], path: Path, line_number: int, repo_root
     return_summary = raw.get("return_summary") if isinstance(raw.get("return_summary"), dict) else {}
     phase_timing = raw.get("phase_timing") if isinstance(raw.get("phase_timing"), dict) else {}
     environment = raw.get("environment") if isinstance(raw.get("environment"), dict) else {}
+    routing_context = raw.get("routing_context") if isinstance(raw.get("routing_context"), dict) else {}
     child_process = raw.get("child_process") if isinstance(raw.get("child_process"), dict) else {}
 
     surface = str(raw.get("surface") or path.stem or "unknown")
@@ -1434,7 +1440,9 @@ def normalize_event(raw: Dict[str, Any], path: Path, line_number: int, repo_root
     outcome, error_class, error_code, message = extract_error_shape(raw, agent_signal)
     payload_bytes = extract_payload_bytes(raw, agent_signal, return_summary)
     tags = tuple(str(tag) for tag in agent_signal.get("improvement_tags") or [])
-    noise_class = classify_noise(surface, namespace, action, tool_name, tags, call, message, environment)
+    noise_class = classify_noise(
+        surface, namespace, action, tool_name, tags, call, message, environment, routing_context
+    )
     escape_cluster = escape_hatch_cluster(call) if noise_class == "escape_hatch" else ""
     parse_warnings = build_event_warnings(raw, namespace, action)
     source_file = shorten_path(path, repo_root, include_paths)
@@ -1560,11 +1568,20 @@ def classify_noise(
     call: Optional[Dict[str, Any]] = None,
     message: str = "",
     environment: Optional[Dict[str, Any]] = None,
+    routing_context: Optional[Dict[str, Any]] = None,
 ) -> str:
-    # v3 logger environment stamp is the primary synthetic signal. Marker and
-    # per-action fixture whitelists below stay only as fallback for legacy rows
-    # written before environment.is_automation_test existed.
+    # Two primary synthetic signals; marker and per-action fixture whitelists below stay
+    # only as fallback for legacy rows written before either existed.
+    #
+    # 1. environment.is_automation_test — stamped from GIsAutomationTesting, so it only
+    #    covers IN-PROCESS C++ automation tests.
+    # 2. routing_context.client_kind == "benchmark" — self-declared by the out-of-process
+    #    benchmark runners (Scripts/*_benchmark.py -> benchmark_common.BENCHMARK_CLIENT_KIND).
+    #    Without it their deliberate hallucinated-action and typo fixtures are counted as
+    #    genuine unmet demand: the 2026-07-11 report ranked 100+ such rows as `needed_action`.
     if environment and environment.get("is_automation_test") is True:
+        return "synthetic_test"
+    if routing_context and str(routing_context.get("client_kind") or "") == "benchmark":
         return "synthetic_test"
     ns_action = "{0}.{1}".format(namespace, action).lower()
     tool_lower = tool_name.lower()

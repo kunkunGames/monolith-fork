@@ -31,12 +31,48 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from benchmark_common import attach_benchmark_inputs, build_benchmark_inputs, display_path, resolve_plugin_path
+from benchmark_common import (
+    benchmark_routing_context,
+    DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
+    DEFAULT_MAX_TRANSPORT_FAILED_FRACTION,
+    DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES,
+    TaskCorpus,
+    TransportFailureTracker,
+    attach_benchmark_inputs,
+    build_benchmark_inputs,
+    classify_mcp_protocol_failure,
+    display_path,
+    load_task_corpus,
+    paginate_discover_action_names,
+    resolve_plugin_path,
+    status_identity,
+    status_identity_mismatches,
+    task_corpus_metadata,
+    validate_mcp_status_response,
+)
 
 DEFAULT_MCP_URL = "http://localhost:9316/mcp"
 DEFAULT_TASKS = pathlib.Path("Benchmarks/SourceIndex/tasks.jsonl")
 DEFAULT_MANIFEST = pathlib.Path("Benchmarks/SourceIndex/manifest.json")
 DEFAULT_RESULTS_ROOT = pathlib.Path("Saved/Monolith/Benchmarks/SourceIndex")
+
+RUN_OUTPUT_FILENAMES = (
+    "summary.json",
+    "partial_summary.json",
+    "per_task.json",
+    "per_task.jsonl",
+    "run_failure.json",
+)
+
+SOURCE_INDEX_TASK_CATEGORIES = {
+    "ergonomics_text",
+    "health_check",
+    "impact_radius_lookup",
+    "negative_recovery",
+    "review_context_lookup",
+    "schema_field_presence",
+    "symbol_lookup",
+}
 
 EXTENDED_SYMBOLS = [
     "AActor", "UObject", "UActorComponent", "UGameplayStatics", "FVector", "FString",
@@ -154,6 +190,22 @@ def write_jsonl(path: pathlib.Path, rows: Iterable[Dict[str, Any]]) -> None:
             handle.write("\n")
 
 
+def clear_run_outputs(output_dir: pathlib.Path) -> None:
+    """Remove only known run outputs so a failed rerun cannot expose stale success."""
+    for filename in RUN_OUTPUT_FILENAMES:
+        path = output_dir / filename
+        if path.exists():
+            path.unlink()
+
+
+def write_run_failure(output_dir: pathlib.Path, payload: Dict[str, Any]) -> None:
+    """Persist one machine-readable invalid-run record; never write summary.json."""
+    payload.setdefault("created_at", utc_now())
+    payload["run_valid"] = False
+    payload["metrics_valid"] = False
+    write_json(output_dir / "run_failure.json", payload)
+
+
 def read_http_body(response: Any, timeout_s: float) -> str:
     content_type = str(response.headers.get("Content-Type", "")).lower()
     if "text/event-stream" not in content_type:
@@ -180,6 +232,11 @@ def extract_sse_data(raw: str) -> str:
     return "\n".join(data_lines) if data_lines else raw
 
 
+# Declares this traffic as synthetic benchmark fixtures so the invocation-log
+# analyzer does not report deliberate negative probes as real, unmet demand.
+_BENCHMARK_ROUTING_CONTEXT = benchmark_routing_context("SourceIndex")
+
+
 def mcp_call(url: str, tool: str, arguments: Dict[str, Any], timeout_s: float = 45.0) -> Dict[str, Any]:
     body = {
         "jsonrpc": "2.0",
@@ -189,6 +246,7 @@ def mcp_call(url: str, tool: str, arguments: Dict[str, Any], timeout_s: float = 
             "name": tool,
             "arguments": arguments,
         },
+        "_monolith_routing_context": _BENCHMARK_ROUTING_CONTEXT,
     }
     data = json.dumps(body, separators=(",", ":")).encode("utf-8")
     request = urllib.request.Request(
@@ -218,6 +276,13 @@ def mcp_call(url: str, tool: str, arguments: Dict[str, Any], timeout_s: float = 
         parsed = json.loads(raw)
     except json.JSONDecodeError:
         parsed = {"parse_error": True, "raw": raw}
+    if not isinstance(parsed, dict):
+        return {
+            "protocol_error": True,
+            "raw": raw,
+            "error": "MCP response top-level JSON must be an object",
+            "request": body,
+        }
     parsed["request"] = body
     return parsed
 
@@ -264,6 +329,52 @@ def result_data(response: Dict[str, Any]) -> Dict[str, Any]:
     payload = result_payload(response)
     structured = structured_content(payload)
     return structured if structured else payload
+
+
+def canonical_payload(response: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the ACTION's own payload, never the transport envelope.
+
+    With ``bEnableStructuredToolResults`` the payload lives ONLY in
+    ``result.structuredContent`` while ``content[0].text`` is a constant stub
+    ("OK; see structuredContent.").  An *empty* ``structuredContent`` therefore means
+    an empty payload and must NOT fall back to the envelope -- that fallback is how
+    the stub would leak into content assertions and let a data-less response pass.
+    In legacy mode the same payload object is serialized into ``content[0].text`` and
+    ``result_data`` parses it back, so both modes resolve to the same object.
+    """
+    payload = result_payload(response)
+    if "structuredContent" in payload:
+        return structured_content(payload)
+    return result_data(response)
+
+
+def response_scan_text(response: Dict[str, Any]) -> str:
+    """Scannable blob over the CANONICAL payload: human text + structuredContent.
+
+    Every token assertion (empty-result sentinels, the offending identifier, recovery
+    hints) must scan the canonical payload rather than the transport stub.  Both
+    surfaces are unioned, so the scan is strictly stronger than the legacy text-only
+    scan: an error message keeps its human text AND gains the structured error object.
+    """
+    text = result_text(response)
+    structured = structured_content(result_payload(response))
+    if structured:
+        return text + "\n" + json.dumps(structured, ensure_ascii=False, sort_keys=True)
+    return text
+
+
+def classify_protocol_failure(response: Any) -> str:
+    """Classify malformed JSON-RPC/MCP envelopes without conflating valid isError results."""
+    return classify_mcp_protocol_failure(response)
+
+
+def validate_status_response(response: Any) -> Dict[str, Any]:
+    """Validate the mandatory status boundary before any scored task executes."""
+    return validate_mcp_status_response(
+        response,
+        result_payload=result_payload,
+        result_data=result_data,
+    )
 
 
 def count_by(rows: Iterable[Dict[str, Any]], field: str) -> Dict[str, int]:
@@ -342,6 +453,23 @@ def _content_text(data: Dict[str, Any]) -> Optional[str]:
         if isinstance(first, dict) and isinstance(first.get("text"), str):
             return first["text"]
     return None
+
+
+def response_answer_text(response: Dict[str, Any]) -> str:
+    """Return the plain-text answer an ergonomics action produced (never the stub).
+
+    The source ergonomics actions (get_include_path / get_signature / verify_symbols /
+    check_deprecations / find_example_usage) nest their answer at
+    ``<payload>.content[0].text``.  Reading it from the canonical payload keeps the
+    length / "Error" prefix assertions pointed at real content in both envelope modes;
+    an empty or unreadable payload yields "" so the assertion FAILS instead of passing
+    on the transport stub.
+    """
+    data = canonical_payload(response)
+    text = _content_text(data)
+    if text is not None:
+        return text
+    return json.dumps(data, ensure_ascii=False, sort_keys=True) if data else ""
 
 
 def symbol_results(data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -472,11 +600,16 @@ def lookup_has_data(
 ) -> bool:
     """True if a lookup response carries at least one real symbol row.
 
-    A response counts as carrying data when it is not a transport/handler error,
-    is not an explicit empty-result sentinel, and either parses to >=1 structured
-    symbol row or returns non-empty plain text (the find_callers/find_callees text
-    blob does not parse to structured rows, so non-empty non-sentinel text is the
-    truthful positive signal for those actions).
+    ``data`` must be the CANONICAL payload and ``response_text`` the canonical scan
+    text (``response_scan_text``), never the transport ``content[0].text`` -- under
+    structured tool results that text is a constant stub, so scanning it would make
+    every non-error lookup look like a hit.
+
+    A response counts as carrying data when it is not a transport/handler error, is
+    not an explicit empty-result sentinel, and either parses to >=1 structured symbol
+    row or carries non-empty payload text (the find_callers/find_callees blob does not
+    parse to structured rows, so non-empty non-sentinel payload text is the truthful
+    positive signal for those actions).  An empty payload is never data.
     """
     if is_error_response:
         return False
@@ -484,7 +617,10 @@ def lookup_has_data(
         return False
     if symbol_results(data):
         return True
-    return bool(response_text and response_text.strip())
+    payload_text = _content_text(data)
+    if payload_text is not None:
+        return bool(payload_text.strip())
+    return bool(data)
 
 
 def references_offending_identifier(text: str, identifier: str) -> bool:
@@ -537,6 +673,11 @@ def score_negative_response(
     expect: Dict[str, Any],
 ) -> Tuple[float, Dict[str, Any]]:
     """Grade RESPONSE QUALITY on deliberately bad input (0.0 .. 1.0).
+
+    ``response_text`` must be the canonical scan text (``response_scan_text``) and
+    ``data`` the canonical payload (``canonical_payload``); the raw transport
+    ``content[0].text`` is a constant stub under structured tool results and carries
+    neither the empty-result sentinel nor the echoed identifier.
 
     A bad call should fail loudly and helpfully:
       * transport crash / parse failure        -> 0.0 (worst: agent gets nothing actionable)
@@ -593,9 +734,21 @@ def score_negative_response(
 
 def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, Any]:
     response = mcp_call(url, str(task["tool"]), dict(task.get("arguments", {})), timeout_s=timeout_s)
-    data = result_data(response)
+    if not isinstance(response, dict):
+        response = {
+            "protocol_error": True,
+            "raw": str(response)[:500],
+            "error": "MCP response top-level JSON must be an object",
+        }
+    data = canonical_payload(response)
     category = task.get("category")
-    is_error_response = bool(result_payload(response).get("isError")) or bool(response.get("transport_error"))
+    transport_error = bool(response.get("transport_error"))
+    protocol_error = bool(classify_protocol_failure(response))
+    is_error_response = (
+        bool(result_payload(response).get("isError"))
+        or transport_error
+        or protocol_error
+    )
     expected = task.get("expected") if isinstance(task.get("expected"), dict) else {}
     min_results = expected.get("min_results")
     allows_empty = isinstance(min_results, int) and min_results == 0
@@ -603,7 +756,11 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
     # callers/callees/a definition the truthful answer is NOT empty, so an empty or
     # sentinel ("No direct C++ callers found ...") response is a real miss, not a hit.
     require_results = bool(expected.get("require_results")) or (isinstance(min_results, int) and min_results >= 1)
+    # Human-readable text: evidence/preview fields only.  Token assertions scan the
+    # canonical payload (response_scan_full) because under structured tool results
+    # result_text() is the constant "OK; see structuredContent." stub.
     response_text_full = result_text(response)
+    response_scan_full = response_scan_text(response)
 
     direct_success = False
     action_selection_score: Optional[float] = None
@@ -622,7 +779,7 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
         results = symbol_results(data)
         results_count = len(results)
         has_named = results_count > 0 and any(r.get("name") is not None for r in results)
-        has_data = lookup_has_data(data, response_text_full, is_error_response)
+        has_data = lookup_has_data(data, response_scan_full, is_error_response)
         if require_results:
             # Empty / sentinel / error responses are misses for known-nonempty symbols.
             expected_nonempty = True
@@ -683,24 +840,28 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
         }
 
     elif category == "ergonomics_text":
-        response_text = result_text(response)
+        # Assert on the ACTION's answer text, not the transport stub: under structured
+        # tool results content[0].text is always "OK; see structuredContent.", which is
+        # never empty and never starts with "Error", so scanning it would degenerate
+        # this dimension into "1 - isError rate".
+        answer_text = response_answer_text(response)
         direct_success = bool(
-            response_text
-            and len(response_text.strip()) > 0
-            and not response_text.startswith("Error")
+            not is_error_response
+            and answer_text.strip()
+            and not answer_text.lstrip().startswith("Error")
         )
         results_count = 1 if direct_success else 0
         field_complete_count = results_count
         evidence = {
-            "response_len": len(response_text),
-            "response_preview": response_text[:80],
+            "response_len": len(answer_text),
+            "response_preview": answer_text[:80],
         }
 
     elif category in ("review_context_lookup", "impact_radius_lookup"):
         results = symbol_results(data)
         results_count = len(results)
         has_named = results_count > 0 and any(r.get("name") is not None for r in results)
-        has_data = lookup_has_data(data, response_text_full, is_error_response)
+        has_data = lookup_has_data(data, response_scan_full, is_error_response)
         if require_results:
             expected_nonempty = True
             direct_success = has_data
@@ -719,16 +880,23 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
 
     elif category == "negative_recovery":
         # Deliberately bad input: score RESPONSE QUALITY, not transport success.
-        hints_arr = result_payload(response).get("hints")
-        hints = [str(h) for h in hints_arr] if isinstance(hints_arr, list) else []
-        related = result_payload(response).get("related_actions")
-        if isinstance(related, list):
-            hints.extend(str(r) for r in related)
+        # hints / related_actions live at the result top level in the legacy envelope
+        # and inside the structured error object under structured tool results; union
+        # both surfaces so neither envelope can hide a self-correcting hint.
+        payload = result_payload(response)
+        hints: List[str] = []
+        for source in (structured_content(payload), payload):
+            hints_arr = source.get("hints")
+            if isinstance(hints_arr, list):
+                hints.extend(str(h) for h in hints_arr)
+            related = source.get("related_actions")
+            if isinstance(related, list):
+                hints.extend(str(r) for r in related)
         identifier = str(expected.get("offending_identifier", ""))
         negative_quality_score, neg_evidence = score_negative_response(
-            transport_error=bool(response.get("transport_error")),
+            transport_error=transport_error or protocol_error,
             is_error_response=is_error_response,
-            response_text=response_text_full,
+            response_text=response_scan_full,
             hints=hints,
             data=data,
             identifier=identifier,
@@ -740,7 +908,7 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
             "negative_quality_score": round(negative_quality_score, 4),
             "offending_identifier": identifier,
             "response_is_error": is_error_response,
-            "transport_error": bool(response.get("transport_error")),
+            "transport_error": transport_error,
             **neg_evidence,
             "response_preview": response_text_full[:120],
         }
@@ -748,6 +916,10 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
     else:
         evidence = {"unsupported_category": category}
 
+    if transport_error or protocol_error:
+        direct_success = False
+
+    transport_status = response.get("status")
     return {
         "task_id": task.get("id"),
         "category": category,
@@ -762,8 +934,16 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
         "results_count": results_count,
         "field_complete_count": field_complete_count,
         "evidence": evidence,
-        "transport_error": bool(response.get("transport_error")),
-        "transport_error_raw": str(response.get("raw", ""))[:300] if response.get("transport_error") else "",
+        "transport_error": transport_error,
+        "transport_status": (
+            transport_status
+            if isinstance(transport_status, int) and not isinstance(transport_status, bool)
+            else None
+        ),
+        "transport_error_raw": str(response.get("raw", ""))[:300] if transport_error else "",
+        "protocol_error": protocol_error,
+        "protocol_error_raw": str(response.get("raw", response))[:500] if protocol_error else "",
+        "failure_kind": "protocol_error" if protocol_error else "",
         "response_is_error": bool(result_payload(response).get("isError")),
         "response_text": result_text(response)[:1000],
     }
@@ -1608,18 +1788,18 @@ def generate_tasks(url: str, min_tasks: int, tasks_path: pathlib.Path, manifest_
     manifest_path = resolve_plugin_path(manifest_path)
     tasks = build_static_tasks()
 
-    # Top up from live catalog if needed.
+    # Top up from live catalog if needed. Paginate — the source namespace has
+    # more actions than the server's default 50-row discover page.
     if len(tasks) < min_tasks:
-        response = mcp_call(url, "monolith_discover", {"namespace": "source", "mode": "actions"}, timeout_s=45.0)
-        data = result_data(response)
-        live_actions: List[str] = []
-        actions_list = data.get("actions")
-        if isinstance(actions_list, list):
-            for row in actions_list:
-                if isinstance(row, dict) and isinstance(row.get("action"), str):
-                    live_actions.append(row["action"])
-                elif isinstance(row, str):
-                    live_actions.append(row)
+        def fetch_page(arguments: Dict[str, Any]) -> Dict[str, Any]:
+            response = mcp_call(url, "monolith_discover", arguments, timeout_s=45.0)
+            return result_data(response) or {}
+
+        try:
+            live_actions: List[str] = paginate_discover_action_names(fetch_page, "source")
+        except RuntimeError as exc:
+            print(f"[source_index] WARNING: discover action enumeration failed: {exc}", file=sys.stderr)
+            live_actions = []
 
         existing_lookup_actions = {t["action"] for t in tasks if t["category"] == "symbol_lookup"}
         for action in live_actions:
@@ -1673,6 +1853,14 @@ def generate_tasks(url: str, min_tasks: int, tasks_path: pathlib.Path, manifest_
             "negative_recovery_rate": "mean response-quality score (0..1) on deliberately bad input: transport crash / silent empty = 0, structured error naming the offending identifier = 0.7, + did-you-mean/qualified hint = 1.0",
             "mean_results_per_lookup": "average result count across symbol_lookup + review_context_lookup + impact_radius_lookup tasks",
         },
+        "run_gates": {
+            "max_transport_failed_fraction": DEFAULT_MAX_TRANSPORT_FAILED_FRACTION,
+            "max_consecutive_transport_failures": DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
+            "min_transport_fraction_sample": DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES,
+            "status_transport_failure_aborts_before_tasks": True,
+            "invalid_status_response_aborts_before_tasks": True,
+            "invalid_run_writes_summary": False,
+        },
     }
     write_json(manifest_path, manifest)
     return manifest
@@ -1682,46 +1870,401 @@ def generate_tasks(url: str, min_tasks: int, tasks_path: pathlib.Path, manifest_
 # Run
 # ---------------------------------------------------------------------------
 
+def runner_exception_task_row(task: Dict[str, Any], error: str) -> Dict[str, Any]:
+    """Preserve the task that exposed a benchmark implementation failure."""
+    return {
+        "task_id": task.get("id"),
+        "category": task.get("category"),
+        "namespace": task.get("namespace"),
+        "action": task.get("action"),
+        "direct_success": False,
+        "action_selection_score": None,
+        "param_correction_score": None,
+        "hallucinated_workflow_risk": None,
+        "negative_quality_score": None,
+        "expected_nonempty": False,
+        "results_count": 0,
+        "field_complete_count": 0,
+        "evidence": {"runner_exception": error},
+        "transport_error": False,
+        "transport_status": None,
+        "transport_error_raw": "",
+        "protocol_error": False,
+        "protocol_error_raw": "",
+        "response_is_error": False,
+        "response_text": "",
+        "failure_kind": "runner_exception",
+        "error": error,
+    }
+
+
+def attach_run_context(
+    payload: Dict[str, Any],
+    corpus: TaskCorpus,
+    start_identity: Dict[str, str],
+    end_identity: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    payload["task_corpus"] = task_corpus_metadata(corpus)
+    payload["comparison_valid"] = corpus.comparable
+    payload["status_identity_start"] = start_identity
+    if end_identity is not None:
+        payload["status_identity_end"] = end_identity
+    return payload
+
+
+def build_attempt_failure(
+    label: str,
+    status: Dict[str, Any],
+    tasks: List[Dict[str, Any]],
+    rows: List[Dict[str, Any]],
+    tracker: TransportFailureTracker,
+    benchmark_inputs: Dict[str, Any],
+    corpus: TaskCorpus,
+    start_identity: Dict[str, str],
+    fields: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Build partial diagnostics without letting aggregate defects hide the invalid run."""
+    try:
+        failure = aggregate(label, status, tasks[:len(rows)], rows)
+    except Exception as exc:  # noqa: BLE001 - retain a minimal invalid artifact.
+        failure = {
+            "label": label,
+            "created_at": utc_now(),
+            "task_count": len(rows),
+            "aggregate_error": f"{type(exc).__name__}: {exc}",
+        }
+    failure.update(fields)
+    failure["run_valid"] = False
+    failure["metrics_valid"] = False
+    failure.update(tracker.snapshot())
+    attach_benchmark_inputs(failure, benchmark_inputs)
+    attach_run_context(failure, corpus, start_identity)
+    return failure
+
+
 def run_benchmark(
     url: str,
     tasks_path: pathlib.Path,
     output_dir: pathlib.Path,
     label: str,
     timeout_s: float,
+    *,
+    allow_subset: bool = False,
+    max_transport_failed_fraction: float = DEFAULT_MAX_TRANSPORT_FAILED_FRACTION,
+    max_consecutive_transport_failures: int = DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
+    min_transport_fraction_sample: int = DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES,
 ) -> Dict[str, Any]:
-    tasks_path = resolve_plugin_path(tasks_path)
-    tasks = load_jsonl(tasks_path)
     output_dir.mkdir(parents=True, exist_ok=True)
-    status_response = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
-    status = result_data(status_response)
-    benchmark_inputs = build_benchmark_inputs("SourceIndex", tasks_path=tasks_path, mcp_status=status)
+    clear_run_outputs(output_dir)
 
+    try:
+        corpus = load_task_corpus(
+            tasks_path,
+            suite="SourceIndex",
+            canonical_tasks_path=DEFAULT_TASKS,
+            canonical_manifest_path=DEFAULT_MANIFEST,
+            allow_subset=allow_subset,
+            allowed_categories=SOURCE_INDEX_TASK_CATEGORIES,
+            require_arguments=True,
+        )
+        tasks_path = resolve_plugin_path(tasks_path)
+        tasks = corpus.tasks
+    except Exception as exc:  # noqa: BLE001 - invalid inputs must invalidate stale baselines.
+        failure = {
+            "label": label,
+            "completion_status": "aborted_input_preflight",
+            "failure_stage": "input_preflight",
+            "failure_kind": "runner_exception",
+            "metrics_scope": "not_started",
+            "completed_task_count": 0,
+            "total_task_count": 0,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+        write_run_failure(output_dir, failure)
+        return failure
+
+    try:
+        transport_tracker = TransportFailureTracker(
+            max_failed_fraction=max_transport_failed_fraction,
+            max_consecutive_failures=max_consecutive_transport_failures,
+            min_fraction_samples=min_transport_fraction_sample,
+        )
+    except ValueError as exc:
+        failure = {
+            "label": label,
+            "completion_status": "aborted_invalid_configuration",
+            "failure_stage": "configuration",
+            "failure_kind": "invalid_configuration",
+            "metrics_scope": "not_started",
+            "completed_task_count": 0,
+            "total_task_count": len(tasks),
+            "error": str(exc),
+        }
+        write_run_failure(output_dir, failure)
+        return failure
+
+    try:
+        status_response: Any = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
+        status_validation = validate_status_response(status_response)
+    except Exception as exc:  # noqa: BLE001 - status defects must create invalid artifacts.
+        status_validation = {
+            "ok": False,
+            "failure_kind": "runner_exception",
+            "raw": f"{type(exc).__name__}: {exc}",
+            "transport_status": None,
+        }
+    if not status_validation.get("ok"):
+        failure_kind = str(status_validation.get("failure_kind", "protocol_error"))
+        raw = str(status_validation.get("raw", ""))[:500]
+        failure = {
+            "label": label,
+            "completion_status": (
+                "aborted_status_transport_failure"
+                if failure_kind == "transport_error"
+                else "aborted_status_preflight"
+            ),
+            "failure_stage": "status_preflight",
+            "failure_kind": failure_kind,
+            "metrics_scope": "not_started",
+            "completed_task_count": 0,
+            "total_task_count": len(tasks),
+            "transport_failure_count": 1 if failure_kind == "transport_error" else 0,
+            "last_transport_status": status_validation.get("transport_status"),
+            "last_transport_error_raw": raw if failure_kind == "transport_error" else "",
+            "protocol_error_raw": raw if failure_kind != "transport_error" else "",
+            "max_transport_failed_fraction": max_transport_failed_fraction,
+            "max_consecutive_transport_failures": max_consecutive_transport_failures,
+            "min_transport_fraction_sample": min_transport_fraction_sample,
+        }
+        write_run_failure(output_dir, failure)
+        return failure
+
+    status = dict(status_validation["status"])
+    start_identity = status_identity(status, endpoint=url)
+    benchmark_inputs = build_benchmark_inputs(
+        "SourceIndex", tasks_path=tasks_path, mcp_status=status
+    )
     rows: List[Dict[str, Any]] = []
     per_task_jsonl = output_dir / "per_task.jsonl"
-    if per_task_jsonl.exists():
-        per_task_jsonl.unlink()
 
     for index, task in enumerate(tasks, 1):
-        row = score_task(url, task, timeout_s)
+        runner_exception = ""
+        try:
+            row = score_task(url, task, timeout_s)
+        except Exception as exc:  # noqa: BLE001 - preserve the triggering task and abort.
+            runner_exception = f"{type(exc).__name__}: {exc}"
+            row = runner_exception_task_row(task, runner_exception)
         rows.append(row)
+        transport_decision = transport_tracker.observe(
+            transport_error=bool(row.get("transport_error")),
+            item_id=str(row.get("task_id", "")),
+            status=(
+                row.get("transport_status")
+                if isinstance(row.get("transport_status"), int)
+                and not isinstance(row.get("transport_status"), bool)
+                else None
+            ),
+            raw=str(row.get("transport_error_raw", "")),
+        )
         with per_task_jsonl.open("a", encoding="utf-8", newline="\n") as handle:
             handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
             handle.write("\n")
         print(
-            f"[{index}/{len(tasks)}] {row['task_id']} success={row['direct_success']} direct={row['direct_success']}",
+            f"[{index}/{len(tasks)}] {row['task_id']} success={row['direct_success']} "
+            f"direct={row['direct_success']}",
             flush=True,
         )
+
+        if runner_exception:
+            failure = build_attempt_failure(
+                label,
+                status,
+                tasks,
+                rows,
+                transport_tracker,
+                benchmark_inputs,
+                corpus,
+                start_identity,
+                {
+                    "completion_status": "aborted_runner_exception",
+                    "failure_stage": "task_scoring",
+                    "failure_kind": "runner_exception",
+                    "metrics_scope": "attempted_prefix_runner_exception",
+                    "completed_task_count": index,
+                    "total_task_count": len(tasks),
+                    "last_task_id": str(task.get("id", "")),
+                    "exception": runner_exception,
+                },
+            )
+            write_run_failure(output_dir, failure)
+            write_json(output_dir / "partial_summary.json", failure)
+            return failure
+
+        if row.get("failure_kind") == "protocol_error":
+            failure = build_attempt_failure(
+                label,
+                status,
+                tasks,
+                rows,
+                transport_tracker,
+                benchmark_inputs,
+                corpus,
+                start_identity,
+                {
+                    "completion_status": "aborted_protocol_error",
+                    "failure_stage": "task_response",
+                    "failure_kind": "protocol_error",
+                    "metrics_scope": "attempted_prefix_protocol_error",
+                    "completed_task_count": index,
+                    "total_task_count": len(tasks),
+                    "last_task_id": str(task.get("id", "")),
+                    "protocol_error_raw": str(row.get("protocol_error_raw", "")),
+                },
+            )
+            write_run_failure(output_dir, failure)
+            write_json(output_dir / "partial_summary.json", failure)
+            return failure
+
+        if transport_decision:
+            failure = build_attempt_failure(
+                label,
+                status,
+                tasks,
+                rows,
+                transport_tracker,
+                benchmark_inputs,
+                corpus,
+                start_identity,
+                {
+                    "completion_status": "aborted_transport_failure_budget",
+                    "failure_stage": "task_scoring",
+                    "failure_kind": "transport_error",
+                    "metrics_scope": "attempted_prefix_including_transport_failures",
+                    "completed_task_count": index,
+                    "total_task_count": len(tasks),
+                    "transport_gate_reason": transport_decision.reason,
+                    "last_task_id": transport_decision.item_id,
+                },
+            )
+            write_run_failure(output_dir, failure)
+            write_json(output_dir / "partial_summary.json", failure)
+            return failure
+
         if index == 1 or index == len(tasks) or index % 10 == 0:
             partial = aggregate(label, status, tasks[:index], rows)
-            partial["completed_task_count"] = index
-            partial["total_task_count"] = len(tasks)
+            partial.update({
+                "completed_task_count": index,
+                "total_task_count": len(tasks),
+                "run_valid": None,
+                "metrics_valid": False,
+                "metrics_scope": "attempted_prefix",
+                "completion_status": "in_progress",
+            })
+            partial.update(transport_tracker.snapshot())
             attach_benchmark_inputs(partial, benchmark_inputs)
+            attach_run_context(partial, corpus, start_identity)
             write_json(output_dir / "partial_summary.json", partial)
 
-    summary = aggregate(label, status, tasks, rows)
+    try:
+        summary = aggregate(label, status, tasks, rows)
+    except Exception as exc:  # noqa: BLE001 - aggregate defects invalidate the run.
+        error = f"{type(exc).__name__}: {exc}"
+        failure = build_attempt_failure(
+            label,
+            status,
+            tasks,
+            rows,
+            transport_tracker,
+            benchmark_inputs,
+            corpus,
+            start_identity,
+            {
+                "completion_status": "aborted_runner_exception",
+                "failure_stage": "final_aggregate",
+                "failure_kind": "runner_exception",
+                "metrics_scope": "complete_run_invalid",
+                "completed_task_count": len(rows),
+                "total_task_count": len(tasks),
+                "exception": error,
+            },
+        )
+        write_run_failure(output_dir, failure)
+        write_json(output_dir / "partial_summary.json", failure)
+        return failure
+
+    final_transport_decision = transport_tracker.finalize()
+    summary.update({
+        "run_valid": True,
+        "metrics_valid": True,
+        "metrics_scope": "complete_run" if corpus.comparable else "complete_subset_run",
+        "completion_status": "completed",
+    })
+    summary.update(transport_tracker.snapshot())
     attach_benchmark_inputs(summary, benchmark_inputs)
+    attach_run_context(summary, corpus, start_identity)
+    if final_transport_decision:
+        summary.update({
+            "run_valid": False,
+            "metrics_valid": False,
+            "metrics_scope": "complete_run_invalid",
+            "completion_status": "completed_transport_failure_budget_exceeded",
+            "failure_kind": "transport_error",
+            "transport_gate_reason": final_transport_decision.reason,
+            "last_task_id": final_transport_decision.item_id,
+        })
+        write_run_failure(output_dir, summary)
+        write_json(output_dir / "partial_summary.json", summary)
+        return summary
+
+    try:
+        end_status_response: Any = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
+        end_status_validation = validate_status_response(end_status_response)
+    except Exception as exc:  # noqa: BLE001 - postflight must invalidate the run.
+        end_status_validation = {
+            "ok": False,
+            "failure_kind": "runner_exception",
+            "raw": f"{type(exc).__name__}: {exc}",
+            "transport_status": None,
+        }
+    if not end_status_validation.get("ok"):
+        failure_kind = str(end_status_validation.get("failure_kind", "protocol_error"))
+        summary.update({
+            "run_valid": False,
+            "metrics_valid": False,
+            "metrics_scope": "complete_run_invalid",
+            "completion_status": "aborted_status_postflight",
+            "failure_stage": "status_postflight",
+            "failure_kind": failure_kind,
+            "postflight_status_raw": str(end_status_validation.get("raw", ""))[:500],
+            "postflight_transport_status": end_status_validation.get("transport_status"),
+        })
+        write_run_failure(output_dir, summary)
+        write_json(output_dir / "partial_summary.json", summary)
+        return summary
+
+    end_status = dict(end_status_validation["status"])
+    end_identity = status_identity(end_status, endpoint=url)
+    identity_drift = status_identity_mismatches(start_identity, end_identity)
+    attach_run_context(summary, corpus, start_identity, end_identity)
+    if identity_drift:
+        summary.update({
+            "run_valid": False,
+            "metrics_valid": False,
+            "metrics_scope": "complete_run_invalid",
+            "completion_status": "aborted_status_identity_drift",
+            "failure_stage": "status_postflight",
+            "failure_kind": "status_identity_drift",
+            "status_identity_mismatches": identity_drift,
+        })
+        write_run_failure(output_dir, summary)
+        write_json(output_dir / "partial_summary.json", summary)
+        return summary
+
     write_json(output_dir / "summary.json", summary)
     write_json(output_dir / "per_task.json", rows)
+    partial_path = output_dir / "partial_summary.json"
+    if partial_path.exists():
+        partial_path.unlink()
     return summary
 
 
@@ -1806,6 +2349,29 @@ def main(argv: Optional[List[str]] = None) -> int:
     run_cmd.add_argument("--output-dir", type=pathlib.Path, required=True)
     run_cmd.add_argument("--label", required=True)
     run_cmd.add_argument("--request-timeout-s", type=float, default=12.0)
+    run_cmd.add_argument(
+        "--allow-subset",
+        action="store_true",
+        help="Permit an explicit non-canonical diagnostic corpus; output is marked non-comparable.",
+    )
+    run_cmd.add_argument(
+        "--max-transport-failed-fraction",
+        type=float,
+        default=DEFAULT_MAX_TRANSPORT_FAILED_FRACTION,
+        help="Abort without summary when transport failures exceed this fraction after 20 tasks.",
+    )
+    run_cmd.add_argument(
+        "--max-consecutive-transport-failures",
+        type=int,
+        default=DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
+        help="Abort without summary after this many consecutive transport-failed tasks.",
+    )
+    run_cmd.add_argument(
+        "--min-transport-fraction-sample",
+        type=int,
+        default=DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES,
+        help="Minimum attempted tasks before applying the transport-fraction gate.",
+    )
 
     cmp_cmd = sub.add_parser("compare", help="Compare two run summary files")
     cmp_cmd.add_argument("--baseline", type=pathlib.Path, required=True)
@@ -1820,9 +2386,19 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
 
     if args.cmd == "run":
-        summary = run_benchmark(args.mcp_url, args.tasks, args.output_dir, args.label, args.request_timeout_s)
+        summary = run_benchmark(
+            args.mcp_url,
+            args.tasks,
+            args.output_dir,
+            args.label,
+            args.request_timeout_s,
+            allow_subset=args.allow_subset,
+            max_transport_failed_fraction=args.max_transport_failed_fraction,
+            max_consecutive_transport_failures=args.max_consecutive_transport_failures,
+            min_transport_fraction_sample=args.min_transport_fraction_sample,
+        )
         print(json.dumps(summary, indent=2, ensure_ascii=False))
-        return 0
+        return 0 if summary.get("run_valid") else 1
 
     if args.cmd == "compare":
         comparison = compare_runs(args.baseline, args.current, args.output_dir)

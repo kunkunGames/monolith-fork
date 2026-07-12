@@ -235,6 +235,12 @@ Signals:
 - Duplicate source/project result rows, including repeated unknown or empty
   symbol names.
 
+`duplicate_retry` is failure-specific: only canonical records whose `status` is
+not `success` contribute to its count, score, CSV row, and evidence. v3 loggers
+also stamp `retry_signature` on successful calls, but a repeated successful
+signature is not itself proof of a retry loop; successful duplicate-work
+findings require separate result-shape or workflow-sequence evidence.
+
 Output:
 
 - `duplicate_call` findings for exact or near-exact repeats.
@@ -328,7 +334,7 @@ Noise classes:
 | Class | Default handling | Examples |
 |---|---|---|
 | `heartbeat` | Summarize counts and duration, exclude from ROI ranking unless `--include-heartbeats` is passed. | `monolith.status`, `monolith_status` proxy calls |
-| `synthetic_test` | Summarize separately, exclude from missing-action recommendations unless `--include-synthetic-tests` is passed. Primary signal: `environment.is_automation_test == true` on v3 rows (stamped from `GIsAutomationTesting`); synthetic argument markers and per-action fixture whitelists remain only as fallback for legacy rows without the stamp. | `__missing_action_for_headless_log_test`, `__cc05_dispatch_ns__` |
+| `synthetic_test` | Summarize separately, exclude from missing-action recommendations unless `--include-synthetic-tests` is passed. Two primary signals on v3 rows: `environment.is_automation_test == true` (stamped from `GIsAutomationTesting`, so it covers only in-process C++ automation) and `routing_context.client_kind == "benchmark"` (self-declared by the out-of-process benchmark runners, which send hallucinated action names and typo fixtures on purpose — without it those rows rank as `needed_action` demand). Synthetic argument markers and per-action fixture whitelists remain only as fallback for legacy rows without either stamp. | `__missing_action_for_headless_log_test`, `__cc05_dispatch_ns__`, `worldgen.get_blockout_volumse` (benchmark typo fixture) |
 | `maintenance` | Include in ROI ranking only when repeated, slow, or failing. | `source.repair_crg_cache`, `source.build_crg_graph`, `source.health` |
 | `expected_slow_domain` | Rank by error/retry rate first, duration second. | image generation actions |
 | `escape_hatch` | Always rank when frequent enough to suggest missing first-class actions. | `editor.run_python` |

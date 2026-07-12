@@ -21,14 +21,41 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
-from benchmark_common import attach_benchmark_inputs, build_benchmark_inputs, display_path, resolve_plugin_path
+from benchmark_common import (
+    benchmark_routing_context,
+    DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
+    DEFAULT_MAX_TRANSPORT_FAILED_FRACTION,
+    DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES,
+    TaskCorpus,
+    TransportFailureTracker,
+    attach_benchmark_inputs,
+    build_benchmark_inputs,
+    classify_mcp_protocol_failure,
+    display_path,
+    load_task_corpus,
+    paginate_discover_action_names,
+    resolve_plugin_path,
+    status_identity,
+    status_identity_mismatches,
+    task_corpus_metadata,
+    validate_mcp_status_response,
+)
 
 DEFAULT_MCP_URL = "http://localhost:9316/mcp"
 DEFAULT_TASKS = pathlib.Path("Benchmarks/ActionGuidance/tasks.jsonl")
 DEFAULT_MANIFEST = pathlib.Path("Benchmarks/ActionGuidance/manifest.json")
 DEFAULT_RESULTS_ROOT = pathlib.Path("Saved/Monolith/Benchmarks/ActionGuidance")
+DEFAULT_MAX_RECOVERY_CALLS = 3
+
+ACTION_GUIDANCE_TASK_CATEGORIES = {
+    "discovery_planning",
+    "needed_action_routing",
+    "unknown_action_recovery",
+    "missing_required_param",
+    "invalid_param_type",
+}
 
 READ_ONLY_POLICY_IDS = {"", "read_only"}
 
@@ -127,6 +154,7 @@ def utc_now() -> str:
 
 
 def load_jsonl(path: pathlib.Path) -> List[Dict[str, Any]]:
+    path = resolve_plugin_path(path)
     rows: List[Dict[str, Any]] = []
     with path.open("r", encoding="utf-8") as handle:
         for line_no, line in enumerate(handle, 1):
@@ -181,6 +209,11 @@ def extract_sse_data(raw: str) -> str:
     return "\n".join(data_lines) if data_lines else raw
 
 
+# Declares this traffic as synthetic benchmark fixtures so the invocation-log
+# analyzer does not report deliberate negative probes as real, unmet demand.
+_BENCHMARK_ROUTING_CONTEXT = benchmark_routing_context("ActionGuidance")
+
+
 def mcp_call(url: str, tool: str, arguments: Dict[str, Any], timeout_s: float = 45.0) -> Dict[str, Any]:
     body = {
         "jsonrpc": "2.0",
@@ -190,6 +223,7 @@ def mcp_call(url: str, tool: str, arguments: Dict[str, Any], timeout_s: float = 
             "name": tool,
             "arguments": arguments,
         },
+        "_monolith_routing_context": _BENCHMARK_ROUTING_CONTEXT,
     }
     data = json.dumps(body, separators=(",", ":")).encode("utf-8")
     request = urllib.request.Request(
@@ -219,6 +253,13 @@ def mcp_call(url: str, tool: str, arguments: Dict[str, Any], timeout_s: float = 
         parsed = json.loads(raw)
     except json.JSONDecodeError:
         parsed = {"parse_error": True, "raw": raw}
+    if not isinstance(parsed, dict):
+        return {
+            "protocol_error": True,
+            "raw": raw,
+            "error": "MCP response top-level JSON must be an object",
+            "request": body,
+        }
     parsed["request"] = body
     return parsed
 
@@ -344,13 +385,192 @@ def is_read_only(schema_row: Dict[str, Any]) -> bool:
     return (policy_id in READ_ONLY_POLICY_IDS) and not can_mutate and not destructive
 
 
-def discover_schema(url: str, namespace: str, action: str, timeout_s: float = 45.0) -> Optional[Dict[str, Any]]:
-    response = mcp_call(url, "monolith_discover", {"namespace": namespace, "action": action, "mode": "schema"}, timeout_s=timeout_s)
+def discover_schema(
+    url: str,
+    namespace: str,
+    action: str,
+    timeout_s: float = 45.0,
+    call_fn: Optional[Callable[[str, str, Dict[str, Any], float], Dict[str, Any]]] = None,
+) -> Optional[Dict[str, Any]]:
+    caller = call_fn or mcp_call
+    response = caller(
+        url,
+        "monolith_discover",
+        {"namespace": namespace, "action": action, "mode": "schema"},
+        timeout_s,
+    )
     parsed = result_data(response)
     if not parsed:
         return None
     schema = parsed.get("schema")
     return schema if isinstance(schema, dict) else None
+
+
+def discover_namespace_actions_strict(url: str, namespace: str, timeout_s: float = 45.0) -> List[str]:
+    """Enumerate one namespace without turning catalog drift into missing tasks."""
+
+    def fetch_page(arguments: Dict[str, Any]) -> Dict[str, Any]:
+        response = mcp_call(url, "monolith_discover", arguments, timeout_s=timeout_s)
+        return result_data(response) or {}
+
+    return paginate_discover_action_names(fetch_page, namespace)
+
+
+def discover_catalog_namespaces(
+    url: str,
+    timeout_s: float = 45.0,
+    expected_catalog_version: str = "",
+) -> List[Dict[str, Any]]:
+    """Return summary rows enriched with the complete paginated action catalog.
+
+    Compact discovery deliberately keeps action names out of summary rows.  A
+    benchmark generator must enumerate ``mode=actions`` for every namespace and
+    verify the summary counts; otherwise a response-shape or pagination change
+    silently shrinks the generated corpus.
+    """
+
+    response = mcp_call(
+        url,
+        "monolith_discover",
+        {"mode": "summary", "limit": 1000},
+        timeout_s=timeout_s,
+    )
+    summary = result_data(response)
+    rows = summary.get("namespaces") if isinstance(summary, dict) else None
+    if not isinstance(rows, list) or not rows:
+        raise RuntimeError("monolith_discover summary did not return namespaces")
+    observed_catalog_version = str(summary.get("catalog_version", "")).strip()
+    if (
+        expected_catalog_version
+        and observed_catalog_version != expected_catalog_version
+    ):
+        raise RuntimeError(
+            "catalog version changed before namespace enumeration "
+            f"({expected_catalog_version} -> {observed_catalog_version or '<missing>'})"
+        )
+
+    normalized: List[Dict[str, Any]] = []
+    seen_namespaces = set()
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            raise RuntimeError(f"monolith_discover summary namespace row {index} is not an object")
+        namespace = str(row.get("namespace", "")).strip()
+        if not namespace:
+            raise RuntimeError(f"monolith_discover summary namespace row {index} has no namespace")
+        if namespace in seen_namespaces:
+            raise RuntimeError(f"monolith_discover summary returned duplicate namespace '{namespace}'")
+        seen_namespaces.add(namespace)
+
+        expected_count = row.get("action_count")
+        if isinstance(expected_count, bool) or not isinstance(expected_count, int) or expected_count < 1:
+            raise RuntimeError(
+                f"monolith_discover summary namespace '{namespace}' has invalid action_count={expected_count!r}"
+            )
+
+        actions = discover_namespace_actions_strict(url, namespace, timeout_s=timeout_s)
+        if len(actions) != len(set(actions)):
+            raise RuntimeError(f"monolith_discover returned duplicate actions for namespace '{namespace}'")
+        if len(actions) != expected_count:
+            raise RuntimeError(
+                f"monolith_discover action count mismatch for namespace '{namespace}': "
+                f"summary={expected_count}, enumerated={len(actions)}"
+            )
+
+        normalized_row = dict(row)
+        normalized_row["namespace"] = namespace
+        normalized_row["actions"] = actions
+        normalized.append(normalized_row)
+
+    total_actions = summary.get("total_actions")
+    enumerated_total = sum(len(row["actions"]) for row in normalized)
+    if isinstance(total_actions, bool) or not isinstance(total_actions, int):
+        raise RuntimeError(f"monolith_discover summary has invalid total_actions={total_actions!r}")
+    if total_actions != enumerated_total:
+        raise RuntimeError(
+            "monolith_discover total action count mismatch: "
+            f"summary={total_actions}, enumerated={enumerated_total}"
+        )
+
+    return normalized
+
+
+def read_generation_catalog_fingerprint(
+    url: str,
+    timeout_s: float = 45.0,
+) -> Dict[str, Any]:
+    """Read strict status+discover identity before/after corpus generation."""
+    status_response = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
+    if not isinstance(status_response, dict):
+        raise RuntimeError("monolith_status response top-level JSON was not an object")
+    if (
+        status_response.get("transport_error")
+        or status_response.get("parse_error")
+        or status_response.get("protocol_error")
+        or status_response.get("error") is not None
+    ):
+        raise RuntimeError(
+            f"monolith_status failed during corpus generation: {str(status_response)[:300]}"
+        )
+    status = result_data(status_response)
+    if not status or status.get("server_running") is not True:
+        raise RuntimeError(
+            f"monolith_status returned an invalid generation payload: {str(status)[:300]}"
+        )
+
+    discover_response = mcp_call(
+        url,
+        "monolith_discover",
+        {"mode": "summary", "limit": 1000},
+        timeout_s=timeout_s,
+    )
+    if not isinstance(discover_response, dict):
+        raise RuntimeError("monolith_discover response top-level JSON was not an object")
+    if (
+        discover_response.get("transport_error")
+        or discover_response.get("parse_error")
+        or discover_response.get("protocol_error")
+        or discover_response.get("error") is not None
+    ):
+        raise RuntimeError(
+            "monolith_discover failed during corpus generation: "
+            f"{str(discover_response)[:300]}"
+        )
+    discover = result_data(discover_response)
+    namespaces = discover.get("namespaces") if isinstance(discover, dict) else None
+    if not isinstance(namespaces, list) or not namespaces:
+        raise RuntimeError("monolith_discover generation fingerprint returned no namespaces")
+
+    status_version = str(status.get("catalog_version", "")).strip()
+    discover_version = str(discover.get("catalog_version", "")).strip()
+    if not status_version or status_version != discover_version:
+        raise RuntimeError(
+            "status/discover catalog version mismatch during corpus generation "
+            f"({status_version or '<missing>'} != {discover_version or '<missing>'})"
+        )
+    discover_action_count = discover.get("total_actions")
+    if not isinstance(discover_action_count, int) or isinstance(discover_action_count, bool):
+        discover_action_count = sum(
+            int(row.get("action_count") or 0)
+            for row in namespaces
+            if isinstance(row, dict)
+        )
+    status_action_count = status.get("catalog_action_count", status.get("total_actions"))
+    status_namespace_count = status.get("catalog_namespace_count", status.get("namespaces"))
+    if isinstance(status_action_count, int) and status_action_count != discover_action_count:
+        raise RuntimeError(
+            "status/discover catalog action-count mismatch during corpus generation "
+            f"({status_action_count} != {discover_action_count})"
+        )
+    if isinstance(status_namespace_count, int) and status_namespace_count != len(namespaces):
+        raise RuntimeError(
+            "status/discover catalog namespace-count mismatch during corpus generation "
+            f"({status_namespace_count} != {len(namespaces)})"
+        )
+    return {
+        "catalog_version": status_version,
+        "catalog_action_count": discover_action_count,
+        "catalog_namespace_count": len(namespaces),
+    }
 
 
 def representative_actions(actions: List[str], count: int = 3) -> List[str]:
@@ -425,6 +645,11 @@ _STATIC_DISCOVERY_TASKS_20260617 = [
     ("asset", "inspect_asset"),
     ("scene", "list_actors"),
     ("source", "review_context"),
+]
+
+_STATIC_READ_ONLY_POLICY_TASKS_20260711 = [
+    ("source_control", "list_opened"),
+    ("source_control", "map_depot_paths"),
 ]
 
 _STATIC_UNKNOWN_ACTION_TASKS_20260617 = [
@@ -623,6 +848,23 @@ def append_static_unreal_practical_tasks(tasks: List[Dict[str, Any]]) -> None:
             "safety": "read_only_discovery",
         })
 
+    for namespace, action in _STATIC_READ_ONLY_POLICY_TASKS_20260711:
+        append_unique_task(tasks, seen, {
+            "category": "discovery_planning",
+            "namespace": namespace,
+            "action": action,
+            "tool": "monolith_discover",
+            "arguments": {"namespace": namespace, "action": action, "mode": "schema"},
+            "expected": {
+                "action_id": f"{namespace}.{action}",
+                "requires_planning_signals": True,
+                "execution_policy_id": "read_only",
+                "execution_policy_defaulted": False,
+                "mutates_assets": False,
+            },
+            "safety": "read_only_discovery",
+        })
+
     for namespace, candidate_action, typo in _STATIC_UNKNOWN_ACTION_TASKS_20260617:
         tool, args = action_tool(namespace, typo, {})
         append_unique_task(tasks, seen, {
@@ -702,12 +944,11 @@ def append_static_unreal_practical_tasks(tasks: List[Dict[str, Any]]) -> None:
 def generate_tasks(url: str, min_tasks: int, tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dict[str, Any]:
     tasks_path = resolve_plugin_path(tasks_path)
     manifest_path = resolve_plugin_path(manifest_path)
-    summary_response = mcp_call(url, "monolith_discover", {})
-    summary = text_json(summary_response)
-    if not summary or "namespaces" not in summary:
-        raise RuntimeError("monolith_discover summary did not return namespaces")
-
-    namespaces = [row for row in summary.get("namespaces", []) if isinstance(row, dict)]
+    start_catalog = read_generation_catalog_fingerprint(url)
+    namespaces = discover_catalog_namespaces(
+        url,
+        expected_catalog_version=str(start_catalog["catalog_version"]),
+    )
     namespace_rows = []
     tasks: List[Dict[str, Any]] = []
     schema_cache: Dict[Tuple[str, str], Dict[str, Any]] = {}
@@ -834,7 +1075,13 @@ def generate_tasks(url: str, min_tasks: int, tasks_path: pathlib.Path, manifest_
         if weight > DEFAULT_WEIGHT:
             weighted_task_count += 1
 
-    write_jsonl(tasks_path, tasks)
+    end_catalog = read_generation_catalog_fingerprint(url)
+    if end_catalog != start_catalog:
+        raise RuntimeError(
+            "catalog drifted while generating ActionGuidance corpus; refusing to overwrite "
+            f"tasks/manifest (start={start_catalog}, end={end_catalog})"
+        )
+
     manifest = {
         "generated_at": utc_now(),
         "mcp_url": url,
@@ -842,6 +1089,7 @@ def generate_tasks(url: str, min_tasks: int, tasks_path: pathlib.Path, manifest_
         "min_tasks_requested": min_tasks,
         "catalog_namespace_count": len(namespace_rows),
         "catalog_action_count": sum(row["action_count"] for row in namespace_rows),
+        "catalog_version": start_catalog["catalog_version"],
         "namespace_coverage": namespace_rows,
         "category_counts": count_by(tasks, "category"),
         "task_file": display_path(tasks_path),
@@ -853,10 +1101,25 @@ def generate_tasks(url: str, min_tasks: int, tasks_path: pathlib.Path, manifest_
         },
         "scoring": {
             "effectiveness_score": "0.30*task_success_rate + 0.20*first_recovery_success_rate + 0.15*action_selection_accuracy + 0.15*param_correction_accuracy + 0.10*(1-normalized_tool_calls) + 0.10*(1-hallucinated_workflow_rate)",
-            "normalized_tool_calls": "clamp((mean_tool_calls_to_success - 1) / 3, 0, 1)",
+            "normalized_tool_calls": "clamp((mean_tool_calls_to_success - 1) / max(1, max_recovery_calls - 1), 0, 1)",
             "aggregation": "Per-task sub-metrics are combined with weighted_avg using each task's demand weight; component weights still sum to 1.0.",
         },
+        "run_gates": {
+            "default_max_recovery_calls": DEFAULT_MAX_RECOVERY_CALLS,
+            "max_transport_failed_fraction": DEFAULT_MAX_TRANSPORT_FAILED_FRACTION,
+            "max_consecutive_transport_failures": DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
+            "min_transport_fraction_sample": DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES,
+            "status_transport_failure_aborts_before_tasks": True,
+            "invalid_status_response_aborts_before_tasks": True,
+            "task_protocol_error_aborts_immediately": True,
+            "runner_exception_aborts_immediately": True,
+            "short_run_fraction_checked_at_finalize": True,
+            "canonical_task_corpus_required_for_comparison": True,
+            "status_identity_must_match_postflight": True,
+            "invalid_run_writes_summary": False,
+        },
     }
+    write_jsonl(tasks_path, tasks)
     write_json(manifest_path, manifest)
     return manifest
 
@@ -894,20 +1157,31 @@ def array_field(payload: Dict[str, Any], field: str) -> List[Any]:
     return value if isinstance(value, list) else []
 
 
-def call_discover_actions(url: str, namespace: str, timeout_s: float = 45.0) -> List[str]:
-    response = mcp_call(url, "monolith_discover", {"namespace": namespace, "mode": "actions"}, timeout_s=timeout_s)
-    parsed = result_data(response)
-    if not parsed:
+def call_discover_actions(
+    url: str,
+    namespace: str,
+    timeout_s: float = 45.0,
+    call_fn: Optional[Callable[[str, str, Dict[str, Any], float], Dict[str, Any]]] = None,
+) -> List[str]:
+    """Return every action name of a namespace via paginated mode="actions".
+
+    The server pages namespace listings (default 50 rows); a single unpaged
+    call hid everything past page 1 for namespaces like ai (182 actions) and
+    silently failed the error-recovery scorer for any expected action beyond
+    the first page. Pagination drift is reported loudly but scored as a failed
+    recovery ([]), not a crashed run.
+    """
+    caller = call_fn or mcp_call
+
+    def fetch_page(arguments: Dict[str, Any]) -> Dict[str, Any]:
+        response = caller(url, "monolith_discover", arguments, timeout_s)
+        return result_data(response) or {}
+
+    try:
+        return paginate_discover_action_names(fetch_page, namespace)
+    except RuntimeError as exc:
+        print(f"[action_guidance] WARNING: discover action enumeration failed: {exc}", file=sys.stderr)
         return []
-    actions = parsed.get("actions")
-    out: List[str] = []
-    if isinstance(actions, list):
-        for row in actions:
-            if isinstance(row, dict) and isinstance(row.get("action"), str):
-                out.append(row["action"])
-            elif isinstance(row, str):
-                out.append(row)
-    return out
 
 
 def candidate_contains(payload: Dict[str, Any], expected_action_id: str) -> bool:
@@ -963,8 +1237,59 @@ def routing_names_action(payload: Dict[str, Any], parsed: Dict[str, Any], expect
     return expected_action_id in candidates[:top_n]
 
 
-def score_task(url: str, task: Dict[str, Any], max_recovery_calls: int, timeout_s: float) -> Dict[str, Any]:
-    response = mcp_call(url, str(task["tool"]), dict(task.get("arguments", {})), timeout_s=timeout_s)
+class TaskMcpProtocolError(RuntimeError):
+    """A malformed task-call envelope; the run must stop at this task."""
+
+    def __init__(self, tool: str, raw: str):
+        super().__init__(f"{tool} returned an invalid MCP/JSON-RPC response")
+        self.tool = tool
+        self.raw = raw[:500]
+
+
+def _score_task_impl(url: str, task: Dict[str, Any], max_recovery_calls: int, timeout_s: float) -> Dict[str, Any]:
+    transport_events: List[Dict[str, Any]] = []
+
+    def task_mcp_call(
+        call_url: str,
+        tool: str,
+        arguments: Dict[str, Any],
+        call_timeout_s: float,
+    ) -> Dict[str, Any]:
+        call_response = mcp_call(
+            call_url,
+            tool,
+            arguments,
+            timeout_s=call_timeout_s,
+        )
+        if not isinstance(call_response, dict):
+            call_response = {
+                "protocol_error": True,
+                "raw": str(call_response)[:500],
+                "error": "MCP response top-level JSON must be an object",
+            }
+        if call_response.get("transport_error"):
+            status = call_response.get("status")
+            transport_events.append({
+                "tool": tool,
+                "status": (
+                    status if isinstance(status, int) and not isinstance(status, bool) else None
+                ),
+                "raw": str(call_response.get("raw", ""))[:300],
+            })
+        protocol_failure = classify_mcp_protocol_failure(call_response)
+        if protocol_failure:
+            raise TaskMcpProtocolError(
+                tool,
+                str(call_response.get("raw", call_response)),
+            )
+        return call_response
+
+    response = task_mcp_call(
+        url,
+        str(task["tool"]),
+        dict(task.get("arguments", {})),
+        timeout_s,
+    )
     payload = result_payload(response)
     parsed_text = result_data(response)
     category = task.get("category")
@@ -988,14 +1313,33 @@ def score_task(url: str, task: Dict[str, Any], max_recovery_calls: int, timeout_
             output_status = schema.get("output_contract_status")
             next_status = schema.get("next_actions_status")
             status_explicit = output_status in ("declared", "not_declared") and next_status in ("declared", "not_declared")
-            direct_success = bool(has_signals and has_skill and status_explicit)
+            expected_policy_id = expected.get("execution_policy_id")
+            expected_policy_defaulted = expected.get("execution_policy_defaulted")
+            expected_mutates_assets = expected.get("mutates_assets")
+            policy = schema.get("execution_policy")
+            policy_ok = True
+            if expected_policy_id is not None:
+                policy_ok = isinstance(policy, dict) and policy.get("policy_id") == expected_policy_id
+                policy_ok = policy_ok and not bool(
+                    policy.get("dirty_package_tracking")
+                    or policy.get("transaction_wrapping")
+                    or policy.get("post_edit_validation")
+                )
+            if expected_policy_defaulted is not None:
+                policy_ok = policy_ok and isinstance(policy, dict) and bool(policy.get("defaulted")) == bool(expected_policy_defaulted)
+            if expected_mutates_assets is not None:
+                policy_ok = policy_ok and bool(schema.get("mutates_assets")) == bool(expected_mutates_assets)
+            direct_success = bool(has_signals and has_skill and status_explicit and policy_ok)
             recovered = direct_success
-            hallucinated_workflow_risk = 0.0 if status_explicit else 1.0
+            hallucinated_workflow_risk = 0.0 if status_explicit and policy_ok else 1.0
             evidence = {
                 "has_planning_signals": has_signals,
                 "has_skill": has_skill,
                 "output_contract_status": output_status,
                 "next_actions_status": next_status,
+                "execution_policy": policy,
+                "mutates_assets": schema.get("mutates_assets"),
+                "policy_ok": policy_ok,
             }
         else:
             action_selection_score = 0.0
@@ -1009,7 +1353,12 @@ def score_task(url: str, task: Dict[str, Any], max_recovery_calls: int, timeout_
         action_selection_score = 1.0 if direct_candidate else 0.0
         recovered = direct_success
         if not recovered and tool_calls < max_recovery_calls:
-            actions = call_discover_actions(url, str(task.get("namespace", "")), timeout_s=timeout_s)
+            actions = call_discover_actions(
+                url,
+                str(task.get("namespace", "")),
+                timeout_s=timeout_s,
+                call_fn=task_mcp_call,
+            )
             tool_calls += 1
             expected_action = expected_candidate.split(".", 1)[1] if "." in expected_candidate else expected_candidate
             best = difflib.get_close_matches(str(task.get("action", "")), actions, n=1)
@@ -1033,11 +1382,11 @@ def score_task(url: str, task: Dict[str, Any], max_recovery_calls: int, timeout_
         recovered = direct_success
         if not recovered and tool_calls < max_recovery_calls:
             # Deterministic fallback: re-query monolith_find scoped to the namespace.
-            retry = mcp_call(
+            retry = task_mcp_call(
                 url,
                 "monolith_find",
                 {"query": str(task.get("action", "")).replace("_", " "), "namespace": str(task.get("namespace", ""))},
-                timeout_s=timeout_s,
+                timeout_s,
             )
             tool_calls += 1
             retry_candidates = routing_candidates(result_payload(retry), result_data(retry))
@@ -1061,7 +1410,13 @@ def score_task(url: str, task: Dict[str, Any], max_recovery_calls: int, timeout_
         param_correction_score = 1.0 if direct_success else 0.0
         recovered = direct_success
         if not recovered and tool_calls < max_recovery_calls:
-            schema = discover_schema(url, str(task.get("namespace", "")), str(task.get("action", "")), timeout_s=timeout_s)
+            schema = discover_schema(
+                url,
+                str(task.get("namespace", "")),
+                str(task.get("action", "")),
+                timeout_s=timeout_s,
+                call_fn=task_mcp_call,
+            )
             tool_calls += 1
             params = schema_params(schema or {})
             recovered = bool(missing in params and params[missing].get("required"))
@@ -1081,7 +1436,13 @@ def score_task(url: str, task: Dict[str, Any], max_recovery_calls: int, timeout_
         param_correction_score = 1.0 if direct_success else 0.0
         recovered = direct_success
         if not recovered and tool_calls < max_recovery_calls:
-            schema = discover_schema(url, str(task.get("namespace", "")), str(task.get("action", "")), timeout_s=timeout_s)
+            schema = discover_schema(
+                url,
+                str(task.get("namespace", "")),
+                str(task.get("action", "")),
+                timeout_s=timeout_s,
+                call_fn=task_mcp_call,
+            )
             tool_calls += 1
             params = schema_params(schema or {})
             recovered = bool(invalid_param in params and params[invalid_param].get("type"))
@@ -1098,6 +1459,7 @@ def score_task(url: str, task: Dict[str, Any], max_recovery_calls: int, timeout_
     if not recovered:
         tool_calls = max_recovery_calls
 
+    last_transport = transport_events[-1] if transport_events else {}
     return {
         "task_id": task.get("id"),
         "category": category,
@@ -1111,11 +1473,56 @@ def score_task(url: str, task: Dict[str, Any], max_recovery_calls: int, timeout_
         "param_correction_score": param_correction_score,
         "hallucinated_workflow_risk": hallucinated_workflow_risk,
         "evidence": evidence,
-        "transport_error": bool(response.get("transport_error")),
-        "transport_error_raw": str(response.get("raw", ""))[:300] if response.get("transport_error") else "",
+        "transport_error": bool(transport_events),
+        "transport_status": last_transport.get("status"),
+        "transport_error_raw": str(last_transport.get("raw", "")),
+        "transport_failure_call_count": len(transport_events),
+        "last_transport_tool": str(last_transport.get("tool", "")),
         "response_is_error": bool(payload.get("isError")),
         "response_text": result_text(response)[:1000],
     }
+
+
+def protocol_failure_task_row(
+    task: Dict[str, Any],
+    max_recovery_calls: int,
+    failure: TaskMcpProtocolError,
+) -> Dict[str, Any]:
+    """Preserve the exact task and call that exposed a malformed MCP envelope."""
+    return {
+        "task_id": task.get("id"),
+        "category": task.get("category"),
+        "namespace": task.get("namespace"),
+        "action": task.get("action"),
+        "weight": task_weight(task),
+        "direct_success": False,
+        "task_success": False,
+        "tool_calls_to_success": max_recovery_calls,
+        "action_selection_score": 0.0,
+        "param_correction_score": None,
+        "hallucinated_workflow_risk": 1.0,
+        "evidence": {"protocol_error": str(failure)},
+        "transport_error": False,
+        "transport_status": None,
+        "transport_error_raw": "",
+        "transport_failure_call_count": 0,
+        "last_transport_tool": "",
+        "protocol_error": True,
+        "protocol_error_raw": failure.raw,
+        "protocol_failure_call_count": 1,
+        "last_protocol_tool": failure.tool,
+        "response_is_error": False,
+        "response_text": "",
+        "failure_kind": "protocol_error",
+        "error": str(failure),
+    }
+
+
+def score_task(url: str, task: Dict[str, Any], max_recovery_calls: int, timeout_s: float) -> Dict[str, Any]:
+    try:
+        return _score_task_impl(url, task, max_recovery_calls, timeout_s)
+    except TaskMcpProtocolError as failure:
+        return protocol_failure_task_row(task, max_recovery_calls, failure)
 
 
 def avg(values: List[float]) -> float:
@@ -1181,6 +1588,104 @@ def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], r
     }
 
 
+def runner_exception_task_row(
+    task: Dict[str, Any],
+    max_recovery_calls: int,
+    error: str,
+) -> Dict[str, Any]:
+    """Preserve the triggering task without invoking benchmark scoring code."""
+    return {
+        "task_id": task.get("id"),
+        "category": task.get("category"),
+        "namespace": task.get("namespace"),
+        "action": task.get("action"),
+        "weight": task_weight(task),
+        "direct_success": False,
+        "task_success": False,
+        "tool_calls_to_success": max_recovery_calls,
+        "action_selection_score": 0.0,
+        "param_correction_score": None,
+        "hallucinated_workflow_risk": 1.0,
+        "evidence": {"runner_exception": error},
+        "transport_error": False,
+        "transport_status": None,
+        "transport_error_raw": "",
+        "transport_failure_call_count": 0,
+        "last_transport_tool": "",
+        "response_is_error": False,
+        "response_text": "",
+        "failure_kind": "runner_exception",
+        "error": error,
+    }
+
+
+RUN_OUTPUT_FILENAMES = (
+    "summary.json",
+    "partial_summary.json",
+    "per_task.json",
+    "per_task.jsonl",
+    "run_failure.json",
+)
+
+
+def clear_known_run_outputs(output_dir: pathlib.Path) -> None:
+    """Invalidate every stale success/failure artifact before any input is trusted."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for name in RUN_OUTPUT_FILENAMES:
+        path = output_dir / name
+        if path.exists():
+            path.unlink()
+
+
+def write_invalid_run_artifacts(output_dir: pathlib.Path, failure: Dict[str, Any]) -> None:
+    failure["run_valid"] = False
+    failure["metrics_valid"] = False
+    write_json(output_dir / "run_failure.json", failure)
+    write_json(output_dir / "partial_summary.json", failure)
+
+
+def attach_run_context(
+    payload: Dict[str, Any],
+    corpus: TaskCorpus,
+    start_identity: Dict[str, str],
+    end_identity: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    payload["task_corpus"] = task_corpus_metadata(corpus)
+    payload["comparison_valid"] = corpus.comparable
+    payload["status_identity_start"] = start_identity
+    if end_identity is not None:
+        payload["status_identity_end"] = end_identity
+    return payload
+
+
+def build_attempt_failure(
+    label: str,
+    status: Dict[str, Any],
+    tasks: List[Dict[str, Any]],
+    rows: List[Dict[str, Any]],
+    max_recovery_calls: int,
+    tracker: TransportFailureTracker,
+    benchmark_inputs: Dict[str, Any],
+    corpus: TaskCorpus,
+    start_identity: Dict[str, str],
+    fields: Dict[str, Any],
+) -> Dict[str, Any]:
+    try:
+        failure = aggregate(label, status, tasks[:len(rows)], rows, max_recovery_calls)
+    except Exception as exc:  # noqa: BLE001 - preserve the invalid run even if aggregate code fails.
+        failure = {
+            "label": label,
+            "created_at": utc_now(),
+            "task_count": len(rows),
+            "aggregate_error": f"{type(exc).__name__}: {exc}",
+        }
+    failure.update(fields)
+    failure.update(tracker.snapshot())
+    attach_benchmark_inputs(failure, benchmark_inputs)
+    attach_run_context(failure, corpus, start_identity)
+    return failure
+
+
 def run_benchmark(
     url: str,
     tasks_path: pathlib.Path,
@@ -1188,35 +1693,326 @@ def run_benchmark(
     label: str,
     max_recovery_calls: int,
     timeout_s: float,
+    max_transport_failed_fraction: float = DEFAULT_MAX_TRANSPORT_FAILED_FRACTION,
+    max_consecutive_transport_failures: int = DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
+    min_transport_fraction_sample: int = DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES,
+    allow_subset: bool = False,
 ) -> Dict[str, Any]:
-    tasks_path = resolve_plugin_path(tasks_path)
-    tasks = load_jsonl(tasks_path)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    status_response = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
-    status = result_data(status_response)
-    benchmark_inputs = build_benchmark_inputs("ActionGuidance", tasks_path=tasks_path, mcp_status=status)
+    clear_known_run_outputs(output_dir)
+    try:
+        corpus = load_task_corpus(
+            tasks_path,
+            suite="ActionGuidance",
+            canonical_tasks_path=DEFAULT_TASKS,
+            canonical_manifest_path=DEFAULT_MANIFEST,
+            allow_subset=allow_subset,
+            allowed_categories=ACTION_GUIDANCE_TASK_CATEGORIES,
+            require_arguments=True,
+        )
+        tasks_path = resolve_plugin_path(tasks_path)
+        tasks = corpus.tasks
+    except Exception as exc:  # noqa: BLE001 - malformed corpora must invalidate stale baselines.
+        failure = {
+            "label": label,
+            "created_at": utc_now(),
+            "metrics_scope": "not_started",
+            "completion_status": "aborted_input_preflight",
+            "failure_stage": "input_preflight",
+            "failure_kind": "runner_exception",
+            "completed_task_count": 0,
+            "total_task_count": 0,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+        write_invalid_run_artifacts(output_dir, failure)
+        return failure
+
+    try:
+        if isinstance(max_recovery_calls, bool) or not isinstance(max_recovery_calls, int):
+            raise ValueError("max_recovery_calls must be an integer")
+        if max_recovery_calls < 1:
+            raise ValueError("max_recovery_calls must be >= 1")
+        transport_tracker = TransportFailureTracker(
+            max_failed_fraction=max_transport_failed_fraction,
+            max_consecutive_failures=max_consecutive_transport_failures,
+            min_fraction_samples=min_transport_fraction_sample,
+        )
+    except ValueError as exc:
+        failure = {
+            "label": label,
+            "created_at": utc_now(),
+            "metrics_scope": "not_started",
+            "completion_status": "aborted_invalid_configuration",
+            "failure_stage": "configuration",
+            "failure_kind": "invalid_configuration",
+            "completed_task_count": 0,
+            "total_task_count": len(tasks),
+            "error": str(exc),
+        }
+        write_invalid_run_artifacts(output_dir, failure)
+        return failure
+
+    try:
+        status_response: Any = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
+        status_validation = validate_mcp_status_response(
+            status_response,
+            result_payload=result_payload,
+            result_data=result_data,
+        )
+    except Exception as exc:  # noqa: BLE001 - status runner defects must leave invalid artifacts.
+        status_validation = {
+            "ok": False,
+            "failure_kind": "runner_exception",
+            "raw": f"{type(exc).__name__}: {exc}",
+            "transport_status": None,
+        }
+
+    if not status_validation.get("ok"):
+        status_failure_kind = str(status_validation.get("failure_kind", "protocol_error"))
+        raw = str(status_validation.get("raw", ""))[:500]
+        failure = {
+            "label": label,
+            "created_at": utc_now(),
+            "metrics_scope": "not_started",
+            "completion_status": (
+                "aborted_status_transport_failure"
+                if status_failure_kind == "transport_error"
+                else "aborted_status_preflight"
+            ),
+            "failure_stage": "status_preflight",
+            "failure_kind": status_failure_kind,
+            "completed_task_count": 0,
+            "total_task_count": len(tasks),
+            "transport_failure_count": 1 if status_failure_kind == "transport_error" else 0,
+            "transport_status": status_validation.get("transport_status"),
+            "transport_error_raw": raw if status_failure_kind == "transport_error" else "",
+            "protocol_error_raw": raw if status_failure_kind != "transport_error" else "",
+        }
+        write_invalid_run_artifacts(output_dir, failure)
+        return failure
+
+    status = dict(status_validation["status"])
+    start_identity = status_identity(status, endpoint=url)
+    expected_catalog = str(corpus.manifest.get("catalog_version", "")).strip()
+    observed_catalog = str(status.get("catalog_version", "")).strip()
+    if corpus.canonical and expected_catalog and observed_catalog != expected_catalog:
+        failure = {
+            "label": label,
+            "created_at": utc_now(),
+            "metrics_scope": "not_started",
+            "completion_status": "aborted_catalog_identity_mismatch",
+            "failure_stage": "status_preflight",
+            "failure_kind": "catalog_identity_mismatch",
+            "completed_task_count": 0,
+            "total_task_count": len(tasks),
+            "expected_catalog_version": expected_catalog,
+            "observed_catalog_version": observed_catalog,
+        }
+        attach_run_context(failure, corpus, start_identity)
+        write_invalid_run_artifacts(output_dir, failure)
+        return failure
+
+    try:
+        benchmark_inputs = build_benchmark_inputs(
+            "ActionGuidance", tasks_path=tasks_path, mcp_status=status
+        )
+    except Exception as exc:  # noqa: BLE001 - provenance defects invalidate the run.
+        failure = {
+            "label": label,
+            "created_at": utc_now(),
+            "metrics_scope": "not_started",
+            "completion_status": "aborted_runner_exception",
+            "failure_stage": "benchmark_inputs",
+            "failure_kind": "runner_exception",
+            "completed_task_count": 0,
+            "total_task_count": len(tasks),
+            "exception": f"{type(exc).__name__}: {exc}",
+        }
+        attach_run_context(failure, corpus, start_identity)
+        write_invalid_run_artifacts(output_dir, failure)
+        return failure
 
     rows: List[Dict[str, Any]] = []
     per_task_jsonl = output_dir / "per_task.jsonl"
-    if per_task_jsonl.exists():
-        per_task_jsonl.unlink()
     for index, task in enumerate(tasks, 1):
-        row = score_task(url, task, max_recovery_calls, timeout_s)
+        runner_exception = ""
+        try:
+            row = score_task(url, task, max_recovery_calls, timeout_s)
+        except Exception as exc:  # noqa: BLE001 - preserve the triggering task and abort.
+            runner_exception = f"{type(exc).__name__}: {exc}"
+            row = runner_exception_task_row(task, max_recovery_calls, runner_exception)
         rows.append(row)
+        transport_decision = transport_tracker.observe(
+            transport_error=bool(row.get("transport_error")),
+            item_id=str(row.get("task_id", "")),
+            status=(
+                row.get("transport_status")
+                if isinstance(row.get("transport_status"), int)
+                and not isinstance(row.get("transport_status"), bool)
+                else None
+            ),
+            raw=str(row.get("transport_error_raw", "")),
+        )
         with per_task_jsonl.open("a", encoding="utf-8", newline="\n") as handle:
             handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
             handle.write("\n")
+
+        failure_kind = str(row.get("failure_kind", ""))
+        if runner_exception or failure_kind == "protocol_error":
+            failure = build_attempt_failure(
+                label, status, tasks, rows, max_recovery_calls, transport_tracker,
+                benchmark_inputs, corpus, start_identity,
+                {
+                    "metrics_scope": (
+                        "attempted_prefix_runner_exception"
+                        if runner_exception
+                        else "attempted_prefix_protocol_failure"
+                    ),
+                    "completion_status": (
+                        "aborted_runner_exception"
+                        if runner_exception
+                        else "aborted_protocol_failure"
+                    ),
+                    "failure_stage": "task_scoring",
+                    "failure_kind": "runner_exception" if runner_exception else "protocol_error",
+                    "completed_task_count": index,
+                    "total_task_count": len(tasks),
+                    "last_task_id": str(task.get("id", "")),
+                    "exception": runner_exception,
+                    "protocol_error_raw": str(row.get("protocol_error_raw", "")),
+                },
+            )
+            write_invalid_run_artifacts(output_dir, failure)
+            return failure
+
+        if transport_decision:
+            failure = build_attempt_failure(
+                label, status, tasks, rows, max_recovery_calls, transport_tracker,
+                benchmark_inputs, corpus, start_identity,
+                {
+                    "metrics_scope": "attempted_prefix_including_transport_failures",
+                    "completion_status": "aborted_transport_failure_budget",
+                    "failure_stage": "task_transport",
+                    "failure_kind": "transport_error",
+                    "completed_task_count": index,
+                    "total_task_count": len(tasks),
+                    "transport_gate_reason": transport_decision.reason,
+                    "last_task_id": transport_decision.item_id,
+                },
+            )
+            write_invalid_run_artifacts(output_dir, failure)
+            return failure
+
         if index == 1 or index == len(tasks) or index % 10 == 0:
             partial = aggregate(label, status, tasks[:index], rows, max_recovery_calls)
-            partial["completed_task_count"] = index
-            partial["total_task_count"] = len(tasks)
+            partial.update({
+                "completed_task_count": index,
+                "total_task_count": len(tasks),
+                "run_valid": None,
+                "metrics_valid": False,
+                "metrics_scope": "attempted_prefix",
+                "completion_status": "in_progress",
+            })
+            partial.update(transport_tracker.snapshot())
             attach_benchmark_inputs(partial, benchmark_inputs)
+            attach_run_context(partial, corpus, start_identity)
             write_json(output_dir / "partial_summary.json", partial)
-            print(f"[{index}/{len(tasks)}] {row['task_id']} success={row['task_success']} direct={row['direct_success']}", flush=True)
-    summary = aggregate(label, status, tasks, rows, max_recovery_calls)
+            print(
+                f"[{index}/{len(tasks)}] {row['task_id']} "
+                f"success={row['task_success']} direct={row['direct_success']}",
+                flush=True,
+            )
+
+    try:
+        summary = aggregate(label, status, tasks, rows, max_recovery_calls)
+    except Exception as exc:  # noqa: BLE001 - aggregate defects invalidate the run.
+        failure = build_attempt_failure(
+            label, status, tasks, rows, max_recovery_calls, transport_tracker,
+            benchmark_inputs, corpus, start_identity,
+            {
+                "metrics_scope": "complete_run_invalid",
+                "completion_status": "aborted_runner_exception",
+                "failure_stage": "final_aggregate",
+                "failure_kind": "runner_exception",
+                "completed_task_count": len(rows),
+                "total_task_count": len(tasks),
+                "exception": f"{type(exc).__name__}: {exc}",
+            },
+        )
+        write_invalid_run_artifacts(output_dir, failure)
+        return failure
+
+    summary.update({
+        "run_valid": True,
+        "completion_status": "completed",
+        "metrics_valid": True,
+        "metrics_scope": "complete_run" if corpus.comparable else "complete_subset_run",
+        "max_recovery_calls": max_recovery_calls,
+    })
+    summary.update(transport_tracker.snapshot())
     attach_benchmark_inputs(summary, benchmark_inputs)
+    attach_run_context(summary, corpus, start_identity)
+
+    final_transport_decision = transport_tracker.finalize()
+    if final_transport_decision:
+        summary.update({
+            "metrics_scope": "complete_run_invalid",
+            "completion_status": "completed_transport_failure_budget_exceeded",
+            "failure_stage": "task_transport_finalize",
+            "failure_kind": "transport_error",
+            "completed_task_count": len(rows),
+            "total_task_count": len(tasks),
+            "transport_gate_reason": final_transport_decision.reason,
+            "last_task_id": final_transport_decision.item_id,
+        })
+        write_invalid_run_artifacts(output_dir, summary)
+        return summary
+
+    try:
+        end_status_response: Any = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
+        end_status_validation = validate_mcp_status_response(
+            end_status_response,
+            result_payload=result_payload,
+            result_data=result_data,
+        )
+    except Exception as exc:  # noqa: BLE001 - postflight must invalidate the run.
+        end_status_validation = {
+            "ok": False,
+            "failure_kind": "runner_exception",
+            "raw": f"{type(exc).__name__}: {exc}",
+            "transport_status": None,
+        }
+    if not end_status_validation.get("ok"):
+        summary.update({
+            "metrics_scope": "complete_run_invalid",
+            "completion_status": "aborted_status_postflight",
+            "failure_stage": "status_postflight",
+            "failure_kind": str(end_status_validation.get("failure_kind", "protocol_error")),
+            "postflight_status_raw": str(end_status_validation.get("raw", ""))[:500],
+            "postflight_transport_status": end_status_validation.get("transport_status"),
+        })
+        write_invalid_run_artifacts(output_dir, summary)
+        return summary
+
+    end_status = dict(end_status_validation["status"])
+    end_identity = status_identity(end_status, endpoint=url)
+    identity_drift = status_identity_mismatches(start_identity, end_identity)
+    attach_run_context(summary, corpus, start_identity, end_identity)
+    if identity_drift:
+        summary.update({
+            "metrics_scope": "complete_run_invalid",
+            "completion_status": "aborted_status_identity_drift",
+            "failure_stage": "status_postflight",
+            "failure_kind": "status_identity_drift",
+            "status_identity_mismatches": identity_drift,
+        })
+        write_invalid_run_artifacts(output_dir, summary)
+        return summary
+
     write_json(output_dir / "summary.json", summary)
     write_json(output_dir / "per_task.json", rows)
+    partial_path = output_dir / "partial_summary.json"
+    if partial_path.exists():
+        partial_path.unlink()
     return summary
 
 
@@ -1292,8 +2088,31 @@ def main(argv: Optional[List[str]] = None) -> int:
     run.add_argument("--tasks", type=pathlib.Path, default=DEFAULT_TASKS)
     run.add_argument("--output-dir", type=pathlib.Path, required=True)
     run.add_argument("--label", required=True)
-    run.add_argument("--max-recovery-calls", type=int, default=3)
+    run.add_argument("--max-recovery-calls", type=int, default=DEFAULT_MAX_RECOVERY_CALLS)
+    run.add_argument(
+        "--allow-subset",
+        action="store_true",
+        help="Run a non-canonical diagnostic task subset; results are marked non-comparable.",
+    )
     run.add_argument("--request-timeout-s", type=float, default=12.0)
+    run.add_argument(
+        "--max-transport-failed-fraction",
+        type=float,
+        default=DEFAULT_MAX_TRANSPORT_FAILED_FRACTION,
+        help="Abort without summary when transport failures exceed this fraction after 20 tasks.",
+    )
+    run.add_argument(
+        "--max-consecutive-transport-failures",
+        type=int,
+        default=DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
+        help="Abort without summary after this many consecutive transport failures.",
+    )
+    run.add_argument(
+        "--min-transport-fraction-sample",
+        type=int,
+        default=DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES,
+        help="Minimum completed tasks before applying the transport-fraction gate.",
+    )
 
     cmp_cmd = sub.add_parser("compare", help="Compare two run summary files")
     cmp_cmd.add_argument("--baseline", type=pathlib.Path, required=True)
@@ -1306,9 +2125,20 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(json.dumps(manifest, indent=2, ensure_ascii=False))
         return 0
     if args.cmd == "run":
-        summary = run_benchmark(args.mcp_url, args.tasks, args.output_dir, args.label, args.max_recovery_calls, args.request_timeout_s)
+        summary = run_benchmark(
+            args.mcp_url,
+            args.tasks,
+            args.output_dir,
+            args.label,
+            args.max_recovery_calls,
+            args.request_timeout_s,
+            args.max_transport_failed_fraction,
+            args.max_consecutive_transport_failures,
+            args.min_transport_fraction_sample,
+            allow_subset=args.allow_subset,
+        )
         print(json.dumps(summary, indent=2, ensure_ascii=False))
-        return 0
+        return 0 if summary.get("run_valid") else 1
     if args.cmd == "compare":
         comparison = compare_runs(args.baseline, args.current, args.output_dir)
         print(json.dumps({"output_dir": str(args.output_dir), "deltas": comparison["deltas"]}, indent=2))

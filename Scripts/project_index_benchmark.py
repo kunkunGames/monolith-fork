@@ -27,43 +27,63 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from benchmark_common import attach_benchmark_inputs, build_benchmark_inputs, display_path, resolve_plugin_path
+from benchmark_common import (
+    benchmark_routing_context,
+    DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
+    DEFAULT_MAX_TRANSPORT_FAILED_FRACTION,
+    DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES,
+    TaskCorpus,
+    TransportFailureTracker,
+    attach_benchmark_inputs,
+    build_benchmark_inputs,
+    classify_mcp_protocol_failure,
+    display_path,
+    load_task_corpus,
+    paginate_discover_action_names,
+    resolve_plugin_path,
+    status_identity,
+    status_identity_mismatches,
+    task_corpus_metadata,
+    validate_mcp_status_response,
+)
 
 DEFAULT_MCP_URL = "http://localhost:9316/mcp"
 DEFAULT_TASKS = pathlib.Path("Benchmarks/ProjectIndex/tasks.jsonl")
 DEFAULT_MANIFEST = pathlib.Path("Benchmarks/ProjectIndex/manifest.json")
 DEFAULT_RESULTS_ROOT = pathlib.Path("Saved/Monolith/Benchmarks/ProjectIndex")
+# Project-derived fixtures (schema action list + known-answer recall pairs).
+# Written by `refresh_live_fixtures` against the CURRENT project's live index;
+# consumed by `generate`. Historical cross-project schema/known-answer snapshots
+# are deliberately not executable: fixtures must travel with the project, and
+# every task builder call requires the current validated fixture contract.
+DEFAULT_LIVE_FIXTURES = pathlib.Path("Benchmarks/ProjectIndex/live_fixtures.json")
+
+PROJECT_INDEX_TASK_CATEGORIES = {
+    "asset_search",
+    "gameplay_tag_lookup",
+    "health_check",
+    "known_answer",
+    "schema_field_presence",
+    "stats_check",
+}
+# Naming-convention seed prefixes used to derive known-answer candidates.
+KNOWN_ANSWER_SEED_PREFIXES = [
+    "DA_", "DT_", "BP_", "WBP_", "IA_", "IMC_", "L_", "BT_", "BB_", "SM_", "M_", "T_",
+]
+
+# Mutable benchmark assets are created, edited, and deleted by other benchmark
+# suites. They may exist in ProjectIndex only because another benchmark ran
+# first, so they can never be clean-checkout known answers even if a particular
+# fixture eventually becomes source-controlled.
+KNOWN_ANSWER_MUTABLE_PATH_PREFIXES = (
+    "/Game/Benchmarks/",
+)
+
+LIVE_FIXTURE_SCHEMA_VERSION = 2
+LIVE_FIXTURE_SELECTION_POLICY = "deterministic_prefix_round_robin"
 
 # Required fields for project search result rows (from CLAUDE.md project search contract)
 PROJECT_REQUIRED_FIELDS = {"match_object_path", "match_value", "match_source"}
-
-SCHEMA_ACTIONS = [
-    "search",
-    "health",
-    "get_asset_details",
-    "list_gameplay_tags",
-    "search_gameplay_tags",
-    "find_by_type",
-    "find_references",
-    "get_stats",
-    "repair_fts",
-    "list_asset_registry_tags",
-    "get_blueprint_info",
-    "find_data_table_rows",
-    "search_data_tables",
-    "get_level_info",
-    "list_map_check_results",
-    "find_unreferenced_assets",
-    "get_redirect_map",
-    "find_soft_references",
-    "find_hard_references",
-    "find_actors_of_class",
-    "get_asset_size_report",
-    "list_asset_dependencies",
-    "find_circular_dependencies",
-    "validate_assets",
-    "audit_asset_naming",
-]
 
 ASSET_SEARCH_QUERIES = [
     "Actor", "Widget", "Blueprint", "Material", "Sound", "Level", "Niagara",
@@ -167,24 +187,6 @@ _PRESERVED_GAMEPLAY_TAG_SEARCH_QUERIES_20260617 = [
     "Crit",
     "Aura",
     "Slow",
-]
-
-_PRESERVED_SCHEMA_ACTIONS_20260617 = [
-    "impact_radius",
-    "risk_score",
-    "review_hotspots",
-    "review_context",
-    "detect_changes",
-    "find_unused",
-    "pre_merge_check",
-    "snapshot",
-    "diff_snapshots",
-    "build_crg_graph",
-    "repair_crg_cache",
-    "list_assets",
-    "get_asset_by_path",
-    "get_dependencies",
-    "search_assets",
 ]
 
 _PRESERVED_HEALTH_VARIANTS_20260617 = [
@@ -337,54 +339,6 @@ _LOG_DERIVED_ASSET_SEARCH_QUERIES_20260617 = [
     "AgentOps",
 ]
 
-# Known-answer recall fixtures: (query, expected_object_path).
-#
-# Unlike the broad single-token searches above (which use min_results:0 and have no
-# ground truth), each of these queries a distinctive, project-unique asset name and
-# asserts the response actually contains the exact /Game object path for that asset.
-# This closes the "empty/broken index still scores 1.000" loophole: a known-answer
-# task is a HIT only when expected_object_path appears in the result set's
-# match_object_path values, and it requires >=1 result.
-#
-# expected_object_path is the package-relative object path emitted by project.search
-# for an asset-name match (the package path; no trailing `.AssetName` object suffix),
-# matching the live `match_object_path` field. Every pair below was verified against
-# Saved/ProjectIndex.db via `Binaries\monolith_query.exe project search <query>` so the
-# expected path is present in the default content-inclusive search results.
-_KNOWN_ANSWER_FIXTURES_20260618: List[Tuple[str, str]] = [
-    ("DA_Monster_001_Wiggly", "/Game/Design/DataAsset/Monsters/DA_Monster_001_Wiggly"),
-    ("DA_Monster_002_Puffshroom", "/Game/Design/DataAsset/Monsters/DA_Monster_002_Puffshroom"),
-    ("DA_Monster_003_Chonkbee", "/Game/Design/DataAsset/Monsters/DA_Monster_003_Chonkbee"),
-    ("DA_Character_001_Kain", "/Game/Design/DataAsset/Characters/DA_Character_001_Kain"),
-    ("DA_Character_002_Igna", "/Game/Design/DataAsset/Characters/DA_Character_002_Igna"),
-    ("DA_Character_003_Leia", "/Game/Design/DataAsset/Characters/DA_Character_003_Leia"),
-    ("DA_Weapon_001_Whip", "/Game/Design/DataAsset/Weapons/DA_Weapon_001_Whip"),
-    ("DA_Weapon_002_Magic_Wand", "/Game/Design/DataAsset/Weapons/DA_Weapon_002_Magic_Wand"),
-    ("DA_Weapon_004_Axe", "/Game/Design/DataAsset/Weapons/DA_Weapon_004_Axe"),
-    ("DA_Item_001_Egg", "/Game/Design/DataAsset/Item/DA_Item_001_Egg"),
-    ("DA_Potion_001_Potion_of_Life", "/Game/Design/DataAsset/Item/Potions/DA_Potion_001_Potion_of_Life"),
-    ("DA_Potion_005_Potion_of_Vampirism", "/Game/Design/DataAsset/Item/Potions/DA_Potion_005_Potion_of_Vampirism"),
-    ("DA_Pawn_001_PlayerCharacter", "/Game/Design/DataAsset/PawnTable/DA_Pawn_001_PlayerCharacter"),
-    ("DA_Synergy_001_s2_01", "/Game/Design/DataAsset/Synergies/DA_Synergy_001_s2_01"),
-    ("DA_Synergy_010_s2_10", "/Game/Design/DataAsset/Synergies/DA_Synergy_010_s2_10"),
-    ("DA_Stage_001_A", "/Game/Design/DataAsset/Stages/DA_Stage_001_A"),
-    ("DA_NodeMap_001_Generation_Default", "/Game/Design/DataAsset/NodeMap/DA_NodeMap_001_Generation_Default"),
-    ("DA_NodeMap_002_Style_Default", "/Game/Design/DataAsset/NodeMap/DA_NodeMap_002_Style_Default"),
-    ("DA_StageGeneration_001_Config", "/Game/Design/DataAsset/Stages/Generation/DA_StageGeneration_001_Config"),
-    ("DA_GameplayExperience_001_LobbyExperience", "/Game/Design/DataAsset/Experience/DA_GameplayExperience_001_LobbyExperience"),
-    ("DA_World_002_Lobby", "/Game/Design/DataAsset/WorldTable/DA_World_002_Lobby"),
-    ("EUW_StageMaker", "/Game/Editor/StageMaker/EUW_StageMaker"),
-    ("EUW_CheatPanel", "/Game/CheatBoard/EUW_CheatPanel"),
-    ("DT_AbilityTags", "/Game/Design/DataTable/GameplayTags/DT_AbilityTags"),
-    ("DT_CommonTags", "/Game/Design/DataTable/GameplayTags/DT_CommonTags"),
-    ("DT_DamageTypeTags", "/Game/Design/DataTable/GameplayTags/DT_DamageTypeTags"),
-    ("DT_GameplayCueTags", "/Game/Design/DataTable/GameplayTags/DT_GameplayCueTags"),
-    ("IA_Attack", "/Game/Design/PC/Input/Actions/IA_Attack"),
-    ("IA_Interaction", "/Game/Design/PC/Input/Actions/IA_Interaction"),
-    ("IMC_Default", "/Game/GameMode/GameModeSub/IMC_Default"),
-]
-
-
 def append_project_search_tasks(tasks: List[Dict[str, Any]], next_id: Any, queries: List[str]) -> None:
     for query in queries:
         tasks.append({
@@ -456,20 +410,6 @@ def append_project_gameplay_tag_tasks(
             "arguments": {"action": "search_gameplay_tags", "query": query},
             "expected": {"valid_response": True},
             "safety": "read_only",
-        })
-
-
-def append_project_schema_tasks(tasks: List[Dict[str, Any]], next_id: Any, actions: List[str]) -> None:
-    for action in actions:
-        tasks.append({
-            "id": next_id(),
-            "category": "schema_field_presence",
-            "namespace": "project",
-            "action": action,
-            "tool": "monolith_discover",
-            "arguments": {"action": action, "mode": "schema", "namespace": "project"},
-            "expected": {"requires_planning_signals": True, "requires_skill": True},
-            "safety": "read_only_discovery",
         })
 
 
@@ -550,6 +490,11 @@ def extract_sse_data(raw: str) -> str:
     return "\n".join(data_lines) if data_lines else raw
 
 
+# Declares this traffic as synthetic benchmark fixtures so the invocation-log
+# analyzer does not report deliberate negative probes as real, unmet demand.
+_BENCHMARK_ROUTING_CONTEXT = benchmark_routing_context("ProjectIndex")
+
+
 def mcp_call(url: str, tool: str, arguments: Dict[str, Any], timeout_s: float = 45.0) -> Dict[str, Any]:
     body = {
         "jsonrpc": "2.0",
@@ -559,6 +504,7 @@ def mcp_call(url: str, tool: str, arguments: Dict[str, Any], timeout_s: float = 
             "name": tool,
             "arguments": arguments,
         },
+        "_monolith_routing_context": _BENCHMARK_ROUTING_CONTEXT,
     }
     data = json.dumps(body, separators=(",", ":")).encode("utf-8")
     request = urllib.request.Request(
@@ -588,6 +534,13 @@ def mcp_call(url: str, tool: str, arguments: Dict[str, Any], timeout_s: float = 
         parsed = json.loads(raw)
     except json.JSONDecodeError:
         parsed = {"parse_error": True, "raw": raw}
+    if not isinstance(parsed, dict):
+        return {
+            "protocol_error": True,
+            "raw": raw,
+            "error": "MCP response top-level JSON must be an object",
+            "request": body,
+        }
     parsed["request"] = body
     return parsed
 
@@ -634,6 +587,33 @@ def result_data(response: Dict[str, Any]) -> Dict[str, Any]:
     payload = result_payload(response)
     structured = structured_content(payload)
     return structured if structured else payload
+
+
+def normalize_mcp_response(response: Any, context: str) -> Dict[str, Any]:
+    """Return one structured response object even for an injected bad runner value."""
+    if isinstance(response, dict):
+        return response
+    return {
+        "protocol_error": True,
+        "raw": str(response)[:500],
+        "error": f"{context} response top-level JSON must be an object",
+    }
+
+
+def mcp_protocol_failure_kind(response: Dict[str, Any]) -> str:
+    """Classify failures that invalidate a run instead of measuring index quality."""
+    if response.get("parse_error"):
+        return "parse_error"
+    if response.get("protocol_error"):
+        return "protocol_error"
+    if response.get("error") is not None:
+        return "mcp_protocol_error"
+    return classify_mcp_protocol_failure(response)
+
+
+def valid_status_payload(status: Dict[str, Any]) -> bool:
+    """The benchmark may score tasks only against a confirmed running endpoint."""
+    return bool(status) and status.get("server_running") is True
 
 
 def count_by(rows: Iterable[Dict[str, Any]], field: str) -> Dict[str, int]:
@@ -694,12 +674,20 @@ def result_has_project_fields(result: Dict[str, Any]) -> bool:
 
 
 def result_object_paths(results: List[Dict[str, Any]]) -> List[str]:
-    """All match_object_path values present across the result rows."""
+    """All asset-identity paths present across the result rows.
+
+    The live search contract carries the asset's package path in "asset_path";
+    "match_object_path" is the object path of the matching field WITHIN the
+    asset (e.g. "MapID" for a variable match) and only equals the package path
+    on legacy identity rows. Both are collected so known-answer matching works
+    against the current contract without dropping older cached fixtures.
+    """
     paths: List[str] = []
     for result in results:
-        value = result.get("match_object_path")
-        if isinstance(value, str) and value:
-            paths.append(value)
+        for key in ("asset_path", "match_object_path"):
+            value = result.get(key)
+            if isinstance(value, str) and value:
+                paths.append(value)
     return paths
 
 
@@ -755,8 +743,55 @@ def schema_has_skill(schema: Dict[str, Any]) -> bool:
 # Task scoring
 # ---------------------------------------------------------------------------
 
+def invalid_task_row(
+    task: Dict[str, Any],
+    failure_kind: str,
+    error: str,
+    *,
+    transport_error: bool = False,
+    transport_status: Optional[int] = None,
+    raw: str = "",
+) -> Dict[str, Any]:
+    """Preserve the triggering task without feeding invalid data into scoring."""
+    expected = task.get("expected", {}) if isinstance(task.get("expected"), dict) else {}
+    return {
+        "task_id": task.get("id"),
+        "category": task.get("category"),
+        "namespace": task.get("namespace"),
+        "action": task.get("action"),
+        "direct_success": False,
+        "results_count": 0,
+        "field_complete_count": 0,
+        "expected_nonempty": int(expected.get("min_results", 0) or 0) >= 1,
+        "known_answer_hit": False,
+        "stale": False,
+        "planning_signals": False,
+        "evidence": {failure_kind: error},
+        "transport_error": transport_error,
+        "transport_status": transport_status,
+        "transport_error_raw": raw[:300] if transport_error else "",
+        "response_is_error": False,
+        "response_text": "",
+        "failure_kind": failure_kind,
+        "error": error,
+        "protocol_error_raw": raw[:500] if not transport_error else "",
+    }
+
+
 def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, Any]:
-    response = mcp_call(url, str(task["tool"]), dict(task.get("arguments", {})), timeout_s=timeout_s)
+    response = normalize_mcp_response(
+        mcp_call(url, str(task["tool"]), dict(task.get("arguments", {})), timeout_s=timeout_s),
+        str(task.get("tool", "task")),
+    )
+    protocol_failure_kind = mcp_protocol_failure_kind(response)
+    if protocol_failure_kind:
+        raw = str(response.get("raw", response))
+        return invalid_task_row(
+            task,
+            protocol_failure_kind,
+            str(response.get("error") or raw)[:500],
+            raw=raw,
+        )
     data = result_data(response)
     category = task.get("category")
     expected = task.get("expected", {}) if isinstance(task.get("expected"), dict) else {}
@@ -859,6 +894,11 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
     else:
         evidence = {"unsupported_category": category}
 
+    transport_status = response.get("status")
+    if not isinstance(transport_status, int) or isinstance(transport_status, bool):
+        transport_status = None
+    response_is_error = bool(result_payload(response).get("isError"))
+    transport_error = bool(response.get("transport_error"))
     return {
         "task_id": task.get("id"),
         "category": category,
@@ -872,10 +912,16 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
         "stale": stale,
         "planning_signals": planning_signals,
         "evidence": evidence,
-        "transport_error": bool(response.get("transport_error")),
-        "transport_error_raw": str(response.get("raw", ""))[:300] if response.get("transport_error") else "",
-        "response_is_error": bool(result_payload(response).get("isError")),
+        "transport_error": transport_error,
+        "transport_status": transport_status,
+        "transport_error_raw": str(response.get("raw", ""))[:300] if transport_error else "",
+        "response_is_error": response_is_error,
         "response_text": result_text(response)[:1000],
+        "failure_kind": (
+            "transport_error" if transport_error else "mcp_error" if response_is_error else ""
+        ),
+        "error": "",
+        "protocol_error_raw": "",
     }
 
 
@@ -936,6 +982,10 @@ def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], r
 
     error_count = sum(1 for r in rows if r.get("transport_error") or r.get("response_is_error"))
     error_free_rate = 1.0 - (error_count / len(rows) if rows else 0.0)
+    # Environment failures (endpoint died mid-run) are tracked separately from
+    # server isError responses: they poison the run rather than measure the
+    # index, and the run-integrity gate keys off this count.
+    transport_failed_task_count = sum(1 for r in rows if r.get("transport_error"))
 
     # all_empty: loud integrity signal. True when there are result-bearing tasks but
     # NONE of them returned a single result -- i.e. the index is empty or broken.
@@ -969,6 +1019,7 @@ def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], r
         "mcp_status": status,
         "task_count": len(rows),
         "error_count": error_count,
+        "transport_failed_task_count": transport_failed_task_count,
         "all_empty": all_empty,
         "category_counts": count_by(tasks, "category"),
         "metrics": {
@@ -991,8 +1042,109 @@ def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], r
 # Generate
 # ---------------------------------------------------------------------------
 
-def build_static_tasks() -> List[Dict[str, Any]]:
-    """Build a deterministic task list for the project namespace benchmark."""
+def normalized_package_path(path: str) -> str:
+    """Normalize an Unreal package path for deterministic policy checks."""
+    normalized = str(path or "").strip().replace("\\", "/")
+    while "//" in normalized:
+        normalized = normalized.replace("//", "/")
+    return normalized
+
+
+def is_mutable_known_answer_path(path: str) -> bool:
+    """True when path belongs to a benchmark-owned mutable asset root."""
+    candidate = normalized_package_path(path).casefold()
+    for prefix in KNOWN_ANSWER_MUTABLE_PATH_PREFIXES:
+        normalized_prefix = normalized_package_path(prefix).casefold()
+        if candidate == normalized_prefix.rstrip("/") or candidate.startswith(normalized_prefix):
+            return True
+    return False
+
+
+def live_fixture_stability_policy() -> Dict[str, Any]:
+    """Checked-in contract proving how known-answer candidates were admitted."""
+    return {
+        "selection": LIVE_FIXTURE_SELECTION_POLICY,
+        "excluded_path_prefixes": list(KNOWN_ANSWER_MUTABLE_PATH_PREFIXES),
+        "requires_saved_asset_state": True,
+        "requires_source_control": True,
+    }
+
+
+def validate_live_fixtures(data: Any, source: str = "live fixtures") -> Dict[str, Any]:
+    """Validate the project-local fixture contract or raise RuntimeError.
+
+    Generation is intentionally fail-closed. A missing field, duplicate known
+    answer, mutable benchmark path, or pre-stability schema must never fall back
+    to a historical fixture snapshot captured on another project.
+    """
+    if not isinstance(data, dict):
+        raise RuntimeError(f"{source}: root must be a JSON object")
+    if data.get("schema_version") != LIVE_FIXTURE_SCHEMA_VERSION:
+        raise RuntimeError(
+            f"{source}: schema_version must be {LIVE_FIXTURE_SCHEMA_VERSION}; "
+            "refresh fixtures with the current generator"
+        )
+    if data.get("benchmark") != "ProjectIndex":
+        raise RuntimeError(f"{source}: benchmark must be 'ProjectIndex'")
+    for field in ("project_name", "catalog_version", "generated_at"):
+        if not isinstance(data.get(field), str) or not str(data.get(field)).strip():
+            raise RuntimeError(f"{source}: '{field}' must be a non-empty string")
+
+    seed_prefixes = data.get("seed_prefixes")
+    if seed_prefixes != KNOWN_ANSWER_SEED_PREFIXES:
+        raise RuntimeError(
+            f"{source}: seed_prefixes do not match the current deterministic selection contract"
+        )
+
+    policy = data.get("stability_policy")
+    expected_policy = live_fixture_stability_policy()
+    if policy != expected_policy:
+        raise RuntimeError(
+            f"{source}: stability_policy must equal {json.dumps(expected_policy, sort_keys=True)}"
+        )
+
+    schema_actions = data.get("schema_actions")
+    if not isinstance(schema_actions, list) or not schema_actions:
+        raise RuntimeError(f"{source}: schema_actions must be a non-empty list")
+    normalized_actions = [str(action).strip() for action in schema_actions]
+    if any(not action for action in normalized_actions):
+        raise RuntimeError(f"{source}: schema_actions cannot contain empty names")
+    if len(set(normalized_actions)) != len(normalized_actions):
+        raise RuntimeError(f"{source}: schema_actions must be unique")
+
+    rows = data.get("known_answers")
+    if not isinstance(rows, list) or not rows:
+        raise RuntimeError(f"{source}: known_answers must be a non-empty list")
+    seen_queries: set[str] = set()
+    seen_paths: set[str] = set()
+    for index, row in enumerate(rows):
+        row_source = f"{source}: known_answers[{index}]"
+        if not isinstance(row, dict):
+            raise RuntimeError(f"{row_source} must be an object")
+        query = str(row.get("query") or "").strip()
+        path = normalized_package_path(str(row.get("expected_object_path") or ""))
+        if not query or not path.startswith("/"):
+            raise RuntimeError(f"{row_source} requires a non-empty query and absolute package path")
+        if path.rsplit("/", 1)[-1] != query:
+            raise RuntimeError(f"{row_source} query must equal the package asset name")
+        if is_mutable_known_answer_path(path):
+            raise RuntimeError(f"{row_source} uses excluded mutable benchmark path '{path}'")
+        query_key = query.casefold()
+        path_key = path.casefold()
+        if query_key in seen_queries:
+            raise RuntimeError(f"{row_source} duplicates query '{query}'")
+        if path_key in seen_paths:
+            raise RuntimeError(f"{row_source} duplicates path '{path}'")
+        seen_queries.add(query_key)
+        seen_paths.add(path_key)
+
+    return data
+
+def build_static_tasks(live_fixtures: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Build deterministic tasks from a required validated project fixture."""
+    live_fixtures = validate_live_fixtures(
+        live_fixtures, "build_static_tasks live fixtures"
+    )
     tasks: List[Dict[str, Any]] = []
 
     def next_id() -> str:
@@ -1098,8 +1250,9 @@ def build_static_tasks() -> List[Dict[str, Any]]:
         "safety": "read_only",
     })
 
-    # --- schema_field_presence: monolith_discover schema for 25 project actions ---
-    for action in SCHEMA_ACTIONS:
+    # --- schema_field_presence: current live project actions only ---
+    schema_actions = [str(action) for action in live_fixtures["schema_actions"]]
+    for action in schema_actions:
         tasks.append({
             "id": next_id(),
             "category": "schema_field_presence",
@@ -1118,7 +1271,6 @@ def build_static_tasks() -> List[Dict[str, Any]]:
         prefixes=_PRESERVED_GAMEPLAY_TAG_PREFIXES_20260617,
         queries=_PRESERVED_GAMEPLAY_TAG_SEARCH_QUERIES_20260617,
     )
-    append_project_schema_tasks(tasks, next_id, _PRESERVED_SCHEMA_ACTIONS_20260617)
     append_project_health_tasks(tasks, next_id, _PRESERVED_HEALTH_VARIANTS_20260617)
 
     append_project_search_tasks(tasks, next_id, _ADDED_ASSET_SEARCH_QUERIES_20260617)
@@ -1132,16 +1284,42 @@ def build_static_tasks() -> List[Dict[str, Any]]:
     append_project_search_tasks(tasks, next_id, _LOG_DERIVED_ASSET_SEARCH_QUERIES_20260617)
 
     # --- known_answer: ground-truth recall fixtures (require_results, HIT-checked) ---
-    append_project_known_answer_tasks(tasks, next_id, _KNOWN_ANSWER_FIXTURES_20260618)
+    known_answers = [
+        (str(row["query"]), str(row["expected_object_path"]))
+        for row in live_fixtures["known_answers"]
+    ]
+    append_project_known_answer_tasks(tasks, next_id, known_answers)
 
     return dedupe_tasks(tasks, "PIB")
 
 
-def generate_tasks(tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dict[str, Any]:
-    """Generate task fixtures and write to tasks_path. Write manifest to manifest_path."""
+def load_live_fixtures(path: pathlib.Path) -> Dict[str, Any]:
+    """Load and strictly validate the required project-derived fixtures file."""
+    resolved = resolve_plugin_path(path)
+    if not resolved.is_file():
+        raise RuntimeError(
+            f"required live fixtures file is missing: {display_path(resolved)}; "
+            "run refresh_live_fixtures before generate"
+        )
+    try:
+        data = json.loads(resolved.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise RuntimeError(f"failed to read live fixtures {display_path(resolved)}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"invalid JSON in live fixtures {display_path(resolved)}: {exc}") from exc
+    return validate_live_fixtures(data, display_path(resolved))
+
+
+def generate_tasks(
+    tasks_path: pathlib.Path,
+    manifest_path: pathlib.Path,
+    live_fixtures_path: pathlib.Path = DEFAULT_LIVE_FIXTURES,
+) -> Dict[str, Any]:
+    """Generate tasks from required validated live fixtures and write the manifest."""
     tasks_path = resolve_plugin_path(tasks_path)
     manifest_path = resolve_plugin_path(manifest_path)
-    tasks = build_static_tasks()
+    live_fixtures = load_live_fixtures(live_fixtures_path)
+    tasks = build_static_tasks(live_fixtures)
 
     write_jsonl(tasks_path, tasks)
 
@@ -1165,13 +1343,360 @@ def generate_tasks(tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dic
         "all_empty_score_cap": ALL_EMPTY_SCORE_CAP,
         "task_file": display_path(tasks_path),
     }
+    manifest["live_fixtures"] = {
+        "file": display_path(resolve_plugin_path(live_fixtures_path)),
+        "schema_version": live_fixtures.get("schema_version"),
+        "project_name": live_fixtures.get("project_name"),
+        "catalog_version": live_fixtures.get("catalog_version"),
+        "generated_at": live_fixtures.get("generated_at"),
+        "schema_action_count": len(live_fixtures.get("schema_actions") or []),
+        "known_answer_count": len(live_fixtures.get("known_answers") or []),
+        "stability_policy": live_fixtures.get("stability_policy"),
+    }
     write_json(manifest_path, manifest)
     return manifest
 
 
 # ---------------------------------------------------------------------------
+# Live fixture derivation (refresh_live_fixtures)
+# ---------------------------------------------------------------------------
+
+def require_mcp_data(response: Dict[str, Any], context: str) -> Dict[str, Any]:
+    """Return parsed MCP data or fail the refresh instead of writing partial fixtures."""
+    if response.get("transport_error"):
+        raise RuntimeError(f"{context}: transport failure: {str(response.get('raw', ''))[:200]}")
+    if response.get("error") is not None:
+        raise RuntimeError(f"{context}: JSON-RPC error: {str(response.get('error'))[:200]}")
+    payload = result_payload(response)
+    if payload.get("isError"):
+        raise RuntimeError(f"{context}: MCP action error: {result_text(response)[:200]}")
+    data = result_data(response)
+    if not isinstance(data, dict):
+        raise RuntimeError(f"{context}: MCP response did not contain an object result")
+    return data
+
+
+def candidate_exists_on_disk(
+    url: str,
+    timeout_s: float,
+    package_path: str,
+) -> bool:
+    """Require project.get_saved_asset_state to prove a non-empty package file exists."""
+    response = mcp_call(
+        url,
+        "project_query",
+        {"action": "get_saved_asset_state", "asset_path": package_path},
+        timeout_s=timeout_s,
+    )
+    if response.get("transport_error") or response.get("error") is not None:
+        require_mcp_data(response, f"get_saved_asset_state({package_path})")
+    payload = result_payload(response)
+    if payload.get("isError"):
+        # A stale ProjectIndex row may legitimately point at a package that no
+        # longer exists. Reject that candidate and continue with stable rows.
+        return False
+    data = result_data(response)
+    state = data.get("asset_state") if isinstance(data, dict) else None
+    if not isinstance(state, dict):
+        raise RuntimeError(
+            f"get_saved_asset_state({package_path}): missing asset_state object"
+        )
+    state_path = normalized_package_path(str(state.get("package_path") or ""))
+    try:
+        file_size = float(state.get("file_size", -1))
+    except (TypeError, ValueError):
+        file_size = -1
+    return (
+        state.get("exists_on_disk") is True
+        and file_size > 0
+        and state_path.casefold() == normalized_package_path(package_path).casefold()
+    )
+
+
+def candidate_is_submitted_source_control_asset(
+    url: str,
+    timeout_s: float,
+    package_path: str,
+) -> bool:
+    """Require a current, submitted source-control state for one package path.
+
+    Provider unavailability is a run-level failure: skipping the check would
+    allow local adds back into checked-in fixtures. Individual untracked,
+    added, deleted, ignored, or conflicted candidates are simply rejected.
+    """
+    response = mcp_call(
+        url,
+        "source_control_query",
+        {"action": "get_status", "paths": [package_path]},
+        timeout_s=timeout_s,
+    )
+    data = require_mcp_data(response, f"source_control.get_status({package_path})")
+    provider = data.get("provider")
+    if (
+        data.get("available") is not True
+        or not isinstance(provider, dict)
+        or provider.get("enabled") is not True
+        or provider.get("available") is not True
+    ):
+        provider_name = provider.get("name") if isinstance(provider, dict) else "unknown"
+        raise RuntimeError(
+            f"source-control provider unavailable while validating known-answer fixtures "
+            f"(provider={provider_name}); refusing to overwrite fixtures"
+        )
+
+    states = data.get("states")
+    if not isinstance(states, list) or len(states) != 1 or not isinstance(states[0], dict):
+        raise RuntimeError(
+            f"source_control.get_status({package_path}): expected exactly one state row"
+        )
+    state = states[0]
+    return (
+        state.get("state_known") is True
+        and state.get("source_controlled") is True
+        and state.get("current") is True
+        and state.get("added") is not True
+        and state.get("deleted") is not True
+        and state.get("ignored") is not True
+        and state.get("conflicted") is not True
+    )
+
+
+def verify_known_answer_candidate(
+    url: str,
+    timeout_s: float,
+    name: str,
+    package_path: str,
+) -> bool:
+    """Verify clean-checkout stability plus the benchmark-shaped identity hit."""
+    if is_mutable_known_answer_path(package_path):
+        return False
+    if not candidate_exists_on_disk(url, timeout_s, package_path):
+        return False
+    if not candidate_is_submitted_source_control_asset(url, timeout_s, package_path):
+        return False
+    response = mcp_call(
+        url,
+        "project_query",
+        {"action": "search", "query": name},
+        timeout_s=timeout_s,
+    )
+    data = require_mcp_data(response, f"project.search({name})")
+    return known_answer_hit(project_results(data), package_path)
+
+
+def collect_known_answer_candidate_pools(
+    url: str,
+    timeout_s: float,
+    min_name_length: int,
+) -> Dict[str, List[Tuple[str, str]]]:
+    """Collect and deterministically sort identity candidates per seed prefix."""
+    pools: Dict[str, List[Tuple[str, str]]] = {}
+    for prefix in KNOWN_ANSWER_SEED_PREFIXES:
+        response = mcp_call(
+            url,
+            "project_query",
+            {"action": "search", "query": prefix, "limit": 50, "include_content": False},
+            timeout_s=timeout_s,
+        )
+        data = require_mcp_data(response, f"project.search seed prefix {prefix}")
+        candidates: Dict[Tuple[str, str], Tuple[str, str]] = {}
+        for row in project_results(data):
+            name = row.get("asset_name")
+            path = row.get("asset_path")
+            if not isinstance(name, str) or not isinstance(path, str):
+                continue
+            name = name.strip()
+            path = normalized_package_path(path)
+            if not name.casefold().startswith(prefix.casefold()) or len(name) < min_name_length:
+                continue
+            if not path.startswith("/") or is_mutable_known_answer_path(path):
+                continue
+            key = (name.casefold(), path.casefold())
+            candidates[key] = (name, path)
+        pools[prefix] = [candidates[key] for key in sorted(candidates)]
+    return pools
+
+def derive_known_answer_fixtures(
+    url: str,
+    timeout_s: float,
+    target_count: int,
+    per_prefix_cap: Optional[int] = None,
+    min_name_length: int = 8,
+) -> List[Dict[str, str]]:
+    """Derive stable, prefix-balanced known-answer fixture pairs.
+
+    Candidate pools are sorted independently of live search ordering, then
+    selected one per prefix per round. Every admitted row must exist on disk,
+    be current and submitted in the active source-control provider, avoid
+    mutable benchmark roots, and pass the exact content-inclusive search used
+    by the benchmark task.
+    """
+    if target_count < 1:
+        raise RuntimeError("known-answer target_count must be at least 1")
+    if per_prefix_cap is None:
+        # Continue balanced rounds until the target can be filled even when
+        # some prefixes have no stable submitted assets in the current project.
+        per_prefix_cap = target_count
+    if per_prefix_cap < 1:
+        raise RuntimeError("known-answer per_prefix_cap must be at least 1")
+
+    pools = collect_known_answer_candidate_pools(url, timeout_s, min_name_length)
+    fixtures: List[Dict[str, str]] = []
+    seen_names: set[str] = set()
+    seen_paths: set[str] = set()
+    cursors = {prefix: 0 for prefix in KNOWN_ANSWER_SEED_PREFIXES}
+
+    for _round in range(per_prefix_cap):
+        made_progress = False
+        for prefix in KNOWN_ANSWER_SEED_PREFIXES:
+            pool = pools.get(prefix, [])
+            while cursors[prefix] < len(pool):
+                name, path = pool[cursors[prefix]]
+                cursors[prefix] += 1
+                name_key = name.casefold()
+                path_key = path.casefold()
+                if name_key in seen_names or path_key in seen_paths:
+                    continue
+                if not verify_known_answer_candidate(url, timeout_s, name, path):
+                    continue
+                fixtures.append({"query": name, "expected_object_path": path})
+                seen_names.add(name_key)
+                seen_paths.add(path_key)
+                made_progress = True
+                break
+            if len(fixtures) >= target_count:
+                return fixtures
+        if not made_progress:
+            break
+    return fixtures
+
+
+def refresh_live_fixtures(
+    url: str,
+    fixtures_path: pathlib.Path,
+    timeout_s: float,
+    known_answer_count: int,
+    min_known_answers: int,
+) -> Dict[str, Any]:
+    """Derive and write the project-local fixtures file from the live index.
+
+    Raises RuntimeError when the derivation is too thin to be a trustworthy
+    corpus (no schema actions, or fewer than min_known_answers verified
+    pairs) — a thin fixtures file must never silently replace a full one.
+    """
+    if min_known_answers < 1:
+        raise RuntimeError("min_known_answers must be at least 1")
+    if known_answer_count < min_known_answers:
+        raise RuntimeError("known_answer_count must be >= min_known_answers")
+
+    status_response = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
+    status = require_mcp_data(status_response, f"monolith_status at {url}")
+    if not status:
+        raise RuntimeError(f"monolith_status returned no data at {url}")
+
+    def fetch_page(arguments: Dict[str, Any]) -> Dict[str, Any]:
+        response = mcp_call(url, "monolith_discover", arguments, timeout_s=timeout_s)
+        return require_mcp_data(response, "monolith_discover(project actions)")
+
+    schema_actions = paginate_discover_action_names(fetch_page, "project")
+    if not schema_actions:
+        raise RuntimeError("live project namespace enumerated 0 actions — refusing to write fixtures")
+
+    known_answers = derive_known_answer_fixtures(url, timeout_s, known_answer_count)
+    if len(known_answers) < min_known_answers:
+        raise RuntimeError(
+            f"only {len(known_answers)} verified known-answer fixtures derived "
+            f"(minimum {min_known_answers}) — index too thin or search contract drifted; "
+            "refusing to write fixtures"
+        )
+
+    fixtures = {
+        "schema_version": LIVE_FIXTURE_SCHEMA_VERSION,
+        "benchmark": "ProjectIndex",
+        "project_name": status.get("project_name"),
+        "catalog_version": status.get("catalog_version"),
+        "generated_at": utc_now(),
+        "seed_prefixes": list(KNOWN_ANSWER_SEED_PREFIXES),
+        "stability_policy": live_fixture_stability_policy(),
+        "schema_actions": schema_actions,
+        "known_answers": known_answers,
+    }
+    resolved = resolve_plugin_path(fixtures_path)
+    validate_live_fixtures(fixtures, display_path(resolved))
+    write_json(resolved, fixtures)
+    return fixtures
+
+
+# ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
+
+RUN_OUTPUT_FILENAMES = (
+    "summary.json",
+    "partial_summary.json",
+    "per_task.json",
+    "per_task.jsonl",
+    "run_failure.json",
+)
+
+
+def clear_known_run_outputs(output_dir: pathlib.Path) -> None:
+    """Remove stale success/failure artifacts before a new run starts."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for name in RUN_OUTPUT_FILENAMES:
+        path = output_dir / name
+        if path.exists():
+            path.unlink()
+
+
+def write_invalid_run_artifacts(output_dir: pathlib.Path, failure: Dict[str, Any]) -> None:
+    """Invalid runs always publish diagnostics, never a normal final summary."""
+    failure["run_valid"] = False
+    failure["metrics_valid"] = False
+    write_json(output_dir / "run_failure.json", failure)
+    write_json(output_dir / "partial_summary.json", failure)
+
+
+def attach_run_context(
+    payload: Dict[str, Any],
+    corpus: TaskCorpus,
+    start_identity: Dict[str, str],
+    end_identity: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    payload["task_corpus"] = task_corpus_metadata(corpus)
+    payload["comparison_valid"] = corpus.comparable
+    payload["status_identity_start"] = start_identity
+    if end_identity is not None:
+        payload["status_identity_end"] = end_identity
+    return payload
+
+
+def build_attempt_failure(
+    label: str,
+    status: Dict[str, Any],
+    tasks: List[Dict[str, Any]],
+    rows: List[Dict[str, Any]],
+    tracker: TransportFailureTracker,
+    benchmark_inputs: Dict[str, Any],
+    corpus: TaskCorpus,
+    start_identity: Dict[str, str],
+    fields: Dict[str, Any],
+) -> Dict[str, Any]:
+    try:
+        failure = aggregate(label, status, tasks[:len(rows)], rows)
+    except Exception as exc:  # noqa: BLE001 - retain a minimal invalid artifact.
+        failure = {
+            "label": label,
+            "created_at": utc_now(),
+            "task_count": len(rows),
+            "aggregate_error": f"{type(exc).__name__}: {exc}",
+        }
+    failure.update(fields)
+    failure.update(tracker.snapshot())
+    attach_benchmark_inputs(failure, benchmark_inputs)
+    attach_run_context(failure, corpus, start_identity)
+    return failure
+
 
 def run_benchmark(
     url: str,
@@ -1179,22 +1704,151 @@ def run_benchmark(
     output_dir: pathlib.Path,
     label: str,
     timeout_s: float,
+    max_transport_failed_fraction: float = DEFAULT_MAX_TRANSPORT_FAILED_FRACTION,
+    max_consecutive_transport_failures: int = DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
+    min_transport_fraction_sample: int = DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES,
+    allow_subset: bool = False,
 ) -> Dict[str, Any]:
-    tasks_path = resolve_plugin_path(tasks_path)
-    tasks = load_jsonl(tasks_path)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    status_response = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
-    status = result_data(status_response)
-    benchmark_inputs = build_benchmark_inputs("ProjectIndex", tasks_path=tasks_path, mcp_status=status)
+    clear_known_run_outputs(output_dir)
+    try:
+        corpus = load_task_corpus(
+            tasks_path,
+            suite="ProjectIndex",
+            canonical_tasks_path=DEFAULT_TASKS,
+            canonical_manifest_path=DEFAULT_MANIFEST,
+            allow_subset=allow_subset,
+            allowed_categories=PROJECT_INDEX_TASK_CATEGORIES,
+            require_arguments=True,
+        )
+        tasks_path = resolve_plugin_path(tasks_path)
+        tasks = corpus.tasks
+    except Exception as exc:  # noqa: BLE001 - task corpus defects invalidate the run.
+        failure = {
+            "label": label,
+            "created_at": utc_now(),
+            "metrics_scope": "not_started",
+            "completion_status": "aborted_task_loading",
+            "failure_stage": "task_loading",
+            "failure_kind": "runner_exception",
+            "completed_task_count": 0,
+            "total_task_count": 0,
+            "exception": f"{type(exc).__name__}: {exc}",
+        }
+        write_invalid_run_artifacts(output_dir, failure)
+        return failure
+
+    try:
+        transport_tracker = TransportFailureTracker(
+            max_failed_fraction=max_transport_failed_fraction,
+            max_consecutive_failures=max_consecutive_transport_failures,
+            min_fraction_samples=min_transport_fraction_sample,
+        )
+    except ValueError as exc:
+        failure = {
+            "label": label,
+            "created_at": utc_now(),
+            "metrics_scope": "not_started",
+            "completion_status": "aborted_invalid_configuration",
+            "failure_stage": "configuration",
+            "failure_kind": "invalid_configuration",
+            "completed_task_count": 0,
+            "total_task_count": len(tasks),
+            "error": str(exc),
+            "max_transport_failed_fraction": max_transport_failed_fraction,
+            "max_consecutive_transport_failures": max_consecutive_transport_failures,
+            "min_transport_fraction_sample": min_transport_fraction_sample,
+        }
+        write_invalid_run_artifacts(output_dir, failure)
+        return failure
+
+    try:
+        status_response: Any = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
+        status_validation = validate_mcp_status_response(
+            status_response,
+            result_payload=result_payload,
+            result_data=result_data,
+        )
+    except Exception as exc:  # noqa: BLE001 - status runner defects must leave artifacts.
+        status_validation = {
+            "ok": False,
+            "failure_kind": "runner_exception",
+            "raw": f"{type(exc).__name__}: {exc}",
+            "transport_status": None,
+        }
+
+    if not status_validation.get("ok"):
+        status_failure_kind = str(status_validation.get("failure_kind", "protocol_error"))
+        raw = str(status_validation.get("raw", ""))[:500]
+        transport_status = status_validation.get("transport_status")
+        failure = {
+            "label": label,
+            "created_at": utc_now(),
+            "metrics_scope": "not_started",
+            "completion_status": (
+                "aborted_status_transport_failure"
+                if status_failure_kind == "transport_error"
+                else "aborted_status_preflight"
+            ),
+            "failure_stage": "status_preflight",
+            "failure_kind": status_failure_kind,
+            "completed_task_count": 0,
+            "total_task_count": len(tasks),
+            "transport_failure_count": 1 if status_failure_kind == "transport_error" else 0,
+            "transport_status": transport_status,
+            "transport_error_raw": raw if status_failure_kind == "transport_error" else "",
+            "protocol_error_raw": raw if status_failure_kind != "transport_error" else "",
+            "max_transport_failed_fraction": max_transport_failed_fraction,
+            "max_consecutive_transport_failures": max_consecutive_transport_failures,
+            "min_transport_fraction_sample": min_transport_fraction_sample,
+        }
+        write_invalid_run_artifacts(output_dir, failure)
+        return failure
+
+    status = dict(status_validation["status"])
+    start_identity = status_identity(status, endpoint=url)
+
+    try:
+        benchmark_inputs = build_benchmark_inputs(
+            "ProjectIndex", tasks_path=tasks_path, mcp_status=status
+        )
+    except Exception as exc:  # noqa: BLE001 - provenance defects invalidate the run.
+        failure = {
+            "label": label,
+            "created_at": utc_now(),
+            "metrics_scope": "not_started",
+            "completion_status": "aborted_runner_exception",
+            "failure_stage": "benchmark_inputs",
+            "failure_kind": "runner_exception",
+            "completed_task_count": 0,
+            "total_task_count": len(tasks),
+            "exception": f"{type(exc).__name__}: {exc}",
+        }
+        failure.update(transport_tracker.snapshot())
+        write_invalid_run_artifacts(output_dir, failure)
+        return failure
 
     rows: List[Dict[str, Any]] = []
     per_task_jsonl = output_dir / "per_task.jsonl"
-    if per_task_jsonl.exists():
-        per_task_jsonl.unlink()
 
     for index, task in enumerate(tasks, 1):
-        row = score_task(url, task, timeout_s)
+        runner_exception = ""
+        try:
+            row = score_task(url, task, timeout_s)
+        except Exception as exc:  # noqa: BLE001 - preserve triggering task and abort.
+            runner_exception = f"{type(exc).__name__}: {exc}"
+            row = invalid_task_row(task, "runner_exception", runner_exception)
         rows.append(row)
+        transport_decision = transport_tracker.observe(
+            transport_error=bool(row.get("transport_error")),
+            item_id=str(row.get("task_id", "")),
+            status=(
+                row.get("transport_status")
+                if isinstance(row.get("transport_status"), int)
+                and not isinstance(row.get("transport_status"), bool)
+                else None
+            ),
+            raw=str(row.get("transport_error_raw", "")),
+        )
         with per_task_jsonl.open("a", encoding="utf-8", newline="\n") as handle:
             handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
             handle.write("\n")
@@ -1202,17 +1856,155 @@ def run_benchmark(
             f"[{index}/{len(tasks)}] {row['task_id']} success={row['direct_success']}",
             flush=True,
         )
+        invalid_failure_kind = str(row.get("failure_kind", ""))
+        if runner_exception or invalid_failure_kind in {
+            "parse_error",
+            "protocol_error",
+            "mcp_protocol_error",
+            "runner_exception",
+        }:
+            failure = build_attempt_failure(
+                label, status, tasks, rows, transport_tracker, benchmark_inputs,
+                corpus, start_identity,
+                {
+                    "metrics_scope": (
+                        "attempted_prefix_runner_exception"
+                        if runner_exception
+                        else "attempted_prefix_protocol_failure"
+                    ),
+                    "completion_status": (
+                        "aborted_runner_exception"
+                        if runner_exception
+                        else "aborted_protocol_failure"
+                    ),
+                    "failure_stage": "task_scoring",
+                    "failure_kind": "runner_exception" if runner_exception else invalid_failure_kind,
+                    "completed_task_count": index,
+                    "total_task_count": len(tasks),
+                    "last_task_id": str(task.get("id", "")),
+                    "exception": runner_exception,
+                    "protocol_error_raw": str(row.get("protocol_error_raw", "")),
+                },
+            )
+            write_invalid_run_artifacts(output_dir, failure)
+            return failure
+        if transport_decision:
+            failure = build_attempt_failure(
+                label, status, tasks, rows, transport_tracker, benchmark_inputs,
+                corpus, start_identity,
+                {
+                    "metrics_scope": "attempted_prefix_including_transport_failures",
+                    "completion_status": "aborted_transport_failure_budget",
+                    "failure_stage": "task_transport",
+                    "failure_kind": "transport_error",
+                    "completed_task_count": index,
+                    "total_task_count": len(tasks),
+                    "transport_gate_reason": transport_decision.reason,
+                    "last_task_id": transport_decision.item_id,
+                },
+            )
+            write_invalid_run_artifacts(output_dir, failure)
+            return failure
         if index == 1 or index == len(tasks) or index % 10 == 0:
             partial = aggregate(label, status, tasks[:index], rows)
             partial["completed_task_count"] = index
             partial["total_task_count"] = len(tasks)
+            partial["run_valid"] = None
+            partial["metrics_valid"] = False
+            partial["metrics_scope"] = "attempted_prefix"
+            partial["completion_status"] = "in_progress"
+            partial.update(transport_tracker.snapshot())
             attach_benchmark_inputs(partial, benchmark_inputs)
+            attach_run_context(partial, corpus, start_identity)
             write_json(output_dir / "partial_summary.json", partial)
 
-    summary = aggregate(label, status, tasks, rows)
+    try:
+        summary = aggregate(label, status, tasks, rows)
+    except Exception as exc:  # noqa: BLE001 - aggregate defects invalidate the run.
+        failure = build_attempt_failure(
+            label, status, tasks, rows, transport_tracker, benchmark_inputs,
+            corpus, start_identity,
+            {
+                "metrics_scope": "complete_run_invalid",
+                "completion_status": "aborted_runner_exception",
+                "failure_stage": "final_aggregate",
+                "failure_kind": "runner_exception",
+                "completed_task_count": len(rows),
+                "total_task_count": len(tasks),
+                "exception": f"{type(exc).__name__}: {exc}",
+            },
+        )
+        write_invalid_run_artifacts(output_dir, failure)
+        return failure
+    final_transport_decision = transport_tracker.finalize()
+    summary.update({
+        "run_valid": True,
+        "metrics_valid": True,
+        "metrics_scope": "complete_run" if corpus.comparable else "complete_subset_run",
+        "completion_status": "completed",
+    })
+    summary.update(transport_tracker.snapshot())
     attach_benchmark_inputs(summary, benchmark_inputs)
+    attach_run_context(summary, corpus, start_identity)
+    if final_transport_decision:
+        summary.update({
+            "metrics_scope": "complete_run_invalid",
+            "completion_status": "completed_transport_failure_budget_exceeded",
+            "failure_stage": "task_transport_finalize",
+            "failure_kind": "transport_error",
+            "completed_task_count": len(rows),
+            "total_task_count": len(tasks),
+            "transport_gate_reason": final_transport_decision.reason,
+            "last_task_id": final_transport_decision.item_id,
+        })
+        write_invalid_run_artifacts(output_dir, summary)
+        return summary
+
+    try:
+        end_status_response: Any = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
+        end_status_validation = validate_mcp_status_response(
+            end_status_response,
+            result_payload=result_payload,
+            result_data=result_data,
+        )
+    except Exception as exc:  # noqa: BLE001 - postflight must invalidate the run.
+        end_status_validation = {
+            "ok": False,
+            "failure_kind": "runner_exception",
+            "raw": f"{type(exc).__name__}: {exc}",
+            "transport_status": None,
+        }
+    if not end_status_validation.get("ok"):
+        summary.update({
+            "metrics_scope": "complete_run_invalid",
+            "completion_status": "aborted_status_postflight",
+            "failure_stage": "status_postflight",
+            "failure_kind": str(end_status_validation.get("failure_kind", "protocol_error")),
+            "postflight_status_raw": str(end_status_validation.get("raw", ""))[:500],
+            "postflight_transport_status": end_status_validation.get("transport_status"),
+        })
+        write_invalid_run_artifacts(output_dir, summary)
+        return summary
+
+    end_status = dict(end_status_validation["status"])
+    end_identity = status_identity(end_status, endpoint=url)
+    identity_drift = status_identity_mismatches(start_identity, end_identity)
+    attach_run_context(summary, corpus, start_identity, end_identity)
+    if identity_drift:
+        summary.update({
+            "metrics_scope": "complete_run_invalid",
+            "completion_status": "aborted_status_identity_drift",
+            "failure_stage": "status_postflight",
+            "failure_kind": "status_identity_drift",
+            "status_identity_mismatches": identity_drift,
+        })
+        write_invalid_run_artifacts(output_dir, summary)
+        return summary
     write_json(output_dir / "summary.json", summary)
     write_json(output_dir / "per_task.json", rows)
+    partial_path = output_dir / "partial_summary.json"
+    if partial_path.exists():
+        partial_path.unlink()
     return summary
 
 
@@ -1287,12 +2079,48 @@ def main(argv: Optional[List[str]] = None) -> int:
     gen = sub.add_parser("generate", help="Generate task fixtures for the project namespace benchmark")
     gen.add_argument("--tasks", type=pathlib.Path, default=DEFAULT_TASKS)
     gen.add_argument("--manifest", type=pathlib.Path, default=DEFAULT_MANIFEST)
+    gen.add_argument("--live-fixtures", type=pathlib.Path, default=DEFAULT_LIVE_FIXTURES,
+                     help="Project-derived fixtures file written by refresh_live_fixtures")
+
+    refresh = sub.add_parser(
+        "refresh_live_fixtures",
+        help="Derive the project-local schema-action list and verified known-answer pairs "
+             "from the live index and write them to the fixtures file",
+    )
+    refresh.add_argument("--mcp-url", default=DEFAULT_MCP_URL)
+    refresh.add_argument("--fixtures", type=pathlib.Path, default=DEFAULT_LIVE_FIXTURES)
+    refresh.add_argument("--request-timeout-s", type=float, default=45.0)
+    refresh.add_argument("--known-answer-count", type=int, default=30)
+    refresh.add_argument("--min-known-answers", type=int, default=10)
 
     run_cmd = sub.add_parser("run", help="Run tasks against a live MCP endpoint and score results")
     run_cmd.add_argument("--mcp-url", default=DEFAULT_MCP_URL)
     run_cmd.add_argument("--tasks", type=pathlib.Path, default=DEFAULT_TASKS)
     run_cmd.add_argument("--output-dir", type=pathlib.Path, required=True)
     run_cmd.add_argument("--label", required=True)
+    run_cmd.add_argument(
+        "--allow-subset",
+        action="store_true",
+        help="Permit an explicit non-canonical diagnostic corpus; output is marked non-comparable.",
+    )
+    run_cmd.add_argument(
+        "--max-transport-failed-fraction",
+        type=float,
+        default=DEFAULT_MAX_TRANSPORT_FAILED_FRACTION,
+        help="Abort without a normal summary when transport failures exceed this fraction.",
+    )
+    run_cmd.add_argument(
+        "--max-consecutive-transport-failures",
+        type=int,
+        default=DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
+        help="Abort after this many consecutive task transport failures.",
+    )
+    run_cmd.add_argument(
+        "--min-transport-fraction-sample",
+        type=int,
+        default=DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES,
+        help="Minimum attempted tasks before applying the in-run fraction gate.",
+    )
     run_cmd.add_argument("--request-timeout-s", type=float, default=12.0)
 
     cmp_cmd = sub.add_parser("compare", help="Compare two run summary files")
@@ -1303,14 +2131,49 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     if args.cmd == "generate":
-        manifest = generate_tasks(args.tasks, args.manifest)
+        try:
+            manifest = generate_tasks(args.tasks, args.manifest, args.live_fixtures)
+        except RuntimeError as exc:
+            print(f"[project_index] ERROR: {exc}", file=sys.stderr)
+            return 1
         print(json.dumps(manifest, indent=2, ensure_ascii=False))
         return 0
 
-    if args.cmd == "run":
-        summary = run_benchmark(args.mcp_url, args.tasks, args.output_dir, args.label, args.request_timeout_s)
-        print(json.dumps(summary, indent=2, ensure_ascii=False))
+    if args.cmd == "refresh_live_fixtures":
+        try:
+            fixtures = refresh_live_fixtures(
+                args.mcp_url, args.fixtures, args.request_timeout_s,
+                args.known_answer_count, args.min_known_answers,
+            )
+        except RuntimeError as exc:
+            print(f"[project_index] ERROR: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(
+            {
+                "fixtures_file": display_path(resolve_plugin_path(args.fixtures)),
+                "project_name": fixtures.get("project_name"),
+                "catalog_version": fixtures.get("catalog_version"),
+                "schema_action_count": len(fixtures.get("schema_actions") or []),
+                "known_answer_count": len(fixtures.get("known_answers") or []),
+            },
+            indent=2, ensure_ascii=False,
+        ))
         return 0
+
+    if args.cmd == "run":
+        summary = run_benchmark(
+            args.mcp_url,
+            args.tasks,
+            args.output_dir,
+            args.label,
+            args.request_timeout_s,
+            args.max_transport_failed_fraction,
+            args.max_consecutive_transport_failures,
+            args.min_transport_fraction_sample,
+            allow_subset=args.allow_subset,
+        )
+        print(json.dumps(summary, indent=2, ensure_ascii=False))
+        return 0 if summary.get("run_valid") else 1
 
     if args.cmd == "compare":
         comparison = compare_runs(args.baseline, args.current, args.output_dir)
