@@ -917,6 +917,28 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListDirectors(const TShared
 	}
 	SQL += TEXT(" ORDER BY ls_path");
 
+	int64 TotalDirectors = 0;
+	{
+		FString CountSQL = TEXT("SELECT COUNT(*) FROM level_sequence_directors");
+		if (!PathFilter.IsEmpty())
+		{
+			CountSQL += TEXT(" WHERE ls_path LIKE ? ESCAPE '\\'");
+		}
+		FSQLitePreparedStatement CountStmt;
+		if (CountStmt.Create(*RawDB, *CountSQL))
+		{
+			if (!PathFilter.IsEmpty())
+			{
+				CountStmt.SetBindingValueByIndex(1, LikePattern);
+			}
+			if (CountStmt.Step() == ESQLitePreparedStatementStepResult::Row)
+			{
+				CountStmt.GetColumnValueByIndex(0, TotalDirectors);
+			}
+		}
+		CountStmt.Destroy();
+	}
+
 	FSQLitePreparedStatement Stmt;
 	if (!Stmt.Create(*RawDB, *SQL))
 	{
@@ -928,6 +950,11 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListDirectors(const TShared
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Directors;
+	if (TotalDirectors > 0)
+	{
+		Directors.Reserve(static_cast<int32>(TotalDirectors));
+	}
+
 	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		FString LsPath, DirName;
