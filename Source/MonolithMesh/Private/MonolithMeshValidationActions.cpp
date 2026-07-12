@@ -557,6 +557,7 @@ FMonolithActionResult FMonolithMeshValidationActions::BatchValidate(const TShare
 	}
 
 	// === Pass 2: Deep validation on flagged assets only ===
+	IssuesArr.Reserve(FlaggedPaths.Num());
 	for (const FString& AssetPath : FlaggedPaths)
 	{
 		auto IssueObj = MakeShared<FJsonObject>();
