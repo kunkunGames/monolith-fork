@@ -1521,13 +1521,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeEffects(cons
 			}
 			if (ClassPaths.Num() > 0)
 			{
-				FString ClassesStr = TEXT("(");
-				for (int32 c = 0; c < ClassPaths.Num(); c++)
-				{
-					if (c > 0) ClassesStr += TEXT(",");
-					ClassesStr += ClassPaths[c];
-				}
-				ClassesStr += TEXT(")");
+				FString ClassesStr = FString::Printf(TEXT("(%s)"), *FString::Join(ClassPaths, TEXT(",")));
 				ContainerParts.Add(FString::Printf(TEXT("TargetGameplayEffectClasses=%s"), *ClassesStr));
 			}
 		}
