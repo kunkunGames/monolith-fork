@@ -6426,6 +6426,8 @@ namespace MonolithUI::SpecActionsInternal
         CopyPatchFieldAlias(SlotSource, Destination, TEXT("z_order"), TEXT("z_order"), TEXT("zOrder"));
         CopyPatchFieldAlias(SlotSource, Destination, TEXT("h_align"), TEXT("h_align"), TEXT("hAlign"));
         CopyPatchFieldAlias(SlotSource, Destination, TEXT("v_align"), TEXT("v_align"), TEXT("vAlign"));
+        CopyPatchFieldAlias(SlotSource, Destination, TEXT("size_rule"), TEXT("size_rule"), TEXT("sizeRule"));
+        CopyPatchFieldAlias(SlotSource, Destination, TEXT("fill_weight"), TEXT("fill_weight"), TEXT("fillWeight"));
     }
 
     static TSharedPtr<FJsonObject> MakePatchStepParamsWithAsset(const TSharedPtr<FJsonObject>& Entry, const FString& AssetPath)
@@ -7073,7 +7075,9 @@ namespace MonolithUI::SpecActionsInternal
             TEXT("auto_size"),
             TEXT("z_order"),
             TEXT("h_align"),
-            TEXT("v_align")
+            TEXT("v_align"),
+            TEXT("size_rule"),
+            TEXT("fill_weight")
         };
         for (const TCHAR* Field : Fields)
         {
@@ -7103,7 +7107,9 @@ namespace MonolithUI::SpecActionsInternal
             TEXT("auto_size"),
             TEXT("z_order"),
             TEXT("h_align"),
-            TEXT("v_align")
+            TEXT("v_align"),
+            TEXT("size_rule"),
+            TEXT("fill_weight")
         };
         for (const TCHAR* Field : Fields)
         {
@@ -7133,7 +7139,19 @@ namespace MonolithUI::SpecActionsInternal
             return;
         }
 
-        if (Cast<UVerticalBoxSlot>(Slot) || Cast<UHorizontalBoxSlot>(Slot) || Cast<UOverlaySlot>(Slot))
+        if (Cast<UVerticalBoxSlot>(Slot) || Cast<UHorizontalBoxSlot>(Slot))
+        {
+            OutFields = {
+                TEXT("padding"),
+                TEXT("h_align"),
+                TEXT("v_align"),
+                TEXT("size_rule"),
+                TEXT("fill_weight")
+            };
+            return;
+        }
+
+        if (Cast<UOverlaySlot>(Slot))
         {
             OutFields = {
                 TEXT("padding"),

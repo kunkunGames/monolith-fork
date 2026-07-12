@@ -1368,4 +1368,96 @@ bool FMonolithUISpecPatchSlotPreflightTest::RunTest(const FString& /*Parameters*
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithUISpecPatchBoxSizeRuleRoutingTest,
+	"MonolithUI.SpecMarkup.PatchBoxSizeRuleRouting",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUISpecPatchBoxSizeRuleRoutingTest::RunTest(const FString& /*Parameters*/)
+{
+	if (!TestNotNull(TEXT("UMonolithUIRegistrySubsystem available"), UMonolithUIRegistrySubsystem::Get()))
+	{
+		return false;
+	}
+
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	MonolithUI::FSpecActions::Register(Registry);
+	FMonolithUIActions::RegisterActions(Registry);
+	FMonolithUISlotActions::RegisterActions(Registry);
+
+	const FString AssetPath = TEXT("/Game/Tests/Monolith/UI/WBP_SpecPatchBoxSizeRuleRouting");
+	TSharedPtr<FJsonObject> ConvertParams = MakeShared<FJsonObject>();
+	ConvertParams->SetStringField(
+		TEXT("markup"),
+		TEXT("<VerticalBox Name=\"RootBox\"><TextBlock Name=\"ActionTile\" Text=\"Action\" /></VerticalBox>"));
+	ConvertParams->SetStringField(TEXT("root_save_path"), AssetPath);
+	const FMonolithActionResult ConvertResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("convert_markup_to_ui_spec"), ConvertParams);
+	if (!TestTrue(TEXT("convert action succeeds"), ConvertResult.bSuccess && ConvertResult.Result.IsValid()))
+	{
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> BuildParams = MakeShared<FJsonObject>();
+	BuildParams->SetStringField(TEXT("asset_path"), AssetPath);
+	BuildParams->SetObjectField(TEXT("spec"), ConvertResult.Result->GetObjectField(TEXT("spec")));
+	BuildParams->SetBoolField(TEXT("overwrite"), true);
+	BuildParams->SetBoolField(TEXT("dry_run"), false);
+	const FMonolithActionResult BuildResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("build_ui_from_spec"), BuildParams);
+	if (!TestTrue(TEXT("build action succeeds"), BuildResult.bSuccess && BuildResult.Result.IsValid()))
+	{
+		return false;
+	}
+	if (!TestTrue(TEXT("build payload bSuccess"), BuildResult.Result->GetBoolField(TEXT("bSuccess"))))
+	{
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> SlotObject = MakeShared<FJsonObject>();
+	SlotObject->SetStringField(TEXT("sizeRule"), TEXT("Fill"));
+	SlotObject->SetNumberField(TEXT("fillWeight"), 2.0);
+	TSharedPtr<FJsonObject> SlotOp = MakeShared<FJsonObject>();
+	SlotOp->SetStringField(TEXT("op"), TEXT("set_slot_property"));
+	SlotOp->SetStringField(TEXT("widget_name"), TEXT("ActionTile"));
+	SlotOp->SetObjectField(TEXT("slot"), SlotObject);
+
+	TArray<TSharedPtr<FJsonValue>> PatchOps;
+	PatchOps.Add(MakeShared<FJsonValueObject>(SlotOp));
+	TSharedPtr<FJsonObject> DryRunParams = MakeShared<FJsonObject>();
+	DryRunParams->SetStringField(TEXT("asset_path"), AssetPath);
+	DryRunParams->SetArrayField(TEXT("patch"), PatchOps);
+	DryRunParams->SetBoolField(TEXT("dry_run"), true);
+
+	const FMonolithActionResult DryRunResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("apply_ui_spec_patch"), DryRunParams);
+	if (!TestTrue(TEXT("box-size dry-run succeeds"), DryRunResult.bSuccess && DryRunResult.Result.IsValid()))
+	{
+		return false;
+	}
+	TestTrue(TEXT("box-size dry-run payload is supported"), DryRunResult.Result->GetBoolField(TEXT("ok")));
+	TestEqual(TEXT("box-size dry-run status"), DryRunResult.Result->GetStringField(TEXT("status")), TEXT("planned"));
+	TestEqual(TEXT("box-size dry-run plans one owner action"), static_cast<int32>(DryRunResult.Result->GetNumberField(TEXT("step_count"))), 1);
+
+	const TArray<TSharedPtr<FJsonValue>>* Steps = nullptr;
+	if (!TestTrue(TEXT("box-size dry-run steps array"), DryRunResult.Result->TryGetArrayField(TEXT("steps"), Steps) && Steps && Steps->Num() == 1))
+	{
+		return false;
+	}
+	const TSharedPtr<FJsonObject> Step = (*Steps)[0]->AsObject();
+	if (!TestTrue(TEXT("box-size step is set_slot_property"), Step.IsValid() && Step->GetStringField(TEXT("action")) == TEXT("set_slot_property")))
+	{
+		return false;
+	}
+	const TSharedPtr<FJsonObject>* RoutedParams = nullptr;
+	if (!TestTrue(TEXT("box-size step params exist"), Step->TryGetObjectField(TEXT("params"), RoutedParams) && RoutedParams && RoutedParams->IsValid()))
+	{
+		return false;
+	}
+	TestEqual(TEXT("camel sizeRule canonicalized"), (*RoutedParams)->GetStringField(TEXT("size_rule")), TEXT("Fill"));
+	TestTrue(TEXT("camel fillWeight canonicalized"), FMath::IsNearlyEqual((*RoutedParams)->GetNumberField(TEXT("fill_weight")), 2.0));
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

@@ -124,7 +124,7 @@ Count history before 2026-06-30 is retained for provenance, but the live registr
 **Slot Operations (3)**
 | Action | Params | Description |
 |--------|--------|-------------|
-| `set_slot_property` | `asset_path`, `widget_name`, `property_name`, `value` | Set a layout slot property (padding, alignment, size, etc.) |
+| `set_slot_property` | `asset_path`, `widget_name`; optional Canvas fields `anchors`, `offsets`, `position`, `size`, `alignment`, `z_order`, `auto_size`; optional box/overlay fields `h_align`, `v_align`, `padding`; optional Vertical/Horizontal box fields `size_rule=Automatic|Fill`, `fill_weight>=0`; `compile=false` | Set typed layout-slot fields. Box size-rule writes preserve unspecified rule/weight state, reject non-finite or negative weights, and reject box-only fields on incompatible slot classes. |
 | `set_anchor_preset` | `asset_path`, `widget_name`, `preset` | Apply an anchor preset to a Canvas Panel slot |
 | `move_widget` | `asset_path`, `widget_name`, `new_parent`, `slot_index` | Move a widget to a different parent slot |
 
@@ -666,6 +666,7 @@ This action is structural proof only. It does not replace the PC/mobile responsi
 - `Source/MonolithUI/Private/Actions/MonolithUISpecActions.cpp` -- `ui::dump_ui_spec` action handler + the inverse `NodeToJson` / `SlotToJson` / `EffectToJson` / `CommonUIToJson` packers, plus the read-only `ui::audit_widget_layout` structural validator and `ui::audit_widget_material_lifecycle` dynamic-material lifetime validator.
 - `Source/MonolithUI/Public/Registry/UIReflectionHelper.h` (+ `.cpp`) -- new `ReadJsonPath` method (symmetric counterpart to `ApplyJsonPath`); read-side `ReadValueFromProperty` dispatch table mirrors the existing write-side `WriteValueToProperty`.
 - `Source/MonolithUI/Private/Tests/UISpecRoundtripTests.cpp` -- automation tests J1 (`MonolithUI.SpecSerializer.RoundtripIdentity`), supported slot/content/style coverage (`MonolithUI.SpecSerializer.SupportedFields`), curated anchor coverage (`MonolithUI.SpecSerializer.PublicFields`), J4 (`MonolithUI.SpecSerializer.RoundtripCorpus` -- 5 representative WBP shapes), and a per-slot-type coverage test (`MonolithUI.SpecSerializer.SlotCoverage`).
+- `ui::get_widget_tree` and successful `ui::set_slot_property` responses expose box-slot `size_rule` / `fill_weight` in canonical snake_case, while UISpec dump/patch retains canonical document fields `sizeRule` / `fillWeight`. `ui::apply_ui_spec_patch` accepts either spelling in nested `slot` input and routes validated box writes to the owner action.
 - `Source/MonolithUI/Private/Tests/MonolithUILayoutAuditTests.cpp` -- deterministic `ui::audit_widget_layout` contract tests that construct an edge-anchored Canvas slot with mismatched alignment and verify the `CanvasAnchorMismatch` finding, plus a min-width-only `SizeBox` wrapper around unwrapped dynamic text to verify `MinDesiredWidth` does not suppress `UnboundedDynamicText`; guide-derived fixtures cover `OneChildCanvasWrapper`, `DecorativeHitTestBlocker`, `HiddenInteractiveSpace`, `UnstyledInteractiveState`, `MaterialDomainMismatch`, and `EdgeUiMissingSafeZone`. The same file covers `ui::audit_widget_material_lifecycle` with unsaved WBP graph fixtures for clean and Tick-created dynamic material cases.
 
 ### LLM Error Reporting (M5 — Phase K, landed 2026-04-26)
@@ -691,7 +692,7 @@ This action is structural proof only. It does not replace the PC/mobile responsi
 | `ui::add_widget` | 16-entry common widget-class starter list (full set behind `ui::list_widget_types`) |
 | `ui::set_widget_property` | Live allowlist entries for the widget type (when the registry has classified the type); `raw_mode=true` named in `suggested_fix` as the bypass |
 | `ui::compile_widget` | n/a — surfaces `BS_Error` as a `Compile`-category structured failure instead of success-with-status=error |
-| `ui::set_slot_property` | The 10 legal slot-property keys |
+| `ui::set_slot_property` | The 12 legal slot-property keys, including box-only `size_rule=Automatic|Fill` and finite non-negative `fill_weight` |
 | `ui::set_anchor_preset` | All 16 anchor-preset tokens (canonical list at `MonolithUIInternal::GetAnchorPresetNames`) |
 | `ui::set_brush` | The 5 `ESlateBrushDrawType` tokens; the 9 brush-property keys |
 | `ui::set_font` | `TextBlock`, `RichTextBlock`; the 6 font-property keys |

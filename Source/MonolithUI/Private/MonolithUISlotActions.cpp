@@ -10,6 +10,30 @@
 
 namespace
 {
+    static const TArray<FString>& GetBoxSlotSizeRuleTokens()
+    {
+        static const TArray<FString> Tokens = {
+            TEXT("Automatic"),
+            TEXT("Fill")
+        };
+        return Tokens;
+    }
+
+    static bool TryParseBoxSlotSizeRule(const FString& Token, ESlateSizeRule::Type& OutRule)
+    {
+        if (Token == TEXT("Automatic"))
+        {
+            OutRule = ESlateSizeRule::Automatic;
+            return true;
+        }
+        if (Token == TEXT("Fill"))
+        {
+            OutRule = ESlateSizeRule::Fill;
+            return true;
+        }
+        return false;
+    }
+
     enum class EMonolithUISlotSnapshotKind
     {
         None,
@@ -197,7 +221,7 @@ void FMonolithUISlotActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
     Registry.RegisterAction(
         TEXT("ui"), TEXT("set_slot_property"),
-        TEXT("Set a slot property on a widget (anchors, offsets, padding, alignment, z-order)"),
+        TEXT("Set a slot property on a widget (anchors, offsets, padding, alignment, box size rule, z-order)"),
         FMonolithActionHandler::CreateStatic(&HandleSetSlotProperty),
         FParamSchemaBuilder()
             .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
@@ -211,6 +235,8 @@ void FMonolithUISlotActions::RegisterActions(FMonolithToolRegistry& Registry)
             .Optional(TEXT("auto_size"), TEXT("boolean"), TEXT("Canvas auto-size"))
             .Optional(TEXT("h_align"), TEXT("string"), TEXT("Horizontal alignment: Left, Center, Right, Fill"))
             .Optional(TEXT("v_align"), TEXT("string"), TEXT("Vertical alignment: Top, Center, Bottom, Fill"))
+            .Optional(TEXT("size_rule"), TEXT("string"), TEXT("VerticalBoxSlot/HorizontalBoxSlot size rule: Automatic or Fill")).Enum(TEXT("size_rule"), { TEXT("Automatic"), TEXT("Fill") })
+            .Optional(TEXT("fill_weight"), TEXT("number"), TEXT("VerticalBoxSlot/HorizontalBoxSlot fill weight; must be finite and >= 0")).Minimum(TEXT("fill_weight"), 0.0)
             .Optional(TEXT("padding"), TEXT("object"), TEXT("Slot padding: {\"left\":0, \"top\":0, \"right\":0, \"bottom\":0}"))
             .Optional(TEXT("compile"), TEXT("boolean"), TEXT("Compile after setting"), TEXT("false"))
             .Build()
@@ -277,6 +303,59 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
             TEXT("/widget_name"),
             FString::Printf(TEXT("Widget '%s' has no slot — likely the WidgetTree root."), *WidgetName),
             TEXT("Slot properties only apply to non-root widgets. Use a parent panel and address its child."));
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
+    }
+
+    const bool bHasSizeRule = Params->HasField(TEXT("size_rule"));
+    FString SizeRuleToken;
+    ESlateSizeRule::Type ParsedSizeRule = ESlateSizeRule::Automatic;
+    if (bHasSizeRule)
+    {
+        if (!Params->TryGetStringField(TEXT("size_rule"), SizeRuleToken)
+            || !TryParseBoxSlotSizeRule(SizeRuleToken, ParsedSizeRule))
+        {
+            FUISpecError E = MonolithUIInternal::MakeSpecError(
+                TEXT("Enum"),
+                TEXT("/size_rule"),
+                FString::Printf(TEXT("Unknown box slot size rule '%s'."), *SizeRuleToken),
+                TEXT("Use one of the listed canonical size-rule tokens."),
+                GetBoxSlotSizeRuleTokens());
+            E.WidgetId = FName(*WidgetName);
+            return MonolithUIInternal::MakeErrorFromSpecError(E);
+        }
+    }
+
+    const bool bHasFillWeight = Params->HasField(TEXT("fill_weight"));
+    double FillWeight = 0.0;
+    if (bHasFillWeight
+        && (!Params->TryGetNumberField(TEXT("fill_weight"), FillWeight)
+            || !FMath::IsFinite(FillWeight)
+            || FillWeight < 0.0))
+    {
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("Range"),
+            TEXT("/fill_weight"),
+            TEXT("fill_weight must be a finite number greater than or equal to zero."),
+            TEXT("Pass a finite non-negative box-slot fill coefficient."));
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
+    }
+
+    const bool bHasBoxSizeField = bHasSizeRule || bHasFillWeight;
+    const bool bIsBoxSlot = Cast<UVerticalBoxSlot>(Slot) || Cast<UHorizontalBoxSlot>(Slot);
+    if (bHasBoxSizeField && !bIsBoxSlot)
+    {
+        const TCHAR* BoxSizeJsonPath = bHasSizeRule ? TEXT("/size_rule") : TEXT("/fill_weight");
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("SlotClass"),
+            BoxSizeJsonPath,
+            FString::Printf(
+                TEXT("Widget '%s' uses %s; size_rule and fill_weight require a VerticalBoxSlot or HorizontalBoxSlot."),
+                *WidgetName,
+                *Slot->GetClass()->GetName()),
+            TEXT("Re-parent the widget under a VerticalBox or HorizontalBox, or remove the box-only fields."),
+            { TEXT("VerticalBoxSlot"), TEXT("HorizontalBoxSlot") });
         E.WidgetId = FName(*WidgetName);
         return MonolithUIInternal::MakeErrorFromSpecError(E);
     }
@@ -383,11 +462,27 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
     {
         if (!HAlign.IsEmpty()) { VS->SetHorizontalAlignment(ParseHAlign(HAlign)); PropsSet++; }
         if (!VAlign.IsEmpty()) { VS->SetVerticalAlignment(ParseVAlign(VAlign)); PropsSet++; }
+        if (bHasBoxSizeField)
+        {
+            FSlateChildSize BoxSize = VS->GetSize();
+            if (bHasSizeRule) BoxSize.SizeRule = ParsedSizeRule;
+            if (bHasFillWeight) BoxSize.Value = static_cast<float>(FillWeight);
+            VS->SetSize(BoxSize);
+            PropsSet += static_cast<int32>(bHasSizeRule) + static_cast<int32>(bHasFillWeight);
+        }
     }
     else if (UHorizontalBoxSlot* HS = Cast<UHorizontalBoxSlot>(Slot))
     {
         if (!HAlign.IsEmpty()) { HS->SetHorizontalAlignment(ParseHAlign(HAlign)); PropsSet++; }
         if (!VAlign.IsEmpty()) { HS->SetVerticalAlignment(ParseVAlign(VAlign)); PropsSet++; }
+        if (bHasBoxSizeField)
+        {
+            FSlateChildSize BoxSize = HS->GetSize();
+            if (bHasSizeRule) BoxSize.SizeRule = ParsedSizeRule;
+            if (bHasFillWeight) BoxSize.Value = static_cast<float>(FillWeight);
+            HS->SetSize(BoxSize);
+            PropsSet += static_cast<int32>(bHasSizeRule) + static_cast<int32>(bHasFillWeight);
+        }
     }
     else if (UOverlaySlot* OS = Cast<UOverlaySlot>(Slot))
     {
@@ -418,7 +513,8 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
             TEXT("No slot properties were set. Provide at least one slot property parameter."),
             TEXT("Pass one or more of the listed parameter keys with the appropriate JSON shape."),
             { TEXT("anchors"), TEXT("offsets"), TEXT("position"), TEXT("size"), TEXT("alignment"),
-              TEXT("z_order"), TEXT("auto_size"), TEXT("h_align"), TEXT("v_align"), TEXT("padding") }));
+              TEXT("z_order"), TEXT("auto_size"), TEXT("h_align"), TEXT("v_align"), TEXT("size_rule"),
+              TEXT("fill_weight"), TEXT("padding") }));
     }
 
     FBlueprintEditorUtils::MarkBlueprintAsModified(WBP);
@@ -432,6 +528,18 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
     Result->SetStringField(TEXT("slot_type"), Slot->GetClass()->GetName());
     Result->SetNumberField(TEXT("properties_set"), PropsSet);
     Result->SetBoolField(TEXT("compiled"), bCompile);
+    if (const UVerticalBoxSlot* VS = Cast<UVerticalBoxSlot>(Slot))
+    {
+        const FSlateChildSize BoxSize = VS->GetSize();
+        Result->SetStringField(TEXT("size_rule"), BoxSize.SizeRule == ESlateSizeRule::Fill ? TEXT("Fill") : TEXT("Automatic"));
+        Result->SetNumberField(TEXT("fill_weight"), BoxSize.Value);
+    }
+    else if (const UHorizontalBoxSlot* HS = Cast<UHorizontalBoxSlot>(Slot))
+    {
+        const FSlateChildSize BoxSize = HS->GetSize();
+        Result->SetStringField(TEXT("size_rule"), BoxSize.SizeRule == ESlateSizeRule::Fill ? TEXT("Fill") : TEXT("Automatic"));
+        Result->SetNumberField(TEXT("fill_weight"), BoxSize.Value);
+    }
     return FMonolithActionResult::Success(Result);
 }
 

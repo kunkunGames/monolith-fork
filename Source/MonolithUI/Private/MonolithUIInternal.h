@@ -266,11 +266,17 @@ namespace MonolithUIInternal
         {
             SlotJson->SetStringField(TEXT("h_align"), UEnum::GetValueAsString(VS->GetHorizontalAlignment()));
             SlotJson->SetStringField(TEXT("v_align"), UEnum::GetValueAsString(VS->GetVerticalAlignment()));
+            const FSlateChildSize Size = VS->GetSize();
+            SlotJson->SetStringField(TEXT("size_rule"), Size.SizeRule == ESlateSizeRule::Fill ? TEXT("Fill") : TEXT("Automatic"));
+            SlotJson->SetNumberField(TEXT("fill_weight"), Size.Value);
         }
         else if (UHorizontalBoxSlot* HS = Cast<UHorizontalBoxSlot>(Slot))
         {
             SlotJson->SetStringField(TEXT("h_align"), UEnum::GetValueAsString(HS->GetHorizontalAlignment()));
             SlotJson->SetStringField(TEXT("v_align"), UEnum::GetValueAsString(HS->GetVerticalAlignment()));
+            const FSlateChildSize Size = HS->GetSize();
+            SlotJson->SetStringField(TEXT("size_rule"), Size.SizeRule == ESlateSizeRule::Fill ? TEXT("Fill") : TEXT("Automatic"));
+            SlotJson->SetNumberField(TEXT("fill_weight"), Size.Value);
         }
         else if (UOverlaySlot* OS = Cast<UOverlaySlot>(Slot))
         {
