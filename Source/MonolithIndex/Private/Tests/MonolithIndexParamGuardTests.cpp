@@ -7,6 +7,7 @@
 #include "Actions/ProjectExportAssetTextAction.h"
 #include "Actions/ProjectSearchAction.h"
 #include "Actions/ProjectSearchGameplayTagsAction.h"
+#include "Actions/ProjectReviewHotspotsAction.h"
 #include "Dom/JsonObject.h"
 #include "MonolithParamSchema.h"
 
@@ -138,6 +139,22 @@ bool FProjectIndexParamGuardTest::RunTest(const FString& Parameters)
 		FMonolithActionResult Result = FProjectSearchAction::Execute(Params);
 		TestFalse(TEXT("Search: Reject wrong type for path_filter"), Result.bSuccess);
 		TestEqual(TEXT("Search: Error code for path_filter"), Result.ErrorCode, -32602);
+	}
+
+	{
+		auto Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("limit"), TEXT("not_a_number"));
+		FMonolithActionResult Result = FProjectReviewHotspotsAction::Execute(Params);
+		TestFalse(TEXT("ReviewHotspots: Reject wrong type for limit"), Result.bSuccess);
+		TestEqual(TEXT("ReviewHotspots: Error code for limit"), Result.ErrorCode, -32602);
+	}
+
+	{
+		auto Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("min_lines"), TEXT("not_a_number"));
+		FMonolithActionResult Result = FProjectReviewHotspotsAction::Execute(Params);
+		TestFalse(TEXT("ReviewHotspots: Reject wrong type for min_lines"), Result.bSuccess);
+		TestEqual(TEXT("ReviewHotspots: Error code for min_lines"), Result.ErrorCode, -32602);
 	}
 
 	return true;

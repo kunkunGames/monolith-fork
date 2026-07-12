@@ -6,6 +6,43 @@
 
 FMonolithActionResult FProjectReviewHotspotsAction::Execute(const TSharedPtr<FJsonObject>& Params)
 {
+	FString Kind = TEXT("all");
+	if (Params->HasField(TEXT("kind")) && !Params->TryGetStringField(TEXT("kind"), Kind))
+	{
+		return FMonolithActionResult::Error(TEXT("'kind' parameter must be a string"), -32602);
+	}
+
+	int32 Limit = 50;
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("'limit' parameter must be a number"), -32602);
+		}
+		Limit = static_cast<int32>(LimitValue);
+	}
+
+	int32 MinLines = 100;
+	if (Params->HasField(TEXT("min_lines")))
+	{
+		double MinLinesValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("min_lines"), MinLinesValue))
+		{
+			return FMonolithActionResult::Error(TEXT("'min_lines' parameter must be a number"), -32602);
+		}
+		MinLines = static_cast<int32>(MinLinesValue);
+	}
+
+	bool bIncludeQuestions = true;
+	if (Params->HasField(TEXT("include_questions")))
+	{
+		if (!Params->TryGetBoolField(TEXT("include_questions"), bIncludeQuestions))
+		{
+			return FMonolithActionResult::Error(TEXT("'include_questions' parameter must be a bool"), -32602);
+		}
+	}
+
 	UMonolithIndexSubsystem* Subsystem = GEditor ? GEditor->GetEditorSubsystem<UMonolithIndexSubsystem>() : nullptr;
 	FMonolithIndexDatabase* Db = Subsystem ? Subsystem->GetDatabase() : nullptr;
 	if (!Db)
@@ -14,10 +51,7 @@ FMonolithActionResult FProjectReviewHotspotsAction::Execute(const TSharedPtr<FJs
 	}
 
 	return FMonolithActionResult::Success(FMonolithIndexReview::ReviewHotspots(*Db,
-		FMonolithIndexReview::PStr(Params, TEXT("kind"), TEXT("all")),
-		FMonolithIndexReview::PInt(Params, TEXT("limit"), 50),
-		FMonolithIndexReview::PInt(Params, TEXT("min_lines"), 100),
-		FMonolithIndexReview::PBool(Params, TEXT("include_questions"), true)));
+		Kind, Limit, MinLines, bIncludeQuestions));
 }
 
 TSharedPtr<FJsonObject> FProjectReviewHotspotsAction::GetSchema()
