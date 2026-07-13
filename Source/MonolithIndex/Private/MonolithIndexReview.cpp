@@ -334,6 +334,7 @@ namespace
 	FJsonArr StringArray(const TArray<FString>& Values)
 	{
 		FJsonArr Arr;
+		Arr.Reserve(Values.Num());
 		for (const FString& Value : Values)
 		{
 			Arr.Add(MakeShared<FJsonValueString>(Value));
@@ -378,6 +379,7 @@ namespace
 		TArray<FString> Sorted = Values.Array();
 		Sorted.Sort();
 		FJsonArr Arr;
+		Arr.Reserve(Sorted.Num());
 		for (const FString& Value : Sorted)
 		{
 			Arr.Add(MakeShared<FJsonValueString>(Value));
