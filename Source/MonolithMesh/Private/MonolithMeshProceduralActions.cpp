@@ -3005,6 +3005,8 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateFragments(const TSha
 	// Store each fragment as a handle
 	TArray<TSharedPtr<FJsonValue>> HandleNames;
 	TArray<TSharedPtr<FJsonValue>> TriCounts;
+	HandleNames.Reserve(ComponentMeshes.Num());
+	TriCounts.Reserve(ComponentMeshes.Num());
 
 	for (int32 i = 0; i < ComponentMeshes.Num(); ++i)
 	{
