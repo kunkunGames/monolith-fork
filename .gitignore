@@ -148,3 +148,4 @@ pr*.diff
 make_release*.log
 Monolith_FullUnity_*.log
 Monolith_OfflineCLIBuild_*.log
+Monolith_NativeGatewayBuild_*.log
