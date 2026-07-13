@@ -2782,6 +2782,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetStateInfo(const TShare
 				TArray<TSharedPtr<FJsonValue>> NodesArr;
 				if (StateGraph)
 				{
+					NodesArr.Reserve(StateGraph->Nodes.Num());
 					for (UEdGraphNode* InnerNode : StateGraph->Nodes)
 					{
 						UAnimGraphNode_Base* AnimNode = Cast<UAnimGraphNode_Base>(InnerNode);
@@ -12855,6 +12856,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleCopyBonePoseBetweenSequen
 	Controller.OpenBracket(FText::FromString(TEXT("Copy Bone Pose Between Sequences")), false);
 
 	TArray<FString> CopiedBones;
+	CopiedBones.Reserve(BoneNamesArr->Num());
 	TArray<TSharedPtr<FJsonValue>> SkippedJson;
 
 	const FReferenceSkeleton& SourceRefSkel = SourceSkel->GetReferenceSkeleton();

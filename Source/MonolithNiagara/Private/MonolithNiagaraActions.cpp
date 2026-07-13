@@ -15287,6 +15287,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 			// For merge, we only apply emitters whose names don't already exist
 			TSharedRef<FJsonObject> FilteredSpec = MakeShared<FJsonObject>();
 			TArray<TSharedPtr<FJsonValue>> NewEmitters;
+			NewEmitters.Reserve(EmittersArrPtr->Num());
 			for (int32 EmitterIndex = 0; EmitterIndex < EmittersArrPtr->Num(); ++EmitterIndex)
 			{
 				const TSharedPtr<FJsonValue>& EVal = (*EmittersArrPtr)[EmitterIndex];
@@ -16323,6 +16324,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRenameUserParameter(const T
 	if (Warnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarnArr;
+		WarnArr.Reserve(Warnings.Num());
 		for (const FString& W : Warnings) WarnArr.Add(MakeShared<FJsonValueString>(W));
 		R->SetArrayField(TEXT("warnings"), WarnArr);
 	}
