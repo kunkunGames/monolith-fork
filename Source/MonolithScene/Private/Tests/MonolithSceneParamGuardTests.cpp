@@ -98,6 +98,23 @@ bool FMonolithLimitGuardSceneSpatialSweepRadiusTest::RunTest(const FString& Para
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardSceneLightingGetCoverageMalformedParamsTest, "Monolith.ParamGuard.MonolithScene.GetLightCoverageRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardSceneLightingGetCoverageMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithMeshLightingActions::RegisterActions(FMonolithToolRegistry::Get());
+	TestTrue(TEXT("get_light_coverage action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("scene"), TEXT("get_light_coverage")));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	// Missing required "volume_name"
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("scene"), TEXT("get_light_coverage"), Params);
+	TestFalse(TEXT("get_light_coverage rejects missing volume_name parameter"), Result.bSuccess);
+	TestTrue(TEXT("get_light_coverage reports the validation error"), Result.ErrorMessage.Contains(TEXT("volume_name")));
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardSceneLightingSuggestMalformedParamsTest, "Monolith.ParamGuard.MonolithScene.SuggestLightPlacementRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithParamGuardSceneLightingSuggestMalformedParamsTest::RunTest(const FString& Parameters)
