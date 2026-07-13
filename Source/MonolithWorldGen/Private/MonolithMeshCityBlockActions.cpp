@@ -1216,13 +1216,21 @@ FMonolithActionResult FMonolithMeshCityBlockActions::CreateCityBlock(const TShar
 	}
 
 	// Extract parameters with defaults
-	const int32 BuildingCount = Params->HasField(TEXT("buildings"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("buildings"))) : 4;
+	int32 BuildingCount = 4;
+	if (Params->HasField(TEXT("buildings")))
+	{
+		double Temp;
+		if (!Params->TryGetNumberField(TEXT("buildings"), Temp))
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'buildings', must be a number"));
+		BuildingCount = static_cast<int32>(Temp);
+	}
 
 	float BlockWidth = 6000.0f, BlockHeight = 4000.0f;
 	const TArray<TSharedPtr<FJsonValue>>* BlockSizeArr = nullptr;
 	if (Params->TryGetArrayField(TEXT("block_size"), BlockSizeArr) && BlockSizeArr && BlockSizeArr->Num() >= 2)
 	{
+		if ((*BlockSizeArr)[0]->Type != EJson::Number || (*BlockSizeArr)[1]->Type != EJson::Number)
+			return FMonolithActionResult::Error(TEXT("Elements of 'block_size' must be numbers"));
 		BlockWidth = static_cast<float>((*BlockSizeArr)[0]->AsNumber());
 		BlockHeight = static_cast<float>((*BlockSizeArr)[1]->AsNumber());
 	}
@@ -1230,22 +1238,56 @@ FMonolithActionResult FMonolithMeshCityBlockActions::CreateCityBlock(const TShar
 	FString Genre = TEXT("horror");
 	Params->TryGetStringField(TEXT("genre"), Genre);
 
-	int32 Seed = Params->HasField(TEXT("seed"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("seed")))
-		: FMath::Rand();
+	int32 Seed = FMath::Rand();
+	if (Params->HasField(TEXT("seed")))
+	{
+		double Temp;
+		if (!Params->TryGetNumberField(TEXT("seed"), Temp))
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'seed', must be a number"));
+		Seed = static_cast<int32>(Temp);
+	}
 	FRandomStream Rng(Seed);
 
-	const float Decay = Params->HasField(TEXT("decay"))
-		? FMath::Clamp(static_cast<float>(Params->GetNumberField(TEXT("decay"))), 0.0f, 1.0f) : 0.3f;
-	const float StreetWidth = Params->HasField(TEXT("street_width"))
-		? static_cast<float>(Params->GetNumberField(TEXT("street_width"))) : 600.0f;
-	const float SidewalkWidth = Params->HasField(TEXT("sidewalk_width"))
-		? static_cast<float>(Params->GetNumberField(TEXT("sidewalk_width"))) : 200.0f;
+	float Decay = 0.3f;
+	if (Params->HasField(TEXT("decay")))
+	{
+		double Temp;
+		if (!Params->TryGetNumberField(TEXT("decay"), Temp))
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'decay', must be a number"));
+		Decay = FMath::Clamp(static_cast<float>(Temp), 0.0f, 1.0f);
+	}
 
-	const bool bHospiceMode = Params->HasField(TEXT("hospice_mode"))
-		? Params->GetBoolField(TEXT("hospice_mode")) : false;
-	const bool bSkipFacades = Params->HasField(TEXT("skip_facades"))
-		? Params->GetBoolField(TEXT("skip_facades")) : false;
+	float StreetWidth = 600.0f;
+	if (Params->HasField(TEXT("street_width")))
+	{
+		double Temp;
+		if (!Params->TryGetNumberField(TEXT("street_width"), Temp))
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'street_width', must be a number"));
+		StreetWidth = static_cast<float>(Temp);
+	}
+
+	float SidewalkWidth = 200.0f;
+	if (Params->HasField(TEXT("sidewalk_width")))
+	{
+		double Temp;
+		if (!Params->TryGetNumberField(TEXT("sidewalk_width"), Temp))
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'sidewalk_width', must be a number"));
+		SidewalkWidth = static_cast<float>(Temp);
+	}
+
+	bool bHospiceMode = false;
+	if (Params->HasField(TEXT("hospice_mode")))
+	{
+		if (!Params->TryGetBoolField(TEXT("hospice_mode"), bHospiceMode))
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'hospice_mode', must be a boolean"));
+	}
+
+	bool bSkipFacades = false;
+	if (Params->HasField(TEXT("skip_facades")))
+	{
+		if (!Params->TryGetBoolField(TEXT("skip_facades"), bSkipFacades))
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'skip_facades', must be a boolean"));
+	}
 
 	// Facade style for integrated generation (v3)
 	FString BlockFacadeStyle;
@@ -1258,22 +1300,62 @@ FMonolithActionResult FMonolithMeshCityBlockActions::CreateCityBlock(const TShar
 		else if (Genre == TEXT("downtown")) BlockFacadeStyle = TEXT("brutalist");
 		else BlockFacadeStyle = TEXT("colonial"); // fallback
 	}
-	const bool bSkipRoofs = Params->HasField(TEXT("skip_roofs"))
-		? Params->GetBoolField(TEXT("skip_roofs")) : false;
-	const bool bSkipStreets = Params->HasField(TEXT("skip_streets"))
-		? Params->GetBoolField(TEXT("skip_streets")) : false;
-	const bool bSkipFurniture = Params->HasField(TEXT("skip_furniture"))
-		? Params->GetBoolField(TEXT("skip_furniture")) : false;
-	const bool bSkipValidation = Params->HasField(TEXT("skip_validation"))
-		? Params->GetBoolField(TEXT("skip_validation")) : false;
-	const bool bValidateAndRetry = Params->HasField(TEXT("validate_and_retry"))
-		? Params->GetBoolField(TEXT("validate_and_retry")) : false;
-	const bool bSkipFurnishing = Params->HasField(TEXT("skip_furnishing"))
-		? Params->GetBoolField(TEXT("skip_furnishing")) : false;
-	const bool bSkipVolumes = Params->HasField(TEXT("skip_volumes"))
-		? Params->GetBoolField(TEXT("skip_volumes")) : false;
-	const bool bUseTemplates = Params->HasField(TEXT("use_templates"))
-		? Params->GetBoolField(TEXT("use_templates")) : true;
+
+	bool bSkipRoofs = false;
+	if (Params->HasField(TEXT("skip_roofs")))
+	{
+		if (!Params->TryGetBoolField(TEXT("skip_roofs"), bSkipRoofs))
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'skip_roofs', must be a boolean"));
+	}
+
+	bool bSkipStreets = false;
+	if (Params->HasField(TEXT("skip_streets")))
+	{
+		if (!Params->TryGetBoolField(TEXT("skip_streets"), bSkipStreets))
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'skip_streets', must be a boolean"));
+	}
+
+	bool bSkipFurniture = false;
+	if (Params->HasField(TEXT("skip_furniture")))
+	{
+		if (!Params->TryGetBoolField(TEXT("skip_furniture"), bSkipFurniture))
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'skip_furniture', must be a boolean"));
+	}
+
+	bool bSkipValidation = false;
+	if (Params->HasField(TEXT("skip_validation")))
+	{
+		if (!Params->TryGetBoolField(TEXT("skip_validation"), bSkipValidation))
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'skip_validation', must be a boolean"));
+	}
+
+	bool bValidateAndRetry = false;
+	if (Params->HasField(TEXT("validate_and_retry")))
+	{
+		if (!Params->TryGetBoolField(TEXT("validate_and_retry"), bValidateAndRetry))
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'validate_and_retry', must be a boolean"));
+	}
+
+	bool bSkipFurnishing = false;
+	if (Params->HasField(TEXT("skip_furnishing")))
+	{
+		if (!Params->TryGetBoolField(TEXT("skip_furnishing"), bSkipFurnishing))
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'skip_furnishing', must be a boolean"));
+	}
+
+	bool bSkipVolumes = false;
+	if (Params->HasField(TEXT("skip_volumes")))
+	{
+		if (!Params->TryGetBoolField(TEXT("skip_volumes"), bSkipVolumes))
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'skip_volumes', must be a boolean"));
+	}
+
+	bool bUseTemplates = true;
+	if (Params->HasField(TEXT("use_templates")))
+	{
+		if (!Params->TryGetBoolField(TEXT("use_templates"), bUseTemplates))
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'use_templates', must be a boolean"));
+	}
 
 	FVector BlockOrigin = FVector::ZeroVector;
 	MonolithMeshUtils::ParseVector(Params, TEXT("location"), BlockOrigin);

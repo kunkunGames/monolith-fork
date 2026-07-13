@@ -338,4 +338,30 @@ bool FMonolithWorldGenTerrainGridResClampTest::RunTest(const FString& Parameters
 
 	return true;
 }
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardWorldGenCityBlockMalformedParamsTest, "Monolith.ParamGuard.MonolithWorldGen.CityBlockRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardWorldGenCityBlockMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithMeshCityBlockActions::RegisterActions(FMonolithToolRegistry::Get());
+	TestTrue(TEXT("create_city_block action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("worldgen"), TEXT("create_city_block")));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("save_path_prefix"), TEXT("/Game/TestBlock"));
+
+	// Add malformed street_width
+	Params->SetStringField(TEXT("street_width"), TEXT("very_wide"));
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("create_city_block"), Params);
+	TestFalse(TEXT("create_city_block rejects malformed street_width parameter"), Result.bSuccess);
+	TestTrue(TEXT("create_city_block reports the validation error for street_width"), Result.ErrorMessage.Contains(TEXT("street_width")));
+
+	// Add malformed skip_roofs
+	Params->RemoveField(TEXT("street_width"));
+	Params->SetStringField(TEXT("skip_roofs"), TEXT("false"));
+	Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("create_city_block"), Params);
+	TestFalse(TEXT("create_city_block rejects malformed skip_roofs parameter"), Result.bSuccess);
+	TestTrue(TEXT("create_city_block reports the validation error for skip_roofs"), Result.ErrorMessage.Contains(TEXT("skip_roofs")));
+
+	return true;
+}
+
 #endif // WITH_GEOMETRYSCRIPT
