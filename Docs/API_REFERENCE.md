@@ -1756,7 +1756,7 @@ Optional sprite asset production orchestration and validation actions.
 | `validate_guides` | `spec_path` (string) |
 | `validate_sheet` | `spec_path` (string), `sheet_path` (string), `metadata_path` (optional string) |
 
-See `Plugins/Monolith/Docs/specs/SPEC_MonolithSprite.md` for the deep dive.
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithSpriteAsset.md` for the deep dive.
 
 ## imagegen
 
