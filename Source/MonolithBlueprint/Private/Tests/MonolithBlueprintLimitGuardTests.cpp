@@ -114,8 +114,14 @@ bool FMonolithBlueprintSearchFunctionsPagingTest::RunTest(const FString& Paramet
 	TestTrue(TEXT("page rows present"), Row1.IsValid() && Row2.IsValid());
 	if (Row1.IsValid() && Row2.IsValid())
 	{
-		const FString Key1 = Row1->GetStringField(TEXT("class_name")) + TEXT("::") + Row1->GetStringField(TEXT("function_name"));
-		const FString Key2 = Row2->GetStringField(TEXT("class_name")) + TEXT("::") + Row2->GetStringField(TEXT("function_name"));
+			FString Class1, Func1, Class2, Func2;
+			Row1->TryGetStringField(TEXT("class_name"), Class1);
+			Row1->TryGetStringField(TEXT("function_name"), Func1);
+			Row2->TryGetStringField(TEXT("class_name"), Class2);
+			Row2->TryGetStringField(TEXT("function_name"), Func2);
+
+			const FString Key1 = Class1 + TEXT("::") + Func1;
+			const FString Key2 = Class2 + TEXT("::") + Func2;
 		TestNotEqual(TEXT("pages do not overlap"), Key1, Key2);
 	}
 	bool bTruncated2 = false;
@@ -134,8 +140,10 @@ bool FMonolithBlueprintSearchFunctionsPagingTest::RunTest(const FString& Paramet
 	TestTrue(TEXT("cursor page row present"), CursorRow.IsValid());
 	if (CursorRow.IsValid() && Row2.IsValid())
 	{
-		TestEqual(TEXT("cursor page matches offset page"),
-			CursorRow->GetStringField(TEXT("function_name")), Row2->GetStringField(TEXT("function_name")));
+			FString CursorFunc, Row2Func;
+			CursorRow->TryGetStringField(TEXT("function_name"), CursorFunc);
+			Row2->TryGetStringField(TEXT("function_name"), Row2Func);
+			TestEqual(TEXT("cursor page matches offset page"), CursorFunc, Row2Func);
 	}
 
 	// Fields projection keeps only requested keys and warns on unknown ones.
