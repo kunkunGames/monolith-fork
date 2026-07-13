@@ -51,30 +51,6 @@ public class MonolithUI : ModuleRules
 		return false;
 	}
 
-    private static bool HasPluginDir(string BaseDir, string PluginName)
-    {
-        if (!Directory.Exists(BaseDir))
-        {
-            return false;
-        }
-
-        if (Directory.Exists(Path.Combine(BaseDir, PluginName)) && File.Exists(Path.Combine(BaseDir, PluginName, PluginName + ".uplugin")))
-        {
-            return true;
-        }
-
-        string[] Dirs = Directory.Exists(BaseDir) ? Directory.GetDirectories(BaseDir, PluginName + "_*", SearchOption.TopDirectoryOnly) : new string[0];
-        foreach (string Dir in Dirs)
-        {
-            if (File.Exists(Path.Combine(Dir, PluginName + ".uplugin")))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     public MonolithUI(ReadOnlyTargetRules Target) : base(Target)
     {
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
@@ -137,7 +113,6 @@ public class MonolithUI : ModuleRules
         // Monolith's own CommonUI source files are present. The public release zip
         // gitignores these files — without this gate, end users get WITH_COMMONUI=1
         // but missing headers (C1083). See GitHub issue #36.
-        bool bHasCommonUI = false;
         bool bReleaseBuild = System.Environment.GetEnvironmentVariable("MONOLITH_RELEASE_BUILD") == "1";
 
         // Self-check: do our own CommonUI source files exist? Release zips strip them.
@@ -145,31 +120,7 @@ public class MonolithUI : ModuleRules
         bool bHasOurCommonUISources = Directory.Exists(OurCommonUIDir)
             && File.Exists(Path.Combine(OurCommonUIDir, "MonolithCommonUIActions.h"));
 
-        if (!bReleaseBuild && bHasOurCommonUISources && IsPluginEnabled(Target, "CommonUI"))
-        {
-            // Location 1: project plugins (guard Target.ProjectFile — null for engine-only / Program targets)
-            if (Target.ProjectFile != null)
-            {
-                string ProjectPluginsDir = Path.Combine(Target.ProjectFile.Directory.FullName, "Plugins");
-                bHasCommonUI = HasPluginDir(ProjectPluginsDir, "CommonUI");
-            }
-
-            if (!bHasCommonUI)
-            {
-                string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
-                string MarketplaceDir = Path.Combine(EngineDir, "Plugins", "Marketplace");
-                bHasCommonUI = HasPluginDir(MarketplaceDir, "CommonUI");
-
-                if (!bHasCommonUI)
-                {
-                    string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
-                    bHasCommonUI = HasPluginDir(Path.Combine(EnginePluginsDir, "Runtime"), "CommonUI")
-                        || HasPluginDir(Path.Combine(EnginePluginsDir, "Developer"), "CommonUI")
-                        || HasPluginDir(Path.Combine(EnginePluginsDir, "Experimental"), "CommonUI")
-                        || HasPluginDir(EnginePluginsDir, "CommonUI");
-                }
-            }
-        }
+        bool bHasCommonUI = !bReleaseBuild && bHasOurCommonUISources && IsPluginEnabled(Target, "CommonUI");
 
         if (bHasCommonUI)
         {
