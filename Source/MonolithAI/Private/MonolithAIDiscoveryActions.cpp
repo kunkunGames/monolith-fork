@@ -1503,10 +1503,12 @@ FMonolithActionResult FMonolithAIDiscoveryActions::HandleExportAIManifest(const 
 					TSharedPtr<FJsonObject> ItemObj = Item->AsObject();
 					FString TmpName;
 					FString TmpPath;
+					double RefCountDbl = 0.0;
+					int32 RefCount = ItemObj->TryGetNumberField(TEXT("referencer_count"), RefCountDbl) ? static_cast<int32>(RefCountDbl) : 0;
 					MarkdownOutput += FString::Printf(TEXT("| %s | `%s` | %d |\n"),
 						*(ItemObj->TryGetStringField(TEXT("name"), TmpName) ? TmpName : TEXT("")),
 						*(ItemObj->TryGetStringField(TEXT("path"), TmpPath) ? TmpPath : TEXT("")),
-						static_cast<int32>(ItemObj->GetNumberField(TEXT("referencer_count"))));
+						RefCount);
 				}
 			}
 			MarkdownOutput += TEXT("\n");
