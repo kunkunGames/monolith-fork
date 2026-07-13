@@ -51,65 +51,15 @@ public class MonolithBABridge : ModuleRules
 		return false;
 	}
 
-
-	private static bool HasPluginDir(string BaseDir, string PluginName)
-	{
-		if (!Directory.Exists(BaseDir))
-		{
-			return false;
-		}
-
-		if (File.Exists(Path.Combine(BaseDir, PluginName, PluginName + ".uplugin")))
-		{
-			return true;
-		}
-
-		string[] Dirs = Directory.Exists(BaseDir) ? Directory.GetDirectories(BaseDir, "*", SearchOption.TopDirectoryOnly) : new string[0];
-		foreach (string Dir in Dirs)
-		{
-			if (File.Exists(Path.Combine(Dir, PluginName + ".uplugin")))
-			{
-				return true;
-			}
-		}
-
-		return false;
-	}
-
 	public MonolithBABridge(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-		// Probe for Blueprint Assist in multiple locations.
-		// BA installs to Engine/Plugins/Marketplace/ with an obfuscated folder name,
-		// or can be manually placed in the project's Plugins/ folder.
-		//
 		// Release builds: set MONOLITH_RELEASE_BUILD=1 to force all optional deps off.
 		// This ensures binary releases don't link against plugins the user may not have.
 		bool bReleaseBuild = System.Environment.GetEnvironmentVariable("MONOLITH_RELEASE_BUILD") == "1";
 
-		bool bHasBlueprintAssist = false;
-		if (!bReleaseBuild && IsPluginEnabled(Target, "BlueprintAssist"))
-		{
-			if (Target.ProjectFile != null)
-			{
-				string ProjectPluginsDir = Path.Combine(Target.ProjectFile.Directory.FullName, "Plugins");
-				bHasBlueprintAssist = HasPluginDir(ProjectPluginsDir, "BlueprintAssist");
-			}
-
-			if (!bHasBlueprintAssist)
-			{
-				string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
-				string MarketplaceDir = Path.Combine(EngineDir, "Plugins", "Marketplace");
-				bHasBlueprintAssist = HasPluginDir(MarketplaceDir, "BlueprintAssist");
-
-				if (!bHasBlueprintAssist)
-				{
-					string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
-					bHasBlueprintAssist = HasPluginDir(EnginePluginsDir, "BlueprintAssist");
-				}
-			}
-		}
+		bool bHasBlueprintAssist = !bReleaseBuild && IsPluginEnabled(Target, "BlueprintAssist");
 
 		if (bHasBlueprintAssist)
 		{
