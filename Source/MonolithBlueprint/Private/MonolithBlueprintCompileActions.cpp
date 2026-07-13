@@ -438,6 +438,8 @@ FMonolithActionResult FMonolithBlueprintCompileActions::HandleCompileBlueprint(c
 	}
 
 	TArray<TSharedPtr<FJsonValue>> ErrorArr, WarnArr;
+	ErrorArr.Reserve(Results.Messages.Num());
+	WarnArr.Reserve(Results.Messages.Num());
 	for (const TSharedRef<FTokenizedMessage>& Msg : Results.Messages)
 	{
 		TSharedPtr<FJsonObject> MsgObj = MakeShared<FJsonObject>();

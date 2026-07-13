@@ -1665,6 +1665,7 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRemoveEventDispatche
 	Root->SetArrayField(TEXT("available_dispatchers"), GraphStringsToJsonValues(EventDispatcherNames(BP)));
 
 	TArray<TSharedPtr<FJsonValue>> WarnArr;
+	WarnArr.Reserve(Warnings.Num());
 	for (const FString& W : Warnings)
 	{
 		WarnArr.Add(MakeShared<FJsonValueString>(W));

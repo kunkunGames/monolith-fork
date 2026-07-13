@@ -11180,6 +11180,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetSpawnShape(const TShared
 	if (Warnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarnArr;
+		WarnArr.Reserve(Warnings.Num());
 		for (const FString& W : Warnings)
 			WarnArr.Add(MakeShared<FJsonValueString>(W));
 		Result->SetArrayField(TEXT("warnings"), WarnArr);
@@ -12118,6 +12119,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureRibbon(const TShar
 	if (Warnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarnArr;
+		WarnArr.Reserve(Warnings.Num());
 		for (const FString& W : Warnings) WarnArr.Add(MakeShared<FJsonValueString>(W));
 		R->SetArrayField(TEXT("warnings"), WarnArr);
 	}
@@ -12272,6 +12274,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureSubUV(const TShare
 	if (Warnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarnArr;
+		WarnArr.Reserve(Warnings.Num());
 		for (const FString& W : Warnings) WarnArr.Add(MakeShared<FJsonValueString>(W));
 		R->SetArrayField(TEXT("warnings"), WarnArr);
 	}

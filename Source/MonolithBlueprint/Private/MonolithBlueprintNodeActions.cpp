@@ -3700,6 +3700,7 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 
 	// Warnings
 	TArray<TSharedPtr<FJsonValue>> WarnArr;
+	WarnArr.Reserve(Warnings.Num());
 	for (const FString& W : Warnings)
 	{
 		WarnArr.Add(MakeShared<FJsonValueString>(W));

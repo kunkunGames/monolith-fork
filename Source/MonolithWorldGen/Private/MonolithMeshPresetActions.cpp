@@ -1312,6 +1312,7 @@ FMonolithActionResult FMonolithMeshPresetActions::ExportGenrePreset(const TShare
 	if (ExportWarnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarnArr;
+		WarnArr.Reserve(ExportWarnings.Num());
 		for (const FString& W : ExportWarnings)
 		{
 			WarnArr.Add(MakeShared<FJsonValueString>(W));
