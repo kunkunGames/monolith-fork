@@ -1875,20 +1875,11 @@ FMonolithActionResult FMonolithCoreTools::HandleFind(const TSharedPtr<FJsonObjec
 	double LimitValue = 8.0;
 	bool bIncludeSchema = false;
 
-	if (!Params.IsValid() || !Params->HasField(TEXT("query")))
-	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'query'."), FMonolithJsonUtils::ErrInvalidParams);
-	}
-	if (!Params->TryGetStringField(TEXT("query"), Query))
-	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'query' must be a string."), FMonolithJsonUtils::ErrInvalidParams);
-	}
-	Query.TrimStartAndEndInline();
-	if (Query.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'query'."), FMonolithJsonUtils::ErrInvalidParams);
-	}
 	FString ErrMsg;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("query"), Query, ErrMsg))
+	{
+		return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("namespace"), NamespaceFilter, ErrMsg, TEXT(""), true))
 	{
@@ -3586,15 +3577,14 @@ FMonolithActionResult FMonolithCoreTools::HandleSetMcpCompatibilityOptions(const
 			return FMonolithActionResult::Error(TEXT("Parameter 'options' must be an object"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 
+		FString ErrMsg;
 		FString BrowserAccess;
-		if ((*Options)->HasField(TEXT("browser_access")))
+		if (!MonolithParamUtils::GetOptionalStringParam(*Options, TEXT("browser_access"), BrowserAccess, ErrMsg, TEXT("")))
 		{
-			if (!(*Options)->TryGetStringField(TEXT("browser_access"), BrowserAccess))
-			{
-				return FMonolithActionResult::Error(TEXT("Option 'browser_access' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
-			}
-
-			BrowserAccess.TrimStartAndEndInline();
+			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (!BrowserAccess.IsEmpty())
+		{
 			BrowserAccess.ToLowerInline();
 			if (BrowserAccess == TEXT("loopback_only"))
 			{
@@ -3613,29 +3603,23 @@ FMonolithActionResult FMonolithCoreTools::HandleSetMcpCompatibilityOptions(const
 		}
 
 		bool bRequestedLegacySse = false;
-		if ((*Options)->HasField(TEXT("legacy_sse_route_enabled")))
+		if (!MonolithParamUtils::GetOptionalBoolParam(*Options, TEXT("legacy_sse_route_enabled"), bRequestedLegacySse, ErrMsg, false))
 		{
-			if (!(*Options)->TryGetBoolField(TEXT("legacy_sse_route_enabled"), bRequestedLegacySse))
-			{
-				return FMonolithActionResult::Error(TEXT("Option 'legacy_sse_route_enabled' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
-			}
-			if (bRequestedLegacySse)
-			{
-				UnsupportedOptions.Add(TEXT("legacy_sse_route_enabled"));
-			}
+			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (bRequestedLegacySse)
+		{
+			UnsupportedOptions.Add(TEXT("legacy_sse_route_enabled"));
 		}
 
 		bool bRequestedLegacyMessage = false;
-		if ((*Options)->HasField(TEXT("legacy_message_route_enabled")))
+		if (!MonolithParamUtils::GetOptionalBoolParam(*Options, TEXT("legacy_message_route_enabled"), bRequestedLegacyMessage, ErrMsg, false))
 		{
-			if (!(*Options)->TryGetBoolField(TEXT("legacy_message_route_enabled"), bRequestedLegacyMessage))
-			{
-				return FMonolithActionResult::Error(TEXT("Option 'legacy_message_route_enabled' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
-			}
-			if (bRequestedLegacyMessage)
-			{
-				UnsupportedOptions.Add(TEXT("legacy_message_route_enabled"));
-			}
+			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (bRequestedLegacyMessage)
+		{
+			UnsupportedOptions.Add(TEXT("legacy_message_route_enabled"));
 		}
 	}
 
