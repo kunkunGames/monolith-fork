@@ -656,8 +656,14 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleAddDatabaseSequence(cons
 
 FMonolithActionResult FMonolithPoseSearchActions::HandleRemoveDatabaseSequence(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	int32 SequenceIndex = static_cast<int32>(Params->GetNumberField(TEXT("sequence_index")));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+		return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+
+	double SeqIndexDouble;
+	if (!Params->TryGetNumberField(TEXT("sequence_index"), SeqIndexDouble))
+		return FMonolithActionResult::Error(TEXT("Parameter 'sequence_index' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+	int32 SequenceIndex = static_cast<int32>(SeqIndexDouble);
 
 	UPoseSearchDatabase* Database = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchDatabase>(AssetPath);
 	if (!Database)
