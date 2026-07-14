@@ -12010,8 +12010,17 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetPhysicsAssetInfo(const
 
 FMonolithActionResult FMonolithAnimationActions::HandleSetBodyProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString BoneName = Params->GetStringField(TEXT("bone_name"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FString BoneName;
+	if (!Params->TryGetStringField(TEXT("bone_name"), BoneName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'bone_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UPhysicsAsset* PhysAsset = FMonolithAssetUtils::LoadAssetByPath<UPhysicsAsset>(AssetPath);
 	if (!PhysAsset) return FMonolithActionResult::Error(FString::Printf(TEXT("Physics asset not found: %s"), *AssetPath));

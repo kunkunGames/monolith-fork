@@ -369,6 +369,33 @@ bool FMonolithValidateChooserParamGuardTest::RunTest(const FString& Parameters)
 }
 #endif // WITH_CHOOSER
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithSetBodyPropertiesParamGuardTest, "Monolith.ParamGuard.Animation.SetBodyProperties", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithSetBodyPropertiesParamGuardTest::RunTest(const FString& Parameters)
+{
+	FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry::Get());
+
+	// test missing/malformed asset_path
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("asset_path"), 123);
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("animation"), TEXT("set_body_properties"), Params);
+		TestFalse(TEXT("set_body_properties with malformed asset_path should return Error"), Result.bSuccess);
+		TestTrue(TEXT("Error message should complain about parameter 'asset_path'"), Result.ErrorMessage.Contains(TEXT("Parameter 'asset_path' must be a string")));
+	}
+
+	// test missing/malformed bone_name
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Tests/Monolith/TestPhysicsAsset"));
+		Params->SetNumberField(TEXT("bone_name"), 123);
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("animation"), TEXT("set_body_properties"), Params);
+		TestFalse(TEXT("set_body_properties with malformed bone_name should return Error"), Result.bSuccess);
+		TestTrue(TEXT("Error message should complain about parameter 'bone_name'"), Result.ErrorMessage.Contains(TEXT("Parameter 'bone_name' must be a string")));
+	}
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAnimationAddEvaluateChooserNodeParamGuardTest, "Monolith.ParamGuard.Animation.AddEvaluateChooserNodeRejectsMalformedPosition", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithAnimationAddEvaluateChooserNodeParamGuardTest::RunTest(const FString& Parameters)
