@@ -282,7 +282,7 @@ Full read/write access to Blueprint graphs, variables, components, functions, no
 | Timelines | 4 | `add_timeline`, `add_timeline_track`, `set_timeline_keys`, `get_timeline_data` |
 | Compile / validate | 3 | `compile_blueprint`, `validate_blueprint`, `get_dependencies` |
 | Asset CRUD | 8 | `create_blueprint`, `duplicate_blueprint`, `save_asset`, `create_user_defined_struct`, `create_user_defined_enum`, `create_data_table`, `add_data_table_row`, `get_data_table_rows`, `create_data_asset` |
-| Dataset — DataTable (0.15.0) | 8 | `read_data_table`, `describe_data_table_schema`, `set_data_table_rows`, `remove_data_table_row`, `rename_data_table_row`, `duplicate_data_table_row`, `export_data_table`, `import_data_table` |
+| Dataset — DataTable (0.15.0) | 9 | `read_data_table`, `describe_data_table_schema`, `set_data_table_rows`, `remove_data_table_row`, `rename_data_table_row`, `duplicate_data_table_row`, `export_data_table`, `export_data_table_csv`, `import_data_table` |
 | Dataset — CurveTable (0.15.0) | 5 | `read_curve_table`, `set_curve_table_keys`, `add_curve_table_row`, `remove_curve_table_row`, `rename_curve_table_row` |
 | Dataset — StringTable (0.15.0) | 3 | `read_string_table`, `set_string_table_entries`, `remove_string_table_entry` |
 | Dataset — DataAsset (0.15.0) | 1 | `seed_data_asset` (create + bulk-fill in one atomic call) |
@@ -421,6 +421,7 @@ Returns an `FDryRunReport`-shaped per-field `{path, current, proposed, ok, reaso
 | `rename_data_table_row` | `asset_path`, `old_name`, `new_name`, `save?` | Row rename |
 | `duplicate_data_table_row` | `asset_path`, `source_row`, `new_name`, `save?` | Row copy |
 | `export_data_table` | `asset_path`, `format?` (`json`/`csv`), `use_json_objects?`, `simple_text?` | Round-trippable text blob |
+| `export_data_table_csv` | `asset_path`, `file_path`, `dry_run?`, `confirm?` | Export a DataTable to a CSV file |
 | `import_data_table` | `asset_path`, `text`, `format?`, `mode` (`replace` only), `save?` | **REPLACES** all rows; RowStruct must already be set |
 | `read_curve_table` | `asset_path`, `row_name?` | Returns `mode` (`rich`/`simple`/`empty`) + per-key data |
 | `set_curve_table_keys` | `asset_path`, `row_name`, `keys[{time,value}]`, `mode?`, `interp_mode?`, `save?` | First write locks rich-vs-simple; `cubic` → rich, others → simple |

@@ -675,7 +675,7 @@ Counts below were re-verified against the live `monolith_discover()` registry on
 **2026-05-22 through 2026-05-23 UI/Blueprint/API deltas:** [`Docs/plans/2026-05-22-monolith-ui-bp-gap-actions.md`](plans/2026-05-22-monolith-ui-bp-gap-actions.md) added `blueprint.add_property_access`, `blueprint.override_parent_function`, `blueprint.save_dirty_assets`, `describe.action_schema`, UI navigation/conversion/root/is-variable ergonomics, and the dataset pack below. The earlier rolling live totals from this period are superseded by the 2026-05-26 live full-project snapshot above.
 
 Dataset ergonomics added 17 public in-tree `blueprint` namespace actions:
-- **DataTable (8):** `read_data_table`, `describe_data_table_schema`, `set_data_table_rows`, `remove_data_table_row`, `rename_data_table_row`, `duplicate_data_table_row`, `export_data_table`, `import_data_table`.
+- **DataTable (9):** `read_data_table`, `describe_data_table_schema`, `set_data_table_rows`, `remove_data_table_row`, `rename_data_table_row`, `duplicate_data_table_row`, `export_data_table`, `export_data_table_csv`, `import_data_table`.
 - **DataAsset (1):** `seed_data_asset` (create + populate a DataAsset atomically; reuses the bulk_fill `FMonolithReflectionWalker::WriteTree` path).
 - **CurveTable (5):** `read_curve_table`, `set_curve_table_keys`, `add_curve_table_row`, `remove_curve_table_row`, `rename_curve_table_row` (first CurveTable surface in Monolith).
 - **StringTable (3):** `read_string_table`, `set_string_table_entries`, `remove_string_table_entry`.
