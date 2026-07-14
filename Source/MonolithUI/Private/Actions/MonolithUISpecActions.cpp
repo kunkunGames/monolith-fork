@@ -122,6 +122,16 @@ namespace MonolithUI::SpecActionsInternal
         return S;
     }
 
+    static bool TryExtractAssetPath(const TSharedPtr<FJsonObject>& Params, FString& OutAssetPath, FMonolithActionResult& OutError)
+    {
+        if (!Params->TryGetStringField(TEXT("asset_path"), OutAssetPath) || OutAssetPath.IsEmpty())
+        {
+            OutError = FMonolithActionResult::Error(TEXT("Missing or empty required param: asset_path"), -32602);
+            return false;
+        }
+        return true;
+    }
+
     static FVector2D ParseVec2(const TSharedPtr<FJsonObject>& Obj)
     {
         if (!Obj.IsValid()) return FVector2D::ZeroVector;
@@ -1427,9 +1437,10 @@ namespace MonolithUI::SpecActionsInternal
         }
 
         FString AssetPath;
-        if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+        FMonolithActionResult AssetPathError;
+        if (!TryExtractAssetPath(Params, AssetPath, AssetPathError))
         {
-            return FMonolithActionResult::Error(TEXT("Missing or empty required param: asset_path"), -32602);
+            return AssetPathError;
         }
 
         const TSharedPtr<FJsonObject>* SpecObjPtr = nullptr;
@@ -2081,10 +2092,10 @@ namespace MonolithUI::SpecActionsInternal
         }
 
         FString AssetPath;
-        if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+        FMonolithActionResult AssetPathError;
+        if (!TryExtractAssetPath(Params, AssetPath, AssetPathError))
         {
-            return FMonolithActionResult::Error(
-                TEXT("Missing or empty required param: asset_path"), -32602);
+            return AssetPathError;
         }
 
         FUISpecSerializerInputs In;
@@ -4154,9 +4165,10 @@ namespace MonolithUI::SpecActionsInternal
         }
 
         FString AssetPath;
-        if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+        FMonolithActionResult AssetPathError;
+        if (!TryExtractAssetPath(Params, AssetPath, AssetPathError))
         {
-            return FMonolithActionResult::Error(TEXT("Missing or empty required param: asset_path"), -32602);
+            return AssetPathError;
         }
 
         TArray<FLayoutMeasureProfile> Profiles;
@@ -6095,9 +6107,10 @@ namespace MonolithUI::SpecActionsInternal
         }
 
         FString AssetPath;
-        if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+        FMonolithActionResult AssetPathError;
+        if (!TryExtractAssetPath(Params, AssetPath, AssetPathError))
         {
-            return FMonolithActionResult::Error(TEXT("Missing or empty required param: asset_path"), -32602);
+            return AssetPathError;
         }
 
         const FString CompareMode = CompareModeOrDefault(Params);
@@ -8018,9 +8031,10 @@ namespace MonolithUI::SpecActionsInternal
         }
 
         FString AssetPath;
-        if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+        FMonolithActionResult AssetPathError;
+        if (!TryExtractAssetPath(Params, AssetPath, AssetPathError))
         {
-            return FMonolithActionResult::Error(TEXT("Missing or empty required param: asset_path"), -32602);
+            return AssetPathError;
         }
 
         const TArray<TSharedPtr<FJsonValue>>* PatchValues = nullptr;
