@@ -1709,6 +1709,11 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleSeedDataAsset(const
 			TEXT("Asset already exists in memory at '%s'. Delete it first."), *SavePath));
 	}
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	// Create package + instance.
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
