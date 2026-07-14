@@ -132,4 +132,32 @@ bool FMonolithLevelDesignPlaceLightTest::RunTest(const FString& Parameters)
 
 }
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLevelDesignGetActorComponentPropertiesTest, "Monolith.Sentinel.LevelDesign.GetActorComponentPropertiesParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithLevelDesignGetActorComponentPropertiesTest::RunTest(const FString& Parameters)
+{
+	// 1. Missing actor_name
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		FMonolithActionResult Result = ExecuteSceneEditingAction(TEXT("get_actor_component_properties"), Params);
+		TestFalse(TEXT("Missing actor_name should fail"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention actor_name"), Result.ErrorMessage.Contains(TEXT("actor_name")));
+	}
+
+	// 2. Valid parameters
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("actor_name"), TEXT("FakeActor123"));
+		FMonolithActionResult Result = ExecuteSceneEditingAction(TEXT("get_actor_component_properties"), Params);
+		TestFalse(TEXT("Should fail due to missing actor, not malformed param"), Result.bSuccess);
+
+		// Instead of guessing the FindActorByName error, we just make sure it's not the missing param error
+		TestTrue(TEXT("Error message should not be about missing param"),
+			!Result.ErrorMessage.Contains(TEXT("Missing required param: actor_name")));
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
