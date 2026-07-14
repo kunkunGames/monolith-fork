@@ -107,12 +107,12 @@ FString ReadFileWindow(const FString& FilePath, int32 StartLine, int32 EndLine)
 	StartLine = FMath::Clamp(StartLine, 1, FMath::Max(1, Lines.Num()));
 	EndLine = FMath::Clamp(EndLine, StartLine, FMath::Max(StartLine, Lines.Num()));
 
-	FString Result;
+	TStringBuilder<2048> Builder;
 	for (int32 LineIndex = StartLine; LineIndex <= EndLine; ++LineIndex)
 	{
-		Result += FString::Printf(TEXT("%5d | %s\n"), LineIndex, *Lines[LineIndex - 1]);
+		Builder.Appendf(TEXT("%5d | %s\n"), LineIndex, *Lines[LineIndex - 1]);
 	}
-	return Result;
+	return Builder.ToString();
 }
 
 FString TruncateText(const FString& Text, int32 MaxChars, bool& bOutTruncated)

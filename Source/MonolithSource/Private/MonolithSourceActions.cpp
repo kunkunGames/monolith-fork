@@ -1365,12 +1365,12 @@ FString FMonolithSourceActions::ReadFileLines(const FString& FilePath, int32 Sta
 	StartLine = FMath::Max(1, StartLine);
 	EndLine = FMath::Min(Lines.Num(), EndLine);
 
-	FString Result;
+	TStringBuilder<2048> Builder;
 	for (int32 i = StartLine; i <= EndLine; ++i)
 	{
-		Result += FString::Printf(TEXT("%5d | %s\n"), i, *Lines[i - 1]);
+		Builder.Appendf(TEXT("%5d | %s\n"), i, *Lines[i - 1]);
 	}
-	return Result;
+	return Builder.ToString();
 }
 
 namespace
@@ -1386,11 +1386,12 @@ namespace
 		OutStartLine = FMath::Max(1, StartLine);
 		OutEndLine = FMath::Min(Lines.Num(), EndLine);
 
-		OutText.Empty();
+		TStringBuilder<2048> Builder;
 		for (int32 i = OutStartLine; i <= OutEndLine; ++i)
 		{
-			OutText += FString::Printf(TEXT("%5d | %s\n"), i, *Lines[i - 1]);
+			Builder.Appendf(TEXT("%5d | %s\n"), i, *Lines[i - 1]);
 		}
+		OutText = Builder.ToString();
 		return true;
 	}
 }
