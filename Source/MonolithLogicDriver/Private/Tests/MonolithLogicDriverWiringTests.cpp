@@ -612,4 +612,79 @@ bool FMonolithLogicDriverGetNodeConnectionsFunctionalTest::RunTest(const FString
 	return true;
 }
 
+
+
+// ------------------------------------------------------------------------------------------------
+// Monolith.LogicDriverKeeper.GetNodeDetailsFunctional
+// Validates the functional 'happy path' for getting detailed node info in a state machine graph.
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLogicDriverGetNodeDetailsFunctionalTest, "Monolith.LogicDriverKeeper.GetNodeDetailsFunctional", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithLogicDriverGetNodeDetailsFunctionalTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("get_node_details")))
+	{
+		FMonolithLogicDriverAssetActions::RegisterActions(Registry);
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	// 1. Create a State Machine Blueprint
+	FString AssetPath = TEXT("/Game/Tests/SM_GetNodeDetailsTest");
+	{
+		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+		CreateParams->SetStringField(TEXT("save_path"), AssetPath);
+		FMonolithActionResult CreateResult = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("create_state_machine"), CreateParams);
+
+		TestTrue(TEXT("create_state_machine should succeed"), CreateResult.bSuccess);
+		if (!CreateResult.bSuccess)
+		{
+			return true;
+		}
+	}
+
+	// 2. Add Source State
+	FString SourceGuid;
+	{
+		TSharedPtr<FJsonObject> AddStateParams = MakeShared<FJsonObject>();
+		AddStateParams->SetStringField(TEXT("asset_path"), AssetPath);
+		AddStateParams->SetStringField(TEXT("name"), TEXT("DetailsState"));
+
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_state"), AddStateParams);
+		TestTrue(TEXT("add_state should succeed"), Result.bSuccess);
+		if (Result.bSuccess && Result.Payload.IsValid())
+		{
+			Result.Payload->TryGetStringField(TEXT("node_guid"), SourceGuid);
+		}
+	}
+
+	// 3. Get Node Details
+	if (!SourceGuid.IsEmpty())
+	{
+		TSharedPtr<FJsonObject> GetDetailsParams = MakeShared<FJsonObject>();
+		GetDetailsParams->SetStringField(TEXT("asset_path"), AssetPath);
+		GetDetailsParams->SetStringField(TEXT("node_guid"), SourceGuid);
+
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("get_node_details"), GetDetailsParams);
+		TestTrue(TEXT("get_node_details should succeed for valid node"), Result.bSuccess);
+
+		if (Result.bSuccess && Result.Payload.IsValid())
+		{
+			FString NodeName;
+			Result.Payload->TryGetStringField(TEXT("name"), NodeName);
+			TestEqual(TEXT("Node name should match"), NodeName, TEXT("DetailsState"));
+
+			TestTrue(TEXT("Payload contains properties"), Result.Payload->HasField(TEXT("properties")));
+		}
+	}
+
+	// 4. Cleanup
+	if (Registry.HasAction(TEXT("logicdriver"), TEXT("delete_state_machine")))
+	{
+		TSharedPtr<FJsonObject> DeleteParams = MakeShared<FJsonObject>();
+		DeleteParams->SetStringField(TEXT("asset_path"), AssetPath);
+		Registry.ExecuteAction(TEXT("logicdriver"), TEXT("delete_state_machine"), DeleteParams);
+	}
+
+	return true;
+}
 #endif // WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
