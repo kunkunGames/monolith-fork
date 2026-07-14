@@ -24,3 +24,9 @@ Prevention: Use TryGetStringField and TryGetBoolField to handle missing properti
 **Learning:** General instructions in `AGENTS.md` to avoid generic placeholder names and random suffixes are often missed by agents unless directly included in their specific `.jules/<agent>.md` instructions. When an agent creates a PR title of "concise mesh-domain improvement.", it is echoing the prompt's instructions rather than describing the actual change.
 **Prevention:** Always replace the PR title placeholder with a concrete description of the change. Never append numeric task IDs or UUIDs to branch names to evade collision checks. If your chosen branch name is taken, stop without PR instead of renaming it.
 **Avoid:** Using `MeshCartographer: concise mesh-domain improvement.` as a PR title or generating branches with `-<number>` suffixes.
+
+## 2026-07-13 - Forbid announcing no-ops via branches/PRs
+**Coordination issue:** MeshCartographer created a branch (`jules/mesh-cartographer/no-op-15359131840212520290`) simply to announce that no work was needed.
+**Learning:** General instructions in `AGENTS.md` ("Never push a branch or open a PR to announce a no-op") are sometimes missed unless explicitly added to the agent's instructions. Pushing no-op branches clutters the repository and triggers unnecessary CI runs.
+**Prevention:** When ownership is elsewhere, the queue already covers it, or no safe non-overlapping candidate exists, you must stop without creating a branch or PR. Report your findings in the task log using the `done` tool instead.
+**Avoid:** Pushing any branch or PR (such as `jules/mesh-cartographer/no-op`) to announce a no-op.
