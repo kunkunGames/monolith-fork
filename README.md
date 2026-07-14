@@ -12,13 +12,13 @@
 
 Most MCP integrations for Unreal register every action as a separate tool. That floods the AI's context window with hundreds of tool names before you've asked a single question — and the actually useful stuff gets buried. I built Monolith because I wanted my AI to spend its context on my problem, not on memorising a tool catalogue.
 
-One plugin. One MCP endpoint. A handful of namespace-dispatch tools instead of ~2,037. The AI calls `monolith_discover()` and `monolith_guide()` when it needs to know what's available, and otherwise just hits `blueprint_query("create_asset", ...)`, `material_query("compile", ...)`, and so on.
+One plugin. One MCP endpoint. A handful of namespace-dispatch tools instead of ~2,047. The AI calls `monolith_discover()` and `monolith_guide()` when it needs to know what's available, and otherwise just hits `blueprint_query("create_asset", ...)`, `material_query("compile", ...)`, and so on.
 
 > **Platform:** Windows, macOS, Linux.
 
 ## Why Monolith?
 
-Most MCP integrations register every action as a separate tool, which floods the AI's context window and buries the actually useful stuff. Monolith uses a **namespace dispatch pattern** instead: each domain exposes a single `{namespace}_query(action, params)` tool, and a central `monolith_discover()` call lists everything available. A small set of dispatch tools fronts a large capability surface — **~2,037 in-tree actions across 77 namespaces** in this release (run `monolith_discover()` for the authoritative live count; sibling plugins can add more when loaded). The AI gets oriented fast and spends its context on your actual problem.
+Most MCP integrations register every action as a separate tool, which floods the AI's context window and buries the actually useful stuff. Monolith uses a **namespace dispatch pattern** instead: each domain exposes a single `{namespace}_query(action, params)` tool, and a central `monolith_discover()` call lists everything available. A small set of dispatch tools fronts a large capability surface — **~2,047 in-tree actions across 77 namespaces** in this release (run `monolith_discover()` for the authoritative live count; sibling plugins can add more when loaded). The AI gets oriented fast and spends its context on your actual problem.
 
 ## What Can It Actually Do?
 
@@ -56,7 +56,7 @@ Most MCP integrations register every action as a separate tool, which floods the
 
 ## What it does
 
-Monolith exposes **~2,037 actions across 77 in-tree namespaces** through a namespace-dispatch pattern: each domain registers a single `{namespace}_query(action, params)` tool, and a central `monolith_discover()` lists everything available. (Exact counts are intentionally approximate — query `monolith_discover()` for the live figure.)
+Monolith exposes **~2,047 actions across 77 in-tree namespaces** through a namespace-dispatch pattern: each domain registers a single `{namespace}_query(action, params)` tool, and a central `monolith_discover()` lists everything available. (Exact counts are intentionally approximate — query `monolith_discover()` for the live figure.)
 
 Covered domains: Blueprints, Materials, Animation, Niagara, Mesh, UI (incl. CommonUI), AI (Behavior Trees, State Trees, EQS, Smart Objects, Perception, Navigation), Gameplay Ability System, Logic Driver state machines, ComboGraph combo trees, Audio (Sound Cues + MetaSounds), Editor control (UBT builds, log capture, scene capture, asset preview & inspection), Engine source search (1M+ symbols, fully offline), Project asset search (SQLite FTS5), INI config, Level Sequences, a `bulk_fill` / `describe` reflection framework for deep property writes, a `monolith_guide` self-onboarding tool for your AI, plus the new v0.17.0 **Reflection Intelligence** layer: `decision` (architectural decision-record harvest), `risk` (repo-level hotspot + co-change + conditional-gate signals), `cppreflect` (UE 5.7 UHT reflection-edge queries cross-joined with the asset registry), `network` (replication inspection — replicated classes, RPCs, OnRep handlers, unbalanced-handler audits), `pipeline` (read-only composer actions for PR review + release pre-flight), and `reflect` (index maintenance — a project-only force-rebuild of the reflection tables). The `cppreflect` and `network` indexers scan your project plugins by default, so replicated classes and RPCs declared in plugins are in scope without extra setup; enabled marketplace plugins are gated behind a setting, and Epic engine built-ins stay excluded.
 
@@ -166,7 +166,7 @@ Different AI coding assistants use different conventions for project-instruction
 
 Practical prompt to feed your assistant once Monolith is installed and running:
 
-> *"I've installed the Monolith Unreal plugin. It exposes ~2,037 actions across 77 namespaces (`blueprint`, `material`, `animation`, `niagara`, `mesh`, `ui`, `gas`, `ai`, `audio`, `console`, `chaos_fracture`, etc.) over an in-process MCP HTTP listener at `http://localhost:9316/mcp`. What's the best-practice format for a project-instructions file for [your assistant — e.g. `CLAUDE.md`, `AGENTS.md`, `.cursorrules`]? It should help with action discovery via `monolith_discover()` and `monolith_guide()`, asset-path conventions like `/Game/Path/Asset`, and verifying UE 5.7 APIs via `source_query` before writing code."*
+> *"I've installed the Monolith Unreal plugin. It exposes ~2,047 actions across 77 namespaces (`blueprint`, `material`, `animation`, `niagara`, `mesh`, `ui`, `gas`, `ai`, `audio`, `console`, `chaos_fracture`, etc.) over an in-process MCP HTTP listener at `http://localhost:9316/mcp`. What's the best-practice format for a project-instructions file for [your assistant — e.g. `CLAUDE.md`, `AGENTS.md`, `.cursorrules`]? It should help with action discovery via `monolith_discover()` and `monolith_guide()`, asset-path conventions like `/Game/Path/Asset`, and verifying UE 5.7 APIs via `source_query` before writing code."*
 
 Whatever your AI generates, drop it at the appropriate path for your toolchain. The action counts and workflow notes from this README's earlier sections are usable input.
 
@@ -235,7 +235,7 @@ Monolith.uplugin
 - **`monolith_proxy-<source-hash>.exe`** — source-addressed immutable MCP stdio↔HTTP proxy selected by `monolith_proxy.current.json`; the manifest verifies the full artifact SHA-256. Keeps AI sessions alive across editor restarts without colliding with a locked older proxy image.
 - **`monolith_query-<source-hash>.exe` + `monolith_catalog-<semantic-hash>.json`** — immutable offline Query generation selected together by `monolith_query.current.json`. Serves the engine source index, project asset index, and Reflection Intelligence surface (`decision` / `risk` / `cppreflect` / `network`) without launching UE. The fixed `monolith_query.exe` remains a direct-CLI compatibility copy; release and proxy routing use the manifest-selected pair.
 
-**~2,037 in-tree actions across 77 namespaces** (v0.20.3 public release; `monolith_discover()` / `monolith_status()` are the authoritative live catalog; the per-namespace breakdown is runtime-discovered, not hand-maintained here). 45 town-gen experimental actions are disabled by default (`bEnableProceduralTownGen=false`); enabling them raises the count. This figure EXCLUDES sibling-plugin actions — sibling/private plugins ship through their own repos or channels and are not in the public release zip. Live editors with sibling plugins loaded report higher counts.
+**~2,047 in-tree actions across 77 namespaces** (v0.20.3 public release; `monolith_discover()` / `monolith_status()` are the authoritative live catalog; the per-namespace breakdown is runtime-discovered, not hand-maintained here). 45 town-gen experimental actions are disabled by default (`bEnableProceduralTownGen=false`); enabling them raises the count. This figure EXCLUDES sibling-plugin actions — sibling/private plugins ship through their own repos or channels and are not in the public release zip. Live editors with sibling plugins loaded report higher counts.
 
 ### Tool Reference
 
