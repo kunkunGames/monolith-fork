@@ -1388,7 +1388,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::ConnectSoundCueNodes(const 
 
 	// Check max children
 	int32 MaxChildren = ToNode->GetMaxChildNodes();
-	if (MaxChildren > 0 && ChildIndex >= MaxChildren)
+	if (MaxChildren >= 0 && ChildIndex >= MaxChildren)
 	{
 		return FMonolithActionResult::Error(FString::Printf(
 			TEXT("Child index %d exceeds max children (%d) for %s"),
@@ -1838,7 +1838,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::BuildSoundCueFromSpec(const
 			}
 
 			int32 MaxChildren = (*ToPtr)->GetMaxChildNodes();
-			if (ChildIndex >= MaxChildren)
+			if (MaxChildren >= 0 && ChildIndex >= MaxChildren)
 			{
 				return FMonolithActionResult::Error(FString::Printf(
 					TEXT("Child index %d exceeds max children (%d) for node %s (%s)"),
