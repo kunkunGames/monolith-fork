@@ -51,48 +51,6 @@ public class MonolithLogicDriver : ModuleRules
 		return false;
 	}
 
-	private static bool HasPluginDescriptor(string PluginDir, params string[] DescriptorNames)
-	{
-		if (!Directory.Exists(PluginDir))
-		{
-			return false;
-		}
-
-		foreach (string DescriptorName in DescriptorNames)
-		{
-			if (File.Exists(Path.Combine(PluginDir, DescriptorName + ".uplugin")))
-			{
-				return true;
-			}
-		}
-
-		return false;
-	}
-
-	private static bool HasPluginDir(string BaseDir, string DirName, params string[] DescriptorNames)
-	{
-		if (!Directory.Exists(BaseDir))
-		{
-			return false;
-		}
-
-		if (HasPluginDescriptor(Path.Combine(BaseDir, DirName), DescriptorNames))
-		{
-			return true;
-		}
-
-		string[] Dirs = Directory.Exists(BaseDir) ? Directory.GetDirectories(BaseDir, DirName + "_*", SearchOption.TopDirectoryOnly) : new string[0];
-		foreach (string Dir in Dirs)
-		{
-			if (HasPluginDescriptor(Dir, DescriptorNames))
-			{
-				return true;
-			}
-		}
-
-		return false;
-	}
-
 	public MonolithLogicDriver(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
@@ -103,31 +61,7 @@ public class MonolithLogicDriver : ModuleRules
 
 		if (!bReleaseBuild && IsPluginEnabled(Target, "SMSystem"))
 		{
-			// 1. Check project Plugins/ folder
-			if (Target.ProjectFile != null)
-			{
-				string ProjectPluginsDir = Path.Combine(
-					Target.ProjectFile.Directory.FullName, "Plugins");
-				bHasLogicDriver = HasPluginDir(ProjectPluginsDir, "SMSystem", "SMSystem")
-					|| HasPluginDir(ProjectPluginsDir, "LogicDriver", "LogicDriver", "SMSystem");
-			}
-
-			// 2. Check Engine Plugins/Marketplace/ folder (Fab install)
-			if (!bHasLogicDriver)
-			{
-				string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
-				string MarketplaceDir = Path.Combine(EngineDir, "Plugins", "Marketplace");
-				bHasLogicDriver = HasPluginDir(MarketplaceDir, "SMSystem", "SMSystem")
-					|| HasPluginDir(MarketplaceDir, "LogicDriver", "LogicDriver", "SMSystem");
-
-				// 3. Check Engine Plugins/ root
-				if (!bHasLogicDriver)
-				{
-					string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
-					bHasLogicDriver = HasPluginDir(EnginePluginsDir, "SMSystem", "SMSystem")
-						|| HasPluginDir(EnginePluginsDir, "LogicDriver", "LogicDriver", "SMSystem");
-				}
-			}
+			bHasLogicDriver = true;
 		}
 
 		if (bHasLogicDriver)
