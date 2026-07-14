@@ -9435,16 +9435,24 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureDataInterface(cons
 				TArray<TSharedPtr<FJsonValue>> JsonArr = Pair.Value->AsArray();
 				bool bQuoteElements = CastField<FNameProperty>(ArrayProp->Inner)
 					|| CastField<FStrProperty>(ArrayProp->Inner);
-				ValStr = TEXT("(");
+				TStringBuilder<256> Builder;
+				Builder.Append(TEXT("("));
 				for (int32 ArrIdx = 0; ArrIdx < JsonArr.Num(); ++ArrIdx)
 				{
-					if (ArrIdx > 0) ValStr += TEXT(",");
+					if (ArrIdx > 0) Builder.Append(TEXT(","));
 					if (bQuoteElements)
-						ValStr += TEXT("\"") + JsonArr[ArrIdx]->AsString() + TEXT("\"");
+					{
+						Builder.Append(TEXT("\""));
+						Builder.Append(JsonArr[ArrIdx]->AsString());
+						Builder.Append(TEXT("\""));
+					}
 					else
-						ValStr += JsonArr[ArrIdx]->AsString();
+					{
+						Builder.Append(JsonArr[ArrIdx]->AsString());
+					}
 				}
-				ValStr += TEXT(")");
+				Builder.Append(TEXT(")"));
+				ValStr = Builder.ToString();
 			}
 			else { ValStr = Pair.Value->AsString(); }
 		}
@@ -9453,15 +9461,19 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureDataInterface(cons
 			if (Pair.Value->Type == EJson::Object)
 			{
 				TSharedPtr<FJsonObject> Obj = Pair.Value->AsObject();
-				ValStr = TEXT("(");
+				TStringBuilder<256> Builder;
+				Builder.Append(TEXT("("));
 				bool bFirst = true;
 				for (const auto& KV : FMonolithJsonUtils::GetFields(Obj))
 				{
-					if (!bFirst) ValStr += TEXT(",");
+					if (!bFirst) Builder.Append(TEXT(","));
 					bFirst = false;
-					ValStr += FMonolithJsonUtils::FieldKeyToString(KV.Key) + TEXT("=") + KV.Value->AsString();
+					Builder.Append(FMonolithJsonUtils::FieldKeyToString(KV.Key));
+					Builder.Append(TEXT("="));
+					Builder.Append(KV.Value->AsString());
 				}
-				ValStr += TEXT(")");
+				Builder.Append(TEXT(")"));
+				ValStr = Builder.ToString();
 			}
 			else { ValStr = Pair.Value->AsString(); }
 		}
