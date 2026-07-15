@@ -1069,12 +1069,13 @@ Environment:
   LOCALAPPDATA / XDG_CACHE_HOME        Used for script-proxy tool cache fallback paths.
 
 Runtime support notes:
-  MONOLITH_SPLIT_EDITOR_QUERY, MONOLITH_EDITOR_ACTION_ALLOWLIST, and
-  MONOLITH_EDITOR_ACTION_DENYLIST are native C++ proxy controls.
+  MONOLITH_SPLIT_EDITOR_QUERY, MONOLITH_EDITOR_ACTION_ALLOWLIST,
+  MONOLITH_EDITOR_ACTION_DENYLIST, MONOLITH_OFFLINE_FALLBACK,
+  MONOLITH_QUERY_EXE, and MONOLITH_EXPECTED_PROJECT_ROOT are native C++ proxy controls.
   MONOLITH_CALL_LOG and MONOLITH_PROJECT_ROOT control the native C++ proxy call log.
 
 MCP config example:
-  {"mcpServers":{"monolith":{"command":"<project-root>/Plugins/Monolith/Scripts/monolith_proxy.sh"}}} (or .bat on Windows)
+  {"mcpServers":{"monolith":{"command":"<project-root>/Plugins/Monolith/Scripts/monolith_proxy.sh", "args": []}}} (or .bat on Windows)
 
 Offline fallback:
   Use Binaries/monolith_query (or .exe on Windows) for read-only source/project/bridge/console queries when the editor or MCP server is unavailable.
