@@ -1061,6 +1061,7 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		TEXT("if exist \"%s\\Docs\\testing\" xcopy /s /e /i /q /h \"%s\\Docs\\testing\" \"%s\\Docs\\testing\\\"\r\n")
 		TEXT("if exist \"%s\\TrainingMemory\" xcopy /s /e /i /q /h \"%s\\TrainingMemory\" \"%s\\TrainingMemory\\\"\r\n")
 		TEXT("if exist \"%s\\Logs\" xcopy /s /e /i /q /h \"%s\\Logs\" \"%s\\Logs\\\"\r\n")
+		TEXT("if exist \"%s\\Skills\\_catalog_dumps\" xcopy /s /e /i /q /h \"%s\\Skills\\_catalog_dumps\" \"%s\\Skills\\_catalog_dumps\\\"\r\n")
 		TEXT("rem Preserve Saved/ (contains EngineSource.db, ProjectIndex.db, previews, etc.)\r\n")
 		TEXT("if exist \"%s\\Saved\" (\r\n")
 		TEXT("    echo  Preserving Saved directory...\r\n")
@@ -1093,6 +1094,7 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		// Touch step
 		*WinPluginDir,
 		// Preserve .git from backup
+		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
@@ -1166,6 +1168,7 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		TEXT("[ -d \"%s/Docs/testing\" ] && cp -r \"%s/Docs/testing\" \"%s/Docs/testing\"\n")
 		TEXT("[ -d \"%s/TrainingMemory\" ] && cp -r \"%s/TrainingMemory\" \"%s/TrainingMemory\"\n")
 		TEXT("[ -d \"%s/Logs\" ] && cp -r \"%s/Logs\" \"%s/Logs\"\n")
+		TEXT("[ -d \"%s/Skills/_catalog_dumps\" ] && cp -r \"%s/Skills/_catalog_dumps\" \"%s/Skills/_catalog_dumps\"\n")
 		TEXT("# Preserve Saved/ (contains EngineSource.db, ProjectIndex.db, previews, etc.)\n")
 		TEXT("[ -d \"%s/Saved\" ] && cp -r \"%s/Saved\" \"%s/Saved\"\n")
 		TEXT("rm -rf \"%s\" \"%s\"\n")
@@ -1177,6 +1180,7 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		// Touch step
 		*PluginDir,
 		// Preserve .git from backup
+		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
