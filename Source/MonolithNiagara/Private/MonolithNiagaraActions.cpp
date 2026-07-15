@@ -14523,11 +14523,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 FMonolithActionResult FMonolithNiagaraActions::HandleSaveEmitterAsTemplate(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId) || EmitterHandleId.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing or invalid field: emitter"));
 
-	if (EmitterHandleId.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: emitter"));
-	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: save_path"));
+	FString SavePath;
+	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing or invalid field: save_path"));
 	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
 		return FMonolithActionResult::Error(ValidationError);
 
