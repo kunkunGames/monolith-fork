@@ -455,6 +455,7 @@ namespace
             return;
         }
 
+        OutRows.Reserve(DelegateBinding->WidgetAnimationDelegateBindings.Num());
         for (const FBlueprintWidgetAnimationDelegateBinding& Row : DelegateBinding->WidgetAnimationDelegateBindings)
         {
             if (!AnimationName.IsEmpty() && Row.AnimationToBind.ToString() != AnimationName)
@@ -635,6 +636,7 @@ namespace
         Obj->SetNumberField(TEXT("animation_binding_count"), Animation->AnimationBindings.Num());
 
         TArray<TSharedPtr<FJsonValue>> AnimationBindingRows;
+        AnimationBindingRows.Reserve(Animation->AnimationBindings.Num());
         for (const FWidgetAnimationBinding& Binding : Animation->AnimationBindings)
         {
             TSharedPtr<FJsonObject> BindingObj = MakeShared<FJsonObject>();
@@ -675,6 +677,8 @@ namespace
         int32 TrackIndex = 0;
         int32 KeyCount = 0;
         const UMovieScene* ConstMovieScene = MovieScene;
+        BindingRows.Reserve(ConstMovieScene->GetBindings().Num());
+        TrackRows.Reserve(ConstMovieScene->GetBindings().Num() * 2 + MovieScene->GetTracks().Num());
         for (const FMovieSceneBinding& Binding : ConstMovieScene->GetBindings())
         {
             TSharedPtr<FJsonObject> BindingObj = MakeBindingIdentity(Animation, MovieScene, Binding.GetObjectGuid());
@@ -775,6 +779,7 @@ namespace
     TArray<TSharedPtr<FJsonValue>> MakeAnimationDeltaExternalAliases()
     {
         TArray<TSharedPtr<FJsonValue>> Aliases;
+        Aliases.Reserve(4);
         Aliases.Add(MakeShared<FJsonValueString>(TEXT("animation_append_widget_tracks")));
         Aliases.Add(MakeShared<FJsonValueString>(TEXT("animation_append_time_slice")));
         Aliases.Add(MakeShared<FJsonValueString>(TEXT("animation_delete_widget_keys")));
@@ -1831,6 +1836,7 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleGetAnimationOverview(co
     Result->SetBoolField(TEXT("include_all"), bIncludeAll);
     Result->SetStringField(TEXT("owner_action"), TEXT("ui.get_animation_overview"));
     TArray<TSharedPtr<FJsonValue>> ExternalAliases;
+    ExternalAliases.Reserve(3);
     ExternalAliases.Add(MakeShared<FJsonValueString>(TEXT("animation_overview")));
     ExternalAliases.Add(MakeShared<FJsonValueString>(TEXT("animation_widget_properties")));
     ExternalAliases.Add(MakeShared<FJsonValueString>(TEXT("animation_time_properties")));

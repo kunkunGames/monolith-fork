@@ -354,6 +354,7 @@ namespace MonolithSlate::SlateInspectorInternal
 		const TArray<TSharedRef<SWindow>> Windows = GetVisibleWindows();
 
 		TArray<TSharedPtr<FJsonValue>> RegisteredActions;
+		RegisteredActions.Reserve(6);
 		RegisteredActions.Add(MakeShared<FJsonValueString>(TEXT("get_inspector_status")));
 		if (bFeatureEnabled)
 		{
@@ -367,6 +368,7 @@ namespace MonolithSlate::SlateInspectorInternal
 		TArray<TSharedPtr<FJsonValue>> GatedActions;
 		if (!bFeatureEnabled)
 		{
+			GatedActions.Reserve(5);
 			GatedActions.Add(MakeShared<FJsonValueString>(TEXT("list_windows")));
 			GatedActions.Add(MakeShared<FJsonValueString>(TEXT("snapshot_widgets")));
 			GatedActions.Add(MakeShared<FJsonValueString>(TEXT("describe_widget")));
@@ -375,6 +377,7 @@ namespace MonolithSlate::SlateInspectorInternal
 		}
 
 		TArray<TSharedPtr<FJsonValue>> SupportedOperations;
+		SupportedOperations.Reserve(6);
 		SupportedOperations.Add(MakeShared<FJsonValueString>(TEXT("status")));
 		SupportedOperations.Add(MakeShared<FJsonValueString>(TEXT("window_list")));
 		SupportedOperations.Add(MakeShared<FJsonValueString>(TEXT("snapshot")));
