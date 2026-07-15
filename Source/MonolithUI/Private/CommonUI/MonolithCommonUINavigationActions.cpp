@@ -775,6 +775,10 @@ namespace MonolithCommonUINavigation
 		TArray<TSharedPtr<FJsonValue>> DeadEnds;
 		TArray<TSharedPtr<FJsonValue>> DanglingExplicit;
 
+		Unreachable.Reserve(Catalog.Num());
+		DeadEnds.Reserve(Catalog.Num());
+		DanglingExplicit.Reserve(Catalog.Num());
+
 		for (const TPair<FName, FFocusAuditWidget>& Kv : Catalog)
 		{
 			const FFocusAuditWidget& W = Kv.Value;
