@@ -687,4 +687,113 @@ bool FMonolithLogicDriverGetNodeDetailsFunctionalTest::RunTest(const FString& Pa
 
 	return true;
 }
+
+// ------------------------------------------------------------------------------------------------
+// Monolith.LogicDriverKeeper.GetSMStatisticsFunctional
+// Validates the functional 'happy path' for getting state machine statistics.
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLogicDriverGetSMStatisticsFunctionalTest, "Monolith.LogicDriverKeeper.GetSMStatisticsFunctional", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithLogicDriverGetSMStatisticsFunctionalTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("get_sm_statistics")))
+	{
+		FMonolithLogicDriverAssetActions::RegisterActions(Registry);
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	// 1. Create a State Machine Blueprint
+	FString AssetPath = TEXT("/Game/Tests/SM_StatisticsTest");
+	{
+		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+		CreateParams->SetStringField(TEXT("save_path"), AssetPath);
+		FMonolithActionResult CreateResult = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("create_state_machine"), CreateParams);
+
+		if (!CreateResult.bSuccess)
+		{
+			TestTrue(TEXT("Create Succeeded"), false);
+			return true;
+		}
+	}
+
+	// 2. Add Source State
+	FString SourceGuid;
+	{
+		TSharedPtr<FJsonObject> AddStateParams = MakeShared<FJsonObject>();
+		AddStateParams->SetStringField(TEXT("asset_path"), AssetPath);
+		AddStateParams->SetStringField(TEXT("name"), TEXT("SourceState"));
+
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_state"), AddStateParams);
+		TestTrue(TEXT("add_state should succeed"), Result.bSuccess);
+		if (Result.bSuccess && Result.Payload.IsValid())
+		{
+			Result.Payload->TryGetStringField(TEXT("node_guid"), SourceGuid);
+		}
+	}
+
+	// 3. Add Target Conduit
+	FString TargetGuid;
+	{
+		TSharedPtr<FJsonObject> AddConduitParams = MakeShared<FJsonObject>();
+		AddConduitParams->SetStringField(TEXT("asset_path"), AssetPath);
+		AddConduitParams->SetStringField(TEXT("name"), TEXT("TargetConduit"));
+
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_conduit"), AddConduitParams);
+		TestTrue(TEXT("add_conduit should succeed"), Result.bSuccess);
+		if (Result.bSuccess && Result.Payload.IsValid())
+		{
+			Result.Payload->TryGetStringField(TEXT("node_guid"), TargetGuid);
+		}
+	}
+
+	// 4. Add Transition
+	if (!SourceGuid.IsEmpty() && !TargetGuid.IsEmpty())
+	{
+		TSharedPtr<FJsonObject> AddTransParams = MakeShared<FJsonObject>();
+		AddTransParams->SetStringField(TEXT("asset_path"), AssetPath);
+		AddTransParams->SetStringField(TEXT("source_guid"), SourceGuid);
+		AddTransParams->SetStringField(TEXT("target_guid"), TargetGuid);
+
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_transition"), AddTransParams);
+		TestTrue(TEXT("add_transition should succeed"), Result.bSuccess);
+	}
+
+	// 5. Get SM Statistics
+	{
+		TSharedPtr<FJsonObject> StatsParams = MakeShared<FJsonObject>();
+		StatsParams->SetStringField(TEXT("asset_path"), AssetPath);
+
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("get_sm_statistics"), StatsParams);
+		TestTrue(TEXT("get_sm_statistics should succeed"), Result.bSuccess);
+
+		if (Result.bSuccess && Result.Payload.IsValid())
+		{
+			double StateCount = 0;
+			Result.Payload->TryGetNumberField(TEXT("states"), StateCount);
+			TestTrue(TEXT("State count should be at least 1"), StateCount >= 1.0);
+
+			double ConduitCount = 0;
+			Result.Payload->TryGetNumberField(TEXT("conduits"), ConduitCount);
+			TestTrue(TEXT("Conduit count should be at least 1"), ConduitCount >= 1.0);
+
+			double TransitionCount = 0;
+			Result.Payload->TryGetNumberField(TEXT("transitions"), TransitionCount);
+			TestTrue(TEXT("Transition count should be at least 1"), TransitionCount >= 1.0);
+
+			double TotalNodes = 0;
+			Result.Payload->TryGetNumberField(TEXT("total_nodes"), TotalNodes);
+			TestTrue(TEXT("Total nodes count should be at least 3"), TotalNodes >= 3.0);
+		}
+	}
+
+	// 6. Cleanup
+	if (Registry.HasAction(TEXT("logicdriver"), TEXT("delete_state_machine")))
+	{
+		TSharedPtr<FJsonObject> DeleteParams = MakeShared<FJsonObject>();
+		DeleteParams->SetStringField(TEXT("asset_path"), AssetPath);
+		Registry.ExecuteAction(TEXT("logicdriver"), TEXT("delete_state_machine"), DeleteParams);
+	}
+
+	return true;
+}
 #endif // WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
