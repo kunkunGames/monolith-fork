@@ -1266,6 +1266,7 @@ bool FMonolithCoreTypedParamsTest::RunTest(const FString& Parameters)
 		TEXT("monolith"),
 		RegisterCoreActions,
 		{
+			{ TEXT("guide"), true, TEXT("monolith.guide registers") },
 			{ TEXT("find"), true, TEXT("monolith.find registers") },
 			{ TEXT("discover"), true, TEXT("monolith.discover registers") },
 			{ TEXT("status"), true, TEXT("monolith.status registers") },
@@ -1306,6 +1307,15 @@ bool FMonolithCoreTypedParamsTest::RunTest(const FString& Parameters)
 		TEXT("monolith"),
 		RegisterCoreActions,
 		{
+			{
+				TEXT("guide"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetNumberField(TEXT("section"), 42.0);
+				},
+				TEXT("section"),
+				TEXT("monolith.guide rejects non-string section")
+			},
 			{
 				TEXT("find"),
 				[](TSharedRef<FJsonObject> Params)

@@ -50,6 +50,7 @@ void FMonolithGuideTool::RegisterAll()
 		TEXT("Editorial cross-namespace workflow guide for AI agents: onboarding script, cross-namespace recipes, X-vs-Y decision matrices, error-to-recovery maps, namespace->Skill pointers, and Monolith-specific gotchas. Section-keyed (pass section=\"recipes\") to bound context cost. Hand-authored markdown + a live registry overlay (per-namespace action counts, plugin version)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithGuideTool::HandleGuide),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Optional(TEXT("section"), TEXT("string"),
 				TEXT("Optional: return a single H2 section to bound context cost. Omit for the full index + all sections."))
 			.Enum(TEXT("section"), { TEXT("onboarding"), TEXT("recipes"), TEXT("decisions"), TEXT("errors"), TEXT("skills_map"), TEXT("gotchas") })
@@ -219,12 +220,7 @@ FMonolithActionResult FMonolithGuideTool::HandleGuide(const TSharedPtr<FJsonObje
 	FString RequestedSection;
 	if (Params.IsValid() && Params->HasField(TEXT("section")))
 	{
-		if (!Params->TryGetStringField(TEXT("section"), RequestedSection))
-		{
-			return FMonolithActionResult::Error(
-				TEXT("Parameter 'section' must be a string."),
-				FMonolithJsonUtils::ErrInvalidParams);
-		}
+		Params->TryGetStringField(TEXT("section"), RequestedSection);
 		RequestedSection = RequestedSection.TrimStartAndEnd().ToLower();
 	}
 
