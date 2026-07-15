@@ -145,7 +145,10 @@ namespace MonolithComboGraphBulkFillInternal
 		// Wrap as walker root — walker writes the array into the asset's
 		// "Containers" or "EffectContainers" UPROPERTY (case-insensitive forwarding).
 		FString ContainersField = TEXT("EffectContainers");
-		Spec.Tree->TryGetStringField(TEXT("containers_field"), ContainersField);
+		if (Spec.Tree->HasField(TEXT("containers_field")) && !Spec.Tree->TryGetStringField(TEXT("containers_field"), ContainersField))
+		{
+			return MakeResolveFailureReport(TEXT("combograph adapter: Invalid type for param 'containers_field', expected string"));
+		}
 		TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 		Root->SetField(ContainersField, ContainersVal);
 
@@ -212,7 +215,10 @@ namespace MonolithComboGraphBulkFillInternal
 		}
 
 		FString EdgesField = TEXT("Edges");
-		Spec.Tree->TryGetStringField(TEXT("edges_field"), EdgesField);
+		if (Spec.Tree->HasField(TEXT("edges_field")) && !Spec.Tree->TryGetStringField(TEXT("edges_field"), EdgesField))
+		{
+			return MakeResolveFailureReport(TEXT("combograph adapter: Invalid type for param 'edges_field', expected string"));
+		}
 		TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 		Root->SetField(EdgesField, EdgesVal);
 
@@ -300,7 +306,11 @@ FDryRunReport FMonolithComboGraphBulkFillAdapter::ComboGraphBulkFill(const FBulk
 	}
 
 	FString FillKind;
-	Spec.Tree->TryGetStringField(TEXT("fill_kind"), FillKind);
+	if (Spec.Tree->HasField(TEXT("fill_kind")) && !Spec.Tree->TryGetStringField(TEXT("fill_kind"), FillKind))
+	{
+		return MakeResolveFailureReport(TEXT(
+			"combograph adapter: Invalid type for param 'fill_kind', expected string"));
+	}
 	if (FillKind.IsEmpty())
 	{
 		return MakeResolveFailureReport(TEXT(
