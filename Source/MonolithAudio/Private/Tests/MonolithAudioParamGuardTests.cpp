@@ -457,6 +457,19 @@ bool FMonolithParamGuardAudioGetSoundPerceptionBindingRejectsMalformedParamsTest
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioGetSoundCueDurationRejectsMalformedParamsTest, "Monolith.ParamGuard.Audio.GetSoundCueDurationRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardAudioGetSoundCueDurationRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetNumberField(TEXT("asset_path"), 123); // Should be string
+
+	FMonolithActionResult Result = ExecuteAudioAction(TEXT("get_sound_cue_duration"), Params);
+	TestTrue(TEXT("GetSoundCueDuration with malformed asset_path should return Error"), !Result.bSuccess);
+	TestTrue(TEXT("GetSoundCueDuration reports malformed asset_path"), Result.ErrorMessage.Contains(TEXT("asset_path must be a string")));
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioListPerceptionBoundSoundsRejectsMalformedParamsTest, "Monolith.ParamGuard.Audio.ListPerceptionBoundSoundsRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithParamGuardAudioListPerceptionBoundSoundsRejectsMalformedParamsTest::RunTest(const FString& Parameters)
 {
