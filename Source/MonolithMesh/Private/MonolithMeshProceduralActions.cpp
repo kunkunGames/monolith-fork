@@ -2771,9 +2771,11 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateMaze(const TSharedPt
 
 	// Build maze layout JSON for AI pathfinding
 	TArray<TSharedPtr<FJsonValue>> LayoutValues;
+	LayoutValues.Reserve(GridH);
 	for (int32 Y = 0; Y < GridH; ++Y)
 	{
 		TArray<TSharedPtr<FJsonValue>> RowValues;
+		RowValues.Reserve(GridW);
 		for (int32 X = 0; X < GridW; ++X)
 		{
 			auto Cell = MakeShared<FJsonObject>();
