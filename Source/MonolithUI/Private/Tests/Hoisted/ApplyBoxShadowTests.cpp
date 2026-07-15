@@ -625,6 +625,21 @@ bool FMonolithUIApplyBoxShadowInvalidParamsTest::RunTest(const FString& Paramete
         P->SetStringField(TEXT("asset_path"), TEXT("/Game/Foo/WBP_Bar"));
         P->SetStringField(TEXT("widget_name"), TEXT("Target"));
         P->SetStringField(TEXT("shadow_material_path"), TEXT("/Some/Mat"));
+        TSharedPtr<FJsonObject> Shadow = MakeShared<FJsonObject>();
+        Shadow->SetStringField(TEXT("color"), TEXT("#000"));
+        Shadow->SetStringField(TEXT("blur"), TEXT("4.0")); // Wrong type
+        P->SetObjectField(TEXT("shadow"), Shadow);
+        const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"), TEXT("apply_box_shadow"), P);
+        TestFalse(TEXT("shadow wrong type blur -> failure"), R.bSuccess);
+        TestEqual(TEXT("shadow wrong type blur -> -32602"), R.ErrorCode, -32602);
+    }
+
+    {
+        TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+        P->SetStringField(TEXT("asset_path"), TEXT("/Game/Foo/WBP_Bar"));
+        P->SetStringField(TEXT("widget_name"), TEXT("Target"));
+        P->SetStringField(TEXT("shadow_material_path"), TEXT("/Some/Mat"));
         TArray<TSharedPtr<FJsonValue>> Empty;
         P->SetArrayField(TEXT("shadows"), Empty);
         const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(

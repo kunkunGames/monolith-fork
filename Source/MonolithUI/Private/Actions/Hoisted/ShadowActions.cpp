@@ -138,12 +138,35 @@ namespace MonolithUI::ShadowInternal
             return false;
         }
 
-        double D = 0.0;
-        if (Obj->TryGetNumberField(TEXT("x"), D))      { OutSpec.X      = (float)D; }
-        if (Obj->TryGetNumberField(TEXT("y"), D))      { OutSpec.Y      = (float)D; }
-        if (Obj->TryGetNumberField(TEXT("blur"), D))   { OutSpec.Blur   = FMath::Max(0.0f, (float)D); }
-        if (Obj->TryGetNumberField(TEXT("spread"), D)) { OutSpec.Spread = (float)D; }
-        Obj->TryGetBoolField(TEXT("inset"), OutSpec.bInset);
+        auto TryParseOptionalNumber = [&](const TCHAR* FieldName, float& OutVal, float MinVal = -MAX_flt) -> bool
+        {
+            if (Obj->HasField(FieldName))
+            {
+                double Val = 0.0;
+                if (!Obj->TryGetNumberField(FieldName, Val))
+                {
+                    OutError = FString::Printf(TEXT("%s.%s must be a number"), *Context, FieldName);
+                    return false;
+                }
+                OutVal = FMath::Max(MinVal, (float)Val);
+            }
+            return true;
+        };
+
+        if (!TryParseOptionalNumber(TEXT("x"), OutSpec.X)) return false;
+        if (!TryParseOptionalNumber(TEXT("y"), OutSpec.Y)) return false;
+        if (!TryParseOptionalNumber(TEXT("blur"), OutSpec.Blur, 0.0f)) return false;
+        if (!TryParseOptionalNumber(TEXT("spread"), OutSpec.Spread)) return false;
+
+        if (Obj->HasField(TEXT("inset")))
+        {
+            if (!Obj->TryGetBoolField(TEXT("inset"), OutSpec.bInset))
+            {
+                OutError = FString::Printf(TEXT("%s.inset must be a boolean"), *Context);
+                return false;
+            }
+        }
+
         return true;
     }
 } // namespace MonolithUI::ShadowInternal
