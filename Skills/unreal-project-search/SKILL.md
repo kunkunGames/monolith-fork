@@ -65,6 +65,12 @@ Search results expose provenance fields so agents can judge relevance without fe
 | `match_object_path` | Node/object path or asset path associated with the hit |
 | `match_value` | Matched value payload when available |
 
+### Actions
+
+| Action | Purpose |
+|--------|---------|
+| `audit_orphan_assets` | List /Game/.../*.uasset assets with ZERO IAssetRegistry referencers AND zero entries in cpp_asset_edges. |
+
 ## Common Workflows
 
 ### 1. Find-and-trace: from a name to its blast radius
