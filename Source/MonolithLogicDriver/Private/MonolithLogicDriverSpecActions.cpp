@@ -189,7 +189,7 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 			const TSharedPtr<FJsonObject>* StateObjPtr = nullptr;
 			if (!StateVal.IsValid() || !StateVal->TryGetObject(StateObjPtr) || !StateObjPtr || !(*StateObjPtr).IsValid())
 			{
-				continue;
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'states' array elements must be objects"));
 			}
 			const TSharedPtr<FJsonObject>& StateObj = *StateObjPtr;
 			bool bFlag = false;
@@ -337,8 +337,12 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 		const TArray<TSharedPtr<FJsonValue>>& States = *StatesPtr2;
 		for (const TSharedPtr<FJsonValue>& StateVal : States)
 		{
-			const TSharedPtr<FJsonObject>& StateObj = StateVal->AsObject();
-			if (!StateObj.IsValid()) continue;
+			const TSharedPtr<FJsonObject>* StateObjPtr = nullptr;
+			if (!StateVal.IsValid() || !StateVal->TryGetObject(StateObjPtr) || !StateObjPtr || !(*StateObjPtr).IsValid())
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'states' array elements must be objects"));
+			}
+			const TSharedPtr<FJsonObject>& StateObj = *StateObjPtr;
 
 			FString Name;
 			StateObj->TryGetStringField(TEXT("name"), Name);
@@ -393,8 +397,12 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 		const TArray<TSharedPtr<FJsonValue>>& Conduits = *ConduitsPtr;
 		for (const TSharedPtr<FJsonValue>& CV : Conduits)
 		{
-			const TSharedPtr<FJsonObject>& CO = CV->AsObject();
-			if (!CO.IsValid()) continue;
+			const TSharedPtr<FJsonObject>* COPtr = nullptr;
+			if (!CV.IsValid() || !CV->TryGetObject(COPtr) || !COPtr || !(*COPtr).IsValid())
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'conduits' array elements must be objects"));
+			}
+			const TSharedPtr<FJsonObject>& CO = *COPtr;
 			FString Name;
 			CO->TryGetStringField(TEXT("name"), Name);
 			if (Name.IsEmpty()) continue;
@@ -420,8 +428,12 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 		const TArray<TSharedPtr<FJsonValue>>& NestedSMs = *NestedSMsPtr;
 		for (const TSharedPtr<FJsonValue>& NV : NestedSMs)
 		{
-			const TSharedPtr<FJsonObject>& NO = NV->AsObject();
-			if (!NO.IsValid()) continue;
+			const TSharedPtr<FJsonObject>* NOPtr = nullptr;
+			if (!NV.IsValid() || !NV->TryGetObject(NOPtr) || !NOPtr || !(*NOPtr).IsValid())
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'nested_sms' array elements must be objects"));
+			}
+			const TSharedPtr<FJsonObject>& NO = *NOPtr;
 			FString Name;
 			NO->TryGetStringField(TEXT("name"), Name);
 			if (Name.IsEmpty()) continue;
@@ -471,8 +483,12 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 		const TArray<TSharedPtr<FJsonValue>>& Transitions = *TransitionsPtr;
 		for (const TSharedPtr<FJsonValue>& TV : Transitions)
 		{
-			const TSharedPtr<FJsonObject>& TO = TV->AsObject();
-			if (!TO.IsValid()) continue;
+			const TSharedPtr<FJsonObject>* TOPtr = nullptr;
+			if (!TV.IsValid() || !TV->TryGetObject(TOPtr) || !TOPtr || !(*TOPtr).IsValid())
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'transitions' array elements must be objects"));
+			}
+			const TSharedPtr<FJsonObject>& TO = *TOPtr;
 
 			FString From;
 			TO->TryGetStringField(TEXT("from"), From);

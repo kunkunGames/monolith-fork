@@ -274,7 +274,34 @@ bool FMonolithParamGuardLogicDriverBuildSMFromSpecRejectsMalformedParamsTest::Ru
 		return Params;
 	};
 
-		// Test 1: states is malformed
+	// Test 1: states array items are malformed (not objects)
+	{
+		TSharedPtr<FJsonObject> Params = CreateBaseParams();
+		TSharedPtr<FJsonObject> Spec = CreateBaseSpec();
+		TArray<TSharedPtr<FJsonValue>> StatesArray;
+		StatesArray.Add(MakeShared<FJsonValueString>(TEXT("not_an_object")));
+		Spec->SetArrayField(TEXT("states"), StatesArray);
+		Params->SetObjectField(TEXT("spec"), Spec);
+
+		FMonolithActionResult Result = ExecuteAction(Params);
+		TestTrue(TEXT("Malformed states array item should return error"), !Result.bSuccess);
+		TestTrue(TEXT("Error message should mention states array elements must be objects"), Result.ErrorMessage.Contains(TEXT("states")) && Result.ErrorMessage.Contains(TEXT("objects")));
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = CreateBaseParams();
+		TSharedPtr<FJsonObject> Spec = CreateBaseSpec();
+		TArray<TSharedPtr<FJsonValue>> NestedSMsArray;
+		NestedSMsArray.Add(MakeShared<FJsonValueNumber>(12345));
+		Spec->SetArrayField(TEXT("nested_sms"), NestedSMsArray);
+		Params->SetObjectField(TEXT("spec"), Spec);
+
+		FMonolithActionResult Result = ExecuteAction(Params);
+		TestTrue(TEXT("Malformed nested_sms array item should return error"), !Result.bSuccess);
+		TestTrue(TEXT("Error message should mention nested_sms array elements must be objects"), Result.ErrorMessage.Contains(TEXT("nested_sms")) && Result.ErrorMessage.Contains(TEXT("objects")));
+	}
+
+	// Test 2: states is malformed
 	{
 		TSharedPtr<FJsonObject> Params = CreateBaseParams();
 		TSharedPtr<FJsonObject> Spec = CreateBaseSpec();
