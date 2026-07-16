@@ -149,3 +149,4 @@ make_release*.log
 Monolith_FullUnity_*.log
 Monolith_OfflineCLIBuild_*.log
 Monolith_NativeGatewayBuild_*.log
+monolith_proxy_release_validate_*.exe
