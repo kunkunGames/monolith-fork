@@ -796,4 +796,83 @@ bool FMonolithLogicDriverGetSMStatisticsFunctionalTest::RunTest(const FString& P
 
 	return true;
 }
+
+// Monolith.LogicDriverKeeper.SetEndStateFunctional
+// Validates the functional 'happy path' for setting a node as the end state of a state machine graph.
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLogicDriverSetEndStateFunctionalTest, "Monolith.LogicDriverKeeper.SetEndStateFunctional", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithLogicDriverSetEndStateFunctionalTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("set_end_state")))
+	{
+		FMonolithLogicDriverAssetActions::RegisterActions(Registry);
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	// 1. Create a State Machine Blueprint
+	FString AssetPath = TEXT("/Game/Tests/SM_SetEndStateTest");
+	{
+		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+		CreateParams->SetStringField(TEXT("save_path"), AssetPath);
+		FMonolithActionResult CreateResult = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("create_state_machine"), CreateParams);
+
+		// In Jules VM or environments without Logic Driver Pro loaded, this might fail,
+		// but we still want the test coverage to be syntactically correct and run what it can.
+		// Note: The memory instruction says: "When writing EditorContext automation tests for Monolith...
+		// do NOT assert TestTrue on the failing condition. Doing so forces a test failure and breaks CI pipelines for environments without the plugin."
+		if (!CreateResult.bSuccess)
+		{
+			return true;
+		}
+	}
+
+	// 2. Add State to be an end state
+	FString NodeGuid;
+	{
+		TSharedPtr<FJsonObject> AddStateParams = MakeShared<FJsonObject>();
+		AddStateParams->SetStringField(TEXT("asset_path"), AssetPath);
+		AddStateParams->SetStringField(TEXT("name"), TEXT("EndState"));
+
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_state"), AddStateParams);
+		TestTrue(TEXT("add_state should succeed"), Result.bSuccess);
+		if (Result.bSuccess && Result.Payload.IsValid())
+		{
+			Result.Payload->TryGetStringField(TEXT("node_guid"), NodeGuid);
+		}
+	}
+
+	// 3. Set End State
+	if (!NodeGuid.IsEmpty())
+	{
+		TSharedPtr<FJsonObject> SetParams = MakeShared<FJsonObject>();
+		SetParams->SetStringField(TEXT("asset_path"), AssetPath);
+		SetParams->SetStringField(TEXT("node_guid"), NodeGuid);
+		SetParams->SetBoolField(TEXT("is_end_state"), true);
+
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("set_end_state"), SetParams);
+		TestTrue(TEXT("set_end_state should succeed"), Result.bSuccess);
+
+		if (Result.bSuccess && Result.Payload.IsValid())
+		{
+			FString ActionName;
+			Result.Payload->TryGetStringField(TEXT("action"), ActionName);
+			TestEqual(TEXT("Action should be set_end_state"), ActionName, TEXT("set_end_state"));
+
+			FString SetNodeGuid;
+			Result.Payload->TryGetStringField(TEXT("node_guid"), SetNodeGuid);
+			TestEqual(TEXT("Set node guid should match"), SetNodeGuid, NodeGuid);
+		}
+	}
+
+	// 4. Cleanup (if delete_state_machine action is available, use it to leave clean state)
+	if (Registry.HasAction(TEXT("logicdriver"), TEXT("delete_state_machine")))
+	{
+		TSharedPtr<FJsonObject> DeleteParams = MakeShared<FJsonObject>();
+		DeleteParams->SetStringField(TEXT("asset_path"), AssetPath);
+		Registry.ExecuteAction(TEXT("logicdriver"), TEXT("delete_state_machine"), DeleteParams);
+	}
+
+	return true;
+}
 #endif // WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
