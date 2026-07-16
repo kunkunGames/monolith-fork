@@ -511,6 +511,7 @@ namespace
             const TArrayView<const FFrameNumber> Times = Channel.GetTimes();
             const TArrayView<const FMovieSceneFloatValue> Values = Channel.GetValues();
             const int32 NumKeys = FMath::Min(Times.Num(), Values.Num());
+            OutRows.Reserve(OutRows.Num() + NumKeys);
             for (int32 KeyIndex = 0; KeyIndex < NumKeys; ++KeyIndex)
             {
                 TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
@@ -558,6 +559,7 @@ namespace
             const TArrayView<const FFrameNumber> Times = EventData.GetTimes();
             const TArrayView<const FMovieSceneEvent> Events = EventData.GetValues();
             const int32 NumKeys = FMath::Min(Times.Num(), Events.Num());
+            OutRows.Reserve(OutRows.Num() + NumKeys);
             for (int32 KeyIndex = 0; KeyIndex < NumKeys; ++KeyIndex)
             {
                 TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
