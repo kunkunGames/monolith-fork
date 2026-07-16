@@ -10,7 +10,7 @@
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore
 **Namespace:** `logicdriver` | **Tool:** `logicdriver_query(action, params)` | **Actions:** 66
-**Conditional:** Logic Driver Pro plugin features wrapped in `#if WITH_LOGICDRIVER`. When Logic Driver Pro is absent, the module compiles to an empty stub (0 actions registered). Uses UObject reflection only — no direct C++ API linkage against Logic Driver binaries. Build.cs detection at 3 locations (project plugins, engine marketplace, engine plugins).
+**Conditional:** Logic Driver Pro plugin features wrapped in `#if WITH_LOGICDRIVER`. When Logic Driver Pro is absent, the module compiles to an empty stub (0 actions registered). Uses UObject reflection only — no direct C++ API linkage against Logic Driver binaries. Build.cs detection checks the `.uproject` via `IsPluginEnabled`.
 **Settings toggle:** `bEnableLogicDriver` (default: True)
 
 MonolithLogicDriver provides MCP coverage of the Logic Driver Pro marketplace plugin. It covers state machine asset CRUD, graph read/write, node configuration, runtime/PIE control, JSON spec-based generation, scaffolding templates, discovery, component management, and text-based graph visualization.
@@ -71,7 +71,7 @@ MonolithLogicDriver provides MCP coverage of the Logic Driver Pro marketplace pl
 
 **Adapter-specific quirks.**
 
-- **`#if WITH_LOGICDRIVER` stub-adapter pattern.** The adapter ALWAYS registers under `FMonolithBulkFillRegistry` — body is conditionally compiled. When `WITH_LOGICDRIVER=0`, both fill_kinds return the clean error `"logicdriver adapter: LogicDriver not available — WITH_LOGICDRIVER=0 in this build."` and `describe_schema` returns an equivalent stub. This preserves discover-surface symmetry across configurations (matches the existing 3-location Build.cs detection pattern + release-build strip behaviour).
+- **`#if WITH_LOGICDRIVER` stub-adapter pattern.** The adapter ALWAYS registers under `FMonolithBulkFillRegistry` — body is conditionally compiled. When `WITH_LOGICDRIVER=0`, both fill_kinds return the clean error `"logicdriver adapter: LogicDriver not available — WITH_LOGICDRIVER=0 in this build."` and `describe_schema` returns an equivalent stub. This preserves discover-surface symmetry across configurations (matches the `.uproject` Build.cs detection pattern + release-build strip behaviour).
 - **v1 wildcard `*` fanout routes through CDO walker uniformly.** The wildcard handler in `StatePropertiesBulk` enumerates every state in the SM Blueprint and applies the wildcard property map to each via the same reflection walker that handles named states. This is the v1 fanout shape — `(v1.1)` adds per-instanced-state-node fanout where each state instance can be addressed individually rather than by name.
 - **`runtime_*` actions are PIE-only.** Schema descriptors flag the 7 runtime/PIE actions with `pie_blocked: true`. Bulk_fill v1 does NOT target runtime PIE state — only authoring-time SM Blueprint assets.
 - **`compare_state_machines` is value-blind.** The existing `compare_state_machines` action returns structural diff but not exposed-property-value diff. Dry-run reports for `StatePropertiesBulk` partially close this gap by surfacing per-key value diff between current and proposed — but a full-fidelity value-aware `compare_state_machines` is `(WISHLIST)`.
@@ -87,7 +87,7 @@ MonolithLogicDriver provides MCP coverage of the Logic Driver Pro marketplace pl
 
 ### Notes
 
-> **Precompiled plugin integration.** Logic Driver Pro is a marketplace plugin with precompiled binaries. MonolithLogicDriver uses UObject reflection (`FindPropertyByName`, `FProperty::GetValue_InContainer`) and factory classes discovered via reflection rather than linking against Logic Driver headers. The 3-location Build.cs detection finds SMSystem/SMSystemEditor modules whether installed as a project plugin, engine marketplace plugin, or engine plugin.
+> **Precompiled plugin integration.** Logic Driver Pro is a marketplace plugin with precompiled binaries. MonolithLogicDriver uses UObject reflection (`FindPropertyByName`, `FProperty::GetValue_InContainer`) and factory classes discovered via reflection rather than linking against Logic Driver headers. The Build.cs detection uses `IsPluginEnabled` to safely find SMSystem/SMSystemEditor modules.
 >
 > **Reflection-only architecture.** All property access goes through `FindPropertyByName` + `GetValue_InContainer`. State/transition classes are resolved via `FindObject<UClass>`. This makes the integration version-agnostic as long as property names and class hierarchies are stable.
 >
