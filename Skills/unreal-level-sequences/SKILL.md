@@ -11,6 +11,7 @@ Drives the **`level_sequence`** namespace via `level_sequence_query()` to inspec
 
 ```
 monolith_discover({ namespace: "level_sequence" })                              // all actions in this namespace
+monolith_discover({ namespace: "movie_render" })                                // Movie Render Queue actions
 monolith_discover({ namespace: "level_sequence", action: "list_bindings", mode: "schema" })  // exact params for one action
 ```
 
@@ -45,7 +46,7 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `list_event_bindings` | `asset_path*` | All event-track entries grouped by binding GUID. Each binding shows kind (now correctly `spawnable` / `replaceable` for UE 5.7 custom bindings), bound class, and an array of sections (`trigger` / `repeater`) with the Director function each fires (resolved name + kind + signature when matched) |
 | `find_director_function_callers` | `function_name*` (exact, case-sensitive) `asset_path_filter?` (glob `*`/`?`) | Cross-sequence reverse lookup. Returns every event-track section across the project that fires the named function, with LS path and binding context (binding GUID/name/kind/bound class, section kind, resolved bool) |
 
-The live `level_sequence` catalog also registers read-only replay (`get_replay_status`, `list_saved_replays`, `get_saved_replay`), anim-mixer (`get_anim_mixer_status`, `list_anim_mixer_tracks`), and a `ping` smoke test outside this skill's binding/Director inspection scope — `monolith_discover` lists them with schemas if needed.
+The live `level_sequence` catalog also registers read-only replay (`get_replay_status`, `list_saved_replays`, `get_saved_replay`), anim-mixer (`get_anim_mixer_status`, `list_anim_mixer_tracks`), and a `ping` smoke test outside this skill's binding/Director inspection scope — `monolith_discover` lists them with schemas if needed. The `movie_render` namespace also lives here for Movie Render Queue job and queue manipulation (e.g., `get_queue`, `load_queue`, `add_job`, `render_queue`).
 
 ## Common Workflows
 
@@ -91,6 +92,12 @@ blueprint_query({ action: "get_blueprint_info", params: { asset_path: "/Game/Cin
 blueprint_query({ action: "get_graph_summary", params: { asset_path: "...:LS_Intro_DirectorBP", graph_name: "Sequencer Events" } })
 ```
 `level_sequence_query` covers Sequencer-side metadata (bindings, event-track structure); the `blueprint` namespace covers BP graph-level details.
+
+### "How do I render a Level Sequence?"
+```
+movie_render_query({ action: "add_job", params: { sequence_path: "/Game/Cinematics/LS_Intro.LS_Intro" } })
+movie_render_query({ action: "render_queue", params: { confirm: true } })
+```
 
 ## Rules
 
