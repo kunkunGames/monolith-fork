@@ -380,6 +380,7 @@ bool UMonolithMeshHandlePool::OnEvictionCheck(float /*DeltaTime*/)
 {
 	const double Now = FPlatformTime::Seconds();
 	TArray<FString> ToEvict;
+	ToEvict.Reserve(LastAccessTime.Num());
 
 	for (const auto& Pair : LastAccessTime)
 	{
