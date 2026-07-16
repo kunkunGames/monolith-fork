@@ -191,6 +191,7 @@ Each module has its own spec file under `specs/`. The table below is the index.
 | 3.30 | MonolithGameSettings | [specs/SPEC_MonolithGameSettings.md](specs/SPEC_MonolithGameSettings.md) | Read-only GameSettings registry, setting-class, data-source path, visual-data, and player-mappable input diagnostics (6 actions) |
 | 3.31 | MonolithLoading | [specs/SPEC_MonolithLoading.md](specs/SPEC_MonolithLoading.md) | Read-only CommonLoadingScreen manager reason, processor candidate, settings/CVar, and optional Lyra loading handoff diagnostics (4 actions) |
 | 3.32 | MonolithSprite | [specs/SPEC_MonolithSpriteAsset.md](specs/SPEC_MonolithSpriteAsset.md) | Sprite asset validation, generation, extraction, and contact sheet building |
+| 3.33 | MonolithAsset | [specs/SPEC_MonolithAsset.md](specs/SPEC_MonolithAsset.md) | Generic asset ingest/save/delete/inspection/find plus guarded package graph copy/remap planning, duplication, reference fixup, and dependency-closure validation |
 
 Merge audit specs live beside the module specs. The 0.15.0 CL 448 compact-merge decision record is [`specs/SPEC_Monolith0150CompactMerge.md`](specs/SPEC_Monolith0150CompactMerge.md).
 
