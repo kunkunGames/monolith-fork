@@ -410,10 +410,11 @@ namespace
 
 	static bool ParseGraphSpecs(const TSharedPtr<FJsonObject>& Params, TArray<FCloneGraphSpec>& OutSpecs, FString& OutError)
 	{
-		if (Params.IsValid() && Params->HasField(TEXT("graphs")))
+		const TSharedPtr<FJsonValue> GraphsField = Params.IsValid() ? Params->TryGetField(TEXT("graphs")) : nullptr;
+		if (GraphsField.IsValid())
 		{
 			const TArray<TSharedPtr<FJsonValue>>* GraphValues = nullptr;
-			if (!Params->TryGetArrayField(TEXT("graphs"), GraphValues) || !GraphValues)
+			if (!GraphsField->TryGetArray(GraphValues) || !GraphValues)
 			{
 				OutError = TEXT("graphs must be an array of strings or graph spec objects.");
 				return false;
