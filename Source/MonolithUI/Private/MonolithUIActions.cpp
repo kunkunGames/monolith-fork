@@ -578,6 +578,7 @@ namespace MonolithUICommonFrameworkInternal
         if (bIncludeProperties)
         {
             TArray<TSharedPtr<FJsonValue>> Properties;
+            Properties.Reserve(PropertyLimit);
             int32 Added = 0;
             int32 Total = 0;
             for (TFieldIterator<FProperty> It(Class, EFieldIteratorFlags::IncludeSuper); It; ++It)
@@ -602,6 +603,7 @@ namespace MonolithUICommonFrameworkInternal
         if (bIncludeFunctions)
         {
             TArray<TSharedPtr<FJsonValue>> Functions;
+            Functions.Reserve(FunctionLimit);
             int32 Added = 0;
             int32 Total = 0;
             for (TFieldIterator<UFunction> It(Class, EFieldIteratorFlags::IncludeSuper); It; ++It)
@@ -647,6 +649,7 @@ namespace MonolithUICommonFrameworkInternal
         if (bIncludeProperties)
         {
             TArray<TSharedPtr<FJsonValue>> Properties;
+            Properties.Reserve(PropertyLimit);
             int32 Added = 0;
             int32 Total = 0;
             for (TFieldIterator<FProperty> It(Struct, EFieldIteratorFlags::IncludeSuper); It; ++It)
@@ -982,6 +985,7 @@ namespace MonolithUICommonFrameworkInternal
         {
             return Classes;
         }
+        Classes.Reserve(Limit);
 
         int32 Added = 0;
         for (TObjectIterator<UClass> It; It && Added < Limit; ++It)
