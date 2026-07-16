@@ -148,6 +148,7 @@ namespace
 		{
 			TArray<FString> FileNames;
 			IFileManager::Get().FindFiles(FileNames, *(DirectoryPath / TEXT("*")), true, false);
+			OutFiles.Reserve(OutFiles.Num() + FileNames.Num());
 			for (const FString& FileName : FileNames)
 			{
 				OutFiles.Add(FPaths::Combine(DirectoryPath, FileName));
