@@ -23,6 +23,7 @@
 #include "UObject/UnrealType.h"
 #include "WidgetBlueprint.h"
 #include "WidgetBlueprintEditorUtils.h"
+#include "MonolithAssetUtils.h"
 
 namespace MonolithUI::WidgetCopy
 {
@@ -258,7 +259,7 @@ namespace MonolithUI::WidgetCopy
 
         for (const FString& ClassPath : ClassPathCandidates)
         {
-            if (UClass* LoadedClass = LoadObject<UClass>(nullptr, *ClassPath))
+            if (UClass* LoadedClass = FMonolithAssetUtils::LoadAssetByPath<UClass>(ClassPath))
             {
                 return LoadedClass->IsChildOf(UWidget::StaticClass()) ? LoadedClass : nullptr;
             }
