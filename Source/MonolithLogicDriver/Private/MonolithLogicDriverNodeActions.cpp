@@ -916,8 +916,15 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureStateMachi
 
 FMonolithActionResult FMonolithLogicDriverNodeActions::HandleSetStateTags(const TSharedPtr<FJsonObject>& Params)
 {
-	const TArray<TSharedPtr<FJsonValue>>* TagArrayPtr;
-	if (!Params->TryGetArrayField(TEXT("gameplay_tags"), TagArrayPtr) || !TagArrayPtr)
+	const TArray<TSharedPtr<FJsonValue>>* TagArrayPtr = nullptr;
+	if (Params->HasField(TEXT("gameplay_tags")))
+	{
+		if (!Params->TryGetArrayField(TEXT("gameplay_tags"), TagArrayPtr) || !TagArrayPtr)
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param 'gameplay_tags' (must be an array of strings)"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
+	else
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or invalid required param 'gameplay_tags' (must be an array of strings)"));
 	}

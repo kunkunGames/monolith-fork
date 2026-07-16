@@ -386,6 +386,41 @@ bool FMonolithLogicDriverSetInitialStateFunctionalTest::RunTest(const FString& P
 }
 
 // ------------------------------------------------------------------------------------------------
+// Monolith.ParamGuard.LogicDriver.SetStateTags.MalformedTagsArray
+// Validates that passing a malformed 'gameplay_tags' parameter returns a clean JSON error.
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLogicDriverSetStateTagsMalformedTest, "Monolith.ParamGuard.LogicDriver.SetStateTags.MalformedTagsArray", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithLogicDriverSetStateTagsMalformedTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("set_state_tags")))
+	{
+		FMonolithLogicDriverAssetActions::RegisterActions(Registry);
+		FMonolithLogicDriverNodeActions::RegisterActions(Registry);
+	}
+
+	// Test with a string instead of an array
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Tests/SM_WiringTest"));
+	Params->SetStringField(TEXT("node_guid"), TEXT("dummy-guid"));
+	Params->SetStringField(TEXT("gameplay_tags"), TEXT("not-an-array"));
+
+	FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("set_state_tags"), Params);
+
+	TestFalse(TEXT("set_state_tags should fail with malformed gameplay_tags"), Result.bSuccess);
+	if (Result.ErrorData.IsValid())
+	{
+		TestEqual(TEXT("Error should be InvalidParams"), Result.ErrorData->GetIntegerField(TEXT("code")), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	else
+	{
+		AddError(TEXT("Expected error data but got none."));
+	}
+
+	return true;
+}
+
+// ------------------------------------------------------------------------------------------------
 // Monolith.LogicDriverKeeper.AddAnyStateNodeFunctional
 // Validates the functional 'happy path' for adding an Any State node to a state machine graph.
 // ------------------------------------------------------------------------------------------------
