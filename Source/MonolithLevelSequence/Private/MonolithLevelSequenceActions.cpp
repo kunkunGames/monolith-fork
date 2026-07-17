@@ -258,6 +258,7 @@ namespace
 		IFileManager::Get().FindFiles(DirectoryNames, *(Root / TEXT("*")), false, true);
 		DirectoryNames.Sort();
 
+		OutRows.Reserve(OutRows.Num() + FMath::Min(Limit - OutRows.Num(), DirectoryNames.Num()));
 		for (const FString& DirectoryName : DirectoryNames)
 		{
 			if (OutRows.Num() >= Limit)
@@ -295,6 +296,7 @@ namespace
 		TArray<FString> Files;
 		GatherReplayFiles(Root, bIncludeNestedFiles, Files);
 
+		OutRows.Reserve(OutRows.Num() + FMath::Min(Limit - OutRows.Num(), Files.Num()));
 		for (const FString& File : Files)
 		{
 			if (OutRows.Num() >= Limit)
