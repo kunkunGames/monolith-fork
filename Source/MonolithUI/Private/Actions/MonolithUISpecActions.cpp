@@ -4179,19 +4179,22 @@ namespace MonolithUI::SpecActionsInternal
         }
 
         bool bCheckOverlap = true;
-        if (Params->HasField(TEXT("check_overlap")) && !Params->TryGetBoolField(TEXT("check_overlap"), bCheckOverlap))
+        const TSharedPtr<FJsonValue> CheckOverlapField = Params->TryGetField(TEXT("check_overlap"));
+        if (CheckOverlapField.IsValid() && !CheckOverlapField->TryGetBool(bCheckOverlap))
         {
             return FMonolithActionResult::Error(TEXT("check_overlap must be a boolean."), FMonolithJsonUtils::ErrInvalidParams);
         }
 
         bool bCheckSafeZone = true;
-        if (Params->HasField(TEXT("check_safe_zone")) && !Params->TryGetBoolField(TEXT("check_safe_zone"), bCheckSafeZone))
+        const TSharedPtr<FJsonValue> CheckSafeZoneField = Params->TryGetField(TEXT("check_safe_zone"));
+        if (CheckSafeZoneField.IsValid() && !CheckSafeZoneField->TryGetBool(bCheckSafeZone))
         {
             return FMonolithActionResult::Error(TEXT("check_safe_zone must be a boolean."), FMonolithJsonUtils::ErrInvalidParams);
         }
 
         double MaxAllowedOverlapRatio = 0.0;
-        if (Params->HasField(TEXT("max_allowed_overlap_ratio")) && !Params->TryGetNumberField(TEXT("max_allowed_overlap_ratio"), MaxAllowedOverlapRatio))
+        const TSharedPtr<FJsonValue> MaxAllowedOverlapRatioField = Params->TryGetField(TEXT("max_allowed_overlap_ratio"));
+        if (MaxAllowedOverlapRatioField.IsValid() && !MaxAllowedOverlapRatioField->TryGetNumber(MaxAllowedOverlapRatio))
         {
             return FMonolithActionResult::Error(TEXT("max_allowed_overlap_ratio must be a number."), FMonolithJsonUtils::ErrInvalidParams);
         }
