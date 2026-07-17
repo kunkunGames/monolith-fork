@@ -5,7 +5,7 @@
 | Status | Implemented - compact merge contract verified |
 | Owner | Monolith |
 | Scope | P4 CL 448; git range `a14b72a26b8ab4506655701d8c334d89eef79df0..9063f18da54e6ed531466c7ddae16a6206f03889` |
-| Date | 2026-06-10 |
+| Date | 2026-07-17 |
 | Goal | Record which 0.15.0 merge surfaces are retained, compacted, deferred, or removed before submitting CL 448. |
 | Non-goal | This document does not replace live `monolith_find` / `monolith_discover` / `describe` schemas. It defines the retained compact merge shape and verification gates. |
 
@@ -35,9 +35,9 @@ The compact merge target is:
 |----------|-----------------|--------|
 | P4 CL | `p4 describe -s 448` identifies the pending changelist as `Monolith 0.15.0 upgrade` with wide edits across Core, Blueprint, UI, Niagara, domain adapters, docs, tools, and binaries. | The merge is not a narrow patch; it needs an architectural audit before submit. |
 | Git range | `a14b72a26..9063f18d` includes 123 changed files under `Source`, `Docs`, `Tools`, `.jules`, `README.md`, `CHANGELOG.md`, and `Monolith.uplugin`, with about 17k insertions. | Review must classify features by capability family instead of by file only. |
-| Build history | A fresh `<Project>Editor Win64 Development` UBT build passed on 2026-06-10 after the compact-merge code changes. | Code compiles after curation. |
+| Build history | A fresh `<Project>Editor Win64 Development` UBT build passed on 2026-07-17 after the compact-merge code changes. | Code compiles after curation. |
 | Source-index health | `Binaries\monolith_query.exe source health` is readable; the remaining warning is the existing orphan-reference warning, with CRG parity OK. | Source-index parity no longer blocks this spec; orphan cleanup is outside this compact-merge pass. |
-| Existing docs | `Docs/SPEC_CORE.md`, `Docs/API_REFERENCE.md`, and this verification note now distinguish static in-tree reference counts from the live full-project 2026-06-10 registry snapshot. | Exact action/schema truth remains runtime `monolith_find`, `monolith_discover`, and `describe`; docs record the verified snapshot and deliberate conditional deltas. |
+| Existing docs | `Docs/SPEC_CORE.md`, `Docs/API_REFERENCE.md`, and this verification note now distinguish static in-tree reference counts from the live full-project 2026-07-17 registry snapshot. | Exact action/schema truth remains runtime `monolith_find`, `monolith_discover`, and `describe`; docs record the verified snapshot and deliberate conditional deltas. |
 
 ### 2.1 Source Audit Coverage Matrix
 
@@ -147,7 +147,7 @@ If an implementation needs to jump from search to mutation, the sequence is: `pr
 | Material bulk-fill adapter | `MICParameters`, `BuildMaterialGraph` audit wrapper | Split keep/defer | Keep MIC parameter writes through editor-only parameter APIs. Defer or rename `BuildMaterialGraph` adapter as audit-only until it actually drives `material::build_material_graph`. |
 | GAS adapter | `AttributeInitDataTable`, `WITH_GBA` stub branch, GE descriptor | Keep with shared helper extraction | Attribute init row generation adds domain semantics. Optional-dependency clean errors fit Monolith policy. Repeated class-resolution helpers should move to a shared GAS internal utility if reused. |
 | Niagara expansion | User parameter, DI, curve, scalability, rename/update helpers | Keep with verification focus | Niagara actions are native graph/editor operations. They must be verified against parameter-map and GUID instability risks before final docs count is frozen. |
-| Monolith guide | `monolith.guide`, `Docs/MONOLITH_GUIDE.md`, offline `monolith_query.exe monolith guide` | Keep one prose source with strict role separation | One markdown source is good only if it stays editorial: recipes, decisions, recovery, and skill pointers. It must not duplicate `monolith_find`, `monolith_discover`, action catalogs, or schemas. In-editor/offline section-key parity is covered by the 2026-06-10 guide automation. |
+| Monolith guide | `monolith.guide`, `Docs/MONOLITH_GUIDE.md`, offline `monolith_query.exe monolith guide` | Keep one prose source with strict role separation | One markdown source is good only if it stays editorial: recipes, decisions, recovery, and skill pointers. It must not duplicate `monolith_find`, `monolith_discover`, action catalogs, or schemas. In-editor/offline section-key parity is covered by the 2026-07-17 guide automation. |
 | API reference regeneration | `Docs/API_REFERENCE.md` | Defer final regeneration until curation | Action counts are already drifting in multiple docs. Regenerate after the retained public surface is final. |
 | Binaries | `Binaries/Win64/*.dll` | Treat as release artifacts, not design evidence | Submit only if the release policy for CL 448 requires binaries and they come from the verified build. |
 | `.jules` files | `.jules/forge.md`, `.jules/marshal.md` | Review separately | Agent policy docs are not required for runtime 0.15.0 capability merge. |
@@ -244,14 +244,14 @@ Use this order when turning the spec into code changes:
 
 CL 448 should not be submitted until these gates pass after any code curation:
 
-Latest focused compact-merge contract pass: [../testing/2026-06-10-compact-merge-p0.md](../testing/2026-06-10-compact-merge-p0.md).
+Latest focused compact-merge contract pass: [../testing/2026-07-17-compact-merge-p0.md](../testing/2026-07-17-compact-merge-p0.md).
 
-### 8.1 2026-06-10 Verification Snapshot
+### 8.1 2026-07-17 Verification Snapshot
 
 | Gate | Verified result |
 |------|-----------------|
 | Full C++ build | PASS. `<Project>Editor Win64 Development` built through UBT after the final code changes. |
-| Registry health | PASS. Live `monolith_status()` reported version `0.15.0`, 2047 actions, and 45 namespaces in the fully loaded project. |
+| Registry health | PASS. Live `monolith_status()` reported version `0.15.0`, 2102 actions, and 45 namespaces in the fully loaded project. |
 | MCP tool surface | PASS. `tools/list` exposed 77 MCP tools, including 44 `_query` namespace dispatch tools. |
 | Routing boundary smoke | PASS. `monolith_find` routes tasks, `monolith_discover` returns exact schemas, `describe` returns writable shapes, and `monolith_guide` returns editorial workflow prose. |
 | Discover schema mode | PASS. `monolith_discover(namespace="material", action="build_material_graph", mode="schema")` returned the exact action schema without unknown-param warnings. |
@@ -268,7 +268,7 @@ Latest focused compact-merge contract pass: [../testing/2026-06-10-compact-merge
 | Full C++ build | Resolve engine via `BatchFiles\Script\ResolveUnrealEngine.ps1`, then run UBT for `<Project>Editor Win64 Development -Project=<Project>.uproject -WaitMutex -NoHotReloadFromIDE`. | Build succeeds without relying on hard-coded engine paths. |
 | Registry health | `monolith_status()` through the configured MCP client, or equivalent live health check. | Server is reachable and reports expected version/action counts. |
 | Routing boundary smoke | `monolith_find` for action search, `monolith_discover` for params, `describe.schema` for writable shape, and `monolith.guide(section="decisions")` for prose. | Each surface returns its own kind of information without duplicating another surface's output. |
-| Discovery count | `monolith_discover()` and per-namespace discover calls. | The live full-project snapshot is recorded as 2047 actions / 45 namespaces. Static in-tree reference tables either match their curated scope or explicitly defer exact schemas/counts to live discovery. |
+| Discovery count | `monolith_discover()` and per-namespace discover calls. | The live full-project snapshot is recorded as 2102 actions / 45 namespaces. Static in-tree reference tables either match their curated scope or explicitly defer exact schemas/counts to live discovery. |
 | Core framework smoke | `bulk_fill.list_namespaces`, `describe.action_schema`, `describe.schema` for representative namespaces. | Available namespaces and schema payloads match retained adapters; target listing is optional inventory. |
 | Reflection automation | Run the `Leviathan.Monolith.Reflection.*` automation tests after replacing placeholder bodies. | Tests assert write behavior, nested/container handling, unknown-field reporting, and dry-run no-side-effects. |
 | Adapter dry-run smoke | One `bulk_fill.apply` with `dry_run=true` for Blueprint, UI, Material MIC, GAS AttributeInit when available, Niagara, and one optional-gated adapter. | Dry-run reports intended writes, warnings, and silent drops without mutating assets. |
@@ -296,7 +296,7 @@ Latest focused compact-merge contract pass: [../testing/2026-06-10-compact-merge
 
 ## 10. Merge Recommendation
 
-Merge CL 448 after the remaining release-artifact policy checks, not as the original broad merge. The compact code/documentation gates in Section 7 are implemented and verified in [../testing/2026-06-10-compact-merge-p0.md](../testing/2026-06-10-compact-merge-p0.md); binary DLL and `.jules` inclusion remain release-scope decisions, not runtime contract blockers.
+Merge CL 448 after the remaining release-artifact policy checks, not as the original broad merge. The compact code/documentation gates in Section 7 are implemented and verified in [../testing/2026-07-17-compact-merge-p0.md](../testing/2026-07-17-compact-merge-p0.md); binary DLL and `.jules` inclusion remain release-scope decisions, not runtime contract blockers.
 
 The 0.15.0 work contains the right Monolith-native direction: centralized bulk fill, schema-driven describe, richer error surfaces, dataset ergonomics, UI close-the-loop actions, and one editorial guide. This compact pass resolves the blocking risks by extracting shared helper mechanics, making audit-only/stub paths explicitly non-mutating, separating ProjectIndex search from write validation, and recording the live registry snapshot alongside static docs.
 
