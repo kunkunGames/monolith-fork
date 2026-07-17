@@ -1958,8 +1958,20 @@ static FMonolithActionResult HandleAddPoseSearchNotify(const TSharedPtr<FJsonObj
 {
 	FString AnimPath = Params->GetStringField(TEXT("anim_path"));
 	FString NotifyKind = Params->GetStringField(TEXT("notify_kind"));
-	float StartTime = static_cast<float>(Params->GetNumberField(TEXT("start_time")));
-	float Duration = static_cast<float>(Params->GetNumberField(TEXT("duration")));
+
+	double StartTimeDouble = 0.0;
+	if (!Params->TryGetNumberField(TEXT("start_time"), StartTimeDouble))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'start_time' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	float StartTime = static_cast<float>(StartTimeDouble);
+
+	double DurationDouble = 0.0;
+	if (!Params->TryGetNumberField(TEXT("duration"), DurationDouble))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'duration' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	float Duration = static_cast<float>(DurationDouble);
 
 	UAnimSequenceBase* Seq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequenceBase>(AnimPath);
 	if (!Seq)
