@@ -16013,10 +16013,14 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateModule(const TShar
 
 	int32 TgtIndex = -1;
 	double TgtIndex_Double = TgtIndex;
-	if (Params->HasField(TEXT("target_index")) && !Params->TryGetNumberField(TEXT("target_index"), TgtIndex_Double))
-		return FMonolithActionResult::Error(TEXT("Parameter 'target_index' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
-	else if (Params->HasField(TEXT("target_index")))
+	if (Params->HasField(TEXT("target_index")))
+	{
+		if (!Params->TryGetNumberField(TEXT("target_index"), TgtIndex_Double))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'target_index' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 		TgtIndex = static_cast<int32>(TgtIndex_Double);
+	}
 
 	// Load system and find source module
 	UNiagaraSystem* System = LoadSystem(SystemPath);
