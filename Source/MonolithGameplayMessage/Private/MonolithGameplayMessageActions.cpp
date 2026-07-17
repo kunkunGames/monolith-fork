@@ -561,6 +561,7 @@ namespace MonolithGameplayMessage
 	static TArray<TSharedPtr<FJsonValue>> StringsToJson(const TArray<FString>& Values)
 	{
 		TArray<TSharedPtr<FJsonValue>> Rows;
+		Rows.Reserve(Values.Num());
 		for (const FString& Value : Values)
 		{
 			Rows.Add(MakeShared<FJsonValueString>(Value));
@@ -589,6 +590,7 @@ namespace MonolithGameplayMessage
 	static TArray<TSharedPtr<FJsonValue>> TracePatternRows()
 	{
 		TArray<TSharedPtr<FJsonValue>> Rows;
+		Rows.Reserve(UE_ARRAY_COUNT(TracePatterns));
 		for (const FTracePatternSpec& Pattern : TracePatterns)
 		{
 			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
@@ -604,6 +606,7 @@ namespace MonolithGameplayMessage
 	static TArray<TSharedPtr<FJsonValue>> TraceLimitationRows()
 	{
 		TArray<TSharedPtr<FJsonValue>> Rows;
+		Rows.Reserve(4);
 		for (const TCHAR* Limitation : {
 			TEXT("Static source trace only; no PIE session, listener registration, broadcast execution, GameFeature activation, or live subsystem mutation is performed."),
 			TEXT("Lexical matches identify candidate broadcaster/listener call sites and nearby tag/payload tokens, but they do not prove runtime reachability or branch coverage."),
@@ -652,6 +655,7 @@ namespace MonolithGameplayMessage
 		};
 
 		TArray<TSharedPtr<FJsonValue>> Values;
+		Values.Reserve(UE_ARRAY_COUNT(Rows));
 		for (const TCHAR* Row : Rows)
 		{
 			Values.Add(MakeShared<FJsonValueString>(Row));
@@ -1119,6 +1123,7 @@ FMonolithActionResult FMonolithGameplayMessageActions::TraceChannelUsage(const T
 		Keys.Sort();
 
 		TArray<TSharedPtr<FJsonValue>> Rows;
+		Rows.Reserve(Keys.Num());
 		for (const FString& Key : Keys)
 		{
 			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
