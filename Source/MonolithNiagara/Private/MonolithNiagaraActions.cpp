@@ -11808,7 +11808,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetDynamicInputInputs(const
 	FString ScriptPath = Params->GetStringField(TEXT("script_path"));
 	if (ScriptPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: script_path"));
 
-	UNiagaraScript* Script = LoadObject<UNiagaraScript>(nullptr, *ScriptPath);
+	UNiagaraScript* Script = FMonolithAssetUtils::LoadAssetByPath<UNiagaraScript>(ScriptPath);
 	if (!Script) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load script: %s"), *ScriptPath));
 
 	UNiagaraScriptSource* Src = Cast<UNiagaraScriptSource>(Script->GetLatestSource());
