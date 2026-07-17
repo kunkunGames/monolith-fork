@@ -698,7 +698,9 @@ FMonolithActionResult FMonolithMeshTechArtActions::AutoGenerateLods(const TShare
 
 	// Generate each LOD via simplification
 	TArray<FMeshDescription> LodMeshDescs;
+	LodMeshDescs.Reserve(LodCount + 1);
 	TArray<int32> LodTriCounts;
+	LodTriCounts.Reserve(LodCount + 1);
 
 	// LOD0 mesh description: read from the source static mesh directly
 	{
