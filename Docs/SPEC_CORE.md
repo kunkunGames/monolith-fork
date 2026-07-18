@@ -192,6 +192,18 @@ Each module has its own spec file under `specs/`. The table below is the index.
 | 3.31 | MonolithLoading | [specs/SPEC_MonolithLoading.md](specs/SPEC_MonolithLoading.md) | Read-only CommonLoadingScreen manager reason, processor candidate, settings/CVar, and optional Lyra loading handoff diagnostics (4 actions) |
 | 3.32 | MonolithSprite | [specs/SPEC_MonolithSpriteAsset.md](specs/SPEC_MonolithSpriteAsset.md) | Sprite asset validation, generation, extraction, and contact sheet building |
 | 3.33 | MonolithAsset | [specs/SPEC_MonolithAsset.md](specs/SPEC_MonolithAsset.md) | Generic asset ingest/save/delete/inspection/find plus guarded package graph copy/remap planning, duplication, reference fixup, and dependency-closure validation |
+| 3.34 | MonolithWorldConditions | [specs/SPEC_MonolithWorldConditions.md](specs/SPEC_MonolithWorldConditions.md) | World Conditions queries and validation |
+| 3.35 | MonolithInterchange | [specs/SPEC_MonolithInterchange.md](specs/SPEC_MonolithInterchange.md) | Interchange import operations and overrides |
+| 3.36 | MonolithLevelSequence | [specs/SPEC_MonolithLevelSequence.md](specs/SPEC_MonolithLevelSequence.md) | Level Sequence track bindings and edits |
+| 3.37 | MonolithScene | [specs/SPEC_MonolithScene.md](specs/SPEC_MonolithScene.md) | Scene actor manipulation and lighting |
+| 3.38 | MonolithLevelDesign | [specs/SPEC_MonolithLevelDesign.md](specs/SPEC_MonolithLevelDesign.md) | Level Design metrics, pacing, and layout |
+| 3.39 | MonolithSlate | [specs/SPEC_MonolithSlate.md](specs/SPEC_MonolithSlate.md) | Slate widget inspection and metrics |
+| 3.40 | MonolithPaper2D | [specs/SPEC_MonolithPaper2D.md](specs/SPEC_MonolithPaper2D.md) | Paper2D sprite status and single asset metadata |
+| 3.41 | MonolithWater | [specs/SPEC_MonolithWater.md](specs/SPEC_MonolithWater.md) | Water and Landscape read-only body/zone discovery |
+| 3.42 | MonolithWorldGen | [specs/SPEC_MonolithWorldGen.md](specs/SPEC_MonolithWorldGen.md) | Procedural world generation and town placement |
+| 3.43 | MonolithModelGen | [specs/SPEC_MonolithModelGen.md](specs/SPEC_MonolithModelGen.md) | 3D Model generation APIs and provenance tracking |
+| 3.44 | MonolithImageGen | [specs/SPEC_MonolithImageGen.md](specs/SPEC_MonolithImageGen.md) | 2D Image generation and provenance tracking |
+| 3.45 | MonolithPCG | [specs/SPEC_MonolithPCG.md](specs/SPEC_MonolithPCG.md) | Procedural Content Generation graphs and metrics |
 
 Merge audit specs live beside the module specs. The 0.15.0 CL 448 compact-merge decision record is [`specs/SPEC_Monolith0150CompactMerge.md`](specs/SPEC_Monolith0150CompactMerge.md).
 
