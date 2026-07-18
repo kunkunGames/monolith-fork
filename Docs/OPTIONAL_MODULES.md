@@ -111,7 +111,7 @@ void FMonolithBABridgeModule::ShutdownModule()
 ```
 
 The bridge module also uses `#if WITH_BLUEPRINT_ASSIST` (set by its `Build.cs` via
-`Directory.Exists()`) so it compiles even when BA is absent — it just registers nothing.
+`IsPluginEnabled()`) so it compiles even when BA is absent — it just registers nothing.
 
 ### Consumer Pattern
 
@@ -182,7 +182,7 @@ No third-party headers. Only engine types. This header is safe to include anywhe
 Add `Source/MonolithYourBridge/` with:
 
 - `MonolithYourBridge.Build.cs` — depends on `MonolithCore` + optional third party
-  (use `Directory.Exists()` pattern from `OPTIONAL_MODULE_ARCHITECTURE.md` section 3.1)
+  (use `IsPluginEnabled()` pattern from `MonolithBABridge.Build.cs`)
 - `MonolithYourBridgeModule.cpp` — registers/unregisters the implementation
 - `MonolithYourFeatureImpl.h/.cpp` — concrete implementation behind `#if WITH_YOUR_PLUGIN`
 
