@@ -94,10 +94,13 @@ public class MonolithAI : ModuleRules
 		// Issue #71: gate on ENABLEMENT (read from the .uproject), not disk presence.
 		// StateTree ships under Engine/Plugins/Runtime on every UE 5.7 install but is
 		// EnabledByDefault:false; disk presence would false-positive a hard-link on a
-		// source builder who hasn't enabled it. GameplayStateTree/PropertyBindingUtils are
-		// co-enabled with StateTree (StateTree.uplugin requires them), so checking StateTree
-		// alone is sufficient.
-		bool bHasStateTree = !bReleaseBuild && IsPluginEnabled(Target, "StateTree");
+		// source builder who hasn't enabled it. We must also explicitly check
+		// GameplayStateTree and PropertyBindingUtils because they are separate plugins
+		// and a user could enable StateTree without GameplayStateTree, leading to a hard-link error.
+		bool bHasStateTree = !bReleaseBuild
+			&& IsPluginEnabled(Target, "StateTree")
+			&& IsPluginEnabled(Target, "GameplayStateTree")
+			&& IsPluginEnabled(Target, "PropertyBindingUtils");
 
 		if (bHasStateTree)
 		{
