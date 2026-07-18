@@ -168,4 +168,20 @@ bool FMonolithDescribeListTargetsMissingNamespaceTest::RunTest(const FString& /*
 	return true;
 }
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithDescribeActionSchemaMissingParamsTest,
+	"Monolith.Core.Describe.ActionSchemaMissingParamsErrors",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithDescribeActionSchemaMissingParamsTest::RunTest(const FString& /*Parameters*/)
+{
+	TSharedPtr<FJsonObject> NullParams;
+	const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("describe"), TEXT("action_schema"), NullParams);
+	TestFalse(TEXT("describe.action_schema with missing params fails"), Result.bSuccess);
+	TestTrue(TEXT("error names missing params"), Result.ErrorMessage.Contains(TEXT("describe.action_schema requires params")));
+	TestEqual(TEXT("error code is invalid params"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

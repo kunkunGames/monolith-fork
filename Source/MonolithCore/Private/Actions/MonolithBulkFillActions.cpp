@@ -367,7 +367,7 @@ namespace MonolithBulkFillActionsInternal
 		// future code path bypasses the alias rewrite.
 		if (!Params.IsValid())
 		{
-			return FMonolithActionResult::Error(TEXT("describe.action_schema requires params"));
+			return FMonolithActionResult::Error(TEXT("describe.action_schema requires params"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		FString TargetNamespace;
 		if (!Params->TryGetStringField(TEXT("target_namespace"), TargetNamespace) || TargetNamespace.IsEmpty())
