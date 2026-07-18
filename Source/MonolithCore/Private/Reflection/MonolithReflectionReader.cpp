@@ -107,6 +107,7 @@ TSharedPtr<FJsonValue> FMonolithReflectionReader::PropertyToJsonValue(FProperty*
 	{
 		TArray<TSharedPtr<FJsonValue>> Arr;
 		FScriptArrayHelper Helper(ArrayProp, ValuePtr);
+		Arr.Reserve(Helper.Num());
 		for (int32 i = 0; i < Helper.Num(); ++i)
 		{
 			Arr.Add(PropertyToJsonValue(ArrayProp->Inner, Helper.GetRawPtr(i), Owner));
@@ -119,6 +120,7 @@ TSharedPtr<FJsonValue> FMonolithReflectionReader::PropertyToJsonValue(FProperty*
 	{
 		TArray<TSharedPtr<FJsonValue>> Arr;
 		FScriptSetHelper Helper(SetProp, ValuePtr);
+		Arr.Reserve(Helper.Num());
 		for (int32 i = 0; i < Helper.Num(); ++i)
 		{
 			if (Helper.IsValidIndex(i))
