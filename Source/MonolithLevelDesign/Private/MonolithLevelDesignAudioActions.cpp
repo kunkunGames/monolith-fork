@@ -176,6 +176,32 @@ namespace
 		return true;
 	}
 
+	/** Helper to extract volume context shared across actions */
+	bool TryExtractVolumeContext(const TSharedPtr<FJsonObject>& Params, FString& OutVolumeName, UWorld*& OutWorld, FVector& OutOrigin, FVector& OutExtent, FMonolithActionResult& OutErrorResult)
+	{
+		if (!Params->TryGetStringField(TEXT("volume_name"), OutVolumeName))
+		{
+			OutErrorResult = FMonolithActionResult::Error(TEXT("Missing required param: volume_name"));
+			return false;
+		}
+
+		OutWorld = MonolithMeshUtils::GetEditorWorld();
+		if (!OutWorld)
+		{
+			OutErrorResult = FMonolithActionResult::Error(TEXT("No editor world available"));
+			return false;
+		}
+
+		FString Error;
+		if (!GetVolumeBounds(OutVolumeName, OutOrigin, OutExtent, Error))
+		{
+			OutErrorResult = FMonolithActionResult::Error(Error);
+			return false;
+		}
+
+		return true;
+	}
+
 	/** Acoustic properties as JSON object */
 	TSharedPtr<FJsonObject> AcousticPropsToJson(const MonolithLevelDesignAcoustics::FAcousticProperties& Props)
 	{
@@ -598,22 +624,13 @@ FMonolithActionResult FMonolithLevelDesignAudioActions::EstimateFootstepSound(co
 FMonolithActionResult FMonolithLevelDesignAudioActions::AnalyzeRoomAcoustics(const TSharedPtr<FJsonObject>& Params)
 {
 	FString VolumeName;
-	if (!Params->TryGetStringField(TEXT("volume_name"), VolumeName))
-	{
-		return FMonolithActionResult::Error(TEXT("Missing required param: volume_name"));
-	}
-
-	UWorld* World = MonolithMeshUtils::GetEditorWorld();
-	if (!World)
-	{
-		return FMonolithActionResult::Error(TEXT("No editor world available"));
-	}
-
-	FString Error;
+	UWorld* World = nullptr;
 	FVector Origin, Extent;
-	if (!GetVolumeBounds(VolumeName, Origin, Extent, Error))
+	FMonolithActionResult ErrorResult;
+
+	if (!TryExtractVolumeContext(Params, VolumeName, World, Origin, Extent, ErrorResult))
 	{
-		return FMonolithActionResult::Error(Error);
+		return ErrorResult;
 	}
 
 	int32 RayCount = 128;
@@ -1267,22 +1284,13 @@ FMonolithActionResult FMonolithLevelDesignAudioActions::CanAiHearFrom(const TSha
 FMonolithActionResult FMonolithLevelDesignAudioActions::GetStealthMap(const TSharedPtr<FJsonObject>& Params)
 {
 	FString VolumeName;
-	if (!Params->TryGetStringField(TEXT("volume_name"), VolumeName))
-	{
-		return FMonolithActionResult::Error(TEXT("Missing required param: volume_name"));
-	}
-
-	UWorld* World = MonolithMeshUtils::GetEditorWorld();
-	if (!World)
-	{
-		return FMonolithActionResult::Error(TEXT("No editor world available"));
-	}
-
-	FString Error;
+	UWorld* World = nullptr;
 	FVector Origin, Extent;
-	if (!GetVolumeBounds(VolumeName, Origin, Extent, Error))
+	FMonolithActionResult ErrorResult;
+
+	if (!TryExtractVolumeContext(Params, VolumeName, World, Origin, Extent, ErrorResult))
 	{
-		return FMonolithActionResult::Error(Error);
+		return ErrorResult;
 	}
 
 	float GridSize = 100.0f;
@@ -1472,22 +1480,13 @@ FMonolithActionResult FMonolithLevelDesignAudioActions::FindQuietPath(const TSha
 FMonolithActionResult FMonolithLevelDesignAudioActions::SuggestAudioVolumes(const TSharedPtr<FJsonObject>& Params)
 {
 	FString VolumeName;
-	if (!Params->TryGetStringField(TEXT("volume_name"), VolumeName))
-	{
-		return FMonolithActionResult::Error(TEXT("Missing required param: volume_name"));
-	}
-
-	UWorld* World = MonolithMeshUtils::GetEditorWorld();
-	if (!World)
-	{
-		return FMonolithActionResult::Error(TEXT("No editor world available"));
-	}
-
-	FString Error;
+	UWorld* World = nullptr;
 	FVector Origin, Extent;
-	if (!GetVolumeBounds(VolumeName, Origin, Extent, Error))
+	FMonolithActionResult ErrorResult;
+
+	if (!TryExtractVolumeContext(Params, VolumeName, World, Origin, Extent, ErrorResult))
 	{
-		return FMonolithActionResult::Error(Error);
+		return ErrorResult;
 	}
 
 	// Compute room acoustics inline (reusing analyze logic)
@@ -1592,22 +1591,13 @@ FMonolithActionResult FMonolithLevelDesignAudioActions::SuggestAudioVolumes(cons
 FMonolithActionResult FMonolithLevelDesignAudioActions::CreateAudioVolume(const TSharedPtr<FJsonObject>& Params)
 {
 	FString VolumeName;
-	if (!Params->TryGetStringField(TEXT("volume_name"), VolumeName))
-	{
-		return FMonolithActionResult::Error(TEXT("Missing required param: volume_name"));
-	}
-
-	UWorld* World = MonolithMeshUtils::GetEditorWorld();
-	if (!World)
-	{
-		return FMonolithActionResult::Error(TEXT("No editor world available"));
-	}
-
-	FString Error;
+	UWorld* World = nullptr;
 	FVector Origin, Extent;
-	if (!GetVolumeBounds(VolumeName, Origin, Extent, Error))
+	FMonolithActionResult ErrorResult;
+
+	if (!TryExtractVolumeContext(Params, VolumeName, World, Origin, Extent, ErrorResult))
 	{
-		return FMonolithActionResult::Error(Error);
+		return ErrorResult;
 	}
 
 	float Priority = 0.0f;
