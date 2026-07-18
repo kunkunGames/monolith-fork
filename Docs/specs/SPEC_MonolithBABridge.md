@@ -8,7 +8,7 @@
 
 ## MonolithBABridge
 
-**Dependencies:** Core, CoreUObject, Engine, Slate, SlateCore, UnrealEd, GraphEditor, Json, MonolithCore, BlueprintAssist (optional)
+**Dependencies:** Core, CoreUObject, Engine, Slate, SlateCore, UnrealEd, GraphEditor, MonolithCore, BlueprintAssist (optional)
 
 MonolithBABridge is an **optional** editor module that bridges Blueprint Assist's graph formatter into Monolith's graph formatting interface. It registers no MCP actions of its own. The bridge remains available for diagnostics and as a fallback formatter for asset mutation actions only when the target domain has no built-in Monolith formatter.
 

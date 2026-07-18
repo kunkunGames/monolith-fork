@@ -70,8 +70,7 @@ public class MonolithBABridge : ModuleRules
 				"Slate", "SlateCore",
 				"MonolithCore",
 				"BlueprintAssist",
-				"UnrealEd", "GraphEditor",
-				"Json"
+				"UnrealEd", "GraphEditor"
 			});
 			PublicDefinitions.Add("WITH_BLUEPRINT_ASSIST=1");
 		}
