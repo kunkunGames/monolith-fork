@@ -1222,6 +1222,8 @@ FMonolithActionResult FMonolithMeshCityBlockActions::CreateCityBlock(const TShar
 		double Temp;
 		if (!Params->TryGetNumberField(TEXT("buildings"), Temp))
 			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'buildings', must be a number"));
+		if (Temp > 100.0)
+			return FMonolithActionResult::Error(FString::Printf(TEXT("buildings %g exceeds the maximum allowed (100)"), Temp));
 		BuildingCount = static_cast<int32>(Temp);
 	}
 
