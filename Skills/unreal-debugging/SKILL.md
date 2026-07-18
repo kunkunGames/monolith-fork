@@ -52,6 +52,11 @@ Crash-breadcrumb forensics (Monolith's own crash ledger, distinct from `get_cras
 | `get_last_crash_reason` | Most recent Monolith crash breadcrumb (tool, action, params, timestamp) | (none) |
 | `list_recent_crashes` | Crash breadcrumbs newest-first | `limit?=20` `since?` (ISO8601) `tool?` |
 | `get_crash_stats` | Aggregate crash counts grouped by tool/action | `since?` (ISO8601) `group_by?=tool` (tool/action/tool_action) |
+| `get_crash_report_settings` | Return local-only crash reporting settings | (none) |
+| `list_reportable_crashes` | List crash breadcrumbs with local report status | `limit?=20` `since?` (ISO8601) `tool?` `include_ignored?=false` |
+| `preview_crash_report` | Preview the local crash report metadata that would be considered for a manual report | `file?` `include_params?=false` |
+| `submit_crash_report` | Local-only Phase 1 submit stub (no network request) | `file?` |
+| `mark_crash_ignored` [w] | Mark or unmark a crash breadcrumb as ignored in local report status | `file*` `ignored?=true` |
 
 ## Workflows
 
