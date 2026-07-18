@@ -58,6 +58,7 @@ bool FMonolithEditorSamplePieTimeseriesMalformedTest::RunTest(const FString& Par
 }
 
 #include "MonolithEditorActions.h"
+#include "MonolithPieObjectActions.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorGetBuildErrorsMalformedTest, "Monolith.ParamGuard.Editor.GetBuildErrorsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
@@ -173,6 +174,29 @@ bool FMonolithEditorGetRecentLogsAliasTest::RunTest(const FString& Parameters)
 
 		TestFalse(TEXT("Providing both count and max alias should return an error"), Result.bSuccess);
 	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithPieObjectParamGuardTest, "Monolith.Editor.PieObjectParamGuard", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithPieObjectParamGuardTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetNumberField(TEXT("actor_label"), 123.0);
+	Payload->SetStringField(TEXT("object_name"), TEXT("MyObject"));
+	Payload->SetStringField(TEXT("class_name"), TEXT("MyClass"));
+	Payload->SetNumberField(TEXT("component_name"), 123.0);
+	Payload->SetStringField(TEXT("anim_instance"), TEXT("true"));
+
+	FMonolithActionResult Result = FMonolithPieObjectActions::HandleGetObjectProperties(Payload);
+	TestFalse(TEXT("Should reject malformed actor_label type"), Result.bSuccess);
+	TestEqual(TEXT("Should return invalid param error"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+
+	Payload->RemoveField(TEXT("actor_label"));
+	Payload->SetStringField(TEXT("actor_label"), TEXT("MyActor"));
+	Result = FMonolithPieObjectActions::HandleGetObjectProperties(Payload);
+	TestFalse(TEXT("Should reject malformed component_name type"), Result.bSuccess);
+	TestEqual(TEXT("Should return invalid param error"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
 
 	return true;
 }

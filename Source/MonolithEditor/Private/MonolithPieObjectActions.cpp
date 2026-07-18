@@ -110,17 +110,20 @@ namespace MonolithPieObject
 		}
 
 		FString ActorLabel, ObjectName, ClassName;
-		if (Params->HasField(TEXT("actor_label")) && !Params->TryGetStringField(TEXT("actor_label"), ActorLabel))
+		const TSharedPtr<FJsonValue> ActorLabelField = Params->TryGetField(TEXT("actor_label"));
+		if (ActorLabelField.IsValid() && !ActorLabelField->IsNull() && !ActorLabelField->TryGetString(ActorLabel))
 		{
 			Out.Error = TEXT("actor_label must be a string");
 			return Out;
 		}
-		if (Params->HasField(TEXT("object_name")) && !Params->TryGetStringField(TEXT("object_name"), ObjectName))
+		const TSharedPtr<FJsonValue> ObjectNameField = Params->TryGetField(TEXT("object_name"));
+		if (ObjectNameField.IsValid() && !ObjectNameField->IsNull() && !ObjectNameField->TryGetString(ObjectName))
 		{
 			Out.Error = TEXT("object_name must be a string");
 			return Out;
 		}
-		if (Params->HasField(TEXT("class_name")) && !Params->TryGetStringField(TEXT("class_name"), ClassName))
+		const TSharedPtr<FJsonValue> ClassNameField = Params->TryGetField(TEXT("class_name"));
+		if (ClassNameField.IsValid() && !ClassNameField->IsNull() && !ClassNameField->TryGetString(ClassName))
 		{
 			Out.Error = TEXT("class_name must be a string");
 			return Out;
@@ -143,7 +146,8 @@ namespace MonolithPieObject
 
 		// Optional component hop.
 		FString ComponentName;
-		if (Params->HasField(TEXT("component_name")) && !Params->TryGetStringField(TEXT("component_name"), ComponentName))
+		const TSharedPtr<FJsonValue> ComponentNameField = Params->TryGetField(TEXT("component_name"));
+		if (ComponentNameField.IsValid() && !ComponentNameField->IsNull() && !ComponentNameField->TryGetString(ComponentName))
 		{
 			Out.Error = TEXT("component_name must be a string");
 			return Out;
@@ -151,7 +155,8 @@ namespace MonolithPieObject
 		const bool bHasComponent = !ComponentName.IsEmpty();
 
 		bool bWantAnimInstance = false;
-		if (Params->HasField(TEXT("anim_instance")) && !Params->TryGetBoolField(TEXT("anim_instance"), bWantAnimInstance))
+		const TSharedPtr<FJsonValue> AnimInstanceField = Params->TryGetField(TEXT("anim_instance"));
+		if (AnimInstanceField.IsValid() && !AnimInstanceField->IsNull() && !AnimInstanceField->TryGetBool(bWantAnimInstance))
 		{
 			Out.Error = TEXT("anim_instance must be a boolean");
 			return Out;
@@ -579,7 +584,8 @@ FMonolithActionResult FMonolithPieObjectActions::HandleCallFunction(const TShare
 	}
 
 	bool bAllowNonCallable = false;
-	if (Params->HasField(TEXT("allow_non_callable")) && !Params->TryGetBoolField(TEXT("allow_non_callable"), bAllowNonCallable))
+	const TSharedPtr<FJsonValue> AllowNonCallableField = Params->TryGetField(TEXT("allow_non_callable"));
+	if (AllowNonCallableField.IsValid() && !AllowNonCallableField->IsNull() && !AllowNonCallableField->TryGetBool(bAllowNonCallable))
 	{
 		return FMonolithActionResult::Error(TEXT("allow_non_callable must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 	}
@@ -597,7 +603,8 @@ FMonolithActionResult FMonolithPieObjectActions::HandleCallFunction(const TShare
 	}
 
 	const TSharedPtr<FJsonObject>* ArgsObj = nullptr;
-	if (Params->HasField(TEXT("args")) && (!Params->TryGetObjectField(TEXT("args"), ArgsObj) || !ArgsObj || !(*ArgsObj).IsValid()))
+	const TSharedPtr<FJsonValue> ArgsField = Params->TryGetField(TEXT("args"));
+	if (ArgsField.IsValid() && !ArgsField->IsNull() && (!ArgsField->TryGetObject(ArgsObj) || !ArgsObj || !(*ArgsObj).IsValid()))
 	{
 		return FMonolithActionResult::Error(TEXT("args must be an object"), FMonolithJsonUtils::ErrInvalidParams);
 	}
