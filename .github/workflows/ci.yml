@@ -30,10 +30,10 @@ jobs:
           python -m pip install ruff
 
       - name: Python syntax
-        run: python -m compileall Scripts MCP
+        run: python -m compileall Scripts MCP Analyzer
 
       - name: Ruff critical lint
-        run: ruff check Scripts/ MCP/ --select E9,F63,F7,F82
+        run: ruff check Scripts/ MCP/ Analyzer/ --select E9,F63,F7,F82
 
       - name: Monolith static checker
         run: python Scripts/ci_static_checks.py --config .github/monolith-static-ci.json --github check
