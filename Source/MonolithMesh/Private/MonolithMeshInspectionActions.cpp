@@ -735,14 +735,14 @@ FMonolithActionResult FMonolithMeshInspectionActions::GetMeshUvs(const TSharedPt
 	double LodIndexD = 0.0;
 	if (Params->HasField(TEXT("lod_index")) && !Params->TryGetNumberField(TEXT("lod_index"), LodIndexD))
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'lod_index'. Expected number."));
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'lod_index'. Expected number."), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	int32 LodIndex = static_cast<int32>(LodIndexD);
 
 	double TargetChannelD = -1.0;
 	if (Params->HasField(TEXT("uv_channel")) && !Params->TryGetNumberField(TEXT("uv_channel"), TargetChannelD))
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'uv_channel'. Expected number."));
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'uv_channel'. Expected number."), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	int32 TargetChannel = static_cast<int32>(TargetChannelD);
 
@@ -1302,21 +1302,21 @@ FMonolithActionResult FMonolithMeshInspectionActions::GetVertexData(const TShare
 	double LodIndexD = 0.0;
 	if (Params->HasField(TEXT("lod_index")) && !Params->TryGetNumberField(TEXT("lod_index"), LodIndexD))
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'lod_index'. Expected number."));
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'lod_index'. Expected number."), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	int32 LodIndex = static_cast<int32>(LodIndexD);
 
 	double OffsetD = 0.0;
 	if (Params->HasField(TEXT("offset")) && !Params->TryGetNumberField(TEXT("offset"), OffsetD))
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'offset'. Expected number."));
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'offset'. Expected number."), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	int32 Offset = static_cast<int32>(OffsetD);
 
 	double LimitD = 1000.0;
 	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitD))
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'limit'. Expected number."));
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'limit'. Expected number."), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	int32 Limit = static_cast<int32>(LimitD);
 	Limit = FMath::Clamp(Limit, 1, 5000); // Hard max 5000

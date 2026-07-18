@@ -324,3 +324,62 @@ bool FMonolithParamGuardLevelInstanceMalformedParamsTest::RunTest(const FString&
 
     return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshInspectionUvsVertexDataMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.InspectionUvsVertexDataRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardMeshInspectionUvsVertexDataMalformedParamsTest::RunTest(const FString& Parameters)
+{
+    FMonolithMeshInspectionActions::RegisterActions(FMonolithToolRegistry::Get());
+    TestTrue(TEXT("get_mesh_uvs action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("mesh"), TEXT("get_mesh_uvs")));
+    TestTrue(TEXT("get_vertex_data action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("mesh"), TEXT("get_vertex_data")));
+
+    // Test get_mesh_uvs with malformed lod_index
+    {
+        TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+        Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Temp/FakeMesh"));
+        Params->SetStringField(TEXT("lod_index"), TEXT("zero"));
+
+        FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("get_mesh_uvs"), Params);
+        TestFalse(TEXT("GetMeshUvs rejects malformed lod_index parameter"), Result.bSuccess);
+        TestEqual(TEXT("GetMeshUvs returns ErrInvalidParams"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+        TestTrue(TEXT("GetMeshUvs reports the validation error"), Result.ErrorMessage.Contains(TEXT("Expected number")));
+    }
+
+    // Test get_mesh_uvs with malformed uv_channel
+    {
+        TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+        Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Temp/FakeMesh"));
+        Params->SetStringField(TEXT("uv_channel"), TEXT("all"));
+
+        FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("get_mesh_uvs"), Params);
+        TestFalse(TEXT("GetMeshUvs rejects malformed uv_channel parameter"), Result.bSuccess);
+        TestEqual(TEXT("GetMeshUvs returns ErrInvalidParams"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+        TestTrue(TEXT("GetMeshUvs reports the validation error"), Result.ErrorMessage.Contains(TEXT("Expected number")));
+    }
+
+    // Test get_vertex_data with malformed limit
+    {
+        TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+        Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Temp/FakeMesh"));
+        Params->SetStringField(TEXT("limit"), TEXT("max"));
+
+        FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("get_vertex_data"), Params);
+        TestFalse(TEXT("GetVertexData rejects malformed limit parameter"), Result.bSuccess);
+        TestEqual(TEXT("GetVertexData returns ErrInvalidParams"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+        TestTrue(TEXT("GetVertexData reports the validation error"), Result.ErrorMessage.Contains(TEXT("Expected number")));
+    }
+
+    // Test get_vertex_data with malformed offset
+    {
+        TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+        Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Temp/FakeMesh"));
+        Params->SetStringField(TEXT("offset"), TEXT("start"));
+
+        FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("get_vertex_data"), Params);
+        TestFalse(TEXT("GetVertexData rejects malformed offset parameter"), Result.bSuccess);
+        TestEqual(TEXT("GetVertexData returns ErrInvalidParams"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+        TestTrue(TEXT("GetVertexData reports the validation error"), Result.ErrorMessage.Contains(TEXT("Expected number")));
+    }
+
+    return true;
+}
