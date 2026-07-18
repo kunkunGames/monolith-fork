@@ -3257,7 +3257,7 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 		if (!Params->TryGetBoolField(TEXT("two_sided"), Val))
 		{
 			GEditor->EndTransaction();
-			return FMonolithActionResult::Error(TEXT("two_sided must be a boolean"));
+			return FMonolithActionResult::Error(TEXT("two_sided must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		Mat->TwoSided = Val;
 		RecordChange(TEXT("two_sided"), Val ? TEXT("true") : TEXT("false"));
@@ -3268,7 +3268,7 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 		if (!Params->TryGetNumberField(TEXT("opacity_mask_clip_value"), ValDouble))
 		{
 			GEditor->EndTransaction();
-			return FMonolithActionResult::Error(TEXT("opacity_mask_clip_value must be a number"));
+			return FMonolithActionResult::Error(TEXT("opacity_mask_clip_value must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		float Val = static_cast<float>(ValDouble);
 		Mat->OpacityMaskClipValue = Val;
@@ -3280,7 +3280,7 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 		if (!Params->TryGetBoolField(TEXT("dithered_lod_transition"), Val))
 		{
 			GEditor->EndTransaction();
-			return FMonolithActionResult::Error(TEXT("dithered_lod_transition must be a boolean"));
+			return FMonolithActionResult::Error(TEXT("dithered_lod_transition must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		Mat->DitheredLODTransition = Val;
 		RecordChange(TEXT("dithered_lod_transition"), Val ? TEXT("true") : TEXT("false"));
@@ -3291,7 +3291,7 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 		if (!Params->TryGetBoolField(TEXT("used_with_skeletal_mesh"), Val))
 		{
 			GEditor->EndTransaction();
-			return FMonolithActionResult::Error(TEXT("used_with_skeletal_mesh must be a boolean"));
+			return FMonolithActionResult::Error(TEXT("used_with_skeletal_mesh must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		if (Val)
 		{
@@ -3306,7 +3306,7 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 		if (!Params->TryGetBoolField(TEXT("used_with_particle_sprites"), Val))
 		{
 			GEditor->EndTransaction();
-			return FMonolithActionResult::Error(TEXT("used_with_particle_sprites must be a boolean"));
+			return FMonolithActionResult::Error(TEXT("used_with_particle_sprites must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		if (Val)
 		{
@@ -3321,7 +3321,7 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 		if (!Params->TryGetBoolField(TEXT("used_with_niagara_sprites"), Val))
 		{
 			GEditor->EndTransaction();
-			return FMonolithActionResult::Error(TEXT("used_with_niagara_sprites must be a boolean"));
+			return FMonolithActionResult::Error(TEXT("used_with_niagara_sprites must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		if (Val)
 		{
@@ -3336,7 +3336,7 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 		if (!Params->TryGetBoolField(TEXT("used_with_niagara_meshes"), Val))
 		{
 			GEditor->EndTransaction();
-			return FMonolithActionResult::Error(TEXT("used_with_niagara_meshes must be a boolean"));
+			return FMonolithActionResult::Error(TEXT("used_with_niagara_meshes must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		if (Val)
 		{
@@ -3351,7 +3351,7 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 		if (!Params->TryGetBoolField(TEXT("used_with_niagara_ribbons"), Val))
 		{
 			GEditor->EndTransaction();
-			return FMonolithActionResult::Error(TEXT("used_with_niagara_ribbons must be a boolean"));
+			return FMonolithActionResult::Error(TEXT("used_with_niagara_ribbons must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		if (Val)
 		{
@@ -3366,7 +3366,7 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 		if (!Params->TryGetBoolField(TEXT("used_with_morph_targets"), Val))
 		{
 			GEditor->EndTransaction();
-			return FMonolithActionResult::Error(TEXT("used_with_morph_targets must be a boolean"));
+			return FMonolithActionResult::Error(TEXT("used_with_morph_targets must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		if (Val)
 		{
@@ -3381,7 +3381,7 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 		if (!Params->TryGetBoolField(TEXT("used_with_instanced_static_meshes"), Val))
 		{
 			GEditor->EndTransaction();
-			return FMonolithActionResult::Error(TEXT("used_with_instanced_static_meshes must be a boolean"));
+			return FMonolithActionResult::Error(TEXT("used_with_instanced_static_meshes must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		if (Val)
 		{
@@ -3396,7 +3396,7 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 		if (!Params->TryGetBoolField(TEXT("used_with_static_lighting"), Val))
 		{
 			GEditor->EndTransaction();
-			return FMonolithActionResult::Error(TEXT("used_with_static_lighting must be a boolean"));
+			return FMonolithActionResult::Error(TEXT("used_with_static_lighting must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		if (Val)
 		{
@@ -3411,7 +3411,7 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 		if (!Params->TryGetBoolField(TEXT("fully_rough"), Val))
 		{
 			GEditor->EndTransaction();
-			return FMonolithActionResult::Error(TEXT("fully_rough must be a boolean"));
+			return FMonolithActionResult::Error(TEXT("fully_rough must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		Mat->bFullyRough = Val;
 		RecordChange(TEXT("fully_rough"), Val ? TEXT("true") : TEXT("false"));
@@ -3422,7 +3422,7 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 		if (!Params->TryGetBoolField(TEXT("cast_shadow_as_masked"), Val))
 		{
 			GEditor->EndTransaction();
-			return FMonolithActionResult::Error(TEXT("cast_shadow_as_masked must be a boolean"));
+			return FMonolithActionResult::Error(TEXT("cast_shadow_as_masked must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		Mat->bCastDynamicShadowAsMasked = Val;
 		RecordChange(TEXT("cast_shadow_as_masked"), Val ? TEXT("true") : TEXT("false"));
@@ -4838,29 +4838,29 @@ FMonolithActionResult FMonolithMaterialActions::MoveExpression(const TSharedPtr<
 				FMoveOp Op;
 				if (!(*ObjPtr)->TryGetStringField(TEXT("name"), Op.Name))
 				{
-					return FMonolithActionResult::Error(TEXT("Parameter 'name' must be a valid string for each expression in 'expressions' array"));
+					return FMonolithActionResult::Error(TEXT("Parameter 'name' must be a valid string for each expression in 'expressions' array"), FMonolithJsonUtils::ErrInvalidParams);
 				}
 
 				// Accept both "x"/"y" and "pos_x"/"pos_y"
 				double XVal = 0.0;
 				if ((*ObjPtr)->HasField(TEXT("x")))
 				{
-					if (!(*ObjPtr)->TryGetNumberField(TEXT("x"), XVal)) return FMonolithActionResult::Error(TEXT("Parameter 'x' must be a number"));
+					if (!(*ObjPtr)->TryGetNumberField(TEXT("x"), XVal)) return FMonolithActionResult::Error(TEXT("Parameter 'x' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 				}
 				else if ((*ObjPtr)->HasField(TEXT("pos_x")))
 				{
-					if (!(*ObjPtr)->TryGetNumberField(TEXT("pos_x"), XVal)) return FMonolithActionResult::Error(TEXT("Parameter 'pos_x' must be a number"));
+					if (!(*ObjPtr)->TryGetNumberField(TEXT("pos_x"), XVal)) return FMonolithActionResult::Error(TEXT("Parameter 'pos_x' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 				}
 				Op.X = static_cast<int32>(XVal);
 
 				double YVal = 0.0;
 				if ((*ObjPtr)->HasField(TEXT("y")))
 				{
-					if (!(*ObjPtr)->TryGetNumberField(TEXT("y"), YVal)) return FMonolithActionResult::Error(TEXT("Parameter 'y' must be a number"));
+					if (!(*ObjPtr)->TryGetNumberField(TEXT("y"), YVal)) return FMonolithActionResult::Error(TEXT("Parameter 'y' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 				}
 				else if ((*ObjPtr)->HasField(TEXT("pos_y")))
 				{
-					if (!(*ObjPtr)->TryGetNumberField(TEXT("pos_y"), YVal)) return FMonolithActionResult::Error(TEXT("Parameter 'pos_y' must be a number"));
+					if (!(*ObjPtr)->TryGetNumberField(TEXT("pos_y"), YVal)) return FMonolithActionResult::Error(TEXT("Parameter 'pos_y' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 				}
 				Op.Y = static_cast<int32>(YVal);
 
@@ -4873,20 +4873,20 @@ FMonolithActionResult FMonolithMaterialActions::MoveExpression(const TSharedPtr<
 		FMoveOp Op;
 		if (!Params->TryGetStringField(TEXT("expression_name"), Op.Name))
 		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'expression_name' must be a string"));
+			return FMonolithActionResult::Error(TEXT("Parameter 'expression_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 
 		double XVal = 0.0;
 		if (Params->HasField(TEXT("pos_x")) && !Params->TryGetNumberField(TEXT("pos_x"), XVal))
 		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'pos_x' must be a number"));
+			return FMonolithActionResult::Error(TEXT("Parameter 'pos_x' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		Op.X = static_cast<int32>(XVal);
 
 		double YVal = 0.0;
 		if (Params->HasField(TEXT("pos_y")) && !Params->TryGetNumberField(TEXT("pos_y"), YVal))
 		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'pos_y' must be a number"));
+			return FMonolithActionResult::Error(TEXT("Parameter 'pos_y' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		Op.Y = static_cast<int32>(YVal);
 
@@ -9919,7 +9919,7 @@ FMonolithActionResult FMonolithMaterialActions::ImportTexture(const TSharedPtr<F
 		double Val = 0.0;
 		if (!Params->TryGetNumberField(TEXT("max_size"), Val))
 		{
-			return FMonolithActionResult::Error(TEXT("max_size must be a number"));
+			return FMonolithActionResult::Error(TEXT("max_size must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		MaxSize = static_cast<int32>(Val);
 	}
@@ -10036,7 +10036,7 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 
 	if (MapsObj->Values.Num() == 0)
 	{
-		return FMonolithActionResult::Error(TEXT("'maps' must be a non-empty object mapping PBR type to disk file path"));
+		return FMonolithActionResult::Error(TEXT("'maps' must be a non-empty object mapping PBR type to disk file path"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	// ---- Parse optional params ----
@@ -10718,7 +10718,7 @@ FMonolithActionResult FMonolithMaterialActions::SetFunctionInstanceParameter(con
 		double ValD = 0.0;
 		if (!Params->TryGetNumberField(TEXT("scalar_value"), ValD))
 		{
-			return FMonolithActionResult::Error(TEXT("scalar_value must be a number"));
+			return FMonolithActionResult::Error(TEXT("scalar_value must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		float Val = static_cast<float>(ValD);
 		// Try to find existing entry first, then create if not found
@@ -10841,7 +10841,7 @@ FMonolithActionResult FMonolithMaterialActions::SetFunctionInstanceParameter(con
 		bool Val = false;
 		if (!Params->TryGetBoolField(TEXT("switch_value"), Val))
 		{
-			return FMonolithActionResult::Error(TEXT("switch_value must be a boolean"));
+			return FMonolithActionResult::Error(TEXT("switch_value must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 
 		bool bFound = false;
