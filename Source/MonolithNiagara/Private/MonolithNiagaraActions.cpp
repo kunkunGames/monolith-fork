@@ -7046,10 +7046,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetCurveValue(const TShared
 FMonolithActionResult FMonolithNiagaraActions::HandleAddRenderer(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString RendererClassStr = Params->GetStringField(TEXT("class"));
-	if (RendererClassStr.IsEmpty()) RendererClassStr = Params->GetStringField(TEXT("renderer_class"));
-	if (RendererClassStr.IsEmpty()) RendererClassStr = Params->GetStringField(TEXT("renderer_type"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId))
+		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	FString RendererClassStr;
+	if (!Params->TryGetStringField(TEXT("class"), RendererClassStr) && !Params->TryGetStringField(TEXT("renderer_class"), RendererClassStr) && !Params->TryGetStringField(TEXT("renderer_type"), RendererClassStr))
+		return FMonolithActionResult::Error(TEXT("Parameter 'class' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -7084,7 +7086,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddRenderer(const TSharedPt
 FMonolithActionResult FMonolithNiagaraActions::HandleRemoveRenderer(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId))
+		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	double RendererIndex_Double;
 	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
 		return FMonolithActionResult::Error(TEXT("Missing or invalid numeric field: renderer_index"));
@@ -7113,12 +7117,16 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveRenderer(const TShare
 FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererMaterial(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId))
+		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	double RendererIndex_Double;
 	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
 		return FMonolithActionResult::Error(TEXT("Missing or invalid numeric field: renderer_index"));
 	int32 RendererIndex = static_cast<int32>(RendererIndex_Double);
-	FString MaterialPath = Params->GetStringField(TEXT("material"));
+	FString MaterialPath;
+	if (!Params->TryGetStringField(TEXT("material"), MaterialPath))
+		return FMonolithActionResult::Error(TEXT("Parameter 'material' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -7161,13 +7169,16 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererMaterial(const T
 FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererProperty(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId))
+		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	double RendererIndex_Double;
 	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
 		return FMonolithActionResult::Error(TEXT("Missing or invalid numeric field: renderer_index"));
 	int32 RendererIndex = static_cast<int32>(RendererIndex_Double);
-	FString PropertyName = Params->GetStringField(TEXT("property"));
-	if (PropertyName.IsEmpty()) PropertyName = Params->GetStringField(TEXT("property_name"));
+	FString PropertyName;
+	if (!Params->TryGetStringField(TEXT("property"), PropertyName) && !Params->TryGetStringField(TEXT("property_name"), PropertyName))
+		return FMonolithActionResult::Error(TEXT("Parameter 'property' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	TSharedPtr<FJsonValue> JV = Params->TryGetField(TEXT("value"));
 	if (!JV.IsValid())
 		return FMonolithActionResult::Error(TEXT("Missing required field: value"));
@@ -7233,7 +7244,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererProperty(const T
 FMonolithActionResult FMonolithNiagaraActions::HandleGetRendererBindings(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId))
+		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	double RendererIndex_Double;
 	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
 		return FMonolithActionResult::Error(TEXT("Missing or invalid numeric field: renderer_index"));
@@ -7271,13 +7284,19 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetRendererBindings(const T
 FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererBinding(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId))
+		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	double RendererIndex_Double;
 	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
 		return FMonolithActionResult::Error(TEXT("Missing or invalid numeric field: renderer_index"));
 	int32 RendererIndex = static_cast<int32>(RendererIndex_Double);
-	FString BindingName = Params->GetStringField(TEXT("binding_name"));
-	FString AttributePath = Params->GetStringField(TEXT("attribute"));
+	FString BindingName;
+	if (!Params->TryGetStringField(TEXT("binding_name"), BindingName))
+		return FMonolithActionResult::Error(TEXT("Parameter 'binding_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	FString AttributePath;
+	if (!Params->TryGetStringField(TEXT("attribute"), AttributePath))
+		return FMonolithActionResult::Error(TEXT("Parameter 'attribute' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
