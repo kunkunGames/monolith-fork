@@ -5697,6 +5697,9 @@ FMonolithActionResult FMonolithMaterialActions::SetInstanceParameters(const TSha
 	TArray<TSharedPtr<FJsonValue>> ErrorsArr;
 	TArray<TSharedPtr<FJsonValue>> ResultsArr;  // MINOR #3: per-param results
 
+	ErrorsArr.Reserve(ParamArray->Num());
+	ResultsArr.Reserve(ParamArray->Num());
+
 	for (const auto& ParamVal : *ParamArray)
 	{
 		const TSharedPtr<FJsonObject>* ParamObj = nullptr;
