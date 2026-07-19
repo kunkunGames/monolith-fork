@@ -4575,7 +4575,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleGraph(const TShare
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetCustomHLSLText(const TSharedPtr<FJsonObject>& Params)
 {
-	FString ScriptPath = Params->GetStringField(TEXT("script_path"));
+	FString ScriptPath;
+	if (!Params->TryGetStringField(TEXT("script_path"), ScriptPath))
+		return FMonolithActionResult::Error(TEXT("Missing required field: script_path must be a string"));
 	FString NodeGuidStr;
 	if (Params->HasField(TEXT("node_guid")) && !Params->TryGetStringField(TEXT("node_guid"), NodeGuidStr))
 		return FMonolithActionResult::Error(TEXT("Parameter 'node_guid' must be a string"));
@@ -4643,14 +4645,18 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetCustomHLSLText(const TSh
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetCustomHLSLText(const TSharedPtr<FJsonObject>& Params)
 {
-	FString ScriptPath = Params->GetStringField(TEXT("script_path"));
-	FString HlslText = Params->GetStringField(TEXT("hlsl"));
+	FString ScriptPath;
+	if (!Params->TryGetStringField(TEXT("script_path"), ScriptPath))
+		return FMonolithActionResult::Error(TEXT("Missing required field: script_path must be a string"));
+	FString HlslText;
+	if (!Params->TryGetStringField(TEXT("hlsl"), HlslText))
+		return FMonolithActionResult::Error(TEXT("Missing required field: hlsl must be a string"));
 	FString NodeGuidStr;
 	if (Params->HasField(TEXT("node_guid")) && !Params->TryGetStringField(TEXT("node_guid"), NodeGuidStr))
 		return FMonolithActionResult::Error(TEXT("Parameter 'node_guid' must be a string"));
 
 	if (HlslText.IsEmpty())
-		return FMonolithActionResult::Error(TEXT("Missing required field: hlsl"));
+		return FMonolithActionResult::Error(TEXT("Missing required field: hlsl must be a string"));
 
 	UNiagaraScript* Script = LoadObject<UNiagaraScript>(nullptr, *ScriptPath);
 	if (!Script) return FMonolithActionResult::Error(TEXT("Failed to load script"));

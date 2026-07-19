@@ -73,5 +73,37 @@ bool FMonolithParamGuardNiagaraUsageIdTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("Should fail when node_guid is not a string"), Result.bSuccess);
 	TestTrue(TEXT("Error message should mention node_guid must be a string"), Result.ErrorMessage.Contains(TEXT("Parameter 'node_guid' must be a string")));
 
+	// Test HandleGetCustomHLSLText: missing script_path
+	{
+		TSharedRef<FJsonObject> GetParams = MakeShared<FJsonObject>();
+		GetParams->SetNumberField(TEXT("script_path"), 123); // wrong type
+
+		Result = FMonolithNiagaraActions::HandleGetCustomHLSLText(GetParams);
+		TestFalse(TEXT("HandleGetCustomHLSLText should fail gracefully with wrong-type script_path"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention script_path must be a string"), Result.ErrorMessage.Contains(TEXT("script_path must be a string")));
+	}
+
+	// Test HandleSetCustomHLSLText: missing script_path
+	{
+		TSharedRef<FJsonObject> SetParams = MakeShared<FJsonObject>();
+		SetParams->SetNumberField(TEXT("script_path"), 123); // wrong type
+		SetParams->SetStringField(TEXT("hlsl"), TEXT("return 0;"));
+
+		Result = FMonolithNiagaraActions::HandleSetCustomHLSLText(SetParams);
+		TestFalse(TEXT("HandleSetCustomHLSLText should fail gracefully with wrong-type script_path"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention script_path must be a string"), Result.ErrorMessage.Contains(TEXT("script_path must be a string")));
+	}
+
+	// Test HandleSetCustomHLSLText: missing hlsl
+	{
+		TSharedRef<FJsonObject> SetParams = MakeShared<FJsonObject>();
+		SetParams->SetStringField(TEXT("script_path"), TEXT("/Some/Path/To/Script"));
+		SetParams->SetNumberField(TEXT("hlsl"), 123); // wrong type
+
+		Result = FMonolithNiagaraActions::HandleSetCustomHLSLText(SetParams);
+		TestFalse(TEXT("HandleSetCustomHLSLText should fail gracefully with wrong-type hlsl"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention hlsl must be a string"), Result.ErrorMessage.Contains(TEXT("hlsl must be a string")));
+	}
+
 	return true;
 }
