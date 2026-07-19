@@ -12867,6 +12867,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleCopyBonePoseBetweenSequen
 	TArray<FString> CopiedBones;
 	CopiedBones.Reserve(BoneNamesArr->Num());
 	TArray<TSharedPtr<FJsonValue>> SkippedJson;
+	SkippedJson.Reserve(BoneNamesArr->Num());
 
 	const FReferenceSkeleton& SourceRefSkel = SourceSkel->GetReferenceSkeleton();
 	const FReferenceSkeleton& DestRefSkel = DestSkel->GetReferenceSkeleton();
