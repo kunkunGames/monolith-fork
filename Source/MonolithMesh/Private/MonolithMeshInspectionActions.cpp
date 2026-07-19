@@ -1366,6 +1366,7 @@ FMonolithActionResult FMonolithMeshInspectionActions::GetVertexData(const TShare
 
 		FVector4f Normal = VertBuffer.VertexTangentZ(V);
 		TArray<TSharedPtr<FJsonValue>> NArr;
+		NArr.Reserve(3);
 		NArr.Add(MakeShared<FJsonValueNumber>(Normal.X));
 		NArr.Add(MakeShared<FJsonValueNumber>(Normal.Y));
 		NArr.Add(MakeShared<FJsonValueNumber>(Normal.Z));

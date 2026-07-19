@@ -251,24 +251,28 @@ TSharedPtr<FJsonObject> BoundsToJson(const FBoxSphereBounds& Bounds)
 	FVector Extent = Bounds.BoxExtent * 2.0;
 
 	TArray<TSharedPtr<FJsonValue>> MinArr;
+	MinArr.Reserve(3);
 	MinArr.Add(MakeShared<FJsonValueNumber>(Min.X));
 	MinArr.Add(MakeShared<FJsonValueNumber>(Min.Y));
 	MinArr.Add(MakeShared<FJsonValueNumber>(Min.Z));
 	Result->SetArrayField(TEXT("min"), MinArr);
 
 	TArray<TSharedPtr<FJsonValue>> MaxArr;
+	MaxArr.Reserve(3);
 	MaxArr.Add(MakeShared<FJsonValueNumber>(Max.X));
 	MaxArr.Add(MakeShared<FJsonValueNumber>(Max.Y));
 	MaxArr.Add(MakeShared<FJsonValueNumber>(Max.Z));
 	Result->SetArrayField(TEXT("max"), MaxArr);
 
 	TArray<TSharedPtr<FJsonValue>> ExtArr;
+	ExtArr.Reserve(3);
 	ExtArr.Add(MakeShared<FJsonValueNumber>(Extent.X));
 	ExtArr.Add(MakeShared<FJsonValueNumber>(Extent.Y));
 	ExtArr.Add(MakeShared<FJsonValueNumber>(Extent.Z));
 	Result->SetArrayField(TEXT("extent"), ExtArr);
 
 	TArray<TSharedPtr<FJsonValue>> CenterArr;
+	CenterArr.Reserve(3);
 	CenterArr.Add(MakeShared<FJsonValueNumber>(Bounds.Origin.X));
 	CenterArr.Add(MakeShared<FJsonValueNumber>(Bounds.Origin.Y));
 	CenterArr.Add(MakeShared<FJsonValueNumber>(Bounds.Origin.Z));
@@ -286,18 +290,21 @@ TSharedPtr<FJsonObject> TransformToJson(const FTransform& Transform)
 	FVector Scale = Transform.GetScale3D();
 
 	TArray<TSharedPtr<FJsonValue>> LocArr;
+	LocArr.Reserve(3);
 	LocArr.Add(MakeShared<FJsonValueNumber>(Loc.X));
 	LocArr.Add(MakeShared<FJsonValueNumber>(Loc.Y));
 	LocArr.Add(MakeShared<FJsonValueNumber>(Loc.Z));
 	Result->SetArrayField(TEXT("location"), LocArr);
 
 	TArray<TSharedPtr<FJsonValue>> RotArr;
+	RotArr.Reserve(3);
 	RotArr.Add(MakeShared<FJsonValueNumber>(Rot.Pitch));
 	RotArr.Add(MakeShared<FJsonValueNumber>(Rot.Yaw));
 	RotArr.Add(MakeShared<FJsonValueNumber>(Rot.Roll));
 	Result->SetArrayField(TEXT("rotation"), RotArr);
 
 	TArray<TSharedPtr<FJsonValue>> ScaleArr;
+	ScaleArr.Reserve(3);
 	ScaleArr.Add(MakeShared<FJsonValueNumber>(Scale.X));
 	ScaleArr.Add(MakeShared<FJsonValueNumber>(Scale.Y));
 	ScaleArr.Add(MakeShared<FJsonValueNumber>(Scale.Z));

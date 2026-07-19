@@ -53,6 +53,7 @@ namespace
 	TArray<TSharedPtr<FJsonValue>> HlodVectorToJson(const FVector& Value)
 	{
 		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Reserve(3);
 		Arr.Add(MakeShared<FJsonValueNumber>(Value.X));
 		Arr.Add(MakeShared<FJsonValueNumber>(Value.Y));
 		Arr.Add(MakeShared<FJsonValueNumber>(Value.Z));
