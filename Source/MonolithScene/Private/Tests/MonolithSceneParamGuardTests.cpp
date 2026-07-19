@@ -191,3 +191,20 @@ bool FMonolithLimitGuardSceneVolumeFilterRadiusTest::RunTest(const FString& Para
 
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardSceneAnalyzePropDensityMalformedParamsTest, "Monolith.ParamGuard.MonolithScene.AnalyzePropDensityRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardSceneAnalyzePropDensityMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithMeshDecalActions::RegisterActions(FMonolithToolRegistry::Get());
+	TestTrue(TEXT("analyze_prop_density action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("scene"), TEXT("analyze_prop_density")));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	// Missing required "volume_name"
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("scene"), TEXT("analyze_prop_density"), Params);
+	TestFalse(TEXT("analyze_prop_density rejects missing volume_name parameter"), Result.bSuccess);
+	TestTrue(TEXT("analyze_prop_density reports the validation error"), Result.ErrorMessage.Contains(TEXT("volume_name")));
+
+	return true;
+}
