@@ -1159,6 +1159,9 @@ Environment:
   MONOLITH_TOOL_LOG_MAX_FIELD_BYTES    Bound captured log fields.
   LOCALAPPDATA / XDG_CACHE_HOME        Used for script-proxy tool cache fallback paths.
 
+Offline fallback:
+  Use Binaries/monolith_query (or .exe on Windows) for read-only source/project/bridge/console queries when the editor or MCP server is unavailable.
+
 Runtime support notes:
   MONOLITH_SPLIT_EDITOR_QUERY, MONOLITH_EDITOR_ACTION_ALLOWLIST,
   MONOLITH_EDITOR_ACTION_DENYLIST, MONOLITH_OFFLINE_FALLBACK,
@@ -1167,9 +1170,6 @@ Runtime support notes:
 
 MCP config example:
   {"mcpServers":{"monolith":{"command":"<project-root>/Plugins/Monolith/Scripts/monolith_proxy.sh", "args": []}}} (or .bat on Windows)
-
-Offline fallback:
-  Use Binaries/monolith_query (or .exe on Windows) for read-only source/project/bridge/console queries when the editor or MCP server is unavailable.
 """
     )
 
