@@ -4090,9 +4090,28 @@ FMonolithActionResult FMonolithGASEffectActions::HandleGetEffectModifiersBreakdo
 			float Magnitude = 0.f;
 			AGE.Spec.Def->Modifiers[ModIdx].ModifierMagnitude.AttemptCalculateMagnitude(AGE.Spec, Magnitude);
 
-			// Apply stack count
+			// Apply stack count mathematically based on the modifier operation
 			int32 StackCount = AGE.Spec.GetStackCount();
-			float EffectiveMagnitude = Magnitude * StackCount;
+			float EffectiveMagnitude = Magnitude;
+
+			switch (Mod.ModifierOp)
+			{
+			case EGameplayModOp::Additive:
+			case EGameplayModOp::MultiplyAdditive:
+			case EGameplayModOp::DivideAdditive:
+			case EGameplayModOp::AddFinal:
+				EffectiveMagnitude = Magnitude * StackCount;
+				break;
+			case EGameplayModOp::MultiplyCompound:
+				EffectiveMagnitude = FMath::Pow(Magnitude, StackCount);
+				break;
+			case EGameplayModOp::Override:
+				EffectiveMagnitude = Magnitude;
+				break;
+			default:
+				EffectiveMagnitude = Magnitude * StackCount;
+				break;
+			}
 
 			TSharedPtr<FJsonObject> ModEntry = MakeShared<FJsonObject>();
 			ModEntry->SetStringField(TEXT("effect"), AGE.Spec.Def->GetName());
