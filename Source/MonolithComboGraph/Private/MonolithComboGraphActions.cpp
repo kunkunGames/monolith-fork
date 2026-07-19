@@ -927,19 +927,20 @@ FMonolithActionResult FMonolithComboGraphActions::HandleValidateComboGraph(const
 	// BFS from entry/first node to find reachable nodes
 	if (FirstNode)
 	{
-		TArray<UObject*> Queue;
-		Queue.Add(FirstNode);
+		TQueue<UObject*> Queue;
+		Queue.Enqueue(FirstNode);
 		ReachableNodes.Add(FirstNode);
-		while (Queue.Num() > 0)
+		while (!Queue.IsEmpty())
 		{
-			UObject* Current = Queue.Pop(EAllowShrinking::No);
+			UObject* Current;
+			Queue.Dequeue(Current);
 			TArray<UObject*> Children = GetChildrenNodes(Current);
 			for (UObject* Child : Children)
 			{
 				if (Child && !ReachableNodes.Contains(Child))
 				{
 					ReachableNodes.Add(Child);
-					Queue.Add(Child);
+					Queue.Enqueue(Child);
 				}
 			}
 		}
