@@ -1511,7 +1511,11 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeEffects(cons
 
 		// effect_classes -> TargetGameplayEffectClasses
 		const TArray<TSharedPtr<FJsonValue>>* EffectClasses = nullptr;
-		if (ContainerData->TryGetArrayField(TEXT("effect_classes"), EffectClasses) && EffectClasses)
+		if (ContainerData->HasField(TEXT("effect_classes")) && !ContainerData->TryGetArrayField(TEXT("effect_classes"), EffectClasses))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for param \'effect_classes\', expected array"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (EffectClasses)
 		{
 			TArray<FString> ClassPaths;
 			ClassPaths.Reserve(EffectClasses->Num());
@@ -1540,14 +1544,22 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeEffects(cons
 
 		// set_by_caller_tag -> SetByCallerTag
 		FString SetByCallerTag;
-		if (ContainerData->TryGetStringField(TEXT("set_by_caller_tag"), SetByCallerTag) && !SetByCallerTag.IsEmpty())
+		if (ContainerData->HasField(TEXT("set_by_caller_tag")) && !ContainerData->TryGetStringField(TEXT("set_by_caller_tag"), SetByCallerTag))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for param \'set_by_caller_tag\', expected string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (!SetByCallerTag.IsEmpty())
 		{
 			ContainerParts.Add(FString::Printf(TEXT("SetByCallerTag=(TagName=\"%s\")"), *SetByCallerTag));
 		}
 
 		// set_by_caller_magnitude -> SetByCallerMagnitude
 		double Magnitude = 0.0;
-		if (ContainerData->TryGetNumberField(TEXT("set_by_caller_magnitude"), Magnitude))
+		if (ContainerData->HasField(TEXT("set_by_caller_magnitude")) && !ContainerData->TryGetNumberField(TEXT("set_by_caller_magnitude"), Magnitude))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for param \'set_by_caller_magnitude\', expected number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (ContainerData->HasField(TEXT("set_by_caller_magnitude")))
 		{
 			ContainerParts.Add(FString::Printf(TEXT("SetByCallerMagnitude=%f"), Magnitude));
 		}
@@ -1654,7 +1666,11 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeCues(const T
 		const TArray<TSharedPtr<FJsonValue>>* Definitions = nullptr;
 		TArray<FString> DefTexts;
 
-		if (ContainerData->TryGetArrayField(TEXT("definitions"), Definitions) && Definitions)
+		if (ContainerData->HasField(TEXT("definitions")) && !ContainerData->TryGetArrayField(TEXT("definitions"), Definitions))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for param \'definitions\', expected array"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (Definitions)
 		{
 			DefTexts.Reserve(Definitions->Num());
 			for (const auto& DefVal : *Definitions)
@@ -1666,7 +1682,11 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeCues(const T
 
 				// gameplay_cue_tags -> GameplayCueTags
 				const TArray<TSharedPtr<FJsonValue>>* CueTags = nullptr;
-				if (Def->TryGetArrayField(TEXT("gameplay_cue_tags"), CueTags) && CueTags)
+				if (Def->HasField(TEXT("gameplay_cue_tags")) && !Def->TryGetArrayField(TEXT("gameplay_cue_tags"), CueTags))
+				{
+					return FMonolithActionResult::Error(TEXT("Invalid type for param \'gameplay_cue_tags\', expected array"), FMonolithJsonUtils::ErrInvalidParams);
+				}
+				if (CueTags)
 				{
 					TArray<FString> TagTexts;
 					TagTexts.Reserve(CueTags->Num());
@@ -1686,14 +1706,22 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeCues(const T
 
 				// source_type -> SourceType (enum)
 				FString SourceType;
-				if (Def->TryGetStringField(TEXT("source_type"), SourceType) && !SourceType.IsEmpty())
+				if (Def->HasField(TEXT("source_type")) && !Def->TryGetStringField(TEXT("source_type"), SourceType))
+				{
+					return FMonolithActionResult::Error(TEXT("Invalid type for param \'source_type\', expected string"), FMonolithJsonUtils::ErrInvalidParams);
+				}
+				if (!SourceType.IsEmpty())
 				{
 					DefParts.Add(FString::Printf(TEXT("SourceType=%s"), *SourceType));
 				}
 
 				// source_asset -> SourceAsset (soft object ref)
 				FString SourceAsset;
-				if (Def->TryGetStringField(TEXT("source_asset"), SourceAsset) && !SourceAsset.IsEmpty())
+				if (Def->HasField(TEXT("source_asset")) && !Def->TryGetStringField(TEXT("source_asset"), SourceAsset))
+				{
+					return FMonolithActionResult::Error(TEXT("Invalid type for param \'source_asset\', expected string"), FMonolithJsonUtils::ErrInvalidParams);
+				}
+				if (!SourceAsset.IsEmpty())
 				{
 					DefParts.Add(FString::Printf(TEXT("SourceAsset=%s"), *SourceAsset));
 				}
