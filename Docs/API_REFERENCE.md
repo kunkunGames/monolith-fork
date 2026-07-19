@@ -1759,6 +1759,85 @@ Optional sprite asset production orchestration and validation actions.
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithSpriteAsset.md` for the deep dive.
 
+### `sprite.get_status`
+
+Report MonolithSprite sprite-production orchestration status, supported profiles, and action ownership boundaries. No parameters.
+
+### `sprite.validate_asset_spec`
+
+Validate a sprite asset_spec.yaml for profile, target surface, dimensions, frame contract, texture role, and profile-specific required fields.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `spec_path` | string | **required** | Path to asset_spec.yaml, absolute or relative to the Monolith plugin root/project root. |
+
+### `sprite.validate_guides`
+
+Validate that required pose, silhouette, and composition guide PNGs exist and match the declared work canvas.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `spec_path` | string | **required** | Path to asset_spec.yaml. |
+
+### `sprite.build_candidate_plan`
+
+Build a deterministic per-frame/per-seed candidate generation plan without calling an image provider.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `spec_path` | string | **required** | Path to asset_spec.yaml. |
+
+### `sprite.prepare_imagegen_requests`
+
+Prepare imagegen.generate_image_via_ima2 request payloads from a validated sprite asset spec. Does not call the provider.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `spec_path` | string | **required** | Path to asset_spec.yaml. |
+
+### `sprite.run_generation_batch`
+
+Execute a sprite candidate batch by delegating each prepared request to imagegen or another namespaced provider action, then write a generation manifest.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `spec_path` | string | **required** | Path to asset_spec.yaml. |
+| `execute` | boolean | optional | Must be true to call provider actions. False returns a dry-run execution plan. Default: `false`. |
+| `provider_action` | string | optional | Override request action, e.g. imagegen.generate_image_via_ima2 or imagegen.generate_image. |
+| `max_requests` | integer | optional | Maximum requests to execute from the prepared plan. Defaults to all requests. |
+| `manifest_path` | string | optional | Output manifest path. Defaults to export/<asset_id>_generation_manifest.json. |
+| `stop_on_error` | boolean | optional | Stop after the first failed provider action. Default: `true`. |
+
+### `sprite.validate_sheet`
+
+Validate final sprite sheet or UI atlas dimensions, cell grid, frame capacity, and alpha coverage against a sprite asset spec.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `spec_path` | string | **required** | Path to asset_spec.yaml. |
+| `sheet_path` | string | **required** | Path to final sheet/atlas PNG. |
+| `metadata_path` | string | optional | Optional metadata JSON path to check for existence. |
+
+### `sprite.export_metadata`
+
+Export deterministic sprite sheet/atlas metadata JSON with cell rects, pivots, frame ids, role, and source spec path.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `spec_path` | string | **required** | Path to asset_spec.yaml. |
+| `output_path` | string | optional | Metadata JSON output path. Defaults to export/<asset_id>_metadata.json next to the spec. |
+| `sheet_path` | string | optional | Optional final sheet/atlas PNG path recorded in metadata. |
+
+### `sprite.build_preview_contact_sheet`
+
+Build a guide preview PNG from pose, silhouette, and composition guides for human review. Does not mutate Unreal assets.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `spec_path` | string | **required** | Path to asset_spec.yaml. |
+| `output_path` | string | optional | Preview PNG output path. Defaults to export/<asset_id>_guide_preview.png. |
+| `thumbnail_size` | integer | optional | Preview cell size in pixels. Default: 256. |
+
 ## imagegen
 
 Generated-image provider discovery, deterministic local PNG generation, ima2/imag2-gen bridge calls, generated PNG import, SVG source workflows, and MSDF Texture2D baking. `generate_image_via_ima2` keeps provider credentials outside Monolith and accepts only PNG provider output for generated Texture2D imports.
