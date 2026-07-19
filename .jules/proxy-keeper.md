@@ -12,3 +12,9 @@ ProxyKeeper PRs maintain proxy scripts, MCP templates, and install/proxy README 
 **Learning:** General instructions in `AGENTS.md` to avoid generic placeholder names and random suffixes are often missed by agents unless directly included in their specific `.jules/<agent>.md` instructions. When an agent creates a PR title of "concise mcp-proxy improvement.", it is echoing the prompt's instructions rather than describing the actual change.
 **Prevention:** Always replace the PR title placeholder with a concrete description of the change (e.g., `ProxyKeeper: fix offline fallback parity in monolith_proxy`). Never append numeric task IDs or UUIDs to branch names to evade collision checks. If your chosen branch name is taken, stop without PR instead of renaming it.
 **Avoid:** Using `ProxyKeeper: concise mcp-proxy improvement.` as a PR title or generating branches with `-<number>` suffixes.
+
+## 2026-07-20 - Stop generating branches with numeric suffixes
+**Coordination issue:** ProxyKeeper continues to generate branches with large numeric suffixes (e.g., `-16391218154714852643`) to bypass collision checks, despite the previous rule.
+**Learning:** General instructions are being ignored when branch names collide. The agent must yield rather than renaming the branch.
+**Prevention:** If your intended branch name (e.g., `jules/proxy-keeper/cpp-instructions-parity`) is already taken, you MUST stop without creating a PR and use the `done` tool. Do not generate a new name by appending numbers.
+**Avoid:** Generating branches with `-<number>` suffixes.
