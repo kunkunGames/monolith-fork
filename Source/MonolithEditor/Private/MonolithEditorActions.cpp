@@ -7370,6 +7370,7 @@ namespace MonolithEditorPieSmoke
 
 		// Missing must_present patterns (the ones that failed the present check).
 		TArray<TSharedPtr<FJsonValue>> MissingPresent;
+		MissingPresent.Reserve(G.MustPresent.Num());
 		for (const FString& Pattern : G.MustPresent)
 		{
 			bool bFound = false;
