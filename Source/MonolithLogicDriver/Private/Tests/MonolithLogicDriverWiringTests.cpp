@@ -1211,4 +1211,248 @@ bool FMonolithLogicDriverCompileStateMachineFunctionalTest::RunTest(const FStrin
 	return true;
 }
 
+
+
+// ------------------------------------------------------------------------------------------------
+// Monolith.LogicDriverKeeper.FindNodesByTypeFunctional
+// Validates the functional 'happy path' for finding nodes by type.
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLogicDriverFindNodesByTypeFunctionalTest, "Monolith.LogicDriverKeeper.FindNodesByTypeFunctional", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithLogicDriverFindNodesByTypeFunctionalTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("find_nodes_by_type")))
+	{
+		FMonolithLogicDriverAssetActions::RegisterActions(Registry);
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	FString AssetPath = TEXT("/Game/Tests/SM_FindNodesByTypeTest");
+	{
+		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+		CreateParams->SetStringField(TEXT("save_path"), AssetPath);
+		FMonolithActionResult CreateResult = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("create_state_machine"), CreateParams);
+		if (!CreateResult.bSuccess) return true;
+	}
+
+	FString NodeGuid;
+	{
+		TSharedPtr<FJsonObject> AddStateParams = MakeShared<FJsonObject>();
+		AddStateParams->SetStringField(TEXT("asset_path"), AssetPath);
+		AddStateParams->SetStringField(TEXT("name"), TEXT("MyTestState"));
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_state"), AddStateParams);
+		TestTrue(TEXT("add_state should succeed"), Result.bSuccess);
+		if (Result.bSuccess && Result.Payload.IsValid())
+		{
+			Result.Payload->TryGetStringField(TEXT("node_guid"), NodeGuid);
+		}
+	}
+
+	{
+		TSharedPtr<FJsonObject> FindParams = MakeShared<FJsonObject>();
+		FindParams->SetStringField(TEXT("asset_path"), AssetPath);
+		FindParams->SetStringField(TEXT("node_type"), TEXT("state"));
+
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("find_nodes_by_type"), FindParams);
+		TestTrue(TEXT("find_nodes_by_type should succeed"), Result.bSuccess);
+
+		if (Result.bSuccess && Result.Payload.IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* NodesArray = nullptr;
+			if (Result.Payload->TryGetArrayField(TEXT("nodes"), NodesArray))
+			{
+				bool bFound = false;
+				for (const TSharedPtr<FJsonValue>& NodeVal : *NodesArray)
+				{
+					const TSharedPtr<FJsonObject>& NodeObj = NodeVal->AsObject();
+					if (NodeObj.IsValid())
+					{
+						FString Guid;
+						if (NodeObj->TryGetStringField(TEXT("node_guid"), Guid) && Guid == NodeGuid)
+						{
+							bFound = true;
+							break;
+						}
+					}
+				}
+				TestTrue(TEXT("Added state should be found"), bFound);
+			}
+			else
+			{
+				AddError(TEXT("nodes array missing from payload"));
+			}
+		}
+	}
+
+	if (Registry.HasAction(TEXT("logicdriver"), TEXT("delete_state_machine")))
+	{
+		TSharedPtr<FJsonObject> DeleteParams = MakeShared<FJsonObject>();
+		DeleteParams->SetStringField(TEXT("asset_path"), AssetPath);
+		Registry.ExecuteAction(TEXT("logicdriver"), TEXT("delete_state_machine"), DeleteParams);
+	}
+
+	return true;
+}
+
+// ------------------------------------------------------------------------------------------------
+// Monolith.LogicDriverKeeper.FindNodesByClassFunctional
+// Validates the functional 'happy path' for finding nodes by class.
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLogicDriverFindNodesByClassFunctionalTest, "Monolith.LogicDriverKeeper.FindNodesByClassFunctional", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithLogicDriverFindNodesByClassFunctionalTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("find_nodes_by_class")))
+	{
+		FMonolithLogicDriverAssetActions::RegisterActions(Registry);
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	FString AssetPath = TEXT("/Game/Tests/SM_FindNodesByClassTest");
+	{
+		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+		CreateParams->SetStringField(TEXT("save_path"), AssetPath);
+		FMonolithActionResult CreateResult = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("create_state_machine"), CreateParams);
+		if (!CreateResult.bSuccess) return true;
+	}
+
+	FString NodeGuid;
+	{
+		TSharedPtr<FJsonObject> AddStateParams = MakeShared<FJsonObject>();
+		AddStateParams->SetStringField(TEXT("asset_path"), AssetPath);
+		AddStateParams->SetStringField(TEXT("name"), TEXT("MyTestState"));
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_state"), AddStateParams);
+		TestTrue(TEXT("add_state should succeed"), Result.bSuccess);
+		if (Result.bSuccess && Result.Payload.IsValid())
+		{
+			Result.Payload->TryGetStringField(TEXT("node_guid"), NodeGuid);
+		}
+	}
+
+	{
+		TSharedPtr<FJsonObject> FindParams = MakeShared<FJsonObject>();
+		FindParams->SetStringField(TEXT("asset_path"), AssetPath);
+		FindParams->SetStringField(TEXT("class_name"), TEXT("SMStateInstance")); // Default class for state nodes
+
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("find_nodes_by_class"), FindParams);
+		TestTrue(TEXT("find_nodes_by_class should succeed"), Result.bSuccess);
+
+		if (Result.bSuccess && Result.Payload.IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* NodesArray = nullptr;
+			if (Result.Payload->TryGetArrayField(TEXT("nodes"), NodesArray))
+			{
+				bool bFound = false;
+				for (const TSharedPtr<FJsonValue>& NodeVal : *NodesArray)
+				{
+					const TSharedPtr<FJsonObject>& NodeObj = NodeVal->AsObject();
+					if (NodeObj.IsValid())
+					{
+						FString Guid;
+						if (NodeObj->TryGetStringField(TEXT("node_guid"), Guid) && Guid == NodeGuid)
+						{
+							bFound = true;
+							break;
+						}
+					}
+				}
+				TestTrue(TEXT("Added state should be found by its class"), bFound);
+			}
+			else
+			{
+				AddError(TEXT("nodes array missing from payload"));
+			}
+		}
+	}
+
+	if (Registry.HasAction(TEXT("logicdriver"), TEXT("delete_state_machine")))
+	{
+		TSharedPtr<FJsonObject> DeleteParams = MakeShared<FJsonObject>();
+		DeleteParams->SetStringField(TEXT("asset_path"), AssetPath);
+		Registry.ExecuteAction(TEXT("logicdriver"), TEXT("delete_state_machine"), DeleteParams);
+	}
+
+	return true;
+}
+
+// ------------------------------------------------------------------------------------------------
+// Monolith.LogicDriverKeeper.AddConduitFunctional
+// Validates the functional 'happy path' for adding a conduit node.
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLogicDriverAddConduitFunctionalTest, "Monolith.LogicDriverKeeper.AddConduitFunctional", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithLogicDriverAddConduitFunctionalTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("add_conduit")))
+	{
+		FMonolithLogicDriverAssetActions::RegisterActions(Registry);
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	FString AssetPath = TEXT("/Game/Tests/SM_AddConduitTest");
+	{
+		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+		CreateParams->SetStringField(TEXT("save_path"), AssetPath);
+		FMonolithActionResult CreateResult = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("create_state_machine"), CreateParams);
+		if (!CreateResult.bSuccess) return true;
+	}
+
+	FString NodeGuid;
+	{
+		TSharedPtr<FJsonObject> AddConduitParams = MakeShared<FJsonObject>();
+		AddConduitParams->SetStringField(TEXT("asset_path"), AssetPath);
+		AddConduitParams->SetStringField(TEXT("name"), TEXT("MyTestConduit"));
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_conduit"), AddConduitParams);
+		TestTrue(TEXT("add_conduit should succeed"), Result.bSuccess);
+		if (Result.bSuccess && Result.Payload.IsValid())
+		{
+			Result.Payload->TryGetStringField(TEXT("node_guid"), NodeGuid);
+		}
+	}
+
+	{
+		TSharedPtr<FJsonObject> FindParams = MakeShared<FJsonObject>();
+		FindParams->SetStringField(TEXT("asset_path"), AssetPath);
+		FindParams->SetStringField(TEXT("node_type"), TEXT("conduit"));
+
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("find_nodes_by_type"), FindParams);
+		TestTrue(TEXT("find_nodes_by_type should succeed"), Result.bSuccess);
+
+		if (Result.bSuccess && Result.Payload.IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* NodesArray = nullptr;
+			if (Result.Payload->TryGetArrayField(TEXT("nodes"), NodesArray))
+			{
+				bool bFound = false;
+				for (const TSharedPtr<FJsonValue>& NodeVal : *NodesArray)
+				{
+					const TSharedPtr<FJsonObject>& NodeObj = NodeVal->AsObject();
+					if (NodeObj.IsValid())
+					{
+						FString Guid;
+						if (NodeObj->TryGetStringField(TEXT("node_guid"), Guid) && Guid == NodeGuid)
+						{
+							bFound = true;
+							break;
+						}
+					}
+				}
+				TestTrue(TEXT("Added conduit should be found"), bFound);
+			}
+			else
+			{
+				AddError(TEXT("nodes array missing from payload"));
+			}
+		}
+	}
+
+	if (Registry.HasAction(TEXT("logicdriver"), TEXT("delete_state_machine")))
+	{
+		TSharedPtr<FJsonObject> DeleteParams = MakeShared<FJsonObject>();
+		DeleteParams->SetStringField(TEXT("asset_path"), AssetPath);
+		Registry.ExecuteAction(TEXT("logicdriver"), TEXT("delete_state_machine"), DeleteParams);
+	}
+
+	return true;
+}
 #endif // WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
