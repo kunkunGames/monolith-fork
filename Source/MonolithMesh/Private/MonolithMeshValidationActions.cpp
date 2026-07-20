@@ -133,6 +133,7 @@ FMonolithActionResult FMonolithMeshValidationActions::ValidateGameReady(const TS
 	Result->SetStringField(TEXT("asset_path"), AssetPath);
 
 	TArray<TSharedPtr<FJsonValue>> Checks;
+	Checks.Reserve(7);
 	bool bAllPassed = true;
 	int32 CriticalCount = 0;
 	int32 HighCount = 0;
