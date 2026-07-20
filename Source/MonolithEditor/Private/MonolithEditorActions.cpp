@@ -4163,6 +4163,7 @@ FMonolithActionResult FMonolithEditorActions::HandleDeleteAssets(
 	}
 
 	TArray<FString> AssetPaths;
+	AssetPaths.Reserve(AssetPathsArray->Num());
 	for (const auto& Val : *AssetPathsArray)
 	{
 		FString Path;
@@ -4181,6 +4182,7 @@ FMonolithActionResult FMonolithEditorActions::HandleDeleteAssets(
 	const TArray<TSharedPtr<FJsonValue>>* PrefixArray = nullptr;
 	if (Params->TryGetArrayField(TEXT("allowed_prefixes"), PrefixArray) && PrefixArray)
 	{
+		AllowedPrefixes.Reserve(PrefixArray->Num());
 		for (const auto& PVal : *PrefixArray)
 		{
 			FString Prefix;
@@ -4217,6 +4219,7 @@ FMonolithActionResult FMonolithEditorActions::HandleDeleteAssets(
 	Params->TryGetBoolField(TEXT("force"), bForce);
 
 	TArray<UObject*> ObjectsToDelete;
+	ObjectsToDelete.Reserve(AssetPaths.Num());
 	TArray<FString> NotFound;
 
 	for (const FString& Path : AssetPaths)
