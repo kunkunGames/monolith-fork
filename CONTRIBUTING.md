@@ -136,18 +136,25 @@ MonolithIndex uses a plugin-style indexer system. Each indexer implements `IMono
 class FMyIndexer : public IMonolithIndexer
 {
 public:
-    virtual TArray<UClass*> GetSupportedClasses() const override
+    virtual TArray<FString> GetSupportedClasses() const override
     {
-        return { UMyAssetClass::StaticClass() };
+        return { TEXT("MyAssetClass") };
     }
 
-    virtual void IndexAsset(
-        FMonolithIndexDatabase& DB,
+    virtual bool IndexAsset(
         const FAssetData& AssetData,
-        UObject* LoadedAsset) override
+        UObject* LoadedAsset,
+        FMonolithIndexDatabase& DB,
+        int64 AssetId) override
     {
         // Extract data and write to DB using prepared statements
-        DB.InsertNode(AssetId, NodeName, NodeClass, NodeType);
+        FIndexedNode Node;
+        Node.AssetId = AssetId;
+        Node.NodeType = TEXT("MyNodeType");
+        Node.NodeName = LoadedAsset->GetName();
+        DB.InsertNode(Node);
+
+        return true;
     }
 
     virtual FString GetName() const override { return TEXT("MyIndexer"); }
