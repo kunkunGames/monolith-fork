@@ -6902,12 +6902,17 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetParameterDefault(const T
 FMonolithActionResult FMonolithNiagaraActions::HandleSetCurveValue(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString ModuleName = Params->GetStringField(TEXT("module_node"));
-	if (ModuleName.IsEmpty()) ModuleName = Params->GetStringField(TEXT("module"));
-	if (ModuleName.IsEmpty()) ModuleName = Params->GetStringField(TEXT("module_name"));
-	FString InputName = Params->GetStringField(TEXT("input"));
-	if (InputName.IsEmpty()) InputName = Params->GetStringField(TEXT("input_name"));
+	FString EmitterHandleId;
+	if (Params->HasField(TEXT("emitter")) && !Params->TryGetStringField(TEXT("emitter"), EmitterHandleId)) return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"));
+
+	FString ModuleName;
+	if (Params->HasField(TEXT("module_node")) && !Params->TryGetStringField(TEXT("module_node"), ModuleName)) return FMonolithActionResult::Error(TEXT("Parameter 'module_node' must be a string"));
+	if (ModuleName.IsEmpty()) { if (Params->HasField(TEXT("module")) && !Params->TryGetStringField(TEXT("module"), ModuleName)) return FMonolithActionResult::Error(TEXT("Parameter 'module' must be a string")); }
+	if (ModuleName.IsEmpty()) { if (Params->HasField(TEXT("module_name")) && !Params->TryGetStringField(TEXT("module_name"), ModuleName)) return FMonolithActionResult::Error(TEXT("Parameter 'module_name' must be a string")); }
+
+	FString InputName;
+	if (Params->HasField(TEXT("input")) && !Params->TryGetStringField(TEXT("input"), InputName)) return FMonolithActionResult::Error(TEXT("Parameter 'input' must be a string"));
+	if (InputName.IsEmpty()) { if (Params->HasField(TEXT("input_name")) && !Params->TryGetStringField(TEXT("input_name"), InputName)) return FMonolithActionResult::Error(TEXT("Parameter 'input_name' must be a string")); }
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -6937,8 +6942,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetCurveValue(const TShared
 	{
 		TSharedPtr<FJsonObject> KO = KV->AsObject();
 		if (!KO) continue;
-		float T = static_cast<float>(KO->GetNumberField(TEXT("time")));
-		float V = static_cast<float>(KO->GetNumberField(TEXT("value")));
+		double T_Double = 0.0;
+		if (!KO->TryGetNumberField(TEXT("time"), T_Double)) return FMonolithActionResult::Error(TEXT("Key must contain a numeric 'time'"));
+		float T = static_cast<float>(T_Double);
+		double V_Double = 0.0;
+		if (!KO->TryGetNumberField(TEXT("value"), V_Double)) return FMonolithActionResult::Error(TEXT("Key must contain a numeric 'value'"));
+		float V = static_cast<float>(V_Double);
 		float AT = 0.f;
 			double AT_Double = AT;
 			if (KO->TryGetNumberField(TEXT("arrive_tangent"), AT_Double)) AT = static_cast<float>(AT_Double);
