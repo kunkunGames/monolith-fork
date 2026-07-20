@@ -12,8 +12,8 @@ public class MonolithIndex : ModuleRules
 	private static bool IsPluginEnabled(ReadOnlyTargetRules Target, string PluginName)
 	{
 		// 1. Target-level overrides win outright (uncommon but correct: -EnablePlugin=/-DisablePlugin=).
-		if (Target.DisablePlugins != null && System.Linq.Enumerable.Contains(Target.DisablePlugins, PluginName)) { return false; }
-		if (Target.EnablePlugins  != null && System.Linq.Enumerable.Contains(Target.EnablePlugins,  PluginName)) { return true;  }
+		if (Target.DisablePlugins != null && System.Linq.Enumerable.Contains(Target.DisablePlugins, PluginName, System.StringComparer.OrdinalIgnoreCase)) { return false; }
+		if (Target.EnablePlugins  != null && System.Linq.Enumerable.Contains(Target.EnablePlugins,  PluginName, System.StringComparer.OrdinalIgnoreCase)) { return true;  }
 
 		if (Target.ProjectFile == null)
 		{
