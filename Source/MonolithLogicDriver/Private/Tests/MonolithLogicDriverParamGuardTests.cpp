@@ -1044,6 +1044,44 @@ bool FMonolithParamGuardLogicDriverRuntimeStartSMRejectsMalformedParamsTest::Run
 }
 
 // ------------------------------------------------------------------------------------------------
+// Monolith.ParamGuard.LogicDriver.RuntimeSwitchStateRejectsMalformedParams
+// Validates that runtime_switch_state rejects malformed params.
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverRuntimeSwitchStateRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.RuntimeSwitchStateRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverRuntimeSwitchStateRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("runtime_switch_state")))
+	{
+		FMonolithLogicDriverRuntimeActions::RegisterActions(Registry);
+	}
+
+	{
+		TSharedPtr<FJsonObject> EmptyParams = MakeShared<FJsonObject>();
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("runtime_switch_state"), EmptyParams);
+		TestTrue(TEXT("runtime_switch_state rejects missing actor param"), !Result.bSuccess);
+		TestTrue(TEXT("runtime_switch_state reports missing actor"), Result.ErrorMessage.Contains(TEXT("Missing required param 'actor'")));
+	}
+	{
+		TSharedPtr<FJsonObject> MissingGuidParams = MakeShared<FJsonObject>();
+		MissingGuidParams->SetStringField(TEXT("actor"), TEXT("BP_SMInstance_C_0"));
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("runtime_switch_state"), MissingGuidParams);
+		TestTrue(TEXT("runtime_switch_state rejects missing state_guid param"), !Result.bSuccess);
+		TestTrue(TEXT("runtime_switch_state reports missing state_guid"), Result.ErrorMessage.Contains(TEXT("Missing required param 'state_guid'")));
+	}
+	{
+		TSharedPtr<FJsonObject> MalformedGuidParams = MakeShared<FJsonObject>();
+		MalformedGuidParams->SetStringField(TEXT("actor"), TEXT("BP_SMInstance_C_0"));
+		MalformedGuidParams->SetStringField(TEXT("state_guid"), TEXT("not_a_valid_guid"));
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("runtime_switch_state"), MalformedGuidParams);
+		TestTrue(TEXT("runtime_switch_state rejects malformed state_guid param"), !Result.bSuccess);
+		TestTrue(TEXT("runtime_switch_state reports malformed state_guid"), Result.ErrorMessage.Contains(TEXT("Invalid GUID")));
+	}
+
+	return true;
+}
+
+// ------------------------------------------------------------------------------------------------
 // Monolith.ParamGuard.LogicDriver.RuntimeStopSMRejectsMalformedParams
 // Validates that runtime_stop_sm rejects malformed params.
 // ------------------------------------------------------------------------------------------------
