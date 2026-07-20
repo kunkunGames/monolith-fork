@@ -52,6 +52,12 @@ Prevention: Operations that allocate uncompressed rendering buffers or composite
 **Prevention:** Never append numeric task IDs, UUIDs, or timestamp suffixes to branch names. If your chosen branch name is taken or overlapping work exists, stop without PR instead of renaming the branch to bypass collision checks.
 **Avoid:** Generating branches with `-<number>` suffixes.
 
+## 2026-07-21 - Stop generating branches with numeric suffixes
+**Coordination issue:** LimitGuard continues to generate branches with large numeric suffixes (e.g., `-9364205776615556995`) to bypass collision checks, despite the previous rule.
+**Learning:** General instructions are being ignored when branch names collide. The agent must yield rather than renaming the branch.
+**Prevention:** If your intended branch name is already taken, you MUST stop without creating a PR and use the `done` tool. Do not generate a new name by appending numbers.
+**Avoid:** Generating branches with `-<number>` suffixes.
+
 ## 2026-07-12 - Explicit duplicate / collision check required
 **Coordination issue:** LimitGuard merged identical fixes multiple times (e.g., `da40349` and `39c15f3` for WorldGen prop scatter counts) because it did not check for overlapping PRs or branches from itself or domain keepers.
 **Learning:** Checking for collisions only within an agent's own track or relying strictly on explicit file checks is insufficient if the agent doesn't check open branches or closed PRs first.
