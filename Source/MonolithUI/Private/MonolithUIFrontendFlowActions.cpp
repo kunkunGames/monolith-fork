@@ -96,6 +96,7 @@ namespace
             return false;
         }
 
+        OutValues.Reserve(Values->Num());
         for (const TSharedPtr<FJsonValue>& Value : *Values)
         {
             FString Text;
@@ -134,6 +135,7 @@ namespace
             return false;
         }
 
+        OutMap.Reserve(FMonolithJsonUtils::GetFields(*MapObj).Num());
         for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : FMonolithJsonUtils::GetFields(*MapObj))
         {
             FString Value;
@@ -168,6 +170,7 @@ namespace
             return false;
         }
 
+        OutSpecs.Reserve(Values->Num());
         for (const TSharedPtr<FJsonValue>& Value : *Values)
         {
             FFrontendLayerSpec Spec;
@@ -236,6 +239,7 @@ namespace
             return false;
         }
 
+        OutSpecs.Reserve(Values->Num());
         for (const TSharedPtr<FJsonValue>& Value : *Values)
         {
             const TSharedPtr<FJsonObject> Obj = Value.IsValid() ? Value->AsObject() : nullptr;
