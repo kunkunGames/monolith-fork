@@ -1,5 +1,6 @@
 #include "MonolithCoreModule.h"
 #include "MonolithHttpServer.h"
+#include "MonolithMcpHostRole.h"
 #include "MonolithSettings.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithResourceRegistry.h"
@@ -15,6 +16,14 @@
 #include "HAL/IConsoleManager.h"
 
 #define LOCTEXT_NAMESPACE "FMonolithCoreModule"
+
+namespace
+{
+	// A commandlet or planned-exit editor loads this module too. Track sentinel
+	// ownership explicitly so those processes cannot delete a durable host's
+	// file during their own shutdown.
+	bool GMonolithOwnsSentinelFile = false;
+}
 
 static FAutoConsoleCommand GMonolithRestartCmd(
 	TEXT("Monolith.Restart"),
@@ -49,12 +58,16 @@ void FMonolithCoreModule::StartupModule()
 	// FMonolithBulkFillRegistry::RegisterAdapter — those land in Phases 1-5.
 	FMonolithBulkFillActions::RegisterAll();
 
-	// Skip MCP server + sentinel in commandlets (cook/compile). The running editor already holds port 9316
-	// and a second bind attempt surfaces as UAT ExitCode=1. Registry actions stay available so automation
-	// and offline commandlet checks can execute Monolith workflows through the same action registry.
-	if (IsRunningCommandlet())
+	// Every process gets the same registered action surface, but only a durable
+	// editor/headless host may own the HTTP endpoint. Commandlets and planned-exit
+	// automation sessions would otherwise steal or churn port 9316 immediately
+	// before terminating.
+	const EMonolithMcpHostRole HostRole = FMonolithMcpHostRole::ClassifyCurrentProcess();
+	if (!FMonolithMcpHostRole::IsDurableHost(HostRole))
 	{
-		UE_LOG(LogMonolith, Log, TEXT("Monolith — commandlet detected, registered actions and skipped MCP server startup"));
+		UE_LOG(LogMonolith, Log,
+			TEXT("Monolith — MCP host role=%s; registered actions and skipped HTTP listener/sentinel startup"),
+			FMonolithMcpHostRole::ToString(HostRole));
 		return;
 	}
 
@@ -138,6 +151,7 @@ void FMonolithCoreModule::WriteSentinelFile(int32 Port)
 	const FString Path = GetSentinelFilePath();
 	if (FFileHelper::SaveStringToFile(Body, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 	{
+		GMonolithOwnsSentinelFile = true;
 		UE_LOG(LogMonolith, Log, TEXT("Sentinel file written: %s"), *Path);
 	}
 	else
@@ -148,12 +162,18 @@ void FMonolithCoreModule::WriteSentinelFile(int32 Port)
 
 void FMonolithCoreModule::RemoveSentinelFile()
 {
+	if (!GMonolithOwnsSentinelFile)
+	{
+		return;
+	}
+
 	const FString Path = GetSentinelFilePath();
 	if (FPaths::FileExists(Path))
 	{
 		IFileManager::Get().Delete(*Path);
 		UE_LOG(LogMonolith, Log, TEXT("Sentinel file removed: %s"), *Path);
 	}
+	GMonolithOwnsSentinelFile = false;
 }
 
 void FMonolithCoreModule::NormalizeFutureMtimesIfNeeded()
@@ -214,6 +234,9 @@ void FMonolithCoreModule::RestartHttpServer()
 	const int32 Port = Settings ? Settings->ServerPort : 9316;
 
 	UE_LOG(LogMonolith, Log, TEXT("Monolith.Restart: restarting HTTP server on port %d"), Port);
+	// Drop the old ownership marker before unbinding. A failed restart must not
+	// leave a stale sentinel, and a later process must never inherit our marker.
+	Module.RemoveSentinelFile();
 	if (Module.HttpServer->Restart(Port))
 	{
 		Module.WriteSentinelFile(Port);

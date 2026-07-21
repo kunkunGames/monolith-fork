@@ -15,6 +15,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 
 from benchmark_common import (  # noqa: E402
     TaskCorpusContractError,
+    build_benchmark_inputs,
     load_task_corpus,
     status_identity,
     status_identity_mismatches,
@@ -124,6 +125,26 @@ class StatusBoundaryTests(unittest.TestCase):
         self.assertFalse(validation["ok"])
         self.assertEqual(validation["failure_kind"], "server_error")
 
+    def test_status_requires_the_local_project_identity(self) -> None:
+        for project_name in (None, "AnotherProject"):
+            with self.subTest(project_name=project_name):
+                status = {"server_running": True}
+                if project_name is not None:
+                    status["project_name"] = project_name
+                response = {
+                    "result": {
+                        "isError": False,
+                        "structuredContent": status,
+                    }
+                }
+                validation = validate_mcp_status_response(
+                    response,
+                    result_payload=self.result_payload,
+                    result_data=self.result_data,
+                )
+                self.assertFalse(validation["ok"])
+                self.assertEqual(validation["failure_kind"], "invalid_status_identity")
+
     def test_status_identity_detects_changed_and_disappeared_fields(self) -> None:
         start = status_identity(
             {"catalog_version": "sha256:v1", "editor_pid": 10, "project_name": "Speed"},
@@ -136,6 +157,60 @@ class StatusBoundaryTests(unittest.TestCase):
         mismatches = status_identity_mismatches(start, end)
         self.assertEqual(mismatches["catalog_version"], {"start": "sha256:v1", "end": "sha256:v2"})
         self.assertEqual(mismatches["process_id"], {"start": "10", "end": ""})
+
+
+class BenchmarkInputFingerprintTests(unittest.TestCase):
+    def test_exact_database_scope_excludes_unrelated_live_indexes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = pathlib.Path(temp_dir)
+            saved = root / "Saved"
+            saved.mkdir()
+            (saved / "EngineSource.db").write_bytes(b"source")
+            (saved / "ProjectIndex.db").write_bytes(b"project")
+
+            inputs = build_benchmark_inputs(
+                "Synthetic",
+                database_paths=("Saved/EngineSource.db",),
+                plugin_root=root,
+            )
+
+        self.assertEqual(
+            [row["path"] for row in inputs["database_files"]],
+            ["Saved/EngineSource.db"],
+        )
+
+    def test_default_database_scope_is_suite_specific(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = pathlib.Path(temp_dir)
+            saved = root / "Saved"
+            saved.mkdir()
+            (saved / "EngineSource.db").write_bytes(b"source")
+            (saved / "graph.db").write_bytes(b"graph")
+            (saved / "ProjectIndex.db").write_bytes(b"project")
+
+            guidance = build_benchmark_inputs("ActionGuidance", plugin_root=root)
+            source = build_benchmark_inputs("SourceIndex", plugin_root=root)
+            asset = build_benchmark_inputs("AssetEditing", plugin_root=root)
+            (saved / "graph.db").write_bytes(b"unrelated-graph-churn")
+            source_after_graph_churn = build_benchmark_inputs("SourceIndex", plugin_root=root)
+
+        self.assertEqual(guidance["database_files"], [])
+        self.assertEqual(
+            guidance["database_files_scope"],
+            "not_applicable_to_registry_routing",
+        )
+        self.assertEqual(
+            [row["path"] for row in source["database_files"]],
+            ["Saved/EngineSource.db"],
+        )
+        self.assertEqual(
+            source["fingerprint_sha256"],
+            source_after_graph_churn["fingerprint_sha256"],
+        )
+        self.assertEqual(
+            [row["path"] for row in asset["database_files"]],
+            ["Saved/ProjectIndex.db"],
+        )
 
 
 if __name__ == "__main__":

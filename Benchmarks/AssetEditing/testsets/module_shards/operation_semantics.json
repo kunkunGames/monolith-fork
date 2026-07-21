@@ -2,14 +2,14 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-07-12T02:14:12.681671+00:00",
+  "generated_at": "2026-07-17T10:24:39.993026+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "308546814b77b03e591343886d3cbee8e70b26d9354f5734789a7255b0f25990",
+  "source_task_sha256": "ea3c428db9e0fdb056ad50f6e36fce5a1d12383eef5b97982b9e371308a10165",
   "module_storage": "module_shard",
   "shard_id": "operation_semantics",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/operation_semantics.json",
   "task_count": 579,
-  "module_count": 4,
+  "module_count": 5,
   "routing_axes": [
     "category",
     "domain",
@@ -50,7 +50,7 @@
       ],
       "track": "operation_semantics",
       "title": "Operation semantics: create_save",
-      "task_count": 269,
+      "task_count": 268,
       "filters": {
         "operation_semantics": [
           "create_save"
@@ -99,6 +99,26 @@
       "module_shard_id": "operation_semantics",
       "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/operation_semantics.json",
       "parent_module_id": "",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "operation_semantics.rejection_guard",
+      "route": [
+        "AssetEditing",
+        "operation_semantics",
+        "rejection_guard"
+      ],
+      "track": "operation_semantics",
+      "title": "Operation semantics: rejection_guard",
+      "task_count": 1,
+      "filters": {
+        "operation_semantics": [
+          "rejection_guard"
+        ]
+      },
+      "module_shard_id": "operation_semantics",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/operation_semantics.json",
+      "parent_module_id": "category.asset_authoring",
       "child_module_ids": []
     }
   ],
@@ -310,7 +330,7 @@
           "create_save"
         ]
       },
-      "task_count": 269,
+      "task_count": 268,
       "task_ids": [
         "BEB-279",
         "BEB-280",
@@ -460,7 +480,6 @@
         "BEB-425",
         "BEB-426",
         "BEB-428",
-        "BEB-429",
         "BEB-430",
         "BEB-431",
         "BEB-432",
@@ -5214,34 +5233,6 @@
           "description": "Spawn temporary editor actors, harvest them into a dialog-free Actor Blueprint prefab, clean up the scene, save it, and inspect prefab components"
         },
         {
-          "id": "BEB-429",
-          "category": "asset_authoring",
-          "namespace": "mixed",
-          "tool": "monolith_query",
-          "action": "op_chain",
-          "domain": "level_instance",
-          "edit_domain": "blueprint_prefab_guard",
-          "blueprint_type": "",
-          "workflow": "level_instance_rootless_prefab_rejected",
-          "operation_semantics": "create_save",
-          "lifecycle_phase": "create_save",
-          "asset_operations": [
-            "creation_or_import",
-            "save",
-            "edit",
-            "readback_verify"
-          ],
-          "actions": [
-            "op_chain",
-            "delete_assets",
-            "delete_actors",
-            "spawn_actor",
-            "create_blueprint_prefab",
-            "inspect_asset"
-          ],
-          "description": "Spawn bare rootless Actors, confirm create_blueprint_prefab rejects them by name instead of crashing the editor, and confirm no prefab asset was written"
-        },
-        {
           "id": "BEB-430",
           "category": "asset_authoring",
           "namespace": "mixed",
@@ -9149,7 +9140,6 @@
             "BEB-425",
             "BEB-426",
             "BEB-428",
-            "BEB-429",
             "BEB-430",
             "BEB-431",
             "BEB-432",
@@ -9463,7 +9453,6 @@
           ],
           "level_instance": [
             "BEB-428",
-            "BEB-429",
             "BEB-499"
           ],
           "localization": [
@@ -9698,9 +9687,6 @@
           ],
           "blueprint_prefab": [
             "BEB-428"
-          ],
-          "blueprint_prefab_guard": [
-            "BEB-429"
           ],
           "blueprint_spec_builder": [
             "BEB-355"
@@ -10561,7 +10547,6 @@
             "BEB-425",
             "BEB-426",
             "BEB-428",
-            "BEB-429",
             "BEB-430",
             "BEB-431",
             "BEB-432",
@@ -10833,7 +10818,6 @@
             "BEB-425",
             "BEB-426",
             "BEB-428",
-            "BEB-429",
             "BEB-430",
             "BEB-431",
             "BEB-432",
@@ -11104,7 +11088,6 @@
             "BEB-425",
             "BEB-426",
             "BEB-428",
-            "BEB-429",
             "BEB-430",
             "BEB-431",
             "BEB-432",
@@ -11374,7 +11357,6 @@
             "BEB-425",
             "BEB-426",
             "BEB-428",
-            "BEB-429",
             "BEB-430",
             "BEB-431",
             "BEB-432",
@@ -11645,7 +11627,6 @@
             "BEB-425",
             "BEB-426",
             "BEB-428",
-            "BEB-429",
             "BEB-430",
             "BEB-431",
             "BEB-432",
@@ -20518,6 +20499,87 @@
         }
       },
       "parent_module_id": "",
+      "child_module_ids": [],
+      "module_shard_id": "operation_semantics",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/operation_semantics.json"
+    },
+    "operation_semantics.rejection_guard": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "operation_semantics.rejection_guard",
+      "route": [
+        "AssetEditing",
+        "operation_semantics",
+        "rejection_guard"
+      ],
+      "track": "operation_semantics",
+      "title": "Operation semantics: rejection_guard",
+      "description": "All AssetEditing tasks grouped by action-level operation semantics without implying asset persistence lifecycle.",
+      "filters": {
+        "operation_semantics": [
+          "rejection_guard"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-429"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-429",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "level_instance",
+          "edit_domain": "blueprint_prefab_guard",
+          "blueprint_type": "",
+          "workflow": "level_instance_rootless_prefab_rejected",
+          "operation_semantics": "rejection_guard",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "delete_actors",
+            "spawn_actor",
+            "create_blueprint_prefab",
+            "inspect_asset"
+          ],
+          "description": "Spawn bare rootless Actors, confirm create_blueprint_prefab rejects them by name instead of crashing the editor, and confirm no prefab asset was written"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "asset_authoring": [
+            "BEB-429"
+          ]
+        },
+        "by_domain": {
+          "level_instance": [
+            "BEB-429"
+          ]
+        },
+        "by_edit_domain": {
+          "blueprint_prefab_guard": [
+            "BEB-429"
+          ]
+        },
+        "by_blueprint_type": {
+          "general": [
+            "BEB-429"
+          ]
+        },
+        "by_asset_operation": {
+          "readback_verify": [
+            "BEB-429"
+          ]
+        }
+      },
+      "parent_module_id": "category.asset_authoring",
       "child_module_ids": [],
       "module_shard_id": "operation_semantics",
       "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/operation_semantics.json"

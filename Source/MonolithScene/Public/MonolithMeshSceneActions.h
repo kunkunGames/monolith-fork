@@ -3,15 +3,31 @@
 #include "CoreMinimal.h"
 #include "MonolithToolRegistry.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+namespace UE::MonolithScene::Private
+{
+	enum class EDeleteActorsTestFault : uint8
+	{
+		None,
+		SkipExactActorDuringCommit,
+	};
+
+	MONOLITHSCENE_API void ConfigureDeleteActorsTestFault(
+		const FString& ExactActorPath,
+		EDeleteActorsTestFault Fault);
+	MONOLITHSCENE_API void ResetDeleteActorsTestFault();
+}
+#endif
+
 /**
- * Phase 2: Scene Manipulation Actions (8 actions)
+ * Scene Manipulation Actions (11 actions)
  * Actor CRUD operations - spawn, move, duplicate, delete, query info.
  * Foundation for blockout system.
  */
 class MONOLITHSCENE_API FMonolithMeshSceneActions
 {
 public:
-	/** Register all 8 scene manipulation actions with the tool registry */
+	/** Register all 11 scene manipulation actions with the tool registry */
 	static void RegisterActions(FMonolithToolRegistry& Registry);
 
 	/** True when batch_execute is running — sub-actions skip their own undo transactions */

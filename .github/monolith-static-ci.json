@@ -279,6 +279,12 @@
       }
     ]
   },
+  "offline_catalog_snapshot": {
+    "enabled": true,
+    "generator": "Tools/MonolithQuery/generate_monolith_catalog_snapshot.py",
+    "snapshot": "Tools/MonolithQuery/Generated/monolith_catalog_snapshot.json",
+    "timeout_seconds": 60
+  },
   "offline_exe_freshness": {
     "enabled": true,
     "script": "Scripts/check_offline_exe_fresh.py"

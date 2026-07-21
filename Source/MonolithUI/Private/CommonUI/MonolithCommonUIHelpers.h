@@ -11,9 +11,40 @@
 
 class UWidget;
 class UWidgetBlueprint;
+class UCommonActionWidget;
 
 namespace MonolithCommonUI
 {
+	inline constexpr const TCHAR* RuntimeEnhancedInputBindingMode = TEXT("RuntimeEnhancedInput");
+
+	/**
+	 * Read-only evidence for how a UCommonActionWidget receives its action.
+	 * Runtime metadata is accepted only on the matching inherited BindWidget
+	 * property and only when its value exactly matches RuntimeEnhancedInput.
+	 */
+	struct MONOLITHUI_API FActionWidgetBindingEvidence
+	{
+		bool bBound = false;
+		bool bHasLegacyInputActions = false;
+		bool bHasDesignerEnhancedInputAction = false;
+		bool bHasRuntimeEnhancedInputContract = false;
+		bool bHasInvalidBindingModeMetadata = false;
+		FString BindingSource = TEXT("none");
+		FString BindingModeMetadata;
+	};
+
+	/** Resolve already-collected binding facts. Kept separate for deterministic unit coverage. */
+	MONOLITHUI_API FActionWidgetBindingEvidence ResolveActionWidgetBindingEvidence(
+		bool bHasLegacyInputActions,
+		bool bHasDesignerEnhancedInputAction,
+		const FString& BindingModeMetadata,
+		bool bMetadataIsOnCompatibleBindWidgetProperty);
+
+	/** Collect legacy, designer Enhanced Input, and native BindWidget metadata evidence. */
+	MONOLITHUI_API FActionWidgetBindingEvidence EvaluateActionWidgetBinding(
+		const UWidgetBlueprint* WidgetBlueprint,
+		UCommonActionWidget* ActionWidget);
+
 	/**
 	 * Pattern 1: Create a UObject-derived asset at /Game path.
 	 * Handles unique-name check (errors on collision), CreatePackage, NewObject, save + dirty-mark.

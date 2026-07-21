@@ -5,6 +5,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/Texture2D.h"
+#include "GameFramework/Actor.h"
 #include "MonolithReflectionWalkerTestTypes.generated.h"
 
 UENUM()
@@ -24,6 +25,12 @@ struct FMonolithReflectionWalkerNestedTestStruct
 
 	UPROPERTY()
 	FString NestedLabel;
+
+	UPROPERTY()
+	TSubclassOf<AActor> HardActorClass;
+
+	UPROPERTY()
+	TSoftClassPtr<AActor> SoftActorClass;
 };
 
 UCLASS()
@@ -64,4 +71,28 @@ public:
 
 	UPROPERTY()
 	FMonolithReflectionWalkerNestedTestStruct Nested;
+
+	UPROPERTY()
+	TSubclassOf<AActor> HardActorClass;
+
+	UPROPERTY()
+	TSoftClassPtr<AActor> SoftActorClass;
+
+	UPROPERTY()
+	TArray<TSubclassOf<AActor>> HardActorClassArray;
+
+	UPROPERTY()
+	TArray<TSoftClassPtr<AActor>> SoftActorClassArray;
+
+	UPROPERTY()
+	TMap<FName, TSubclassOf<AActor>> HardActorClassMap;
+
+	UPROPERTY()
+	TMap<FName, TSoftClassPtr<AActor>> SoftActorClassMap;
+
+	UPROPERTY()
+	TSet<TSubclassOf<AActor>> HardActorClassSet;
+
+	UPROPERTY()
+	TSet<TSoftClassPtr<AActor>> SoftActorClassSet;
 };

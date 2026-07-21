@@ -2,14 +2,14 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-07-12T02:14:12.681671+00:00",
+  "generated_at": "2026-07-17T10:24:39.993026+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "308546814b77b03e591343886d3cbee8e70b26d9354f5734789a7255b0f25990",
+  "source_task_sha256": "ea3c428db9e0fdb056ad50f6e36fce5a1d12383eef5b97982b9e371308a10165",
   "module_storage": "module_shard",
   "shard_id": "asset_operation.creation_or_import",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
   "task_count": 579,
-  "module_count": 294,
+  "module_count": 293,
   "routing_axes": [
     "category",
     "domain",
@@ -30,7 +30,7 @@
       ],
       "track": "asset_operation",
       "title": "Asset operation: Creation/import",
-      "task_count": 269,
+      "task_count": 268,
       "filters": {
         "asset_operation": [
           "creation_or_import"
@@ -5368,7 +5368,7 @@
       ],
       "track": "asset_operation_domain",
       "title": "Asset operation: Creation/import/level_instance",
-      "task_count": 3,
+      "task_count": 2,
       "filters": {
         "category": [
           "asset_authoring"
@@ -5385,7 +5385,6 @@
       "parent_module_id": "asset_operation.creation_or_import",
       "child_module_ids": [
         "asset_operation.creation_or_import.level_instance.blueprint_prefab",
-        "asset_operation.creation_or_import.level_instance.blueprint_prefab_guard",
         "asset_operation.creation_or_import.level_instance.prefab_placement"
       ]
     },
@@ -5410,37 +5409,6 @@
         ],
         "edit_domain": [
           "blueprint_prefab"
-        ],
-        "asset_operation": [
-          "creation_or_import"
-        ]
-      },
-      "module_shard_id": "asset_operation.creation_or_import",
-      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
-      "parent_module_id": "asset_operation.creation_or_import.level_instance",
-      "child_module_ids": []
-    },
-    {
-      "module_id": "asset_operation.creation_or_import.level_instance.blueprint_prefab_guard",
-      "route": [
-        "AssetEditing",
-        "asset_operation",
-        "creation_or_import",
-        "level_instance",
-        "blueprint_prefab_guard"
-      ],
-      "track": "asset_operation_edit_domain",
-      "title": "Asset operation: Creation/import/level_instance/blueprint_prefab_guard",
-      "task_count": 1,
-      "filters": {
-        "category": [
-          "asset_authoring"
-        ],
-        "domain": [
-          "level_instance"
-        ],
-        "edit_domain": [
-          "blueprint_prefab_guard"
         ],
         "asset_operation": [
           "creation_or_import"
@@ -9366,7 +9334,7 @@
           "creation_or_import"
         ]
       },
-      "task_count": 269,
+      "task_count": 268,
       "task_ids": [
         "BEB-279",
         "BEB-280",
@@ -9518,7 +9486,6 @@
         "BEB-426",
         "BEB-427",
         "BEB-428",
-        "BEB-429",
         "BEB-430",
         "BEB-431",
         "BEB-432",
@@ -14323,34 +14290,6 @@
           "description": "Spawn temporary editor actors, harvest them into a dialog-free Actor Blueprint prefab, clean up the scene, save it, and inspect prefab components"
         },
         {
-          "id": "BEB-429",
-          "category": "asset_authoring",
-          "namespace": "mixed",
-          "tool": "monolith_query",
-          "action": "op_chain",
-          "domain": "level_instance",
-          "edit_domain": "blueprint_prefab_guard",
-          "blueprint_type": "",
-          "workflow": "level_instance_rootless_prefab_rejected",
-          "operation_semantics": "create_save",
-          "lifecycle_phase": "create_save",
-          "asset_operations": [
-            "creation_or_import",
-            "save",
-            "edit",
-            "readback_verify"
-          ],
-          "actions": [
-            "op_chain",
-            "delete_assets",
-            "delete_actors",
-            "spawn_actor",
-            "create_blueprint_prefab",
-            "inspect_asset"
-          ],
-          "description": "Spawn bare rootless Actors, confirm create_blueprint_prefab rejects them by name instead of crashing the editor, and confirm no prefab asset was written"
-        },
-        {
           "id": "BEB-430",
           "category": "asset_authoring",
           "namespace": "mixed",
@@ -18241,7 +18180,6 @@
           ],
           "level_instance": [
             "BEB-428",
-            "BEB-429",
             "BEB-499"
           ],
           "localization": [
@@ -18476,9 +18414,6 @@
           ],
           "blueprint_prefab": [
             "BEB-428"
-          ],
-          "blueprint_prefab_guard": [
-            "BEB-429"
           ],
           "blueprint_spec_builder": [
             "BEB-355"
@@ -19340,7 +19275,6 @@
             "BEB-425",
             "BEB-426",
             "BEB-428",
-            "BEB-429",
             "BEB-430",
             "BEB-431",
             "BEB-432",
@@ -19615,7 +19549,6 @@
             "BEB-425",
             "BEB-426",
             "BEB-428",
-            "BEB-429",
             "BEB-430",
             "BEB-431",
             "BEB-432",
@@ -39046,10 +38979,9 @@
           "creation_or_import"
         ]
       },
-      "task_count": 3,
+      "task_count": 2,
       "task_ids": [
         "BEB-428",
-        "BEB-429",
         "BEB-499"
       ],
       "task_refs": [
@@ -39082,34 +39014,6 @@
             "inspect_asset"
           ],
           "description": "Spawn temporary editor actors, harvest them into a dialog-free Actor Blueprint prefab, clean up the scene, save it, and inspect prefab components"
-        },
-        {
-          "id": "BEB-429",
-          "category": "asset_authoring",
-          "namespace": "mixed",
-          "tool": "monolith_query",
-          "action": "op_chain",
-          "domain": "level_instance",
-          "edit_domain": "blueprint_prefab_guard",
-          "blueprint_type": "",
-          "workflow": "level_instance_rootless_prefab_rejected",
-          "operation_semantics": "create_save",
-          "lifecycle_phase": "create_save",
-          "asset_operations": [
-            "creation_or_import",
-            "save",
-            "edit",
-            "readback_verify"
-          ],
-          "actions": [
-            "op_chain",
-            "delete_assets",
-            "delete_actors",
-            "spawn_actor",
-            "create_blueprint_prefab",
-            "inspect_asset"
-          ],
-          "description": "Spawn bare rootless Actors, confirm create_blueprint_prefab rejects them by name instead of crashing the editor, and confirm no prefab asset was written"
         },
         {
           "id": "BEB-499",
@@ -39149,9 +39053,6 @@
           "blueprint_prefab": [
             "BEB-428"
           ],
-          "blueprint_prefab_guard": [
-            "BEB-429"
-          ],
           "prefab_placement": [
             "BEB-499"
           ]
@@ -39159,14 +39060,12 @@
         "by_operation_semantics": {
           "create_save": [
             "BEB-428",
-            "BEB-429",
             "BEB-499"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
             "BEB-428",
-            "BEB-429",
             "BEB-499"
           ]
         }
@@ -39174,7 +39073,6 @@
       "parent_module_id": "asset_operation.creation_or_import",
       "child_module_ids": [
         "asset_operation.creation_or_import.level_instance.blueprint_prefab",
-        "asset_operation.creation_or_import.level_instance.blueprint_prefab_guard",
         "asset_operation.creation_or_import.level_instance.prefab_placement"
       ],
       "module_shard_id": "asset_operation.creation_or_import",
@@ -39254,86 +39152,6 @@
         "by_lifecycle_phase": {
           "create_save": [
             "BEB-428"
-          ]
-        }
-      },
-      "parent_module_id": "asset_operation.creation_or_import.level_instance",
-      "child_module_ids": [],
-      "module_shard_id": "asset_operation.creation_or_import",
-      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json"
-    },
-    "asset_operation.creation_or_import.level_instance.blueprint_prefab_guard": {
-      "schema_version": 1,
-      "benchmark": "AssetEditing",
-      "generated_by": "asset_editing_benchmark.py",
-      "module_id": "asset_operation.creation_or_import.level_instance.blueprint_prefab_guard",
-      "route": [
-        "AssetEditing",
-        "asset_operation",
-        "creation_or_import",
-        "level_instance",
-        "blueprint_prefab_guard"
-      ],
-      "track": "asset_operation_edit_domain",
-      "title": "Asset operation: Creation/import/level_instance/blueprint_prefab_guard",
-      "description": "Asset-authoring tasks that create, import, generate, build, bake, seed, or submit a persisted asset. This leaf module targets the level_instance/blueprint_prefab_guard asset edit-domain so agents can load/apply exactly one operation slice.",
-      "filters": {
-        "category": [
-          "asset_authoring"
-        ],
-        "domain": [
-          "level_instance"
-        ],
-        "edit_domain": [
-          "blueprint_prefab_guard"
-        ],
-        "asset_operation": [
-          "creation_or_import"
-        ]
-      },
-      "task_count": 1,
-      "task_ids": [
-        "BEB-429"
-      ],
-      "task_refs": [
-        {
-          "id": "BEB-429",
-          "category": "asset_authoring",
-          "namespace": "mixed",
-          "tool": "monolith_query",
-          "action": "op_chain",
-          "domain": "level_instance",
-          "edit_domain": "blueprint_prefab_guard",
-          "blueprint_type": "",
-          "workflow": "level_instance_rootless_prefab_rejected",
-          "operation_semantics": "create_save",
-          "lifecycle_phase": "create_save",
-          "asset_operations": [
-            "creation_or_import",
-            "save",
-            "edit",
-            "readback_verify"
-          ],
-          "actions": [
-            "op_chain",
-            "delete_assets",
-            "delete_actors",
-            "spawn_actor",
-            "create_blueprint_prefab",
-            "inspect_asset"
-          ],
-          "description": "Spawn bare rootless Actors, confirm create_blueprint_prefab rejects them by name instead of crashing the editor, and confirm no prefab asset was written"
-        }
-      ],
-      "groups": {
-        "by_operation_semantics": {
-          "create_save": [
-            "BEB-429"
-          ]
-        },
-        "by_lifecycle_phase": {
-          "create_save": [
-            "BEB-429"
           ]
         }
       },

@@ -21,8 +21,8 @@ Weights sum to exactly 1.0 and live in the single `WEIGHTS` dict in
 `Scripts/asset_editing_benchmark.py` — the sole source of truth for the scorer, the manifest
 formula string, the comparison report, and the module docstring (an `assert` enforces the sum).
 
-> **v5.4 AssetEditing rename + UE 5.8 high-ROI Monolith asset-action expansion (2026-06-26):** the current generated
-> task set is 578 tasks across 11 categories. `asset_authoring` now has 268 asset creation/edit/save/read-back
+> **Current AssetEditing corpus:** the generated task set is 579 tasks across 11 categories.
+> `asset_authoring` now has 269 asset creation/edit/save/read-back
 > chains covering Texture/Font/DataTable/StringTable/Input/Material/MIC/MaterialFunction/CurveTable/
 > DataAsset/StaticMesh/UMG/Animation/Audio/Niagara/AI/GAS/Chooser assets plus ImageGen,
 > Interchange, ModelGen provenance/import-pipeline assets, StaticMesh LOD quality metadata,
@@ -217,13 +217,13 @@ formula string, the comparison report, and the module docstring (an `assert` enf
 | `edit_schema` | 47 | read_only_discovery |
 | `workflow_execute` | 11 | mutating_fixture |
 | `edit_execute` | 113 | mutating_fixture |
-| `asset_authoring` | 268 | mutating_asset_authoring |
+| `asset_authoring` | 269 | mutating_asset_authoring |
 | `error_path` | 20 | read_only_invalid |
 | `duplicate_reject` | 11 | mutating_idempotency |
 | `negative_compile` | 1 | mutating_fixture |
-| **Total** | **578** | |
+| **Total** | **579** | |
 
-`asset_authoring` = 268 cross-domain asset creation/edit/save/read-back chains under
+`asset_authoring` = 269 cross-domain asset creation/edit/save/read-back chains under
 `/Game/Benchmarks/AssetAuthoring`. Most rows are `create_save`; lifecycle-specific modules preserve
 the stable `create` rows separately for dynamic Content Browser collection creation and blank UWorld
 map creation, whose handler saves inline. `workflow_execute` is now 11 executed chains and replaces the
@@ -231,7 +231,7 @@ old `workflow_completeness` (5).
 "already exists" responses count as success only when the read-back still confirms the entity
 is present (idempotent across repeated benchmark runs, but a silent no-op cannot pass).
 
-`testsets/index.json` currently advertises 1820 generated modules split across 39 shard files under
+`testsets/index.json` currently advertises 1824 generated modules split across 39 shard files under
 `testsets/module_shards/`. `testsets/modules.json` keeps the split-shard manifest, and each shard
 keeps module task IDs/refs plus parent/child links, so `select` and `run` load the same subset
 definition without parsing one monolithic module payload. Lifecycle routing is available both as generated modules such as
@@ -414,4 +414,4 @@ missing; `--skip-preflight` exists only as a compatibility escape hatch.
 | expanded-v3 | 1.000 | 1.000 | — | 185 | 70 edit_execute (10×7 types); fixtures created; all parameters verified |
 | current-v4 | 1.000 | 1.000 | 1.000 | 191 | Added `duplicate_reject` (6) + rebalanced weights. The v4 1.000 was reachable by a server that returned success without truly editing — the defect v5 fixes. |
 | **v5 initial static checkpoint** | — | — | — | 295 | Historical pre-AssetEditing expansion checkpoint: read-back-verified `edit_execute` (104), executed `workflow_execute` (11), expanded schema/read coverage, input-specific `error_path` (16), first-call-gated `duplicate_reject` (11), fixture-name/path `type_discovery` (21), and lifecycle preflight. v5 is NOT comparable to v4. |
-| **v5.4 static generator (current)** | — | — | — | 578 | Current static AssetEditing generator: 268 `asset_authoring` chains and 1820 generated test-set modules split across 39 shard files, including workflow/asset-operation/lifecycle/operation-semantics modules, role/domain/edit-domain hierarchy links, and selectors. See `RESULTS.md` for historical live evidence and rerun commands. |
+| **Current static generator** | — | — | — | 579 | Current static AssetEditing generator: 269 `asset_authoring` chains and 1824 generated test-set modules split across 39 shard files, including workflow/asset-operation/lifecycle/operation-semantics modules, role/domain/edit-domain hierarchy links, and selectors. See `RESULTS.md` for historical live evidence and rerun commands. |

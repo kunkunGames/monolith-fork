@@ -2,9 +2,9 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-07-12T02:14:12.681671+00:00",
+  "generated_at": "2026-07-17T10:24:39.993026+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "308546814b77b03e591343886d3cbee8e70b26d9354f5734789a7255b0f25990",
+  "source_task_sha256": "ea3c428db9e0fdb056ad50f6e36fce5a1d12383eef5b97982b9e371308a10165",
   "module_storage": "module_shard",
   "shard_id": "lifecycle",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/lifecycle.json",
@@ -50,7 +50,7 @@
       ],
       "track": "lifecycle",
       "title": "Lifecycle phase: create_save",
-      "task_count": 267,
+      "task_count": 266,
       "filters": {
         "lifecycle_phase": [
           "create_save"
@@ -70,7 +70,7 @@
       ],
       "track": "lifecycle",
       "title": "Lifecycle phase: not_applicable",
-      "task_count": 310,
+      "task_count": 311,
       "filters": {
         "lifecycle_phase": [
           "not_applicable"
@@ -228,7 +228,7 @@
           "create_save"
         ]
       },
-      "task_count": 267,
+      "task_count": 266,
       "task_ids": [
         "BEB-279",
         "BEB-280",
@@ -378,7 +378,6 @@
         "BEB-425",
         "BEB-426",
         "BEB-428",
-        "BEB-429",
         "BEB-430",
         "BEB-431",
         "BEB-432",
@@ -5130,34 +5129,6 @@
           "description": "Spawn temporary editor actors, harvest them into a dialog-free Actor Blueprint prefab, clean up the scene, save it, and inspect prefab components"
         },
         {
-          "id": "BEB-429",
-          "category": "asset_authoring",
-          "namespace": "mixed",
-          "tool": "monolith_query",
-          "action": "op_chain",
-          "domain": "level_instance",
-          "edit_domain": "blueprint_prefab_guard",
-          "blueprint_type": "",
-          "workflow": "level_instance_rootless_prefab_rejected",
-          "operation_semantics": "create_save",
-          "lifecycle_phase": "create_save",
-          "asset_operations": [
-            "creation_or_import",
-            "save",
-            "edit",
-            "readback_verify"
-          ],
-          "actions": [
-            "op_chain",
-            "delete_assets",
-            "delete_actors",
-            "spawn_actor",
-            "create_blueprint_prefab",
-            "inspect_asset"
-          ],
-          "description": "Spawn bare rootless Actors, confirm create_blueprint_prefab rejects them by name instead of crashing the editor, and confirm no prefab asset was written"
-        },
-        {
           "id": "BEB-430",
           "category": "asset_authoring",
           "namespace": "mixed",
@@ -9015,7 +8986,6 @@
             "BEB-425",
             "BEB-426",
             "BEB-428",
-            "BEB-429",
             "BEB-430",
             "BEB-431",
             "BEB-432",
@@ -9317,7 +9287,6 @@
           ],
           "level_instance": [
             "BEB-428",
-            "BEB-429",
             "BEB-499"
           ],
           "localization": [
@@ -9552,9 +9521,6 @@
           ],
           "blueprint_prefab": [
             "BEB-428"
-          ],
-          "blueprint_prefab_guard": [
-            "BEB-429"
           ],
           "blueprint_spec_builder": [
             "BEB-355"
@@ -10406,7 +10372,6 @@
             "BEB-425",
             "BEB-426",
             "BEB-428",
-            "BEB-429",
             "BEB-430",
             "BEB-431",
             "BEB-432",
@@ -10677,7 +10642,6 @@
             "BEB-425",
             "BEB-426",
             "BEB-428",
-            "BEB-429",
             "BEB-430",
             "BEB-431",
             "BEB-432",
@@ -10946,7 +10910,6 @@
             "BEB-425",
             "BEB-426",
             "BEB-428",
-            "BEB-429",
             "BEB-430",
             "BEB-431",
             "BEB-432",
@@ -11215,7 +11178,6 @@
             "BEB-425",
             "BEB-426",
             "BEB-428",
-            "BEB-429",
             "BEB-430",
             "BEB-431",
             "BEB-432",
@@ -11484,7 +11446,6 @@
             "BEB-425",
             "BEB-426",
             "BEB-428",
-            "BEB-429",
             "BEB-430",
             "BEB-431",
             "BEB-432",
@@ -11629,7 +11590,7 @@
           "not_applicable"
         ]
       },
-      "task_count": 310,
+      "task_count": 311,
       "task_ids": [
         "BEB-001",
         "BEB-002",
@@ -11909,6 +11870,7 @@
         "BEB-276",
         "BEB-277",
         "BEB-278",
+        "BEB-429",
         "BEB-548",
         "BEB-549",
         "BEB-550",
@@ -17892,6 +17854,31 @@
           "description": "Set a PrintString InString pin literal and read it back"
         },
         {
+          "id": "BEB-429",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "level_instance",
+          "edit_domain": "blueprint_prefab_guard",
+          "blueprint_type": "",
+          "workflow": "level_instance_rootless_prefab_rejected",
+          "operation_semantics": "rejection_guard",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "delete_actors",
+            "spawn_actor",
+            "create_blueprint_prefab",
+            "inspect_asset"
+          ],
+          "description": "Spawn bare rootless Actors, confirm create_blueprint_prefab rejects them by name instead of crashing the editor, and confirm no prefab asset was written"
+        },
+        {
           "id": "BEB-548",
           "category": "negative_compile",
           "namespace": "blueprint",
@@ -18579,6 +18566,9 @@
       ],
       "groups": {
         "by_category": {
+          "asset_authoring": [
+            "BEB-429"
+          ],
           "duplicate_reject": [
             "BEB-569",
             "BEB-570",
@@ -19202,6 +19192,9 @@
             "BEB-270",
             "BEB-579"
           ],
+          "level_instance": [
+            "BEB-429"
+          ],
           "ui": [
             "BEB-003",
             "BEB-011",
@@ -19237,6 +19230,9 @@
           ]
         },
         "by_edit_domain": {
+          "blueprint_prefab_guard": [
+            "BEB-429"
+          ],
           "class": [
             "BEB-130",
             "BEB-131",
@@ -19872,6 +19868,7 @@
             "BEB-152",
             "BEB-153",
             "BEB-154",
+            "BEB-429",
             "BEB-549",
             "BEB-550",
             "BEB-551",
@@ -20347,6 +20344,7 @@
             "BEB-276",
             "BEB-277",
             "BEB-278",
+            "BEB-429",
             "BEB-548",
             "BEB-549",
             "BEB-550",

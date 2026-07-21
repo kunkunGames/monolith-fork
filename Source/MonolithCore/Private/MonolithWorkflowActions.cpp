@@ -284,16 +284,379 @@ namespace
 		return Params;
 	}
 
+	constexpr int32 MaxSemanticPayloadDepth = 32;
+	constexpr int32 MaxSemanticPayloadNodes = 16384;
+
+	FString JsonTypeName(const TSharedPtr<FJsonValue>& Value)
+	{
+		if (!Value.IsValid())
+		{
+			return TEXT("invalid");
+		}
+
+		switch (Value->Type)
+		{
+		case EJson::None: return TEXT("none");
+		case EJson::Null: return TEXT("null");
+		case EJson::String: return TEXT("string");
+		case EJson::Number: return TEXT("number");
+		case EJson::Boolean: return TEXT("boolean");
+		case EJson::Array: return TEXT("array");
+		case EJson::Object: return TEXT("object");
+		default: return TEXT("unknown");
+		}
+	}
+
+	bool IsPrimitiveFailureStatus(const FString& Status)
+	{
+		FString Normalized = Status.TrimStartAndEnd().ToLower();
+		Normalized.ReplaceInline(TEXT("-"), TEXT("_"));
+		Normalized.ReplaceInline(TEXT(" "), TEXT("_"));
+
+		static const TSet<FString> FailureTokens = {
+			TEXT("fail"),
+			TEXT("failed"),
+			TEXT("failure"),
+			TEXT("error"),
+			TEXT("errored"),
+			TEXT("critical"),
+			TEXT("fatal"),
+			TEXT("blocked"),
+			TEXT("unavailable"),
+			TEXT("invalid"),
+			TEXT("rejected"),
+			TEXT("cancelled"),
+			TEXT("canceled"),
+			TEXT("aborted"),
+			TEXT("timeout"),
+			TEXT("missing"),
+			TEXT("disabled"),
+			TEXT("unsupported"),
+			TEXT("issues")
+		};
+
+		TArray<FString> Tokens;
+		Normalized.ParseIntoArray(Tokens, TEXT("_"), true);
+		for (const FString& Token : Tokens)
+		{
+			if (FailureTokens.Contains(Token))
+			{
+				return true;
+			}
+		}
+
+		static const TArray<FString> FailurePhrases = {
+			TEXT("not_found"),
+			TEXT("not_supported"),
+			TEXT("not_available"),
+			TEXT("not_installed"),
+			TEXT("not_started"),
+			TEXT("timed_out")
+		};
+		for (const FString& FailurePhrase : FailurePhrases)
+		{
+			if (Normalized == FailurePhrase || Normalized.EndsWith(FString(TEXT("_")) + FailurePhrase))
+			{
+				return true;
+			}
+		}
+
+		return Normalized == TEXT("no_editor_world")
+			|| Normalized == TEXT("module_not_loaded");
+	}
+
+	bool IsHighSeverityFinding(const FString& Severity)
+	{
+		return Severity.Equals(TEXT("high"), ESearchCase::IgnoreCase)
+			|| Severity.Equals(TEXT("error"), ESearchCase::IgnoreCase)
+			|| Severity.Equals(TEXT("critical"), ESearchCase::IgnoreCase)
+			|| Severity.Equals(TEXT("fatal"), ESearchCase::IgnoreCase);
+	}
+
+	void AddMalformedSemanticField(
+		const FString& FieldPath,
+		const TCHAR* ExpectedType,
+		const TSharedPtr<FJsonValue>& ActualValue,
+		TArray<FString>& OutFailures)
+	{
+		OutFailures.AddUnique(FString::Printf(
+			TEXT("malformed semantic field %s: expected %s, got %s"),
+			*FieldPath,
+			ExpectedType,
+			*JsonTypeName(ActualValue)));
+	}
+
+	void ValidatePrimitiveSemanticObject(
+		const TSharedPtr<FJsonObject>& Object,
+		const FString& Path,
+		TArray<FString>& OutFailures)
+	{
+		if (!Object.IsValid())
+		{
+			OutFailures.AddUnique(FString::Printf(TEXT("malformed semantic object at %s"), *Path));
+			return;
+		}
+
+		static const TCHAR* BooleanFailureFields[] = {
+			TEXT("ok"),
+			TEXT("success"),
+			TEXT("bSuccess"),
+			TEXT("passed")
+		};
+		for (const TCHAR* FieldName : BooleanFailureFields)
+		{
+			const TSharedPtr<FJsonValue>* FieldValue = Object->Values.Find(FieldName);
+			if (!FieldValue)
+			{
+				continue;
+			}
+
+			const FString FieldPath = Path + TEXT(".") + FieldName;
+			if (!FieldValue->IsValid() || (*FieldValue)->Type != EJson::Boolean)
+			{
+				AddMalformedSemanticField(FieldPath, TEXT("boolean"), FieldValue->IsValid() ? *FieldValue : nullptr, OutFailures);
+			}
+			else if (!(*FieldValue)->AsBool())
+			{
+				OutFailures.AddUnique(FieldPath + TEXT("=false"));
+			}
+		}
+
+		if (const TSharedPtr<FJsonValue>* StatusValue = Object->Values.Find(TEXT("status")))
+		{
+			const FString FieldPath = Path + TEXT(".status");
+			if (!StatusValue->IsValid() || (*StatusValue)->Type != EJson::String)
+			{
+				AddMalformedSemanticField(FieldPath, TEXT("string"), StatusValue->IsValid() ? *StatusValue : nullptr, OutFailures);
+			}
+			else
+			{
+				const FString Status = (*StatusValue)->AsString();
+				if (Status.TrimStartAndEnd().IsEmpty())
+				{
+					OutFailures.AddUnique(FieldPath + TEXT(" is empty"));
+				}
+				else if (IsPrimitiveFailureStatus(Status))
+				{
+					OutFailures.AddUnique(FString::Printf(TEXT("%s=%s"), *FieldPath, *Status));
+				}
+			}
+		}
+
+		if (const TSharedPtr<FJsonValue>* ErrorCountValue = Object->Values.Find(TEXT("error_count")))
+		{
+			const FString FieldPath = Path + TEXT(".error_count");
+			if (!ErrorCountValue->IsValid() || (*ErrorCountValue)->Type != EJson::Number)
+			{
+				AddMalformedSemanticField(FieldPath, TEXT("non-negative integer"), ErrorCountValue->IsValid() ? *ErrorCountValue : nullptr, OutFailures);
+			}
+			else
+			{
+				const double ErrorCount = (*ErrorCountValue)->AsNumber();
+				if (!FMath::IsFinite(ErrorCount) || ErrorCount < 0.0 || ErrorCount != FMath::RoundToDouble(ErrorCount))
+				{
+					OutFailures.AddUnique(FString::Printf(TEXT("malformed semantic field %s: expected non-negative integer, got %g"), *FieldPath, ErrorCount));
+				}
+				else if (ErrorCount > 0.0)
+				{
+					OutFailures.AddUnique(FString::Printf(TEXT("%s=%g"), *FieldPath, ErrorCount));
+				}
+			}
+		}
+
+		if (const TSharedPtr<FJsonValue>* ErrorsValue = Object->Values.Find(TEXT("errors")))
+		{
+			const FString FieldPath = Path + TEXT(".errors");
+			if (!ErrorsValue->IsValid() || (*ErrorsValue)->Type != EJson::Array)
+			{
+				AddMalformedSemanticField(FieldPath, TEXT("array"), ErrorsValue->IsValid() ? *ErrorsValue : nullptr, OutFailures);
+			}
+			else if ((*ErrorsValue)->AsArray().Num() > 0)
+			{
+				OutFailures.AddUnique(FString::Printf(TEXT("%s[%d] is non-empty"), *FieldPath, (*ErrorsValue)->AsArray().Num()));
+			}
+		}
+
+		if (const TSharedPtr<FJsonValue>* FindingsValue = Object->Values.Find(TEXT("findings")))
+		{
+			const FString FieldPath = Path + TEXT(".findings");
+			if (!FindingsValue->IsValid() || (*FindingsValue)->Type != EJson::Array)
+			{
+				AddMalformedSemanticField(FieldPath, TEXT("array"), FindingsValue->IsValid() ? *FindingsValue : nullptr, OutFailures);
+			}
+		}
+
+		const TSharedPtr<FJsonValue>* RequiredValue = Object->Values.Find(TEXT("required"));
+		const TSharedPtr<FJsonValue>* SeverityValue = Object->Values.Find(TEXT("severity"));
+		if (RequiredValue && SeverityValue)
+		{
+			const FString RequiredPath = Path + TEXT(".required");
+			const FString SeverityPath = Path + TEXT(".severity");
+			const bool bRequiredValid = RequiredValue->IsValid() && (*RequiredValue)->Type == EJson::Boolean;
+			const bool bSeverityValid = SeverityValue->IsValid() && (*SeverityValue)->Type == EJson::String;
+			if (!bRequiredValid)
+			{
+				AddMalformedSemanticField(RequiredPath, TEXT("boolean"), RequiredValue->IsValid() ? *RequiredValue : nullptr, OutFailures);
+			}
+			if (!bSeverityValid)
+			{
+				AddMalformedSemanticField(SeverityPath, TEXT("string"), SeverityValue->IsValid() ? *SeverityValue : nullptr, OutFailures);
+			}
+			if (bRequiredValid && bSeverityValid && (*RequiredValue)->AsBool())
+			{
+				const FString Severity = (*SeverityValue)->AsString();
+				if (IsHighSeverityFinding(Severity))
+				{
+					OutFailures.AddUnique(FString::Printf(TEXT("required %s finding at %s"), *Severity, *Path));
+				}
+			}
+		}
+	}
+
+	bool WalkPrimitiveSemanticValue(
+		const TSharedPtr<FJsonValue>& Value,
+		const FString& Path,
+		int32 Depth,
+		int32& InOutNodeCount,
+		TArray<FString>& OutFailures)
+	{
+		if (Depth > MaxSemanticPayloadDepth)
+		{
+			OutFailures.AddUnique(FString::Printf(
+				TEXT("semantic payload depth budget exceeded at %s (max=%d)"),
+				*Path,
+				MaxSemanticPayloadDepth));
+			return false;
+		}
+
+		++InOutNodeCount;
+		if (InOutNodeCount > MaxSemanticPayloadNodes)
+		{
+			OutFailures.AddUnique(FString::Printf(
+				TEXT("semantic payload node budget exceeded at %s (max=%d)"),
+				*Path,
+				MaxSemanticPayloadNodes));
+			return false;
+		}
+
+		if (!Value.IsValid())
+		{
+			OutFailures.AddUnique(FString::Printf(TEXT("malformed JSON value at %s"), *Path));
+			return true;
+		}
+
+		if (Value->Type == EJson::Object)
+		{
+			const TSharedPtr<FJsonObject> Object = Value->AsObject();
+			ValidatePrimitiveSemanticObject(Object, Path, OutFailures);
+			if (!Object.IsValid())
+			{
+				return true;
+			}
+
+			for (const auto& Pair : Object->Values)
+			{
+				if (!WalkPrimitiveSemanticValue(
+					Pair.Value,
+					Path + TEXT(".") + Pair.Key,
+					Depth + 1,
+					InOutNodeCount,
+					OutFailures))
+				{
+					return false;
+				}
+			}
+		}
+		else if (Value->Type == EJson::Array)
+		{
+			const TArray<TSharedPtr<FJsonValue>>& Array = Value->AsArray();
+			for (int32 Index = 0; Index < Array.Num(); ++Index)
+			{
+				if (!WalkPrimitiveSemanticValue(
+					Array[Index],
+					FString::Printf(TEXT("%s[%d]"), *Path, Index),
+					Depth + 1,
+					InOutNodeCount,
+					OutFailures))
+				{
+					return false;
+				}
+			}
+		}
+
+		return true;
+	}
+
+	void CollectPrimitiveSemanticFailures(
+		const TSharedPtr<FJsonObject>& Payload,
+		TArray<FString>& OutFailures)
+	{
+		if (!Payload.IsValid())
+		{
+			OutFailures.AddUnique(TEXT("semantic payload is missing at $"));
+			return;
+		}
+
+		int32 NodeCount = 0;
+		WalkPrimitiveSemanticValue(
+			MakeShared<FJsonValueObject>(Payload),
+			TEXT("$"),
+			0,
+			NodeCount,
+			OutFailures);
+		OutFailures.Sort();
+	}
+
+	bool IsPrimitiveResultSuccessful(
+		const FMonolithActionResult& Result,
+		TArray<FString>& OutSemanticFailures)
+	{
+		if (!Result.bSuccess)
+		{
+			return false;
+		}
+
+		CollectPrimitiveSemanticFailures(Result.Result, OutSemanticFailures);
+		return OutSemanticFailures.Num() == 0;
+	}
+
+	void AddSemanticFailureFields(
+		const TSharedPtr<FJsonObject>& Object,
+		const TArray<FString>& SemanticFailures)
+	{
+		if (!Object.IsValid() || SemanticFailures.Num() == 0)
+		{
+			return;
+		}
+
+		Object->SetBoolField(TEXT("transport_success"), true);
+		Object->SetBoolField(TEXT("semantic_ok"), false);
+		Object->SetArrayField(TEXT("semantic_failures"), StringsToJson(SemanticFailures));
+	}
+
+	void AddPrimitiveFailureError(
+		const FString& ActionId,
+		const TArray<FString>& SemanticFailures,
+		TArray<FString>& OutErrors)
+	{
+		OutErrors.Add(FString::Printf(
+			TEXT("%s semantic gate failed: %s"),
+			*ActionId,
+			*FString::Join(SemanticFailures, TEXT("; "))));
+	}
+
 	TSharedPtr<FJsonObject> MakeActionResultProof(const FMonolithActionResult& Result)
 	{
+		TArray<FString> SemanticFailures;
+		const bool bSucceeded = IsPrimitiveResultSuccessful(Result, SemanticFailures);
 		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetBoolField(TEXT("success"), Result.bSuccess);
-		Obj->SetStringField(TEXT("status"), Result.bSuccess ? TEXT("succeeded") : TEXT("failed"));
+		Obj->SetBoolField(TEXT("success"), bSucceeded);
+		Obj->SetStringField(TEXT("status"), bSucceeded ? TEXT("succeeded") : TEXT("failed"));
 		if (Result.bSuccess && Result.Result.IsValid())
 		{
 			Obj->SetObjectField(TEXT("result"), Result.Result);
 		}
-		else
+		if (!Result.bSuccess)
 		{
 			Obj->SetStringField(TEXT("error"), Result.ErrorMessage);
 			Obj->SetNumberField(TEXT("error_code"), Result.ErrorCode);
@@ -301,6 +664,10 @@ namespace
 			{
 				Obj->SetObjectField(TEXT("error_data"), Result.ErrorData);
 			}
+		}
+		else
+		{
+			AddSemanticFailureFields(Obj, SemanticFailures);
 		}
 		return Obj;
 	}
@@ -325,13 +692,21 @@ namespace
 		}
 
 		const FMonolithActionResult Result = Registry.ExecuteAction(Namespace, Action, Params);
+		TArray<FString> SemanticFailures;
+		const bool bSucceeded = IsPrimitiveResultSuccessful(Result, SemanticFailures);
 		OutProof = MakeActionResultProof(Result);
-		OutActions.Add(MakeShared<FJsonValueObject>(MakeActionRow(ActionId, Result.bSuccess ? TEXT("succeeded") : TEXT("failed"), true, true, Params)));
+		TSharedPtr<FJsonObject> Row = MakeActionRow(ActionId, bSucceeded ? TEXT("succeeded") : TEXT("failed"), true, true, Params);
+		AddSemanticFailureFields(Row, SemanticFailures);
+		OutActions.Add(MakeShared<FJsonValueObject>(Row));
 		if (!Result.bSuccess)
 		{
 			OutErrors.Add(ActionId + TEXT(": ") + Result.ErrorMessage);
 		}
-		return Result.bSuccess;
+		else if (!bSucceeded)
+		{
+			AddPrimitiveFailureError(ActionId, SemanticFailures, OutErrors);
+		}
+		return bSucceeded;
 	}
 
 	bool PlanOrExecutePrimitive(
@@ -370,7 +745,9 @@ namespace
 		}
 
 		const FMonolithActionResult Result = Registry.ExecuteAction(Namespace, Action, Params);
-		TSharedPtr<FJsonObject> Row = MakeActionRow(ActionId, Result.bSuccess ? TEXT("succeeded") : TEXT("failed"), true, true, Params);
+		TArray<FString> SemanticFailures;
+		const bool bSucceeded = IsPrimitiveResultSuccessful(Result, SemanticFailures);
+		TSharedPtr<FJsonObject> Row = MakeActionRow(ActionId, bSucceeded ? TEXT("succeeded") : TEXT("failed"), true, true, Params);
 		if (Result.bSuccess && Result.Result.IsValid())
 		{
 			Row->SetObjectField(TEXT("result"), Result.Result);
@@ -385,9 +762,17 @@ namespace
 			}
 			OutErrors.Add(ActionId + TEXT(": ") + Result.ErrorMessage);
 		}
+		if (Result.bSuccess)
+		{
+			AddSemanticFailureFields(Row, SemanticFailures);
+		}
+		if (Result.bSuccess && !bSucceeded)
+		{
+			AddPrimitiveFailureError(ActionId, SemanticFailures, OutErrors);
+		}
 		OutActions.Add(MakeShared<FJsonValueObject>(Row));
 		OutProofRows.Add(MakeShared<FJsonValueObject>(Row));
-		return Result.bSuccess;
+		return bSucceeded;
 	}
 
 	TSharedPtr<FJsonObject> MakeSourceControlObject(const FString& Status, const TArray<FString>& Paths, const TArray<FString>& Blockers)
@@ -1617,6 +2002,47 @@ namespace
 		return Policy;
 	}
 }
+
+#if WITH_DEV_AUTOMATION_TESTS
+namespace MonolithWorkflowActionsTestSupport
+{
+	bool ExecuteReadOnlyPrimitiveForTest(
+		const FString& Namespace,
+		const FString& Action,
+		const TSharedPtr<FJsonObject>& Params,
+		TSharedPtr<FJsonObject>& OutProof,
+		TArray<TSharedPtr<FJsonValue>>& OutActions,
+		TArray<FString>& OutErrors)
+	{
+		return ExecuteReadOnlyPrimitive(
+			Namespace,
+			Action,
+			Params,
+			OutProof,
+			OutActions,
+			OutErrors);
+	}
+
+	bool ExecutePrimitiveForTest(
+		const FString& Namespace,
+		const FString& Action,
+		const TSharedPtr<FJsonObject>& Params,
+		TArray<TSharedPtr<FJsonValue>>& OutActions,
+		TArray<TSharedPtr<FJsonValue>>& OutProofRows,
+		TArray<FString>& OutErrors)
+	{
+		return PlanOrExecutePrimitive(
+			Namespace,
+			Action,
+			Params,
+			true,
+			true,
+			OutActions,
+			OutProofRows,
+			OutErrors);
+	}
+}
+#endif
 
 void FMonolithWorkflowActions::RegisterAll()
 {

@@ -1,11 +1,13 @@
 {
   "generated_at": "2026-07-11T02:26:09.642697+00:00",
-  "description": "Targeted SchemaCompleteness probe contract. Required rows are preflighted against the complete live catalog; explicit optional/feature-gated absences are reported separately and excluded from schema scoring.",
+  "description": "Targeted SchemaCompleteness probe contract plus a resumable full-catalog scan contract. Required probe rows are preflighted against the complete live catalog; successful per-action evidence preserves the canonical raw schema and its type-exact canonical JSON SHA-256 so every score can be independently rerun; full scans reuse only valid results from an identical input/catalog identity and publish a comparable summary only after every catalog action has exactly one valid result.",
   "expected_namespace_count": 61,
   "expected_action_count": 1840,
   "scoring": {
     "primary_metric": "schema_completeness_score",
     "formula": "0.25*param_types_declared_rate + 0.20*required_params_marked_rate + 0.20*value_domain_rate + 0.15*planning_signals_present_rate + 0.10*skill_routing_present_rate + 0.10*output_contract_declared_rate",
+    "quality_pass_contract": "A full-catalog action passes only when every applicable dimension is explicitly true (schema_score=1.0). A reusable fetch with any false applicable dimension is a quality failure.",
+    "fetch_failure_contract": "failed_action_count and namespace failed_count describe schema fetch/execution failures; quality_pass_action_count and quality_fail_action_count describe schema contract quality.",
     "param_gated_dimensions": [
       "param_types_declared",
       "required_params_marked",
@@ -49,7 +51,7 @@
   "probe_set_file": "Plugins/Monolith/Benchmarks/SchemaCompleteness/probe_set.jsonl",
   "benchmark_script": "Scripts/schema_completeness_benchmark.py",
   "related_benchmark": "Benchmarks/ActionGuidance",
-  "notes": "Probe mode validates JSONL syntax, uniqueness, manifest count, availability gates, and complete live catalog presence before fetching any schema. Required stale rows abort without writing a baseline; absent optional/feature-gated rows remain explicit skipped diagnostics. Full scan still covers every live action.",
+  "notes": "Probe mode validates JSONL syntax, uniqueness, manifest count, availability gates, and complete live catalog presence before fetching any schema. Required stale rows abort without writing a baseline; absent optional/feature-gated rows remain explicit skipped diagnostics. Probe and full-scan per-action rows share one raw-evidence contract: successful rows carry canonical raw_schema, raw_schema_hash_kind, and raw_schema_sha256, and validation reruns score_schema_quality(raw_schema) then exact-compares all six dimensions, schema_score, and value_domain_diagnostics. Full scan checkpoints preserve only validated successful rows plus segment/outage provenance, reject input or catalog drift and duplicate result ids, and require an exact complete result set before summary publication.",
   "catalog_version": "sha256:ef52979d7e00a249",
   "probe_set_availability_counts": {
     "required": 315,
@@ -63,7 +65,39 @@
     "min_transport_fraction_sample": 20,
     "invalid_status_response_aborts_before_schema_fetch": true,
     "status_catalog_version_mismatch_aborts_before_schema_fetch": true,
-    "invalid_run_writes_summary": false
+    "catalog_transport_failure_aborts_remaining_namespaces": true,
+    "invalid_run_writes_summary": false,
+    "full_scan_requires_all_valid_results": true,
+    "full_scan_resume_checkpoint": true,
+    "successful_rows_require_canonical_raw_schema": true,
+    "successful_rows_require_exact_raw_rescoring": true,
+    "resume_requires_identical_input_catalog_identity": true,
+    "normal_summary_requires_exact_catalog_result_set": true
+  },
+  "full_scan_resume": {
+    "contract_version": "schema-completeness-full-catalog-v2",
+    "checkpoint_schema_version": 2,
+    "checkpoint_file": "scan_checkpoint.json",
+    "result_file": "per_action.jsonl",
+    "resume_flag": "--resume",
+    "reusable_result_failure_kind": "ok",
+    "catalog_identity_fields": [
+      "catalog_version",
+      "catalog_action_count",
+      "catalog_action_ids_hash_kind",
+      "catalog_action_ids_sha256"
+    ],
+    "catalog_action_ids_hash_kind": "sorted_json_namespace_dot_action_v1",
+    "raw_schema_hash_kind": "sha256_utf8_canonical_json_sorted_keys_compact_ascii_type_exact_v1",
+    "raw_schema_score_derivation": "score_schema_quality(raw_schema) must exactly equal all six dimension fields, schema_score, and value_domain_diagnostics",
+    "legacy_checkpoint_policy": "Version-1 checkpoints and evidence are not migrated or accepted; existing diagnostic evidence has zero completion credit and the next probe/full run must emit version-2 rows.",
+    "provenance_fields": [
+      "segments",
+      "outages",
+      "invalid_attempts",
+      "recovery_events"
+    ],
+    "database_signatures_applicable": false
   },
   "probe_migration": {
     "previous_probe_count": 388,

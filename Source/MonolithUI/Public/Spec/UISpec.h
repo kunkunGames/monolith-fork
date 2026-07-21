@@ -209,6 +209,17 @@ struct MONOLITHUI_API FUISpecSlot
     /** Fill weight for box slots when SizeRule is Fill. Zero is valid when SizeRule is authored. */
     UPROPERTY(BlueprintReadWrite, Category = "MonolithUI|Spec")
     float FillWeight = 1.f;
+
+    // Serializer-only provenance used by semantic diff. These are deliberately
+    // not UPROPERTY/JSON fields: they record that a resolved live value came
+    // from the exact slot-class CDO rather than an authored UISpec override.
+    // bPaddingSpecified is also set by the JSON/markup parser so an explicit
+    // zero margin remains distinguishable from an omitted, class-default value.
+    bool bPaddingSpecified = false;
+    bool bPaddingUsesClassDefault = false;
+    bool bHAlignUsesClassDefault = false;
+    bool bVAlignUsesClassDefault = false;
+    bool bSizeRuleUsesClassDefault = false;
 };
 
 /**
@@ -287,6 +298,17 @@ struct MONOLITHUI_API FUISpecStyle
     /** Enables MaxDesiredHeight even when the value is 0. */
     UPROPERTY(BlueprintReadWrite, Category = "MonolithUI|Spec")
     bool bOverrideMaxDesiredHeight = false;
+
+    // Serializer-only provenance used by semantic diff. These flags never
+    // cross the UISpec JSON/Blueprint contract; they distinguish resolved CDO
+    // values from authored overrides without erasing the value from dumps.
+    // bPaddingSpecified is parser/dumper intent metadata: explicit zero is a
+    // real authored value and must not collapse into an omitted CDO default.
+    bool bPaddingSpecified = false;
+    bool bPaddingUsesClassDefault = false;
+    bool bBackgroundUsesClassDefault = false;
+    bool bOpacityUsesClassDefault = false;
+    bool bVisibilityUsesClassDefault = false;
 };
 
 /**
@@ -306,9 +328,45 @@ struct MONOLITHUI_API FUISpecContent
     UPROPERTY(BlueprintReadWrite, Category = "MonolithUI|Spec")
     float FontSize = 0.f;
 
+    /** Font-family asset path used by TextBlock (`/Game/...` or `/Engine/...`). */
+    UPROPERTY(BlueprintReadWrite, Category = "MonolithUI|Spec")
+    FString FontFamily;
+
+    /** Typeface entry within FontFamily (for example Regular, Bold, or Italic). */
+    UPROPERTY(BlueprintReadWrite, Category = "MonolithUI|Spec")
+    FName Typeface;
+
+    /** Uniform tracking in Slate design units. */
+    UPROPERTY(BlueprintReadWrite, Category = "MonolithUI|Spec")
+    int32 LetterSpacing = 0;
+
     /** Font color (post-degamma linear). */
     UPROPERTY(BlueprintReadWrite, Category = "MonolithUI|Spec")
     FLinearColor FontColor = FLinearColor::White;
+
+    /** Text justification token (Left/Center/Right/InvariantLeft/InvariantRight). */
+    UPROPERTY(BlueprintReadWrite, Category = "MonolithUI|Spec")
+    FName Justification = FName(TEXT("Left"));
+
+    /** Font-outline width in Slate units. */
+    UPROPERTY(BlueprintReadWrite, Category = "MonolithUI|Spec")
+    int32 OutlineSize = 0;
+
+    /** Font-outline color. */
+    UPROPERTY(BlueprintReadWrite, Category = "MonolithUI|Spec")
+    FLinearColor OutlineColor = FLinearColor::Black;
+
+    /** Text shadow offset in Slate units. */
+    UPROPERTY(BlueprintReadWrite, Category = "MonolithUI|Spec")
+    FVector2D ShadowOffset = FVector2D(1.f, 1.f);
+
+    /** Text shadow color and opacity. */
+    UPROPERTY(BlueprintReadWrite, Category = "MonolithUI|Spec")
+    FLinearColor ShadowColor = FLinearColor::Transparent;
+
+    /** Line-height multiplier. UE's authored default is 1.0. */
+    UPROPERTY(BlueprintReadWrite, Category = "MonolithUI|Spec")
+    float LineHeightPercentage = 1.f;
 
     /** Text wrap mode token (None/Wrap/WrapAtWordBoundary). */
     UPROPERTY(BlueprintReadWrite, Category = "MonolithUI|Spec")

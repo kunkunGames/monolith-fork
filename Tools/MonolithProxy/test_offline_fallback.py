@@ -500,6 +500,50 @@ class SlowMutationHandler(LiveErrorHandler):
         )
 
 
+class SlowSchemaDiscoveryHandler(LiveErrorHandler):
+    """Completes authoritative schema discovery after the fast-fallback budget."""
+
+    schema_calls = 0
+
+    def do_POST(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        request = json.loads(self.rfile.read(length).decode("utf-8"))
+        params = request.get("params", {})
+        if params.get("name") == "monolith_status":
+            self._write_json(status_response(request.get("id")))
+            return
+        arguments = params.get("arguments", {})
+        if (
+            params.get("name") == "monolith_discover"
+            and arguments.get("mode") == "schema"
+        ):
+            type(self).schema_calls += 1
+            time.sleep(4.0)
+            self._write_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": request.get("id"),
+                    "result": {
+                        "content": [
+                            {"type": "text", "text": "LIVE_SCHEMA_SENTINEL"}
+                        ],
+                        "isError": False,
+                    },
+                }
+            )
+            return
+        self._write_json(
+            {
+                "jsonrpc": "2.0",
+                "id": request.get("id"),
+                "result": {
+                    "content": [{"type": "text", "text": "LIVE_SENTINEL"}],
+                    "isError": True,
+                },
+            }
+        )
+
+
 class IncompleteHealthHandler(LiveErrorHandler):
     """Looks healthy at a glance but omits required health contract fields."""
 
@@ -3556,6 +3600,59 @@ sys.stdin.buffer.read()
             slow_mutation_server.server_close()
             slow_mutation_thread.join(timeout=2)
 
+        SlowSchemaDiscoveryHandler.schema_calls = 0
+        slow_schema_server = ThreadingHTTPServer(
+            ("127.0.0.1", 0), SlowSchemaDiscoveryHandler
+        )
+        slow_schema_thread = threading.Thread(
+            target=slow_schema_server.serve_forever, daemon=True
+        )
+        slow_schema_thread.start()
+        slow_schema_env = env.copy()
+        slow_schema_env["MONOLITH_URL"] = (
+            f"http://127.0.0.1:{slow_schema_server.server_port}/mcp"
+        )
+        slow_schema_env["MONOLITH_TOOL_LOG_DIR"] = str(
+            temp_root / "slow-schema-logs"
+        )
+        slow_schema_session = launch_proxy(proxy, slow_schema_env)
+        try:
+            slow_schema_session.request(
+                640,
+                "initialize",
+                {
+                    "protocolVersion": "2025-11-25",
+                    "capabilities": {},
+                    "clientInfo": {
+                        "name": "authoritative-schema-budget-smoke",
+                        "version": "1",
+                    },
+                },
+            )
+            wait_for_list_changed(slow_schema_session)
+            schema_start = time.monotonic()
+            slow_schema_result = call_tool(
+                slow_schema_session,
+                641,
+                "monolith_discover",
+                {
+                    "namespace": "editor",
+                    "action": "run_automation_tests",
+                    "mode": "schema",
+                    "schema_detail": "full",
+                },
+            )
+            schema_seconds = time.monotonic() - schema_start
+            assert result_text(slow_schema_result) == "LIVE_SCHEMA_SENTINEL"
+            assert "offline_fallback" not in json.dumps(slow_schema_result)
+            assert 3.5 <= schema_seconds < 10.0, schema_seconds
+            assert SlowSchemaDiscoveryHandler.schema_calls == 1
+        finally:
+            slow_schema_session.close()
+            slow_schema_server.shutdown()
+            slow_schema_server.server_close()
+            slow_schema_thread.join(timeout=2)
+
         print(
             json.dumps(
                 {
@@ -3639,6 +3736,7 @@ sys.stdin.buffer.read()
                         "delayed_health_routes_live",
                         "delayed_status_identity_routes_live",
                         "cold_live_only_generic_routes_live",
+                        "slow_schema_discovery_preserves_live_authority",
                         "live_error_wins_without_fallback",
                         "invalid_live_tools_list_uses_stable_control_plane",
                         "invalid_live_tools_list_does_not_open_action_circuit",

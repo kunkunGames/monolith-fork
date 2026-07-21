@@ -1,4 +1,5 @@
-#include "MonolithEditorActions.h"
+﻿#include "MonolithEditorActions.h"
+#include "MonolithAutomationSession.h"
 #include "MonolithEditorGifTiming.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
@@ -18,10 +19,12 @@
 #include "Misc/App.h"
 #include "Misc/Guid.h"
 #include "Misc/AutomationTest.h"
+#include "Tests/AutomationTestSettings.h"
 #include "Algo/Reverse.h"
 #include "MonolithPackagePathValidator.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformMemory.h"
+#include "Serialization/ArchiveUObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 
@@ -75,6 +78,8 @@
 #include "Slate/WidgetRenderer.h"
 #include "RenderDeferredCleanup.h"
 #include "UObject/SavePackage.h"
+#include "UObject/UObjectGlobals.h"
+#include "UObject/UObjectHash.h"
 #include "LevelEditorViewport.h"
 #include "PixelFormat.h"
 #include "ObjectTools.h"
@@ -145,6 +150,11 @@ double FMonolithEditorActions::LastAutomationRunTimestamp = 0.0;
 TSharedPtr<FJsonObject> FMonolithEditorActions::CurrentAutomationRun;
 TArray<TSharedPtr<FJsonObject>> FMonolithEditorActions::AutomationRunHistory;
 bool FMonolithEditorActions::bAutomationRunActive = false;
+
+void FMonolithEditorActions::ShutdownAutomationSessions()
+{
+	MonolithAutomationAsync::Shutdown();
+}
 
 // --- Log capture ---
 
@@ -629,7 +639,7 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 			.Build());
 
 	Registry.RegisterAction(TEXT("editor"), TEXT("save_packages"),
-		TEXT("Save the requested packages to disk (UPackage::SavePackage + FSavePackageArgs). When fail_on_unrequested_dirty=true, errors before saving anything if any dirty package exists outside the requested set (within scope_paths if given). Returns per-package save status."),
+		TEXT("Save the requested packages to disk (UPackage::SavePackage + FSavePackageArgs). A pre-save guard rejects hard references to private objects in external packages as structured per-package failures before entering the engine saver. When fail_on_unrequested_dirty=true, errors before saving anything if any dirty package exists outside the requested set (within scope_paths if given). Returns per-package save status."),
 		FMonolithActionHandler::CreateStatic(&HandleSavePackages),
 		FParamSchemaBuilder()
 			.Required(TEXT("packages"), TEXT("array"), TEXT("Array of long package names (e.g. [\"/Game/Tests/Monolith/DA_Foo\"]) to save."))
@@ -1033,22 +1043,42 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 			.Build());
 
 	Registry.RegisterAction(TEXT("editor"), TEXT("run_automation_tests"),
-		TEXT("Run automation tests by prefix in the running editor (no PIE, no separate process). Returns run status, progress counters, success/passed/failed counts, and per-test errors."),
+		TEXT("Run synchronously-completing automation tests by prefix in the running editor. This compatibility action returns final results immediately; use start_automation_tests for latent, PIE, or other multi-frame tests. Both start actions share one run slot and return automation_busy without changing run history when occupied."),
 		FMonolithActionHandler::CreateStatic(&HandleRunAutomationTests),
 		FParamSchemaBuilder()
 			.Required(TEXT("prefix"), TEXT("string"), TEXT("Run tests whose full path starts with this prefix (e.g. 'MazeLegends.Bow')"))
 			.Optional(TEXT("max_tests"), TEXT("integer"), TEXT("Hard cap on number of tests to run (default: 200, max: 1000)"))
 			.Build());
 
+	Registry.RegisterAction(TEXT("editor"), TEXT("start_automation_tests"),
+		TEXT("Start an AutomationController-owned asynchronous test run by prefix. Returns immediately after queuing worker discovery; supports latent commands, PIE, polling, bounded timeout, and owned cancellation. An occupied shared run slot returns automation_busy before prefix discovery or no-match recording."),
+		FMonolithActionHandler::CreateStatic(&HandleStartAutomationTests),
+		FParamSchemaBuilder()
+			.Required(TEXT("prefix"), TEXT("string"), TEXT("Run tests whose full path starts with this prefix (e.g. 'Speed.UI.UMG.Convergence.CaptureCanonicalPIE')"))
+			.Optional(TEXT("max_tests"), TEXT("integer"), TEXT("Hard cap on number of tests to run (default: 200, max: 1000)"))
+			.Optional(TEXT("discovery_timeout_seconds"), TEXT("number"), TEXT("Worker/test discovery deadline (default: 30, clamped to 1..120 seconds)"))
+			.Optional(TEXT("readiness_timeout_seconds"), TEXT("number"), TEXT("Post-discovery asset/framerate readiness deadline (default: engine wait plus 60-second grace, clamped to 1..3600 seconds)"))
+			.Optional(TEXT("timeout_seconds"), TEXT("number"), TEXT("Overall controller-run deadline after execution begins (default: 300, clamped to 1..3600 seconds)"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("poll_automation_tests"),
+		TEXT("Poll one Monolith automation run by run_id. Returns a current or final full report including structured per-test results."),
+		FMonolithActionHandler::CreateStatic(&HandlePollAutomationTests),
+		FParamSchemaBuilder()
+			.Required(TEXT("run_id"), TEXT("string"), TEXT("Run id returned by start_automation_tests"))
+			.Build());
+
 	Registry.RegisterAction(TEXT("editor"), TEXT("get_automation_run_status"),
-		TEXT("Return current or last Monolith automation run status plus history capacity. Synchronous runner reports can_stop=false."),
+		TEXT("Return current or last Monolith automation run status plus history capacity. Active asynchronous controller runs report can_stop=true."),
 		FMonolithActionHandler::CreateStatic(&HandleGetAutomationRunStatus),
 		FParamSchemaBuilder().Build());
 
 	Registry.RegisterAction(TEXT("editor"), TEXT("stop_automation_tests"),
-		TEXT("Return the explicit cancellation contract for Monolith automation runs. Current synchronous runner cannot be cancelled."),
+		TEXT("Request bounded cancellation for the Monolith-owned asynchronous run. Never stops an external AutomationController run; synchronous compatibility runs remain non-cancellable."),
 		FMonolithActionHandler::CreateStatic(&HandleStopAutomationTests),
-		FParamSchemaBuilder().Build());
+		FParamSchemaBuilder()
+			.Optional(TEXT("run_id"), TEXT("string"), TEXT("Ownership guard. When supplied, must match the active Monolith asynchronous run."))
+			.Build());
 
 	Registry.RegisterAction(TEXT("editor"), TEXT("list_automation_history"),
 		TEXT("List recent compact Monolith-triggered automation run summaries newest-first."),
@@ -6045,10 +6075,10 @@ FMonolithActionResult FMonolithEditorActions::HandleEncodeFrameSequenceGif(
 // framework (`FAutomationTestFramework`) to enumerate and execute tests inside the
 // already-running editor process. No PIE, no commandlet, no second editor instance.
 //
-// `run_automation_tests` only handles tests that complete synchronously inside
-// `StartTestByName + StopTest` (which is the case for SimpleAutomationTest macros).
-// Latent / async tests (TickTests-driven) are skipped with a clear note so the
-// caller knows they were not exercised.
+// `run_automation_tests` retains its immediate synchronous compatibility contract.
+// `start_automation_tests` delegates multi-frame/latent/PIE execution to Unreal's
+// AutomationController + AutomationWorker. Monolith only observes state and deadlines;
+// it never calls controller/worker/world Tick or pumps latent commands itself.
 
 namespace MonolithAutomationDetail
 {
@@ -6103,8 +6133,15 @@ namespace MonolithAutomationDetail
 		CopyStringField(Run, TEXT("completed_at"), Summary);
 		CopyStringField(Run, TEXT("message"), Summary);
 		CopyStringField(Run, TEXT("stop_status"), Summary);
+		CopyStringField(Run, TEXT("runner_mode"), Summary);
+		CopyStringField(Run, TEXT("controller_mode"), Summary);
+		CopyStringField(Run, TEXT("controller_state"), Summary);
+		CopyStringField(Run, TEXT("phase"), Summary);
 		CopyBoolField(Run, TEXT("success"), Summary);
 		CopyBoolField(Run, TEXT("can_stop"), Summary);
+		CopyBoolField(Run, TEXT("accepted"), Summary);
+		CopyBoolField(Run, TEXT("stop_requested"), Summary);
+		CopyBoolField(Run, TEXT("stopped"), Summary);
 		CopyNumberField(Run, TEXT("matched"), Summary);
 		CopyNumberField(Run, TEXT("max_tests"), Summary);
 		CopyNumberField(Run, TEXT("requested_tests"), Summary);
@@ -6115,6 +6152,10 @@ namespace MonolithAutomationDetail
 		CopyNumberField(Run, TEXT("skipped"), Summary);
 		CopyNumberField(Run, TEXT("progress"), Summary);
 		CopyNumberField(Run, TEXT("truncated_remaining"), Summary);
+		CopyNumberField(Run, TEXT("pending_tests"), Summary);
+		CopyNumberField(Run, TEXT("discovery_timeout_seconds"), Summary);
+		CopyNumberField(Run, TEXT("readiness_timeout_seconds"), Summary);
+		CopyNumberField(Run, TEXT("timeout_seconds"), Summary);
 
 		const TArray<TSharedPtr<FJsonValue>>* Results = nullptr;
 		if (Run->TryGetArrayField(TEXT("results"), Results))
@@ -6289,6 +6330,31 @@ namespace
 	}
 }
 
+void FMonolithEditorActions::RecordFinishedAutomationRun(const TSharedPtr<FJsonObject>& Run)
+{
+	if (!Run.IsValid())
+	{
+		return;
+	}
+
+	LastAutomationRun = Run;
+	LastAutomationRunTimestamp = FPlatformTime::Seconds();
+
+	TSharedPtr<FJsonObject> HistoryEntry = MonolithAutomationDetail::BuildAutomationRunSummary(Run);
+	HistoryEntry->SetStringField(TEXT("recorded_at"), TimestampToIso(LastAutomationRunTimestamp));
+	AutomationRunHistory.Insert(HistoryEntry, 0);
+	while (AutomationRunHistory.Num() > MonolithAutomationDetail::AutomationHistoryCapacity)
+	{
+		AutomationRunHistory.RemoveAt(AutomationRunHistory.Num() - 1);
+	}
+
+	if (CurrentAutomationRun == Run)
+	{
+		CurrentAutomationRun.Reset();
+		bAutomationRunActive = false;
+	}
+}
+
 FMonolithActionResult FMonolithEditorActions::HandleListAutomationTests(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Prefix;
@@ -6412,15 +6478,221 @@ FMonolithActionResult FMonolithEditorActions::HandleFindAutomationTests(const TS
 	return FMonolithActionResult::Success(Result);
 }
 
+FMonolithActionResult FMonolithEditorActions::HandleStartAutomationTests(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Prefix;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("prefix"), Prefix) || Prefix.TrimStartAndEnd().IsEmpty())
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Required parameter: prefix (string, e.g. 'Speed.UI.UMG.Convergence.CaptureCanonicalPIE')"));
+	}
+	Prefix.TrimStartAndEndInline();
+
+	int32 MaxTests = 200;
+	double DiscoveryTimeoutSeconds = 30.0;
+	const UAutomationTestSettings* AutomationSettings = GetDefault<UAutomationTestSettings>();
+	const double EngineReadinessWaitSeconds = AutomationSettings
+		? AutomationSettings->DefaultInteractiveFramerateWaitTime + AutomationSettings->DefaultInteractiveFramerateDuration
+		: 600.0;
+	double ReadinessTimeoutSeconds = FMath::Clamp(EngineReadinessWaitSeconds + 60.0, 1.0, 3600.0);
+	double RunTimeoutSeconds = 300.0;
+	if (Params->HasField(TEXT("max_tests")))
+	{
+		double MaxTestsNumber = MaxTests;
+		if (!Params->TryGetNumberField(TEXT("max_tests"), MaxTestsNumber))
+		{
+			return FMonolithActionResult::Error(TEXT("max_tests must be a number"));
+		}
+		MaxTests = FMath::Clamp(FMath::FloorToInt(MaxTestsNumber), 1, 1000);
+	}
+	if (Params->HasField(TEXT("discovery_timeout_seconds")))
+	{
+		if (!Params->TryGetNumberField(TEXT("discovery_timeout_seconds"), DiscoveryTimeoutSeconds))
+		{
+			return FMonolithActionResult::Error(TEXT("discovery_timeout_seconds must be a number"));
+		}
+		DiscoveryTimeoutSeconds = FMath::Clamp(DiscoveryTimeoutSeconds, 1.0, 120.0);
+	}
+	if (Params->HasField(TEXT("readiness_timeout_seconds")))
+	{
+		if (!Params->TryGetNumberField(TEXT("readiness_timeout_seconds"), ReadinessTimeoutSeconds))
+		{
+			return FMonolithActionResult::Error(TEXT("readiness_timeout_seconds must be a number"));
+		}
+		ReadinessTimeoutSeconds = FMath::Clamp(ReadinessTimeoutSeconds, 1.0, 3600.0);
+	}
+	if (Params->HasField(TEXT("timeout_seconds")))
+	{
+		if (!Params->TryGetNumberField(TEXT("timeout_seconds"), RunTimeoutSeconds))
+		{
+			return FMonolithActionResult::Error(TEXT("timeout_seconds must be a number"));
+		}
+		RunTimeoutSeconds = FMath::Clamp(RunTimeoutSeconds, 1.0, 3600.0);
+	}
+	// Reject every second start, including a prefix that currently matches no
+	// tests. Otherwise recording that no-match terminal report could overwrite
+	// the active run's last/history state while the controller still owns it.
+	if (bAutomationRunActive || MonolithAutomationAsync::IsActive())
+	{
+		return FMonolithActionResult::Error(
+			TEXT("automation_busy: a Monolith automation run is already active."));
+	}
+
+	TArray<FAutomationTestInfo> MatchingTests;
+	MonolithAutomationDetail::CollectMatchingTests(Prefix, MatchingTests);
+	const int32 TestsToRun = FMath::Min(MaxTests, MatchingTests.Num());
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("run_id"), MonolithAutomationDetail::MakeAutomationRunId());
+	Result->SetStringField(TEXT("started_at"), FDateTime::UtcNow().ToIso8601());
+	Result->SetStringField(TEXT("prefix"), Prefix);
+	Result->SetStringField(TEXT("runner_mode"), TEXT("asynchronous"));
+	Result->SetStringField(TEXT("controller_mode"), TEXT("automation_controller"));
+	Result->SetNumberField(TEXT("matched"), MatchingTests.Num());
+	Result->SetNumberField(TEXT("max_tests"), MaxTests);
+	Result->SetNumberField(TEXT("requested_tests"), TestsToRun);
+	Result->SetNumberField(TEXT("total"), TestsToRun);
+	Result->SetNumberField(TEXT("completed_tests"), 0);
+	Result->SetNumberField(TEXT("pending_tests"), TestsToRun);
+	Result->SetNumberField(TEXT("passed"), 0);
+	Result->SetNumberField(TEXT("failed"), 0);
+	Result->SetNumberField(TEXT("skipped"), 0);
+	Result->SetNumberField(TEXT("progress"), 0.0);
+	Result->SetNumberField(TEXT("discovery_timeout_seconds"), DiscoveryTimeoutSeconds);
+	Result->SetNumberField(TEXT("readiness_timeout_seconds"), ReadinessTimeoutSeconds);
+	Result->SetNumberField(TEXT("timeout_seconds"), RunTimeoutSeconds);
+	Result->SetNumberField(TEXT("history_capacity"), MonolithAutomationDetail::AutomationHistoryCapacity);
+	Result->SetBoolField(TEXT("accepted"), true);
+	Result->SetBoolField(TEXT("can_stop"), TestsToRun > 0);
+	Result->SetStringField(TEXT("stop_status"), TestsToRun > 0 ? TEXT("supported") : TEXT("not_running"));
+	Result->SetArrayField(TEXT("results"), TArray<TSharedPtr<FJsonValue>>());
+	if (MatchingTests.Num() > TestsToRun)
+	{
+		Result->SetNumberField(TEXT("truncated_remaining"), MatchingTests.Num() - TestsToRun);
+	}
+
+	// Once the shared run-slot guard above proves there is no Monolith-owned run,
+	// a no-match request can complete without touching the global
+	// AutomationController or the currently executing framework test. This also
+	// keeps the terminal-report contract testable through an independently
+	// launched framework test while preventing an outer Monolith run from being
+	// replaced by that report.
+	if (TestsToRun == 0)
+	{
+		Result->SetStringField(TEXT("state"), TEXT("completed"));
+		Result->SetStringField(TEXT("phase"), TEXT("idle"));
+		Result->SetStringField(TEXT("completion_reason"), TEXT("no_matching_tests"));
+		Result->SetStringField(TEXT("completed_at"), FDateTime::UtcNow().ToIso8601());
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetBoolField(TEXT("can_stop"), false);
+		Result->SetNumberField(TEXT("pending_tests"), 0);
+		Result->SetNumberField(TEXT("progress"), 1.0);
+		Result->SetStringField(TEXT("message"),
+			FString::Printf(TEXT("No tests matching prefix '%s' (call find_automation_tests for available tests)"), *Prefix));
+		RecordFinishedAutomationRun(Result);
+		return FMonolithActionResult::Success(Result);
+	}
+
+	FAutomationTestFramework& Framework = FAutomationTestFramework::Get();
+	if (GIsAutomationTesting || Framework.GetCurrentTest() != nullptr)
+	{
+		return FMonolithActionResult::Error(
+			TEXT("automation_busy: start_automation_tests cannot be nested inside an active automation test."));
+	}
+	if (GIsSlowTask)
+	{
+		return FMonolithActionResult::Error(TEXT("automation_busy: an editor slow task is active."));
+	}
+	if (GIsPlayInEditorWorld || (GEditor && GEditor->PlayWorld != nullptr))
+	{
+		return FMonolithActionResult::Error(
+			TEXT("automation_busy: an unrelated PIE session is already active; end PIE before starting the controller run."));
+	}
+
+	TArray<FMonolithAsyncAutomationTestDescriptor> Tests;
+	Tests.Reserve(TestsToRun);
+	for (int32 Index = 0; Index < TestsToRun; ++Index)
+	{
+		const FAutomationTestInfo& Info = MatchingTests[Index];
+		FMonolithAsyncAutomationTestDescriptor& Test = Tests.AddDefaulted_GetRef();
+		Test.FullPath = MonolithAutomationDetail::GetTestFullPath(Info);
+		Test.TestName = Info.GetTestName();
+		Test.DisplayName = Info.GetDisplayName();
+		Test.Flags = static_cast<uint32>(Info.GetTestFlags());
+	}
+
+	CurrentAutomationRun = Result;
+	bAutomationRunActive = true;
+	FString StartError;
+	if (!MonolithAutomationAsync::StartRun(
+		Tests,
+		Result,
+		DiscoveryTimeoutSeconds,
+		ReadinessTimeoutSeconds,
+		RunTimeoutSeconds,
+		[](const TSharedPtr<FJsonObject>& FinishedRun)
+		{
+			FMonolithEditorActions::RecordFinishedAutomationRun(FinishedRun);
+		},
+		StartError))
+	{
+		CurrentAutomationRun.Reset();
+		bAutomationRunActive = false;
+		return FMonolithActionResult::Error(StartError).WithErrorData(Result);
+	}
+
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithEditorActions::HandlePollAutomationTests(const TSharedPtr<FJsonObject>& Params)
+{
+	FString RunId;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("run_id"), RunId) || RunId.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Required parameter: run_id (string returned by start_automation_tests)"));
+	}
+
+	if (MonolithAutomationAsync::IsActive())
+	{
+		MonolithAutomationAsync::RefreshSnapshot(true);
+	}
+
+	auto MatchesRunId = [&RunId](const TSharedPtr<FJsonObject>& Run)
+	{
+		FString CandidateRunId;
+		return Run.IsValid()
+			&& Run->TryGetStringField(TEXT("run_id"), CandidateRunId)
+			&& CandidateRunId.Equals(RunId, ESearchCase::CaseSensitive);
+	};
+
+	if (MatchesRunId(CurrentAutomationRun))
+	{
+		return FMonolithActionResult::Success(CurrentAutomationRun);
+	}
+	if (MatchesRunId(LastAutomationRun))
+	{
+		return FMonolithActionResult::Success(LastAutomationRun);
+	}
+
+	return FMonolithActionResult::Error(FString::Printf(
+		TEXT("Unknown automation run_id '%s'. Only the active and most recent full run reports are pollable."),
+		*RunId));
+}
+
 FMonolithActionResult FMonolithEditorActions::HandleGetAutomationRunStatus(const TSharedPtr<FJsonObject>& Params)
 {
+	if (MonolithAutomationAsync::IsActive())
+	{
+		MonolithAutomationAsync::RefreshSnapshot(false);
+	}
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	const bool bActive = bAutomationRunActive && CurrentAutomationRun.IsValid();
+	const bool bCanStop = bActive && MonolithAutomationAsync::IsActive();
 
 	Result->SetBoolField(TEXT("active"), bActive);
-	Result->SetBoolField(TEXT("can_stop"), false);
-	Result->SetStringField(TEXT("stop_status"), TEXT("unsupported_cancel"));
-	Result->SetStringField(TEXT("runner_mode"), TEXT("synchronous"));
+	Result->SetBoolField(TEXT("can_stop"), bCanStop);
+	Result->SetStringField(TEXT("stop_status"), bCanStop ? TEXT("supported") : TEXT("unsupported_cancel"));
+	Result->SetStringField(TEXT("runner_mode"), bCanStop ? TEXT("asynchronous") : TEXT("synchronous"));
 	Result->SetNumberField(TEXT("history_count"), AutomationRunHistory.Num());
 	Result->SetNumberField(TEXT("history_capacity"), MonolithAutomationDetail::AutomationHistoryCapacity);
 
@@ -6441,6 +6713,23 @@ FMonolithActionResult FMonolithEditorActions::HandleGetAutomationRunStatus(const
 
 FMonolithActionResult FMonolithEditorActions::HandleStopAutomationTests(const TSharedPtr<FJsonObject>& Params)
 {
+	if (MonolithAutomationAsync::IsActive())
+	{
+		FString ExpectedRunId;
+		if (Params.IsValid())
+		{
+			Params->TryGetStringField(TEXT("run_id"), ExpectedRunId);
+		}
+
+		TSharedPtr<FJsonObject> Run;
+		FString StopError;
+		if (!MonolithAutomationAsync::StopRun(ExpectedRunId, TEXT("stopped_by_request"), Run, StopError))
+		{
+			return FMonolithActionResult::Error(StopError);
+		}
+		return FMonolithActionResult::Success(Run);
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	const bool bActive = bAutomationRunActive && CurrentAutomationRun.IsValid();
 
@@ -6589,6 +6878,14 @@ FMonolithActionResult FMonolithEditorActions::HandleRunAutomationTests(const TSh
 			MaxTests = FMath::Clamp(FMath::FloorToInt(MaxNum), 1, 1000);
 		}
 	}
+	// The synchronous compatibility action shares the same run slot. Apply the
+	// guard before even a no-match terminal record so it cannot disturb an
+	// AutomationController-owned asynchronous run.
+	if (bAutomationRunActive || MonolithAutomationAsync::IsActive())
+	{
+		return FMonolithActionResult::Error(
+			TEXT("automation_busy: a Monolith automation run is already active."));
+	}
 
 	TArray<FAutomationTestInfo> MatchingTests;
 	MonolithAutomationDetail::CollectMatchingTests(Prefix, MatchingTests);
@@ -6610,19 +6907,7 @@ FMonolithActionResult FMonolithEditorActions::HandleRunAutomationTests(const TSh
 
 	auto RecordFinishedRun = [Result]()
 	{
-		LastAutomationRun = Result;
-		LastAutomationRunTimestamp = FPlatformTime::Seconds();
-
-		TSharedPtr<FJsonObject> HistoryEntry = MonolithAutomationDetail::BuildAutomationRunSummary(Result);
-		HistoryEntry->SetStringField(TEXT("recorded_at"), TimestampToIso(LastAutomationRunTimestamp));
-		AutomationRunHistory.Insert(HistoryEntry, 0);
-		while (AutomationRunHistory.Num() > MonolithAutomationDetail::AutomationHistoryCapacity)
-		{
-			AutomationRunHistory.RemoveAt(AutomationRunHistory.Num() - 1);
-		}
-
-		CurrentAutomationRun.Reset();
-		bAutomationRunActive = false;
+		RecordFinishedAutomationRun(Result);
 	};
 
 	if (MatchingTests.Num() == 0)
@@ -6640,6 +6925,12 @@ FMonolithActionResult FMonolithEditorActions::HandleRunAutomationTests(const TSh
 		Result->SetStringField(TEXT("completed_at"), FDateTime::UtcNow().ToIso8601());
 		RecordFinishedRun();
 		return FMonolithActionResult::Success(Result);
+	}
+
+	if (GIsAutomationTesting || FAutomationTestFramework::Get().GetCurrentTest() != nullptr)
+	{
+		return FMonolithActionResult::Error(
+			TEXT("automation_busy: run_automation_tests cannot be nested inside an active automation test."));
 	}
 
 	const int32 TestsToRun = FMath::Min(MaxTests, MatchingTests.Num());
@@ -6931,6 +7222,53 @@ FMonolithActionResult FMonolithEditorActions::HandleLoadLevel(const TSharedPtr<F
 
 namespace MonolithEditorPackages
 {
+	// SavePackage discovers imports by serializing each export through a saving
+	// reference archive. Mirror that boundary here instead of using
+	// FReferenceFinder: in UE 5.8 FReferenceFinder walks reflected/GC references
+	// but does not call UObject::Serialize, so native fields such as
+	// UObjectRedirector::DestinationObject would otherwise escape the preflight.
+	class FSaveSerializedReferenceCollector final : public FArchiveUObject
+	{
+	public:
+		explicit FSaveSerializedReferenceCollector(TSet<UObject*>& InReferencedObjects)
+			: ReferencedObjects(InReferencedObjects)
+		{
+			SetIsSaving(true);
+			SetIsPersistent(true);
+			SetPortFlags(UE::SavePackageUtilities::Private::GetSavePackagePortFlags());
+			ArIsObjectReferenceCollector = true;
+			ArShouldSkipBulkData = true;
+		}
+
+		using FArchiveUObject::operator<<;
+
+		void AddReference(UObject* Object)
+		{
+			if (Object)
+			{
+				ReferencedObjects.Add(Object);
+			}
+		}
+
+		virtual FArchive& operator<<(UObject*& Object) override
+		{
+			AddReference(Object);
+			return *this;
+		}
+
+	private:
+		TSet<UObject*>& ReferencedObjects;
+	};
+
+	struct FExternalPrivateReferenceIssue
+	{
+		FString Referencer;
+		FString ReferencerClass;
+		FString ReferencedObject;
+		FString ReferencedClass;
+		FString ReferencedPackage;
+	};
+
 	// Read scope_paths into a prefix list. Returns true if any prefixes were given.
 	static bool ParseScopePaths(const TSharedPtr<FJsonObject>& Params, TArray<FString>& OutPrefixes)
 	{
@@ -7005,6 +7343,113 @@ namespace MonolithEditorPackages
 			}
 			OutPackages.Add(Package);
 		}, /*bIncludeDerivedClasses=*/false);
+	}
+
+	static bool IsWithinTargetTopLevelObject(const UObject* ReferencedObject, const TArray<UObject*>& TopLevelObjects)
+	{
+		for (const UObject* TopLevelObject : TopLevelObjects)
+		{
+			if (ReferencedObject->IsInOuter(TopLevelObject) ||
+				TopLevelObject->IsInOuter(ReferencedObject) ||
+				ReferencedObject->GetOutermostObject() == TopLevelObject->GetOutermostObject())
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// UPackage::SavePackage harvests imports before rejecting private objects from
+	// external packages. Some malformed in-memory graphs can hit engine assertions
+	// while that harvest is in progress, so the MCP boundary must reject the same
+	// invalid reference shape before entering SavePackage at all.
+	static void CollectExternalPrivateReferences(UPackage* Package, TArray<FExternalPrivateReferenceIssue>& OutIssues)
+	{
+		OutIssues.Reset();
+		if (!Package)
+		{
+			return;
+		}
+
+		TArray<UObject*> TopLevelObjects;
+		GetObjectsWithPackage(Package, TopLevelObjects, EGetObjectsFlags::None);
+
+		TArray<UObject*> PackageObjects;
+		GetObjectsWithPackage(Package, PackageObjects, EGetObjectsFlags::IncludeNestedObjects);
+
+		TSet<FString> SeenIssueKeys;
+		for (UObject* Referencer : PackageObjects)
+		{
+			if (!IsValid(Referencer) || Referencer->HasAnyFlags(RF_Transient))
+			{
+				continue;
+			}
+
+			TSet<UObject*> ReferencedObjects;
+			FSaveSerializedReferenceCollector ReferenceCollector(ReferencedObjects);
+
+			// SavePackage harvests these structural references outside UObject::Serialize.
+			// Include them explicitly so the preflight keeps the same class/ownership/
+			// archetype coverage as the engine import harvester.
+			ReferenceCollector.AddReference(Referencer->GetClass());
+			ReferenceCollector.AddReference(Referencer->GetOuter());
+			ReferenceCollector.AddReference(Referencer->GetArchetype());
+			Referencer->Serialize(ReferenceCollector);
+
+			for (UObject* ReferencedObject : ReferencedObjects)
+			{
+				if (!IsValid(ReferencedObject) ||
+					ReferencedObject->HasAnyFlags(RF_Public | RF_Transient) ||
+					ReferencedObject->GetPackage() == Package ||
+					IsWithinTargetTopLevelObject(ReferencedObject, TopLevelObjects))
+				{
+					continue;
+				}
+
+				UPackage* ReferencedPackage = ReferencedObject->GetPackage();
+				const FString ReferencerPath = Referencer->GetPathName();
+				const FString ReferencedPath = ReferencedObject->GetPathName();
+				const FString IssueKey = ReferencerPath + TEXT("\n") + ReferencedPath;
+				if (SeenIssueKeys.Contains(IssueKey))
+				{
+					continue;
+				}
+				SeenIssueKeys.Add(IssueKey);
+
+				FExternalPrivateReferenceIssue& Issue = OutIssues.AddDefaulted_GetRef();
+				Issue.Referencer = ReferencerPath;
+				Issue.ReferencerClass = Referencer->GetClass()->GetPathName();
+				Issue.ReferencedObject = ReferencedPath;
+				Issue.ReferencedClass = ReferencedObject->GetClass()->GetPathName();
+				Issue.ReferencedPackage = ReferencedPackage ? ReferencedPackage->GetName() : FString();
+			}
+		}
+
+		OutIssues.Sort([](const FExternalPrivateReferenceIssue& A, const FExternalPrivateReferenceIssue& B)
+		{
+			const int32 ReferencerCompare = A.Referencer.Compare(B.Referencer, ESearchCase::CaseSensitive);
+			return ReferencerCompare == 0
+				? A.ReferencedObject.Compare(B.ReferencedObject, ESearchCase::CaseSensitive) < 0
+				: ReferencerCompare < 0;
+		});
+	}
+
+	static TArray<TSharedPtr<FJsonValue>> ExternalPrivateReferencesToJson(
+		const TArray<FExternalPrivateReferenceIssue>& Issues)
+	{
+		TArray<TSharedPtr<FJsonValue>> JsonIssues;
+		JsonIssues.Reserve(Issues.Num());
+		for (const FExternalPrivateReferenceIssue& Issue : Issues)
+		{
+			TSharedPtr<FJsonObject> JsonIssue = MakeShared<FJsonObject>();
+			JsonIssue->SetStringField(TEXT("referencer"), Issue.Referencer);
+			JsonIssue->SetStringField(TEXT("referencer_class"), Issue.ReferencerClass);
+			JsonIssue->SetStringField(TEXT("referenced_object"), Issue.ReferencedObject);
+			JsonIssue->SetStringField(TEXT("referenced_class"), Issue.ReferencedClass);
+			JsonIssue->SetStringField(TEXT("referenced_package"), Issue.ReferencedPackage);
+			JsonIssues.Add(MakeShared<FJsonValueObject>(JsonIssue));
+		}
+		return JsonIssues;
 	}
 }
 
@@ -7129,6 +7574,7 @@ FMonolithActionResult FMonolithEditorActions::HandleSavePackages(const TSharedPt
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
 	int32 SavedCount = 0;
+	int32 ValidationFailureCount = 0;
 	for (const FString& PackageName : RequestedNames)
 	{
 		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
@@ -7155,6 +7601,32 @@ FMonolithActionResult FMonolithEditorActions::HandleSavePackages(const TSharedPt
 		Row->SetBoolField(TEXT("is_map"), bIsMap);
 		Row->SetStringField(TEXT("disk_path"), Filename);
 
+		TArray<FExternalPrivateReferenceIssue> InvalidReferences;
+		CollectExternalPrivateReferences(Package, InvalidReferences);
+		if (InvalidReferences.Num() > 0)
+		{
+			++ValidationFailureCount;
+			Row->SetBoolField(TEXT("validation_passed"), false);
+			Row->SetStringField(TEXT("error_code"), TEXT("external_private_object_reference"));
+			Row->SetNumberField(TEXT("invalid_reference_count"), InvalidReferences.Num());
+			Row->SetArrayField(TEXT("invalid_references"), ExternalPrivateReferencesToJson(InvalidReferences));
+			Row->SetStringField(TEXT("error"), FString::Printf(
+				TEXT("pre-save validation rejected %d hard reference(s) to private objects in external packages; repair object ownership or make the referenced asset public before saving"),
+				InvalidReferences.Num()));
+			if (bDryRun)
+			{
+				Row->SetBoolField(TEXT("would_save"), false);
+				Row->SetBoolField(TEXT("dirty"), Package->IsDirty());
+			}
+			else
+			{
+				Row->SetBoolField(TEXT("saved"), false);
+			}
+			Rows.Add(MakeShared<FJsonValueObject>(Row));
+			continue;
+		}
+		Row->SetBoolField(TEXT("validation_passed"), true);
+
 		if (bDryRun)
 		{
 			// Report intent only — nothing is written. A package "would save" if it is
@@ -7169,6 +7641,10 @@ FMonolithActionResult FMonolithEditorActions::HandleSavePackages(const TSharedPt
 
 		FSavePackageArgs SaveArgs;
 		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+		// MCP calls are non-interactive: any saver-level rejection that survives
+		// the explicit preflight must return false instead of escalating through
+		// LogFatal and terminating the editor process.
+		SaveArgs.SaveFlags = SAVE_NoError;
 		const bool bSaved = UPackage::SavePackage(Package, nullptr, *Filename, SaveArgs);
 
 		Row->SetBoolField(TEXT("saved"), bSaved);
@@ -7181,6 +7657,7 @@ FMonolithActionResult FMonolithEditorActions::HandleSavePackages(const TSharedPt
 	Result->SetBoolField(TEXT("ok"), SavedCount == RequestedNames.Num());
 	Result->SetBoolField(TEXT("dry_run"), bDryRun);
 	Result->SetNumberField(bDryRun ? TEXT("would_save") : TEXT("saved"), SavedCount);
+	Result->SetNumberField(TEXT("failed_validation"), ValidationFailureCount);
 	Result->SetNumberField(TEXT("requested"), RequestedNames.Num());
 	Result->SetArrayField(TEXT("results"), Rows);
 	return FMonolithActionResult::Success(Result);

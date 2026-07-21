@@ -83,7 +83,7 @@ Suite changes that came with it (578 → **579** tasks):
 
 ## v5.4 (2026-06-26) — AssetEditing rename + UE 5.8 high-ROI Monolith asset-action expansion
 
-The current generated static suite has **578 tasks across 11 categories**. The new work expands
+At the v5.4 snapshot, the generated static suite had **578 tasks across 11 categories**. That work expanded
 `asset_authoring` to **268** asset creation/edit/save/read-back chains for high-ROI UE asset types beyond
 Blueprint graph edits: Texture file import metadata and conflict-policy validation, editor delete
 guard read-back, ImageGen Texture2D/MSDF provenance assets,
@@ -203,7 +203,7 @@ until their live action, portable benchmark fixture, and cleanup contracts are p
 
 | Field | Value |
 |-------|-------|
-| Generated tasks | 578 |
+| Generated tasks at v5.4 snapshot | 578 |
 | Generated `asset_authoring` tasks | 268 |
 | Static generation | `python Plugins\Monolith\Scripts\asset_editing_benchmark.py generate` |
 | Generated AssetType slices | 24 directories under `Benchmarks\AssetEditing\[AssetType]`, plus `asset_types.json`, each with type README, scoped `tasks.jsonl`, `index.json`, and `testcases\*.json` files |
@@ -272,7 +272,7 @@ Monolith MCP 0.20.3:
 
 The v5.1 live 1.000 remains useful historical evidence for the Blueprint graph hardening. The
 v5.3 run above is the previous full scored 362-task UE 5.8 baseline; v5.4's latest full scored
-baseline is 375 tasks, while the generated suite is now 578 tasks pending a full live rerun for the
+baseline is 375 tasks, while that v5.4 generated suite had 578 tasks pending a full live rerun for the
 post-baseline asset-authoring addendum.
 
 ## v5.1 (2026-06-18) — adversarial hardening + practical expansion
@@ -401,6 +401,6 @@ python Scripts\asset_editing_benchmark.py run `
   --jobs 4
 ```
 
-Expected on a healthy live editor: 578 tasks loaded and all eleven rates at or near 1.0. A near-1.0
+When run against the current canonical files, expect 579 tasks loaded and all eleven rates at or near 1.0. A near-1.0
 here now *means* the server actually performs, wires, compiles-clean, creates/edits/saves common UE
 asset types, rejects bad input, and guards duplicates — not merely that it replied without error.

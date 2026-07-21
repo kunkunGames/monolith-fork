@@ -7,13 +7,14 @@
   "module_id": "asset_authoring.level_instance",
   "task_count": 3,
   "operation_counts": {
-    "creation_or_import": 3,
-    "edit": 3,
-    "save": 3,
+    "creation_or_import": 2,
+    "edit": 2,
+    "save": 2,
     "readback_verify": 3
   },
   "lifecycle_counts": {
-    "create_save": 3
+    "create_save": 2,
+    "not_applicable": 1
   },
   "edit_domain_count": 3,
   "task_ids": [
@@ -62,12 +63,9 @@
       "edit_domain": "blueprint_prefab_guard",
       "blueprint_type": "",
       "workflow": "level_instance_rootless_prefab_rejected",
-      "operation_semantics": "create_save",
-      "lifecycle_phase": "create_save",
+      "operation_semantics": "rejection_guard",
+      "lifecycle_phase": "not_applicable",
       "asset_operations": [
-        "creation_or_import",
-        "save",
-        "edit",
         "readback_verify"
       ],
       "actions": [
@@ -145,16 +143,13 @@
       "route_edit_domain": "blueprint_prefab_guard",
       "module_id": "asset_authoring.level_instance.blueprint_prefab_guard",
       "asset_operation_modules": {
-        "creation_or_import": "asset_operation.creation_or_import.level_instance.blueprint_prefab_guard",
-        "edit": "asset_operation.edit.level_instance.blueprint_prefab_guard",
-        "save": "asset_operation.save.level_instance.blueprint_prefab_guard",
         "readback_verify": "asset_operation.readback_verify.level_instance.blueprint_prefab_guard"
       },
       "task_count": 1,
       "operation_counts": {
-        "creation_or_import": 1,
-        "edit": 1,
-        "save": 1,
+        "creation_or_import": 0,
+        "edit": 0,
+        "save": 0,
         "readback_verify": 1
       },
       "task_ids": [

@@ -7,13 +7,18 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceReviewContextParamValidationTest, "Monol
 
 bool FSourceReviewContextParamValidationTest::RunTest(const FString& Parameters)
 {
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("source"), TEXT("review_context")))
+	{
+		FMonolithSourceActions::RegisterAll();
+	}
+
 	// 1. Missing required 'symbol' param
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 
-		FMonolithActionResult Result = FMonolithSourceActions::HandleReviewContext(Params);
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("source"), TEXT("review_context"), Params);
 		TestTrue(TEXT("Missing symbol returns error"), !Result.bSuccess);
-		// Note: The actual implementation in MonolithSourceActions::HandleReviewContext returns -32602
 		TestEqual(TEXT("Error code is invalid params"), Result.ErrorCode, -32602);
 	}
 
@@ -22,7 +27,7 @@ bool FSourceReviewContextParamValidationTest::RunTest(const FString& Parameters)
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("symbol"), TEXT(""));
 
-		FMonolithActionResult Result = FMonolithSourceActions::HandleReviewContext(Params);
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("source"), TEXT("review_context"), Params);
 		TestTrue(TEXT("Empty symbol returns error"), !Result.bSuccess);
 		TestEqual(TEXT("Error code is invalid params"), Result.ErrorCode, -32602);
 	}

@@ -21,7 +21,7 @@ Eleven task categories:
   negative_compile - deliberately break a graph and require a REPORTED compile error
 
 v5.4 (2026-06-26): AssetEditing rename + UE 5.8 high-ROI asset-authoring follow-up.
-  - asset_authoring now covers 268 asset creation/edit/save/read-back chains, adding PBR material creation
+  - asset_authoring covers generated asset creation/edit/save/read-back chains, adding PBR material creation
     from disk textures, Material Instance duplicate/reparent/clear flows, MaterialFunctionInstance
     overrides, StaticMesh FBX export, BlendSpace sample bake, AimOffset axis editing, Interchange
     batch import, Blueprint spec build, DataTable bulk import/export, Blackboard inheritance/direct
@@ -146,7 +146,11 @@ from benchmark_common import (
     attach_benchmark_inputs,
     build_benchmark_inputs,
     display_path,
+    refresh_benchmark_input_fingerprint,
     resolve_plugin_path,
+    status_identity,
+    status_identity_mismatches,
+    validate_mcp_status_response,
 )
 
 
@@ -159,6 +163,8 @@ TESTSET_GENERATOR = "asset_editing_benchmark.py"
 TESTSET_MODULE_SHARD_DIRNAME = "module_shards"
 ASSET_TYPE_INDEX_FILENAME = "asset_types.json"
 ASSET_TYPE_TESTCASE_DIRNAME = "testcases"
+ROOT_README_SUMMARY_START = "<!-- asset-editing-generated-summary:start -->"
+ROOT_README_SUMMARY_END = "<!-- asset-editing-generated-summary:end -->"
 
 # Single source of truth for the composite score. aggregate(), the manifest score_formula,
 # write_comparison_markdown(), and the module docstring all derive from this dict, so a weight
@@ -18953,6 +18959,20 @@ def write_run_failure(output_dir: pathlib.Path, payload: Dict[str, Any]) -> None
         stale_summary.unlink()
 
 
+def clear_run_outputs(output_dir: pathlib.Path) -> None:
+    """Remove only this runner's known outputs before starting a new run."""
+    for filename in (
+        "summary.json",
+        "partial_summary.json",
+        "run_failure.json",
+        "per_task.json",
+        "per_task.jsonl",
+    ):
+        path = output_dir / filename
+        if path.exists():
+            path.unlink()
+
+
 def sha256_path(path: pathlib.Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -19080,6 +19100,64 @@ def task_action_names(task: Dict[str, Any]) -> List[str]:
 
 
 ASSET_EDIT_OPERATION = "edit"
+REJECTION_GUARD_SEMANTIC = "rejection_guard"
+
+
+def _action_has_create_intent(action: str) -> bool:
+    action = str(action or "").lower()
+    return (
+        action.startswith(("create", "import", "generate", "seed", "build", "scaffold", "bake", "submit"))
+        or action in {"merge_actors", "setup_hlod"}
+        or "import" in action
+    )
+
+
+def _action_has_save_intent(action: str) -> bool:
+    action = str(action or "").lower()
+    return action.startswith("save") or action.endswith("_save") or action == "save_asset"
+
+
+def _action_has_edit_intent(action: str) -> bool:
+    action = str(action or "").lower()
+    return action.startswith((
+        "add", "set", "remove", "delete", "rename", "batch", "configure", "apply",
+        "link", "update", "duplicate", "reparent", "clear", "assign", "replace",
+    ))
+
+
+def _expected_rejection_mutation_actions(task: Dict[str, Any]) -> List[str]:
+    """Return mutating actions whose failure is the task's required successful outcome.
+
+    An ``expect_error`` mutation is a rejection guard, not evidence that an asset was
+    successfully created, edited, or saved. Keep this distinction at inference time so every
+    generated route and count derives from the same semantic contract.
+    """
+    rejected: List[str] = []
+
+    def inspect_step(step: Any) -> None:
+        if not isinstance(step, dict) or not bool(step.get("expect_error")):
+            return
+        args = step.get("args") if isinstance(step.get("args"), dict) else {}
+        action = str(step.get("op") or args.get("action") or "").strip()
+        has_persistence_intent = bool(args.get("auto_save") or args.get("save") or args.get("save_path"))
+        if not (
+            _action_has_create_intent(action)
+            or _action_has_save_intent(action)
+            or _action_has_edit_intent(action)
+            or has_persistence_intent
+        ):
+            return
+        if action and action not in rejected:
+            rejected.append(action)
+
+    if bool(task.get("expect_error")):
+        inspect_step({"expect_error": True, "op": task.get("action"), "args": task.get("arguments")})
+    for key in ("chain", "setup_chain", "cleanup_chain", "verify"):
+        steps = task.get(key)
+        if isinstance(steps, list):
+            for step in steps:
+                inspect_step(step)
+    return rejected
 
 
 def normalize_asset_operation(value: Any) -> str:
@@ -19157,18 +19235,9 @@ def normalize_testset_module_ids(values: Optional[List[str]]) -> List[str]:
 def _infer_task_capabilities(task: Dict[str, Any]) -> Dict[str, Any]:
     actions = task_action_names(task)
     action_lowers = [action.lower() for action in actions]
-    creates_or_imports = any(
-        action.startswith(("create", "import", "generate", "seed", "build", "scaffold", "bake", "submit"))
-        or action in {"merge_actors", "setup_hlod"}
-        or "import" in action
-        for action in action_lowers
-    )
-    saves = any(
-        action.startswith("save")
-        or action.endswith("_save")
-        or action == "save_asset"
-        for action in action_lowers
-    )
+    expected_rejection_actions = _expected_rejection_mutation_actions(task)
+    creates_or_imports = any(_action_has_create_intent(action) for action in action_lowers)
+    saves = any(_action_has_save_intent(action) for action in action_lowers)
     if not saves:
         for key in ("arguments", "compile_args"):
             payload = task.get(key)
@@ -19182,16 +19251,18 @@ def _infer_task_capabilities(task: Dict[str, Any]) -> Dict[str, Any]:
                     if isinstance(args, dict) and (args.get("auto_save") or args.get("save") or args.get("save_path")):
                         saves = True
                         break
-    asset_edits = any(
-        action.startswith((
-            "add", "set", "remove", "delete", "rename", "batch", "configure", "apply",
-            "link", "update", "duplicate", "reparent", "clear", "assign", "replace",
-        ))
-        for action in action_lowers
-    )
+    asset_edits = any(_action_has_edit_intent(action) for action in action_lowers)
     if task.get("category") == "asset_authoring" and len(actions) > 1:
         asset_edits = True
     readback_verifies = bool(task.get("verify") or task.get("expected"))
+
+    # A required rejection is the capability under test. Setup/cleanup may mutate temporary
+    # scene state, but the guarded asset mutation did not create, edit, or save an asset.
+    if expected_rejection_actions:
+        creates_or_imports = False
+        saves = False
+        asset_edits = False
+
     asset_operations: List[str] = []
     if creates_or_imports:
         asset_operations.append("creation_or_import")
@@ -19211,7 +19282,11 @@ def _infer_task_capabilities(task: Dict[str, Any]) -> Dict[str, Any]:
     elif asset_edits:
         operation_semantics = "edit"
     lifecycle = operation_semantics if task.get("category") == "asset_authoring" else "not_applicable"
-    return {
+    if expected_rejection_actions:
+        operation_semantics = REJECTION_GUARD_SEMANTIC
+        lifecycle = "not_applicable"
+
+    capabilities = {
         "actions": actions,
         "creates_or_imports_assets": creates_or_imports,
         "saves_assets": saves,
@@ -19221,6 +19296,9 @@ def _infer_task_capabilities(task: Dict[str, Any]) -> Dict[str, Any]:
         "operation_semantics": operation_semantics,
         "lifecycle_phase": lifecycle,
     }
+    if expected_rejection_actions:
+        capabilities["expected_rejection_actions"] = expected_rejection_actions
+    return capabilities
 
 
 def task_capabilities(task: Dict[str, Any]) -> Dict[str, Any]:
@@ -19237,16 +19315,34 @@ def task_capabilities(task: Dict[str, Any]) -> Dict[str, Any]:
             "asset_operations",
             "operation_semantics",
             "lifecycle_phase",
+            "expected_rejection_actions",
         ):
             if key in stored:
                 merged[key] = stored[key]
     else:
         merged = inferred
     merged["asset_operations"] = normalize_asset_operation_values(merged.get("asset_operations"))
+    if "expected_rejection_actions" in merged:
+        merged["expected_rejection_actions"] = normalize_asset_operation_values(
+            merged.get("expected_rejection_actions")
+        )
     if task.get("operation_semantics"):
         merged["operation_semantics"] = str(task["operation_semantics"])
     if task.get("lifecycle_phase"):
         merged["lifecycle_phase"] = str(task["lifecycle_phase"])
+    if inferred.get("expected_rejection_actions"):
+        # Generated capability fields are a cache, not an override contract. A stale corpus must
+        # not be able to reclassify an authored expect_error mutation as successful persistence.
+        for key in (
+            "creates_or_imports_assets",
+            "saves_assets",
+            "asset_edits",
+            "asset_operations",
+            "operation_semantics",
+            "lifecycle_phase",
+            "expected_rejection_actions",
+        ):
+            merged[key] = inferred[key]
     return merged
 
 
@@ -20087,6 +20183,49 @@ def write_asset_type_outputs(root_path: pathlib.Path, tasks: List[Dict[str, Any]
     }
     write_json(root_path / ASSET_TYPE_INDEX_FILENAME, payload)
     return payload
+
+
+def asset_editing_global_counts(
+    tasks: List[Dict[str, Any]],
+    asset_type_index: Dict[str, Any],
+    testset_index: Dict[str, Any],
+) -> Dict[str, int]:
+    module_shards = testset_index.get("module_shards")
+    if not isinstance(module_shards, dict):
+        raise RuntimeError("AssetEditing testset index is missing module_shards for README summary")
+    return {
+        "canonical_tasks": len(tasks),
+        "asset_authoring_tasks": int(asset_type_index.get("asset_authoring_task_count", 0)),
+        "testset_modules": int(testset_index.get("module_count", 0)),
+        "module_shards": len(module_shards),
+    }
+
+
+def render_root_readme_summary(counts: Dict[str, int]) -> str:
+    return "\n".join([
+        ROOT_README_SUMMARY_START,
+        "| Generated corpus metric | Count |",
+        "|---|---:|",
+        f"| Canonical tasks | {int(counts['canonical_tasks'])} |",
+        f"| Asset-authoring tasks | {int(counts['asset_authoring_tasks'])} |",
+        f"| Routable test-set modules | {int(counts['testset_modules'])} |",
+        f"| Module shard files | {int(counts['module_shards'])} |",
+        ROOT_README_SUMMARY_END,
+    ])
+
+
+def sync_root_readme_summary(readme_path: pathlib.Path, counts: Dict[str, int]) -> None:
+    """Replace the canonical generated summary without rewriting hand-authored README prose."""
+    readme_path = resolve_plugin_path(readme_path)
+    text = readme_path.read_text(encoding="utf-8")
+    if text.count(ROOT_README_SUMMARY_START) != 1 or text.count(ROOT_README_SUMMARY_END) != 1:
+        raise RuntimeError(
+            f"{display_path(readme_path)} must contain exactly one generated summary marker pair"
+        )
+    start = text.index(ROOT_README_SUMMARY_START)
+    end = text.index(ROOT_README_SUMMARY_END, start) + len(ROOT_README_SUMMARY_END)
+    updated = text[:start] + render_root_readme_summary(counts) + text[end:]
+    readme_path.write_text(updated, encoding="utf-8", newline="\n")
 
 
 def validate_testset_payload(
@@ -23050,6 +23189,13 @@ def generate_tasks(
     if emit_testsets:
         testset_index = write_testsets(testsets_path, tasks, tasks_path)
     asset_type_index = write_asset_type_outputs(tasks_path.parent, tasks)
+    if testset_index is not None:
+        root_readme_path = tasks_path.parent / "README.md"
+        if root_readme_path.exists():
+            sync_root_readme_summary(
+                root_readme_path,
+                asset_editing_global_counts(tasks, asset_type_index, testset_index),
+            )
 
     domain_counts: Dict[str, int] = {}
     for _, dom in BLUEPRINT_EDIT_ACTIONS:
@@ -23596,6 +23742,11 @@ def run_benchmark(
     task_ids: Optional[List[str]] = None,
     module_mode: str = "union",
 ) -> Dict[str, Any]:
+    # Clear only this runner's known artifacts before any corpus or selector
+    # preflight can raise. Otherwise a malformed/stale test-set or a zero-match
+    # selector can leave an older summary.json looking like the result of this run.
+    output_dir.mkdir(parents=True, exist_ok=True)
+    clear_run_outputs(output_dir)
     tasks_path = resolve_plugin_path(tasks_path)
     tasks, task_selection = select_tasks(
         tasks_path,
@@ -23612,21 +23763,51 @@ def run_benchmark(
         task_ids=task_ids,
         module_mode=module_mode,
     )
-    output_dir.mkdir(parents=True, exist_ok=True)
+    jobs = max(1, int(jobs))
+    execution: Dict[str, Any] = {
+        "mode": "parallel" if jobs > 1 else "sequential",
+        "jobs": jobs,
+    }
     status_response = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
-    if status_response.get("transport_error") or status_response.get("parse_error") or _is_error(status_response):
-        raise RuntimeError(
-            "monolith_status failed before benchmark execution: "
-            f"{str(status_response.get('raw') or result_text(status_response))[:300]}"
-        )
-    status = result_data(status_response)
-    benchmark_inputs = build_benchmark_inputs("AssetEditing", tasks_path=tasks_path, mcp_status=status)
+    status_validation = validate_mcp_status_response(
+        status_response,
+        result_payload=result_payload,
+        result_data=result_data,
+    )
+    if not status_validation.get("ok"):
+        failure_kind = str(status_validation.get("failure_kind", "protocol_error"))
+        failure = {
+            "label": label,
+            "created_at": utc_now(),
+            "run_valid": False,
+            "completion_status": "aborted_status_preflight",
+            "failure_stage": "status_preflight",
+            "failure_kind": failure_kind,
+            "error": str(status_validation.get("raw", ""))[:500],
+            "metrics_valid": False,
+            "metrics_scope": "not_started",
+            "completed_task_count": 0,
+            "total_task_count": len(tasks),
+            "execution": execution,
+            "task_selection": task_selection,
+            "transport_failure_count": 1 if failure_kind == "transport_error" else 0,
+        }
+        write_run_failure(output_dir, failure)
+        write_json(output_dir / "partial_summary.json", failure)
+        return failure
+    status = dict(status_validation["status"])
+    start_identity = status_identity(status, endpoint=url)
+    benchmark_inputs = build_benchmark_inputs(
+        "AssetEditing",
+        tasks_path=tasks_path,
+        mcp_status=status,
+        extra_files={"runner": pathlib.Path(__file__)},
+    )
     benchmark_inputs["task_selection"] = task_selection
+    refresh_benchmark_input_fingerprint(benchmark_inputs)
 
     rows: List[Dict[str, Any]] = []
     per_task_jsonl = output_dir / "per_task.jsonl"
-    if per_task_jsonl.exists():
-        per_task_jsonl.unlink()
 
     # A dead/restarting editor answers every call with a transport error, and those
     # empty responses score exactly like capability failures. Gate on them so an
@@ -23638,9 +23819,6 @@ def run_benchmark(
         max_consecutive_failures=max_consecutive_transport_failures,
         min_fraction_samples=min_transport_fraction_sample,
     )
-
-    jobs = max(1, int(jobs))
-    execution: Dict[str, Any] = {"mode": "parallel" if jobs > 1 else "sequential", "jobs": jobs}
 
     def observe_row(row: Dict[str, Any]) -> Optional[TransportAbortDecision]:
         return transport_tracker.observe(
@@ -23804,10 +23982,66 @@ def run_benchmark(
     )
     summary["run_valid"] = True
     summary["completion_status"] = "completed"
+    summary["metrics_valid"] = True
+    summary["metrics_scope"] = "complete_run" if not task_selection["is_subset"] else "explicit_subset"
+    summary["comparison_valid"] = not task_selection["is_subset"]
     summary["execution"] = execution
     summary["task_selection"] = task_selection
     summary["transport"] = transport_tracker.snapshot()
+    summary["status_identity_start"] = start_identity
     attach_benchmark_inputs(summary, benchmark_inputs)
+
+    try:
+        end_status_response = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
+        end_status_validation = validate_mcp_status_response(
+            end_status_response,
+            result_payload=result_payload,
+            result_data=result_data,
+        )
+    except Exception as exc:  # noqa: BLE001 - postflight defects invalidate the run.
+        end_status_validation = {
+            "ok": False,
+            "failure_kind": "runner_exception",
+            "raw": f"{type(exc).__name__}: {exc}",
+        }
+    if not end_status_validation.get("ok"):
+        summary.update({
+            "run_valid": False,
+            "metrics_valid": False,
+            "metrics_scope": "complete_run_invalid",
+            "completion_status": "aborted_status_postflight",
+            "failure_stage": "status_postflight",
+            "failure_kind": str(end_status_validation.get("failure_kind", "protocol_error")),
+            "error": str(end_status_validation.get("raw", ""))[:500],
+        })
+        write_run_failure(output_dir, summary)
+        write_json(output_dir / "partial_summary.json", summary)
+        write_json(output_dir / "per_task.json", rows)
+        return summary
+
+    end_status = dict(end_status_validation["status"])
+    end_identity = status_identity(end_status, endpoint=url)
+    identity_drift = status_identity_mismatches(start_identity, end_identity)
+    summary["status_identity_end"] = end_identity
+    if identity_drift:
+        summary.update({
+            "run_valid": False,
+            "metrics_valid": False,
+            "metrics_scope": "complete_run_invalid",
+            "completion_status": "aborted_status_identity_drift",
+            "failure_stage": "status_postflight",
+            "failure_kind": "status_identity_drift",
+            "status_identity_mismatches": identity_drift,
+        })
+        write_run_failure(output_dir, summary)
+        write_json(output_dir / "partial_summary.json", summary)
+        write_json(output_dir / "per_task.json", rows)
+        return summary
+
+    for stale_name in ("run_failure.json", "partial_summary.json"):
+        stale_path = output_dir / stale_name
+        if stale_path.exists():
+            stale_path.unlink()
     write_json(output_dir / "summary.json", summary)
     write_json(output_dir / "per_task.json", rows)
     return summary
@@ -23895,9 +24129,9 @@ def add_task_selection_args(cmd: argparse.ArgumentParser) -> None:
     cmd.add_argument("--asset-operation", dest="asset_operations", action="append", default=[],
                      help="Filter asset-authoring operation role: creation_or_import, save, edit, or readback_verify")
     cmd.add_argument("--lifecycle-phase", dest="lifecycle_phases", action="append", default=[],
-                     help="Filter by computed lifecycle phase; repeat or pass comma-separated values")
+                     help="Filter by lifecycle phase such as create_save, create, or not_applicable")
     cmd.add_argument("--operation-semantics", dest="operation_semantics", action="append", default=[],
-                     help="Filter by computed operation semantics such as read_only, create_save, edit, or edit_save")
+                     help="Filter by operation semantics such as read_only, create_save, edit_save, or rejection_guard")
     cmd.add_argument("--task-id", dest="task_ids", action="append", default=[],
                      help="Filter by benchmark task id; repeat or pass comma-separated values")
 

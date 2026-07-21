@@ -9,6 +9,13 @@ class UBlueprint;
 class MONOLITHCORE_API FMonolithAssetUtils
 {
 public:
+	/**
+	 * Return true when a mounted long package name resolves inside the current
+	 * project checkout, including project and GameFeature plugin content mounts.
+	 * Engine and externally-mounted packages are rejected.
+	 */
+	static bool IsProjectOwnedPackage(const FString& PackageName);
+
 	/** Resolve a user-provided path to a proper asset path (handles export-text, /Game/, /Content/, relative, etc.) */
 	static FString ResolveAssetPath(const FString& InPath);
 

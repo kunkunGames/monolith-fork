@@ -189,17 +189,19 @@ Implementation status (2026-07-02):
 
 ### 4.2 `ui.verify_widget_visual_artifacts`
 
-This action is the P0 visual QA slice. It validates one or more widget PNG artifacts that were produced by `editor.capture_scene_preview(asset_type="widget")` or by a workflow wrapper that delegates to that editor action. It does not need to own capture in v1; it owns artifact trust.
+This action is the P0 visual QA slice. It validates one or more widget PNG artifacts that were produced by `editor.capture_scene_preview(asset_type="widget")` or by a workflow wrapper that delegates to that editor action. Capture remains owned by the editor/runtime producer; `ui.verify_widget_visual_artifacts` owns artifact trust and baseline comparison.
 
 Parameters:
 
 | Param | Type | Meaning |
 |---|---|---|
 | `asset_path` | string | Widget Blueprint path. |
-| `captures` | array | `{profile?, path?, output_file?, expected_resolution?}` rows. `output_file` is accepted for compatibility and normalized to `path`. |
+| `captures` | array | `{profile?, path?, output_file?, expected_resolution?, baseline_path?, diff_path?, diff_threshold?, pixel_tolerance?, regions?, state_id?, fixture_id?, fixture_sha256?, source_sha256?, ui_spec_sha256?}` rows. `output_file` is accepted for compatibility and normalized to `path`. |
 | `output_dir` | string | Optional directory for `manifest.json`. Defaults under `Saved/Monolith/UIVisualQA/<run_id>`. |
-| `baseline_dir` | string | Optional folder of baseline PNGs by profile name. |
-| `diff_threshold` | number | Optional maximum diff ratio. |
+| `baseline_dir` | string | Optional folder of baseline PNGs by profile name. Per-capture `baseline_path` takes precedence. |
+| `diff_threshold` | number | Maximum global changed-pixel ratio in `[0,1]`; default `0`. A capture row may override it. |
+| `pixel_tolerance` | number | Premultiplied-linear per-channel tolerance in `[0,1]` before a pixel counts as changed; default `0`. |
+| `regions` | array | Optional shared named rectangles `{id,x,y,width,height,diff_threshold?,pixel_tolerance?}`. Capture-local regions take precedence. Invalid/duplicate/out-of-bounds regions fail closed. |
 | `fail_on_blank` | bool | Default true. Fails uniform/transparent/near-empty captures. |
 | `request_id` | string | Echoed and forwarded to the workflow proof. |
 
@@ -208,7 +210,7 @@ Response:
 ```json
 {
   "ok": true,
-  "schema_version": "ui_visual_artifacts.v1",
+  "schema_version": "ui_visual_artifacts.v2",
   "run_id": "ui-gate-001",
   "asset_path": "/Game/UI/WBP_MainMenu",
   "manifest_path": "Saved/Monolith/UIVisualQA/ui-gate-001/manifest.json",
@@ -223,10 +225,23 @@ Response:
       "blank": false,
       "transparent_ratio": 0.02,
       "unique_color_estimate": 512,
+      "state_id": "speedbox.chase.runner.rescue",
+      "fixture_sha256": "hex",
+      "source_sha256": "hex",
       "diff": {
-        "baseline_path": "",
-        "diff_path": "",
-        "diff_ratio": 0.0,
+        "status": "pass",
+        "baseline_path": "Saved/WebGolden/speedbox.chase.runner.rescue.png",
+        "baseline_sha256": "hex",
+        "capture_sha256": "hex",
+        "diff_path": "Saved/Monolith/UIVisualQA/ui-gate-001/diffs/desktop.diff.png",
+        "comparison_space": "premultiplied_linear_srgb_alpha",
+        "changed_pixel_ratio": 0.002,
+        "mean_absolute_error": 0.0008,
+        "root_mean_square_error": 0.003,
+        "max_channel_error": 0.04,
+        "diff_threshold": 0.005,
+        "pixel_tolerance": 0.01,
+        "regions": [],
         "passed": true
       }
     }
@@ -241,8 +256,12 @@ Requirements:
 
 - The action must return explicit `blocked` or `unavailable_render_path` in commandlet, server, null-RHI, or otherwise non-rendering contexts. It must not return a blank success.
 - File validation must check existence, non-zero bytes, PNG dimensions, hash, and nonblank/non-uniform pixel metrics.
-- Baseline diff, multi-profile defaults, text-scale sweeps, input-type sweeps, and colorblind profiles are optional v2 work. The v1 response shape reserves stable `diff` fields, but v1 should not require a baseline.
+- A baseline remains optional for compatibility; no baseline yields `diff.status="not_requested"`. Once `baseline_path` or `baseline_dir` is supplied, comparison is mandatory and cannot silently fall back to no-diff behavior.
+- Baseline comparison uses premultiplied alpha and linearized sRGB channels. It reports changed-pixel ratio, MAE, RMSE, maximum channel error, exact thresholds, hashes, named-region results, and a heatmap PNG.
+- Missing/invalid baselines, baseline dimension mismatch, invalid regions, global/region threshold violations, and heatmap-write failure return structured `{ok:false,status:"fail"}` evidence.
+- Text-scale sweeps, input-type sweeps, and colorblind profiles remain separate matrix-orchestration work; callers can already submit each resulting PNG as an explicit capture row without hidden profile defaults.
 - A generated-WBP automation test must exercise the action without depending on engine sample content.
+- `Monolith.UI.VisualArtifacts.VerifierContract` exercises strict resolution/provenance validation, zero-alpha RGB equivalence, real per-channel pixel tolerance, capture-over-global threshold precedence, named-region failure, invalid/out-of-bounds regions, duplicate sanitized profile rejection, baseline/dimension failures, manifest durability, and deterministic heatmap output.
 - If the underlying editor action returns `output_file`, the wrapper must normalize it to `path`.
 
 `ui.capture_widget_visual_matrix` is deferred until repeated real UI tasks show that one-shot capture orchestration is worth promoting. Before that point, `workflow.ui_shipping_widget_blueprint(proof_profile="visual")` can compose `editor.capture_scene_preview` and `ui.verify_widget_visual_artifacts`.
@@ -258,6 +277,17 @@ Widget Blueprint edits must use this workflow only when the changed surface is s
 5. Apply only after the dry-run payload reports valid validation and acceptable diff.
 6. `ui.dump_ui_spec` again and compare supported fields against the candidate or expected patch.
 7. Run compile, layout audit, and visual artifact verification before reporting done.
+
+Workflow child primitives use one recursive `FJsonValue` semantic gate for both normal composition and read-only proof calls. The gate walks objects and arbitrarily nested arrays, including arrays nested directly inside arrays. A transport-success result is promoted to workflow failure when any nested payload reports `ok=false`, `success=false`, `bSuccess=false`, or `passed=false`; a failure `status`; positive `error_count`; non-empty `errors`; or a `required=true` finding with `severity=high|error|critical|fatal`.
+
+The semantic contract is fail-closed:
+
+- `ok`, `success`, `bSuccess`, and `passed` must be booleans; `status` must be a non-empty string; `error_count` must be a non-negative integer; and `errors`/`findings` must be arrays.
+- A finding object that supplies both `required` and `severity` must use boolean and string types respectively.
+- Failure status matching is case-insensitive and separator-normalized. It covers direct and compound failure vocabulary including `fail`, `failed`, `failure`, `error`, `critical`, `fatal`, `blocked`, `unavailable`, `invalid`, `rejected`, cancellation/abort/timeout, `missing`, `disabled`, `unsupported`, `issues`, and explicit `not_found`/`not_supported`/`not_available`/`not_installed`/`not_started` states.
+- Semantic traversal is bounded to depth 32 and 16,384 JSON values. Missing payloads, invalid JSON values, depth overflow, and node-budget overflow fail the workflow instead of silently passing unchecked data.
+- Transport-success semantic failures preserve the child payload and add `transport_success=true`, `semantic_ok=false`, and `semantic_failures[]`; actual transport failures preserve the child error/error code and do not claim semantic transport success.
+- Automation coverage is owned by `Monolith.Workflow.PrimitiveSemanticGate.Contract` and `Monolith.Workflow.PrimitiveSemanticGate.ReadOnlyContract`.
 
 Canonical action envelope example:
 
@@ -371,6 +401,14 @@ Proof implementations must use stable failure codes so agents can recover withou
 | `capture_unavailable` | Rendering or capture source is unavailable. |
 | `capture_deferred` | Capture could not be completed in the current runtime window. |
 | `pixel_blank_or_uniform` | PNG exists but is blank, fully transparent, or near-uniform. |
+| `baseline_artifact_invalid` | A requested baseline PNG is missing, empty, or undecodable. |
+| `baseline_dimension_mismatch` | Capture and baseline pixel dimensions differ. |
+| `invalid_diff_threshold` | A global or capture-local threshold/tolerance is outside `[0,1]`. |
+| `invalid_diff_region` | A named region is malformed, duplicated, or outside the image. |
+| `visual_diff_exceeds_threshold` | Global changed-pixel ratio exceeds its explicit budget. |
+| `visual_diff_region_exceeds_threshold` | At least one named region exceeds its explicit budget. |
+| `diff_artifact_write_failed` | Metrics were computed but the required heatmap PNG could not be written. |
+| `manifest_write_failed` | Verification completed in memory but the required evidence manifest could not be written; the action fails closed instead of returning a pass without durable proof. |
 | `all_frames_uniform_black` | Runtime capture produced only invalid dark frames. |
 | `thumbnail_misused_as_viewport` | Thumbnail evidence was used where viewport/widget evidence was required. |
 | `artifact_missing` | Manifest references a missing or empty artifact file. |

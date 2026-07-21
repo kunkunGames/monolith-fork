@@ -36,6 +36,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import project_index_benchmark as pib  # noqa: E402
 
 _REAL_MCP_CALL = pib.mcp_call
+_TEST_PROJECT_NAME = "Speed"
+_TEST_CATALOG_VERSION = "test-catalog"
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +123,26 @@ def healthy_schema_response() -> Dict[str, Any]:
     })
 
 
+def healthy_status_response() -> Dict[str, Any]:
+    """A complete healthy status identity for runner-boundary tests.
+
+    ``validate_mcp_status_response`` deliberately rejects a running endpoint
+    that is not bound to the local project. Keep the default offline status as
+    one canonical fixture so task-failure tests cannot accidentally stop at an
+    earlier status preflight when the shared identity contract is strengthened.
+    """
+    return mcp_text_response({
+        "server_running": True,
+        "status": "ok",
+        "server_name": "MonolithMCP-Test",
+        "plugin_version": "test-plugin-version",
+        "catalog_version": _TEST_CATALOG_VERSION,
+        "project_name": _TEST_PROJECT_NAME,
+        "engine_version": "5.7-test",
+        "editor_pid": 4242,
+    })
+
+
 # ---------------------------------------------------------------------------
 # Router: dispatch a fabricated response per task, parameterized by index "mode".
 # ---------------------------------------------------------------------------
@@ -136,7 +158,7 @@ def make_router(mode: str):
     def fake_mcp_call(url: str, tool: str, arguments: Dict[str, Any], timeout_s: float = 45.0) -> Dict[str, Any]:
         action = arguments.get("action")
         if tool == "monolith_status":
-            return mcp_text_response({"server_running": True, "status": "ok"})
+            return healthy_status_response()
         if tool == "monolith_discover":
             return healthy_schema_response() if mode == "healthy" else mcp_text_response({"schema": {}})
         # project_query
@@ -168,8 +190,8 @@ def make_router(mode: str):
 _TEST_LIVE_FIXTURE: Dict[str, Any] = {
     "schema_version": pib.LIVE_FIXTURE_SCHEMA_VERSION,
     "benchmark": "ProjectIndex",
-    "project_name": "Speed",
-    "catalog_version": "test-catalog",
+    "project_name": _TEST_PROJECT_NAME,
+    "catalog_version": _TEST_CATALOG_VERSION,
     "generated_at": "2026-07-11T00:00:00+00:00",
     "seed_prefixes": list(pib.KNOWN_ANSWER_SEED_PREFIXES),
     "stability_policy": pib.live_fixture_stability_policy(),
@@ -246,11 +268,7 @@ def run_offline(
 ) -> tuple[Dict[str, Any], Dict[str, Any], int]:
     """Execute the real runner against injected offline responses."""
     if status_response is None:
-        status_response = mcp_text_response({
-            "server_running": True,
-            "status": "ok",
-            "catalog_version": "test-catalog",
-        })
+        status_response = healthy_status_response()
     with tempfile.TemporaryDirectory() as temp_dir:
         root = pathlib.Path(temp_dir)
         tasks_path = root / "tasks.jsonl"
@@ -696,6 +714,46 @@ def test_status_invalid_transport_and_runner_fail_before_tasks() -> None:
                f"expected {expected_kind}, got {result.get('failure_kind')}")
         expect(artifacts["per_task.jsonl"] is None,
                "status failure must not create a per-task stream")
+
+    canonical_corpus = pib.TaskCorpus(
+        tasks=[simple_task(1)],
+        canonical=True,
+        comparable=True,
+        mode="canonical",
+        manifest={
+            "task_count": 1,
+            "category_counts": {"asset_search": 1},
+            "live_fixtures": {
+                "schema_version": pib.LIVE_FIXTURE_SCHEMA_VERSION,
+                "project_name": "Speed",
+                "catalog_version": "sha256:fixture-old",
+            },
+        },
+        manifest_path=pathlib.Path("manifest.json"),
+    )
+    saved_loader = pib.load_task_corpus
+    pib.load_task_corpus = lambda *args, **kwargs: canonical_corpus
+    try:
+        result, artifacts, task_calls = run_offline(
+            1,
+            lambda *_: search_response([asset_row("/Game/ShouldNotRun")]),
+            status_response=mcp_text_response({
+                "server_running": True,
+                "status": "ok",
+                "catalog_version": "sha256:runtime-new",
+                "project_name": "Speed",
+            }),
+        )
+    finally:
+        pib.load_task_corpus = saved_loader
+    assert_invalid_artifacts(result, artifacts)
+    expect(task_calls == 0, "stale fixture provenance must abort before scored tasks")
+    expect(result.get("failure_stage") == "fixture_provenance_preflight",
+           f"unexpected stale fixture failure stage: {result.get('failure_stage')}")
+    expect(result.get("failure_kind") == "catalog_version_mismatch",
+           f"unexpected stale fixture failure kind: {result.get('failure_kind')}")
+    expect(artifacts["per_task.jsonl"] is None,
+           "stale fixture provenance must not create a per-task stream")
 
 
 def test_three_consecutive_transport_failures_abort_with_diagnostics() -> None:

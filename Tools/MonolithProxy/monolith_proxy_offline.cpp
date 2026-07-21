@@ -2046,6 +2046,23 @@ namespace
 
         if (invocation.query_namespace == "monolith")
         {
+            // A schema request is explicitly asking for the authoritative live
+            // action contract.  The offline catalog can only return degraded
+            // routing metadata, so a healthy editor must receive the normal
+            // request budget instead of the short read-fallback probe budget.
+            // Other discovery projections remain eligible for the fast path so
+            // an unresponsive editor does not stall ordinary offline browsing.
+            if (invocation.action == "discover")
+            {
+                const auto mode_it = invocation.params.find("mode");
+                if (mode_it != invocation.params.end()
+                    && mode_it->is_string()
+                    && mode_it->get<std::string>() == "schema")
+                {
+                    return false;
+                }
+            }
+
             static const std::set<std::string> SafeCatalogActions = {
                 "status",
                 "discover",

@@ -1217,6 +1217,49 @@ JOIN crg_nodes n ON n.domain='project' AND n.native_table='assets' AND n.native_
     };
 }
 
+struct CrgWriteProbeResult {
+    bool success = false;
+    bool transaction_started = false;
+    std::string error;
+};
+
+static CrgWriteProbeResult crg_probe_write_access(Database& db, const std::string& domain,
+                                                   bool keep_transaction) {
+    CrgWriteProbeResult result;
+    const int main_readonly = sqlite3_db_readonly(db.db, "main");
+    if (main_readonly != 0) {
+        result.error = main_readonly > 0
+            ? "SQLite opened the main database read-only"
+            : "SQLite could not resolve the main database write state";
+        return result;
+    }
+
+    if (!exec_sql_ok(db, "BEGIN IMMEDIATE;", result.error)) return result;
+    result.transaction_started = true;
+
+    const char* write_probe = domain == "source"
+        ? "DELETE FROM symbols WHERE 0;"
+        : "DELETE FROM assets WHERE 0;";
+    if (!exec_sql_ok(db, write_probe, result.error)) {
+        std::string rollback_error;
+        if (!exec_sql_ok(db, "ROLLBACK;", rollback_error) && !rollback_error.empty()) {
+            result.error += "; rollback failed: " + rollback_error;
+        }
+        result.transaction_started = false;
+        return result;
+    }
+
+    if (!keep_transaction) {
+        if (!exec_sql_ok(db, "ROLLBACK;", result.error)) {
+            result.transaction_started = false;
+            return result;
+        }
+        result.transaction_started = false;
+    }
+    result.success = true;
+    return result;
+}
+
 static json crg_repair_cache_json(Database& db, const std::string& domain,
                                   const std::string& scope, bool execute) {
     std::string normalized_scope = scope.empty() ? "all" : lower_copy(scope);
@@ -1263,9 +1306,44 @@ static json crg_repair_cache_json(Database& db, const std::string& domain,
         return root;
     }
 
+    const std::string retry_action = domain + ".repair_crg_cache --scope=" + normalized_scope + " --execute";
+    const std::string write_remediation =
+        "Close UnrealEditor, Monolith indexers, and any other process using the " + domain +
+        " index database, then retry " + retry_action + ".";
+    auto write_blocked_result = [&](const std::string& error) {
+        const std::string detail = error.empty() ? write_remediation : error + ". " + write_remediation;
+        root["write_preflight"] = {
+            {"status", "unavailable"},
+            {"error", error},
+            {"remediation", write_remediation},
+        };
+        root["warnings"].push_back("CRG cache rebuild failed at database write preflight: " + detail);
+        if (!root.contains("before")) root["before"] = json::object();
+        if (!root.contains("freshness_checks")) root["freshness_checks"] = json::array();
+        if (!root.contains("repair_needed")) root["repair_needed"] = nullptr;
+        root["after"] = root["before"];
+        root["status"] = "error";
+        root["summary"] = domain + " CRG projection/cache rebuild blocked because database write access is unavailable";
+        root["next_actions"] = json::array({retry_action, domain + ".health"});
+        return root;
+    };
+
+    // Fail before multi-million-row freshness scans when another process has
+    // opened the database without write sharing. This probe is rolled back and
+    // therefore does not turn an already-fresh execute request into a mutation.
+    if (execute) {
+        const CrgWriteProbeResult early_probe = crg_probe_write_access(db, domain, false);
+        if (!early_probe.success) return write_blocked_result(early_probe.error);
+        root["write_preflight"] = {
+            {"status", "ok"},
+            {"probe", "transactional no-op write"},
+        };
+    }
+
     root["before"] = crg_repair_counts(db, domain);
     json freshness_checks = json::array();
     bool repair_needed = false;
+    bool projection_corruption_detected = false;
     auto add_freshness_check = [&](const std::string& name, bool pass, const std::string& detail) {
         freshness_checks.push_back({{"check", name}, {"result", pass ? "ok" : "stale"}, {"detail", detail}});
         if (!pass) repair_needed = true;
@@ -1313,6 +1391,7 @@ static json crg_repair_cache_json(Database& db, const std::string& domain,
                 int64_t crg_metrics = count_rows(db,
                     "SELECT COUNT(*) FROM crg_node_metrics m JOIN crg_nodes n ON n.id = m.node_id "
                     "WHERE n.domain = 'source';");
+                projection_corruption_detected = crg_nodes < 0 || crg_edges < 0 || crg_metrics < 0;
                 add_freshness_check("crg:nodes_row_parity", crg_nodes == symbols,
                                     "symbols=" + std::to_string(symbols) + " crg_nodes(source)=" + std::to_string(crg_nodes));
                 add_freshness_check("crg:edges_row_parity", crg_edges == valid_refs + inheritance,
@@ -1330,6 +1409,7 @@ static json crg_repair_cache_json(Database& db, const std::string& domain,
                 int64_t crg_metrics = count_rows(db,
                     "SELECT COUNT(*) FROM crg_node_metrics m JOIN crg_nodes n ON n.id = m.node_id "
                     "WHERE n.domain = 'project';");
+                projection_corruption_detected = crg_nodes < 0 || crg_edges < 0 || crg_metrics < 0;
                 add_freshness_check("crg:nodes_row_parity", crg_nodes == assets,
                                     "assets=" + std::to_string(assets) + " crg_nodes(project)=" + std::to_string(crg_nodes));
                 add_freshness_check("crg:edges_row_parity", crg_edges == dependencies,
@@ -1347,6 +1427,7 @@ static json crg_repair_cache_json(Database& db, const std::string& domain,
     }
     root["freshness_checks"] = freshness_checks;
     root["repair_needed"] = repair_needed;
+    root["projection_corruption_detected"] = projection_corruption_detected;
     if (!execute) {
         root["status"] = "ok";
         root["summary"] = repair_needed
@@ -1379,24 +1460,73 @@ static json crg_repair_cache_json(Database& db, const std::string& domain,
     }
 
     bool ok = true;
+    bool transaction_started = false;
     std::string error;
     auto fail = [&](const std::string& label, const std::string& err) {
         ok = false;
         root["warnings"].push_back("CRG cache rebuild failed at " + label + (err.empty() ? "" : ": " + err));
     };
+    auto finish_transaction = [&]() {
+        if (!transaction_started) return;
+        if (ok) {
+            if (exec_sql_ok(db, "COMMIT;", error)) {
+                transaction_started = false;
+                return;
+            }
+            fail("commit", error);
+        }
+
+        std::string rollback_error;
+        if (!exec_sql_ok(db, "ROLLBACK;", rollback_error) && !rollback_error.empty()) {
+            root["warnings"].push_back("CRG cache rollback failed: " + rollback_error);
+        }
+        transaction_started = false;
+    };
+
+    // Repeat the probe and retain its transaction so a writer cannot appear
+    // between freshness assessment and cache replacement.
+    const CrgWriteProbeResult rebuild_probe = crg_probe_write_access(db, domain, true);
+    if (!rebuild_probe.success) return write_blocked_result(rebuild_probe.error);
+    transaction_started = rebuild_probe.transaction_started;
+    root["write_preflight"] = {
+        {"status", "ok"},
+        {"probe", "transactional no-op write"},
+    };
+
+    // CRG projection tables are disposable caches. A damaged projection B-tree
+    // cannot be healed by DELETE because SQLite must traverse the corrupt pages
+    // first. When native source/project counts remain readable but a derived count
+    // fails, replace only the derived schema inside the repair transaction and then
+    // repopulate it from the authoritative native tables.
+    if (projection_corruption_detected) {
+        for (const auto& step : std::vector<std::pair<std::string, std::string>>{
+                 {"drop corrupt CRG metrics", "DROP TABLE IF EXISTS crg_node_metrics;"},
+                 {"drop corrupt CRG edges", "DROP TABLE IF EXISTS crg_edges;"},
+                 {"drop corrupt CRG nodes", "DROP TABLE IF EXISTS crg_nodes;"},
+                 {"drop corrupt CRG metadata", "DROP TABLE IF EXISTS crg_meta;"},
+                 {"drop corrupt source override cache", "DROP TABLE IF EXISTS source_override_edges;"},
+             }) {
+            if (!exec_sql_ok(db, step.second, error)) {
+                fail(step.first, error);
+                break;
+            }
+        }
+        if (ok) root["projection_schema_recreated"] = true;
+    }
+
+    // Schema/index creation and projection replacement are one transaction. A later
+    // failure must not leave a half-created maintenance surface behind.
     if (!ensure_crg_projection_tables(db, error)) {
         fail("create schema", error);
     }
     if (ok && domain == "source" && !ensure_source_review_indexes(db, error)) {
         fail("create source review indexes", error);
     }
-    if (ok && !exec_sql_ok(db, "BEGIN;", error)) {
-        fail("begin transaction", error);
-    }
-    if (ok && domain == "source" && normalized_scope == "override_edges") {
-        if (!exec_sql_ok(db, "DELETE FROM source_override_edges;", error)) {
+    if (domain == "source" && normalized_scope == "override_edges") {
+        if (ok && !exec_sql_ok(db, "DELETE FROM source_override_edges;", error)) {
             fail("clear source override edges", error);
-        } else {
+        }
+        if (ok) {
             int64_t override_edges = 0;
             if (!populate_source_override_edge_cache(db, override_edges, error)) {
                 fail("source override edge cache", error);
@@ -1406,16 +1536,13 @@ static json crg_repair_cache_json(Database& db, const std::string& domain,
                 root["source_override_edges_built"] = override_edges;
             }
         }
-        if (ok) {
-            if (!exec_sql_ok(db, "COMMIT;", error)) fail("commit", error);
-        } else {
-            std::string rollback_error;
-            exec_sql_ok(db, "ROLLBACK;", rollback_error);
-        }
+        finish_transaction();
         root["after"] = crg_repair_counts(db, domain);
         root["status"] = ok ? "ok" : "error";
-        root["summary"] = ok ? "Rebuilt source override edge cache" : "source override edge cache rebuild failed; rolled back";
-        root["next_actions"] = json::array({"source.health", "source.find_overrides", "source.review_hotspots"});
+        root["summary"] = ok ? "Rebuilt source override edge cache" : "source override edge cache rebuild failed; transaction rolled back";
+        root["next_actions"] = ok
+            ? json::array({"source.health", "source.find_overrides", "source.review_hotspots"})
+            : json::array({retry_action, "source.health"});
         return root;
     }
     if (ok) {
@@ -1436,21 +1563,18 @@ static json crg_repair_cache_json(Database& db, const std::string& domain,
             root["source_override_edges_built"] = override_edges;
         }
     }
-    if (ok) {
-        if (!exec_sql_ok(db, "COMMIT;", error)) fail("commit", error);
-    } else {
-        std::string rollback_error;
-        exec_sql_ok(db, "ROLLBACK;", rollback_error);
-    }
+    finish_transaction();
 
     root["after"] = crg_repair_counts(db, domain);
     root["status"] = ok ? "ok" : "error";
     root["summary"] = ok
         ? std::string("Rebuilt ") + domain + " CRG projection/cache from indexed " + (domain == "source" ? "source symbols, references and inheritance" : "project assets and dependencies")
-        : domain + " CRG projection/cache rebuild failed; rolled back";
-    root["next_actions"] = domain == "source"
-        ? json::array({"source.health", "source.risk_score", "source.review_context"})
-        : json::array({"project.health", "project.risk_score", "project.review_context"});
+        : domain + " CRG projection/cache rebuild failed; transaction rolled back";
+    root["next_actions"] = ok
+        ? (domain == "source"
+            ? json::array({"source.health", "source.risk_score", "source.review_context"})
+            : json::array({"project.health", "project.risk_score", "project.review_context"}))
+        : json::array({retry_action, domain + ".health"});
     return root;
 }
 

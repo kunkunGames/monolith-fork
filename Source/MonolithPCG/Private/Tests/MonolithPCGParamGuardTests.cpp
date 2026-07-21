@@ -97,7 +97,7 @@ bool FMonolithPCGRemapGraphReferenceContractTest::RunTest(const FString& Paramet
 		FString(TEXT("transaction_optional")));
 
 	TSharedPtr<FJsonObject> RootRemaps = MakeShared<FJsonObject>();
-	RootRemaps->SetStringField(TEXT("/Game/Wall"), TEXT("/SpeedMaps/Meshes/Wall"));
+	RootRemaps->SetStringField(TEXT("/Game/Wall"), TEXT("/Game/Remapped/Wall"));
 
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();

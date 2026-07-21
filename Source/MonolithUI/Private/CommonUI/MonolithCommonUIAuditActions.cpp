@@ -85,20 +85,28 @@ namespace MonolithCommonUIAudit
 			if (UCommonActionWidget* AW = Cast<UCommonActionWidget>(W))
 			{
 				ActionWidgets++;
-				// Check InputActions array is non-empty (protected UPROPERTY)
-				FArrayProperty* InputActionsProp = FindFProperty<FArrayProperty>(UCommonActionWidget::StaticClass(), TEXT("InputActions"));
-				if (InputActionsProp)
+				const MonolithCommonUI::FActionWidgetBindingEvidence Binding =
+					MonolithCommonUI::EvaluateActionWidgetBinding(Wbp, AW);
+				if (Binding.bHasInvalidBindingModeMetadata)
 				{
-					FScriptArrayHelper Helper(InputActionsProp, InputActionsProp->ContainerPtrToValuePtr<void>(AW));
-					if (Helper.Num() == 0)
-					{
-						TSharedPtr<FJsonObject> I = MakeShared<FJsonObject>();
-						I->SetStringField(TEXT("severity"), TEXT("info"));
-						I->SetStringField(TEXT("rule"), TEXT("action_widget_unbound"));
-						I->SetStringField(TEXT("widget"), AW->GetName());
-						I->SetStringField(TEXT("detail"), TEXT("UCommonActionWidget has no InputActions — glyph will not display"));
-						Issues.Add(MakeShared<FJsonValueObject>(I));
-					}
+					TSharedPtr<FJsonObject> I = MakeShared<FJsonObject>();
+					I->SetStringField(TEXT("severity"), TEXT("warning"));
+					I->SetStringField(TEXT("rule"), TEXT("action_widget_binding_metadata_invalid"));
+					I->SetStringField(TEXT("widget"), AW->GetName());
+					I->SetStringField(TEXT("metadata_value"), Binding.BindingModeMetadata);
+					I->SetStringField(TEXT("detail"), FString::Printf(
+						TEXT("CommonActionBindingMode must be exactly '%s' on the matching inherited BindWidget UCommonActionWidget property."),
+						MonolithCommonUI::RuntimeEnhancedInputBindingMode));
+					Issues.Add(MakeShared<FJsonValueObject>(I));
+				}
+				if (!Binding.bBound)
+				{
+					TSharedPtr<FJsonObject> I = MakeShared<FJsonObject>();
+					I->SetStringField(TEXT("severity"), TEXT("info"));
+					I->SetStringField(TEXT("rule"), TEXT("action_widget_unbound"));
+					I->SetStringField(TEXT("widget"), AW->GetName());
+					I->SetStringField(TEXT("detail"), TEXT("UCommonActionWidget has no legacy InputActions, designer EnhancedInputAction, or explicit RuntimeEnhancedInput BindWidget contract — glyph will not display."));
+					Issues.Add(MakeShared<FJsonValueObject>(I));
 				}
 			}
 		});
@@ -128,7 +136,8 @@ namespace MonolithCommonUIAudit
 		TArray<FAssetData> FoundAssets;
 		ARM.Get().GetAssets(Filter, FoundAssets);
 
-		int32 TotalWbps = 0, ActivatableCount = 0, ButtonCount = 0, StyledButtons = 0, ActionWidgetCount = 0, BoundActionWidgets = 0;
+		int32 TotalWbps = 0, ActivatableCount = 0, ButtonCount = 0, StyledButtons = 0;
+		int32 ActionWidgetCount = 0, BoundActionWidgets = 0, InvalidActionWidgetBindingMetadata = 0;
 
 		for (const FAssetData& AD : FoundAssets)
 		{
@@ -150,12 +159,10 @@ namespace MonolithCommonUIAudit
 				if (UCommonActionWidget* AW = Cast<UCommonActionWidget>(W))
 				{
 					ActionWidgetCount++;
-					FArrayProperty* IAP = FindFProperty<FArrayProperty>(UCommonActionWidget::StaticClass(), TEXT("InputActions"));
-					if (IAP)
-					{
-						FScriptArrayHelper Helper(IAP, IAP->ContainerPtrToValuePtr<void>(AW));
-						if (Helper.Num() > 0) BoundActionWidgets++;
-					}
+					const MonolithCommonUI::FActionWidgetBindingEvidence Binding =
+						MonolithCommonUI::EvaluateActionWidgetBinding(Wbp, AW);
+					if (Binding.bBound) BoundActionWidgets++;
+					if (Binding.bHasInvalidBindingModeMetadata) InvalidActionWidgetBindingMetadata++;
 				}
 			});
 		}
@@ -170,6 +177,7 @@ namespace MonolithCommonUIAudit
 		Result->SetNumberField(TEXT("action_widget_count"), ActionWidgetCount);
 		Result->SetNumberField(TEXT("bound_action_widget_count"), BoundActionWidgets);
 		Result->SetNumberField(TEXT("unbound_action_widget_count"), ActionWidgetCount - BoundActionWidgets);
+		Result->SetNumberField(TEXT("invalid_action_widget_binding_metadata_count"), InvalidActionWidgetBindingMetadata);
 
 		const float StylingRatio = ButtonCount > 0 ? static_cast<float>(StyledButtons) / ButtonCount : 1.0f;
 		const float BindingRatio = ActionWidgetCount > 0 ? static_cast<float>(BoundActionWidgets) / ActionWidgetCount : 1.0f;

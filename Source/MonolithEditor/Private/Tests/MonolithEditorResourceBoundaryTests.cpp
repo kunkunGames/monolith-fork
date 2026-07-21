@@ -3,6 +3,83 @@
 #include "Dom/JsonObject.h"
 #include "MonolithToolRegistry.h"
 
+namespace
+{
+	struct FMonolithAutomationRunSlotSnapshot
+	{
+		bool bActive = false;
+		bool bHasLastRun = false;
+		FString CurrentRunId;
+		FString LastRunId;
+		int32 HistoryCount = 0;
+		int32 HistoryCapacity = 0;
+	};
+
+	bool ReadAutomationRunSlotSnapshot(FMonolithAutomationRunSlotSnapshot& OutSnapshot)
+	{
+		const FMonolithActionResult StatusResult = FMonolithToolRegistry::Get().ExecuteAction(
+			TEXT("editor"),
+			TEXT("get_automation_run_status"),
+			MakeShared<FJsonObject>());
+		if (!StatusResult.bSuccess || !StatusResult.Result.IsValid())
+		{
+			return false;
+		}
+
+		double HistoryCount = 0.0;
+		double HistoryCapacity = 0.0;
+		if (!StatusResult.Result->TryGetBoolField(TEXT("active"), OutSnapshot.bActive)
+			|| !StatusResult.Result->TryGetBoolField(TEXT("has_last_run"), OutSnapshot.bHasLastRun)
+			|| !StatusResult.Result->TryGetNumberField(TEXT("history_count"), HistoryCount)
+			|| !StatusResult.Result->TryGetNumberField(TEXT("history_capacity"), HistoryCapacity))
+		{
+			return false;
+		}
+		OutSnapshot.HistoryCount = FMath::FloorToInt(HistoryCount);
+		OutSnapshot.HistoryCapacity = FMath::FloorToInt(HistoryCapacity);
+
+		if (OutSnapshot.bActive)
+		{
+			if (!StatusResult.Result->HasTypedField<EJson::Object>(TEXT("current_run")))
+			{
+				return false;
+			}
+			const TSharedPtr<FJsonObject> CurrentRun = StatusResult.Result->GetObjectField(TEXT("current_run"));
+			if (!CurrentRun.IsValid() || !CurrentRun->TryGetStringField(TEXT("run_id"), OutSnapshot.CurrentRunId))
+			{
+				return false;
+			}
+		}
+
+		if (OutSnapshot.bHasLastRun)
+		{
+			if (!StatusResult.Result->HasTypedField<EJson::Object>(TEXT("last_run")))
+			{
+				return false;
+			}
+			const TSharedPtr<FJsonObject> LastRun = StatusResult.Result->GetObjectField(TEXT("last_run"));
+			if (!LastRun.IsValid() || !LastRun->TryGetStringField(TEXT("run_id"), OutSnapshot.LastRunId))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	void VerifyAutomationRunSlotIdentity(
+		FAutomationTestBase& Test,
+		const FMonolithAutomationRunSlotSnapshot& Before,
+		const FMonolithAutomationRunSlotSnapshot& After)
+	{
+		Test.TestEqual(TEXT("Busy rejection preserves active state"), After.bActive, Before.bActive);
+		Test.TestEqual(TEXT("Busy rejection preserves current run identity"), After.CurrentRunId, Before.CurrentRunId);
+		Test.TestEqual(TEXT("Busy rejection preserves history count"), After.HistoryCount, Before.HistoryCount);
+		Test.TestEqual(TEXT("Busy rejection preserves last-run presence"), After.bHasLastRun, Before.bHasLastRun);
+		Test.TestEqual(TEXT("Busy rejection preserves last-run identity"), After.LastRunId, Before.LastRunId);
+	}
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAssetDeleteAssetsRejectsOversizedArray, "Monolith.LimitGuard.MonolithAsset.DeleteAssetsRejectsOversizedArray", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithAssetDeleteAssetsRejectsOversizedArray::RunTest(const FString& Parameters)
@@ -173,6 +250,155 @@ bool FMonolithEditorAutomationStatusShape::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Stop contract is explicit"), StopStatus, FString(TEXT("unsupported_cancel")));
 	TestTrue(TEXT("Status exposes history capacity"), Result.Result->HasField(TEXT("history_capacity")));
 
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorAsyncAutomationNoMatchPoll, "Monolith.Editor.Automation.AsyncNoMatchPoll", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithEditorAsyncAutomationNoMatchPoll::RunTest(const FString& Parameters)
+{
+	FMonolithAutomationRunSlotSnapshot Before;
+	const bool bReadBefore = ReadAutomationRunSlotSnapshot(Before);
+	TestTrue(TEXT("Run-slot state is readable before no-match start"), bReadBefore);
+	if (!bReadBefore)
+	{
+		return true;
+	}
+
+	TSharedPtr<FJsonObject> StartParams = MakeShared<FJsonObject>();
+	StartParams->SetStringField(TEXT("prefix"), TEXT("Monolith.Editor.Automation.Async.DoesNotExist"));
+	StartParams->SetNumberField(TEXT("max_tests"), 5000.0);
+	StartParams->SetNumberField(TEXT("discovery_timeout_seconds"), 5000.0);
+	StartParams->SetNumberField(TEXT("readiness_timeout_seconds"), 5000.0);
+	StartParams->SetNumberField(TEXT("timeout_seconds"), 5000.0);
+
+	FMonolithActionResult StartResult = FMonolithToolRegistry::Get().ExecuteAction(TEXT("editor"), TEXT("start_automation_tests"), StartParams);
+	if (Before.bActive)
+	{
+		TestFalse(TEXT("No-match async start is rejected while a Monolith run is active"), StartResult.bSuccess);
+		TestTrue(TEXT("No-match busy rejection is explicit"), StartResult.ErrorMessage.Contains(TEXT("automation_busy")));
+
+		FMonolithAutomationRunSlotSnapshot After;
+		const bool bReadAfter = ReadAutomationRunSlotSnapshot(After);
+		TestTrue(TEXT("Run-slot state is readable after no-match rejection"), bReadAfter);
+		if (bReadAfter)
+		{
+			VerifyAutomationRunSlotIdentity(*this, Before, After);
+		}
+
+		TSharedPtr<FJsonObject> ActivePollParams = MakeShared<FJsonObject>();
+		ActivePollParams->SetStringField(TEXT("run_id"), Before.CurrentRunId);
+		const FMonolithActionResult ActivePoll = FMonolithToolRegistry::Get().ExecuteAction(
+			TEXT("editor"),
+			TEXT("poll_automation_tests"),
+			ActivePollParams);
+		TestTrue(TEXT("Rejected no-match start leaves the active run pollable"), ActivePoll.bSuccess);
+		if (ActivePoll.Result.IsValid())
+		{
+			FString PolledRunId;
+			TestTrue(TEXT("Active poll still exposes run_id"), ActivePoll.Result->TryGetStringField(TEXT("run_id"), PolledRunId));
+			TestEqual(TEXT("Active poll still resolves the owning run"), PolledRunId, Before.CurrentRunId);
+		}
+		return true;
+	}
+
+	TestTrue(TEXT("No-match async start returns a structured terminal report"), StartResult.bSuccess);
+	if (!StartResult.Result.IsValid())
+	{
+		AddError(TEXT("Async no-match result JSON is invalid"));
+		return true;
+	}
+
+	FString RunId;
+	TestTrue(TEXT("Async start exposes run_id"), StartResult.Result->TryGetStringField(TEXT("run_id"), RunId));
+	FString State;
+	TestTrue(TEXT("Async start exposes terminal state"), StartResult.Result->TryGetStringField(TEXT("state"), State));
+	TestEqual(TEXT("No-match async start completes immediately"), State, FString(TEXT("completed")));
+	FString RunnerMode;
+	TestTrue(TEXT("Async start exposes runner mode"), StartResult.Result->TryGetStringField(TEXT("runner_mode"), RunnerMode));
+	TestEqual(TEXT("Async runner mode is explicit"), RunnerMode, FString(TEXT("asynchronous")));
+
+	double MaxTests = 0.0;
+	double DiscoveryTimeout = 0.0;
+	double ReadinessTimeout = 0.0;
+	double RunTimeout = 0.0;
+	TestTrue(TEXT("Async start exposes max_tests"), StartResult.Result->TryGetNumberField(TEXT("max_tests"), MaxTests));
+	TestTrue(TEXT("Async start exposes discovery timeout"), StartResult.Result->TryGetNumberField(TEXT("discovery_timeout_seconds"), DiscoveryTimeout));
+	TestTrue(TEXT("Async start exposes readiness timeout"), StartResult.Result->TryGetNumberField(TEXT("readiness_timeout_seconds"), ReadinessTimeout));
+	TestTrue(TEXT("Async start exposes run timeout"), StartResult.Result->TryGetNumberField(TEXT("timeout_seconds"), RunTimeout));
+	TestEqual(TEXT("Async max_tests clamps to 1000"), MaxTests, 1000.0);
+	TestEqual(TEXT("Discovery timeout clamps to 120 seconds"), DiscoveryTimeout, 120.0);
+	TestEqual(TEXT("Readiness timeout clamps to 3600 seconds"), ReadinessTimeout, 3600.0);
+	TestEqual(TEXT("Run timeout clamps to 3600 seconds"), RunTimeout, 3600.0);
+
+	FMonolithAutomationRunSlotSnapshot After;
+	const bool bReadAfter = ReadAutomationRunSlotSnapshot(After);
+	TestTrue(TEXT("Run-slot state is readable after terminal no-match report"), bReadAfter);
+	if (bReadAfter)
+	{
+		TestFalse(TEXT("Terminal no-match report does not claim the active slot"), After.bActive);
+		TestEqual(
+			TEXT("Terminal no-match report records one bounded history entry"),
+			After.HistoryCount,
+			FMath::Min(Before.HistoryCount + 1, Before.HistoryCapacity));
+		TestTrue(TEXT("Terminal no-match report becomes the last run"), After.bHasLastRun);
+		TestEqual(TEXT("Last-run identity matches the no-match report"), After.LastRunId, RunId);
+	}
+
+	TSharedPtr<FJsonObject> PollParams = MakeShared<FJsonObject>();
+	PollParams->SetStringField(TEXT("run_id"), RunId);
+	FMonolithActionResult PollResult = FMonolithToolRegistry::Get().ExecuteAction(TEXT("editor"), TEXT("poll_automation_tests"), PollParams);
+	TestTrue(TEXT("Most recent async run is pollable by run_id"), PollResult.bSuccess);
+	if (PollResult.Result.IsValid())
+	{
+		FString PolledRunId;
+		TestTrue(TEXT("Poll result exposes run_id"), PollResult.Result->TryGetStringField(TEXT("run_id"), PolledRunId));
+		TestEqual(TEXT("Poll returns the requested run"), PolledRunId, RunId);
+		TestTrue(TEXT("Poll returns structured results array"), PollResult.Result->HasTypedField<EJson::Array>(TEXT("results")));
+	}
+
+	TSharedPtr<FJsonObject> UnknownPollParams = MakeShared<FJsonObject>();
+	UnknownPollParams->SetStringField(TEXT("run_id"), TEXT("automation-unknown"));
+	FMonolithActionResult UnknownPoll = FMonolithToolRegistry::Get().ExecuteAction(TEXT("editor"), TEXT("poll_automation_tests"), UnknownPollParams);
+	TestFalse(TEXT("Unknown run_id is rejected"), UnknownPoll.bSuccess);
+	TestTrue(TEXT("Unknown run_id error is explicit"), UnknownPoll.ErrorMessage.Contains(TEXT("Unknown automation run_id")));
+
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorAsyncAutomationNestedStartGuard, "Monolith.Editor.Automation.AsyncNestedStartGuard", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithEditorAsyncAutomationNestedStartGuard::RunTest(const FString& Parameters)
+{
+	FAutomationTestFramework& Framework = FAutomationTestFramework::Get();
+	FAutomationTestBase* CurrentTestBefore = Framework.GetCurrentTest();
+	TestNotNull(TEXT("The guard test itself is the current framework test"), CurrentTestBefore);
+
+	FMonolithAutomationRunSlotSnapshot Before;
+	const bool bReadBefore = ReadAutomationRunSlotSnapshot(Before);
+	TestTrue(TEXT("Run-slot state is readable before nested start"), bReadBefore);
+	if (!bReadBefore)
+	{
+		return true;
+	}
+
+	TSharedPtr<FJsonObject> StartParams = MakeShared<FJsonObject>();
+	StartParams->SetStringField(TEXT("prefix"), TEXT("Monolith.Editor.Automation.AsyncNestedStartGuard"));
+	FMonolithActionResult StartResult = FMonolithToolRegistry::Get().ExecuteAction(TEXT("editor"), TEXT("start_automation_tests"), StartParams);
+
+	TestFalse(TEXT("A positive nested async start is refused"), StartResult.bSuccess);
+	TestTrue(TEXT("Nested refusal is explicit"), StartResult.ErrorMessage.Contains(TEXT("automation_busy")));
+	TestTrue(TEXT("Nested refusal preserves the current test pointer"), Framework.GetCurrentTest() == CurrentTestBefore);
+
+	FMonolithAutomationRunSlotSnapshot After;
+	const bool bReadAfter = ReadAutomationRunSlotSnapshot(After);
+	TestTrue(TEXT("Run-slot state is readable after nested rejection"), bReadAfter);
+	if (bReadAfter)
+	{
+		VerifyAutomationRunSlotIdentity(*this, Before, After);
+	}
 	return true;
 }
 

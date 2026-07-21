@@ -2,15 +2,15 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-07-12T02:14:12.681671+00:00",
+  "generated_at": "2026-07-17T10:24:39.993026+00:00",
   "description": "Routable test-set index for AssetEditing. The flat tasks.jsonl remains the canonical full-suite stream; modules.json is a split-shard manifest and module_shards stores hierarchical module task IDs/references for asset lifecycle, asset-specific edit, Blueprint edit, workflow, asset-operation, and operation-semantics routing.",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "308546814b77b03e591343886d3cbee8e70b26d9354f5734789a7255b0f25990",
+  "source_task_sha256": "ea3c428db9e0fdb056ad50f6e36fce5a1d12383eef5b97982b9e371308a10165",
   "module_file": "Benchmarks/AssetEditing/testsets/modules.json",
   "module_storage": "split_shards",
   "module_shard_dir": "Benchmarks/AssetEditing/testsets/module_shards",
   "task_count": 579,
-  "module_count": 1826,
+  "module_count": 1824,
   "routing_axes": [
     "category",
     "domain",
@@ -533,7 +533,8 @@
         "create": "operation_semantics.create",
         "create_save": "operation_semantics.create_save",
         "edit": "operation_semantics.edit",
-        "read_only": "operation_semantics.read_only"
+        "read_only": "operation_semantics.read_only",
+        "rejection_guard": "operation_semantics.rejection_guard"
       }
     },
     "asset_operation": {
@@ -768,7 +769,6 @@
             "module": "asset_operation.creation_or_import.level_instance",
             "edit_domains": {
               "blueprint_prefab": "asset_operation.creation_or_import.level_instance.blueprint_prefab",
-              "blueprint_prefab_guard": "asset_operation.creation_or_import.level_instance.blueprint_prefab_guard",
               "prefab_placement": "asset_operation.creation_or_import.level_instance.prefab_placement"
             }
           },
@@ -1159,7 +1159,6 @@
             "module": "asset_operation.edit.level_instance",
             "edit_domains": {
               "blueprint_prefab": "asset_operation.edit.level_instance.blueprint_prefab",
-              "blueprint_prefab_guard": "asset_operation.edit.level_instance.blueprint_prefab_guard",
               "prefab_placement": "asset_operation.edit.level_instance.prefab_placement"
             }
           },
@@ -1939,7 +1938,6 @@
             "module": "asset_operation.save.level_instance",
             "edit_domains": {
               "blueprint_prefab": "asset_operation.save.level_instance.blueprint_prefab",
-              "blueprint_prefab_guard": "asset_operation.save.level_instance.blueprint_prefab_guard",
               "prefab_placement": "asset_operation.save.level_instance.prefab_placement"
             }
           },
@@ -2888,7 +2886,7 @@
     "asset_operation.creation_or_import": {
       "shard_id": "asset_operation.creation_or_import",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
-      "module_count": 294,
+      "module_count": 293,
       "module_ids": [
         "asset_operation.creation_or_import",
         "asset_operation.creation_or_import.ai",
@@ -3060,7 +3058,6 @@
         "asset_operation.creation_or_import.interchange.texture_import",
         "asset_operation.creation_or_import.level_instance",
         "asset_operation.creation_or_import.level_instance.blueprint_prefab",
-        "asset_operation.creation_or_import.level_instance.blueprint_prefab_guard",
         "asset_operation.creation_or_import.level_instance.prefab_placement",
         "asset_operation.creation_or_import.localization",
         "asset_operation.creation_or_import.localization.stringtable",
@@ -3189,7 +3186,7 @@
     "asset_operation.edit": {
       "shard_id": "asset_operation.edit",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
-      "module_count": 294,
+      "module_count": 293,
       "module_ids": [
         "asset_operation.edit",
         "asset_operation.edit.ai",
@@ -3361,7 +3358,6 @@
         "asset_operation.edit.interchange.texture_import",
         "asset_operation.edit.level_instance",
         "asset_operation.edit.level_instance.blueprint_prefab",
-        "asset_operation.edit.level_instance.blueprint_prefab_guard",
         "asset_operation.edit.level_instance.prefab_placement",
         "asset_operation.edit.localization",
         "asset_operation.edit.localization.stringtable",
@@ -3791,7 +3787,7 @@
     "asset_operation.save": {
       "shard_id": "asset_operation.save",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
-      "module_count": 292,
+      "module_count": 291,
       "module_ids": [
         "asset_operation.save",
         "asset_operation.save.ai",
@@ -3961,7 +3957,6 @@
         "asset_operation.save.interchange.texture_import",
         "asset_operation.save.level_instance",
         "asset_operation.save.level_instance.blueprint_prefab",
-        "asset_operation.save.level_instance.blueprint_prefab_guard",
         "asset_operation.save.level_instance.prefab_placement",
         "asset_operation.save.localization",
         "asset_operation.save.localization.stringtable",
@@ -4223,12 +4218,13 @@
     "operation_semantics": {
       "shard_id": "operation_semantics",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/operation_semantics.json",
-      "module_count": 4,
+      "module_count": 5,
       "module_ids": [
         "operation_semantics.create",
         "operation_semantics.create_save",
         "operation_semantics.edit",
-        "operation_semantics.read_only"
+        "operation_semantics.read_only",
+        "operation_semantics.rejection_guard"
       ]
     },
     "workflow": {
@@ -4988,7 +4984,6 @@
     "asset_operation.creation_or_import.interchange.texture_import": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.level_instance": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.level_instance.blueprint_prefab": "asset_operation.creation_or_import",
-    "asset_operation.creation_or_import.level_instance.blueprint_prefab_guard": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.level_instance.prefab_placement": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.localization": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.localization.stringtable": "asset_operation.creation_or_import",
@@ -5282,7 +5277,6 @@
     "asset_operation.edit.interchange.texture_import": "asset_operation.edit",
     "asset_operation.edit.level_instance": "asset_operation.edit",
     "asset_operation.edit.level_instance.blueprint_prefab": "asset_operation.edit",
-    "asset_operation.edit.level_instance.blueprint_prefab_guard": "asset_operation.edit",
     "asset_operation.edit.level_instance.prefab_placement": "asset_operation.edit",
     "asset_operation.edit.localization": "asset_operation.edit",
     "asset_operation.edit.localization.stringtable": "asset_operation.edit",
@@ -5868,7 +5862,6 @@
     "asset_operation.save.interchange.texture_import": "asset_operation.save",
     "asset_operation.save.level_instance": "asset_operation.save",
     "asset_operation.save.level_instance.blueprint_prefab": "asset_operation.save",
-    "asset_operation.save.level_instance.blueprint_prefab_guard": "asset_operation.save",
     "asset_operation.save.level_instance.prefab_placement": "asset_operation.save",
     "asset_operation.save.localization": "asset_operation.save",
     "asset_operation.save.localization.stringtable": "asset_operation.save",
@@ -6066,6 +6059,7 @@
     "operation_semantics.create_save": "operation_semantics",
     "operation_semantics.edit": "operation_semantics",
     "operation_semantics.read_only": "operation_semantics",
+    "operation_semantics.rejection_guard": "operation_semantics",
     "workflow.actor_component_property_assembly": "workflow",
     "workflow.actorcomponent_toggle_contract": "workflow",
     "workflow.ai_behavior_tree_granular_edit_roundtrip": "workflow",
@@ -14470,7 +14464,7 @@
       ],
       "track": "asset_operation",
       "title": "Asset operation: Creation/import",
-      "task_count": 269,
+      "task_count": 268,
       "filters": {
         "asset_operation": [
           "creation_or_import"
@@ -19808,7 +19802,7 @@
       ],
       "track": "asset_operation_domain",
       "title": "Asset operation: Creation/import/level_instance",
-      "task_count": 3,
+      "task_count": 2,
       "filters": {
         "category": [
           "asset_authoring"
@@ -19825,7 +19819,6 @@
       "parent_module_id": "asset_operation.creation_or_import",
       "child_module_ids": [
         "asset_operation.creation_or_import.level_instance.blueprint_prefab",
-        "asset_operation.creation_or_import.level_instance.blueprint_prefab_guard",
         "asset_operation.creation_or_import.level_instance.prefab_placement"
       ]
     },
@@ -19850,37 +19843,6 @@
         ],
         "edit_domain": [
           "blueprint_prefab"
-        ],
-        "asset_operation": [
-          "creation_or_import"
-        ]
-      },
-      "module_shard_id": "asset_operation.creation_or_import",
-      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
-      "parent_module_id": "asset_operation.creation_or_import.level_instance",
-      "child_module_ids": []
-    },
-    {
-      "module_id": "asset_operation.creation_or_import.level_instance.blueprint_prefab_guard",
-      "route": [
-        "AssetEditing",
-        "asset_operation",
-        "creation_or_import",
-        "level_instance",
-        "blueprint_prefab_guard"
-      ],
-      "track": "asset_operation_edit_domain",
-      "title": "Asset operation: Creation/import/level_instance/blueprint_prefab_guard",
-      "task_count": 1,
-      "filters": {
-        "category": [
-          "asset_authoring"
-        ],
-        "domain": [
-          "level_instance"
-        ],
-        "edit_domain": [
-          "blueprint_prefab_guard"
         ],
         "asset_operation": [
           "creation_or_import"
@@ -23795,7 +23757,7 @@
       ],
       "track": "asset_operation",
       "title": "Asset operation: Asset edit",
-      "task_count": 269,
+      "task_count": 268,
       "filters": {
         "asset_operation": [
           "edit"
@@ -29133,7 +29095,7 @@
       ],
       "track": "asset_operation_domain",
       "title": "Asset operation: Asset edit/level_instance",
-      "task_count": 3,
+      "task_count": 2,
       "filters": {
         "category": [
           "asset_authoring"
@@ -29150,7 +29112,6 @@
       "parent_module_id": "asset_operation.edit",
       "child_module_ids": [
         "asset_operation.edit.level_instance.blueprint_prefab",
-        "asset_operation.edit.level_instance.blueprint_prefab_guard",
         "asset_operation.edit.level_instance.prefab_placement"
       ]
     },
@@ -29175,37 +29136,6 @@
         ],
         "edit_domain": [
           "blueprint_prefab"
-        ],
-        "asset_operation": [
-          "edit"
-        ]
-      },
-      "module_shard_id": "asset_operation.edit",
-      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
-      "parent_module_id": "asset_operation.edit.level_instance",
-      "child_module_ids": []
-    },
-    {
-      "module_id": "asset_operation.edit.level_instance.blueprint_prefab_guard",
-      "route": [
-        "AssetEditing",
-        "asset_operation",
-        "edit",
-        "level_instance",
-        "blueprint_prefab_guard"
-      ],
-      "track": "asset_operation_edit_domain",
-      "title": "Asset operation: Asset edit/level_instance/blueprint_prefab_guard",
-      "task_count": 1,
-      "filters": {
-        "category": [
-          "asset_authoring"
-        ],
-        "domain": [
-          "level_instance"
-        ],
-        "edit_domain": [
-          "blueprint_prefab_guard"
         ],
         "asset_operation": [
           "edit"
@@ -42445,7 +42375,7 @@
       ],
       "track": "asset_operation",
       "title": "Asset operation: Save",
-      "task_count": 267,
+      "task_count": 266,
       "filters": {
         "asset_operation": [
           "save"
@@ -47719,7 +47649,7 @@
       ],
       "track": "asset_operation_domain",
       "title": "Asset operation: Save/level_instance",
-      "task_count": 3,
+      "task_count": 2,
       "filters": {
         "category": [
           "asset_authoring"
@@ -47736,7 +47666,6 @@
       "parent_module_id": "asset_operation.save",
       "child_module_ids": [
         "asset_operation.save.level_instance.blueprint_prefab",
-        "asset_operation.save.level_instance.blueprint_prefab_guard",
         "asset_operation.save.level_instance.prefab_placement"
       ]
     },
@@ -47761,37 +47690,6 @@
         ],
         "edit_domain": [
           "blueprint_prefab"
-        ],
-        "asset_operation": [
-          "save"
-        ]
-      },
-      "module_shard_id": "asset_operation.save",
-      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
-      "parent_module_id": "asset_operation.save.level_instance",
-      "child_module_ids": []
-    },
-    {
-      "module_id": "asset_operation.save.level_instance.blueprint_prefab_guard",
-      "route": [
-        "AssetEditing",
-        "asset_operation",
-        "save",
-        "level_instance",
-        "blueprint_prefab_guard"
-      ],
-      "track": "asset_operation_edit_domain",
-      "title": "Asset operation: Save/level_instance/blueprint_prefab_guard",
-      "task_count": 1,
-      "filters": {
-        "category": [
-          "asset_authoring"
-        ],
-        "domain": [
-          "level_instance"
-        ],
-        "edit_domain": [
-          "blueprint_prefab_guard"
         ],
         "asset_operation": [
           "save"
@@ -53118,6 +53016,7 @@
         "asset_operation.save",
         "lifecycle.create",
         "lifecycle.create_save",
+        "operation_semantics.rejection_guard",
         "workflow.ai_behavior_tree_granular_edit_roundtrip",
         "workflow.ai_behavior_tree_node_blueprints_roundtrip",
         "workflow.ai_behavior_tree_spec_roundtrip",
@@ -53636,7 +53535,7 @@
       ],
       "track": "lifecycle",
       "title": "Lifecycle phase: create_save",
-      "task_count": 267,
+      "task_count": 266,
       "filters": {
         "lifecycle_phase": [
           "create_save"
@@ -53656,7 +53555,7 @@
       ],
       "track": "lifecycle",
       "title": "Lifecycle phase: not_applicable",
-      "task_count": 310,
+      "task_count": 311,
       "filters": {
         "lifecycle_phase": [
           "not_applicable"
@@ -53696,7 +53595,7 @@
       ],
       "track": "operation_semantics",
       "title": "Operation semantics: create_save",
-      "task_count": 269,
+      "task_count": 268,
       "filters": {
         "operation_semantics": [
           "create_save"
@@ -53745,6 +53644,26 @@
       "module_shard_id": "operation_semantics",
       "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/operation_semantics.json",
       "parent_module_id": "",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "operation_semantics.rejection_guard",
+      "route": [
+        "AssetEditing",
+        "operation_semantics",
+        "rejection_guard"
+      ],
+      "track": "operation_semantics",
+      "title": "Operation semantics: rejection_guard",
+      "task_count": 1,
+      "filters": {
+        "operation_semantics": [
+          "rejection_guard"
+        ]
+      },
+      "module_shard_id": "operation_semantics",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/operation_semantics.json",
+      "parent_module_id": "category.asset_authoring",
       "child_module_ids": []
     },
     {

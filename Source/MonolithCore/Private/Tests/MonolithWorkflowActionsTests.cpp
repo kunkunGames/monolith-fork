@@ -8,6 +8,25 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
+namespace MonolithWorkflowActionsTestSupport
+{
+	bool ExecuteReadOnlyPrimitiveForTest(
+		const FString& Namespace,
+		const FString& Action,
+		const TSharedPtr<FJsonObject>& Params,
+		TSharedPtr<FJsonObject>& OutProof,
+		TArray<TSharedPtr<FJsonValue>>& OutActions,
+		TArray<FString>& OutErrors);
+
+	bool ExecutePrimitiveForTest(
+		const FString& Namespace,
+		const FString& Action,
+		const TSharedPtr<FJsonObject>& Params,
+		TArray<TSharedPtr<FJsonValue>>& OutActions,
+		TArray<TSharedPtr<FJsonValue>>& OutProofRows,
+		TArray<FString>& OutErrors);
+}
+
 namespace
 {
 	TArray<TSharedPtr<FJsonValue>> TestStringsToJson(const TArray<FString>& Values)
@@ -18,6 +37,27 @@ namespace
 			Result.Add(MakeShared<FJsonValueString>(Value));
 		}
 		return Result;
+	}
+
+	bool JsonStringArrayContainsSubstring(
+		const TArray<TSharedPtr<FJsonValue>>* Values,
+		const FString& ExpectedSubstring)
+	{
+		if (!Values)
+		{
+			return false;
+		}
+
+		for (const TSharedPtr<FJsonValue>& Value : *Values)
+		{
+			if (Value.IsValid()
+				&& Value->Type == EJson::String
+				&& Value->AsString().Contains(ExpectedSubstring))
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	bool JsonArrayContainsStringField(const TArray<TSharedPtr<FJsonValue>>* Values, const FString& FieldName, const FString& Expected)
@@ -1295,6 +1335,479 @@ bool FMonolithWorkflowSlateEuwTestFlowContractTest::RunTest(const FString& Param
 	const TArray<TSharedPtr<FJsonValue>>* DirtyPackages = nullptr;
 	bOk &= TestTrue(TEXT("slate dirty packages empty"),
 		Result.Result->TryGetArrayField(TEXT("dirty_packages"), DirtyPackages) && DirtyPackages && DirtyPackages->Num() == 0);
+
+	return bOk;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithWorkflowPrimitiveSemanticGateContractTest,
+	"Monolith.Workflow.PrimitiveSemanticGate.Contract",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithWorkflowPrimitiveSemanticGateContractTest::RunTest(const FString& Parameters)
+{
+	static const FString TestNamespace = TEXT("workflow_semantic_gate_test");
+	static const FString TestAction = TEXT("semantic_payload");
+	FMonolithScopedTestNamespace Scope(*TestNamespace);
+
+	TSharedPtr<FJsonObject> CurrentPayload = MakeShared<FJsonObject>();
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	Registry.RegisterAction(
+		TestNamespace,
+		TestAction,
+		TEXT("Return a transport-success payload for workflow semantic gate tests."),
+		FMonolithActionHandler::CreateLambda([&CurrentPayload](const TSharedPtr<FJsonObject>&)
+		{
+			return FMonolithActionResult::Success(CurrentPayload);
+		}));
+
+	bool bOk = true;
+	auto RunCase = [this, &bOk, &CurrentPayload](
+		const FString& Label,
+		const TSharedPtr<FJsonObject>& Payload,
+		bool bExpectedSuccess,
+		const FString& ExpectedFailureSubstring,
+		bool bExpectedPayloadPreserved)
+	{
+		CurrentPayload = Payload;
+		TArray<TSharedPtr<FJsonValue>> Actions;
+		TArray<TSharedPtr<FJsonValue>> ProofRows;
+		TArray<FString> Errors;
+		const bool bSucceeded = MonolithWorkflowActionsTestSupport::ExecutePrimitiveForTest(
+			TestNamespace,
+			TestAction,
+			MakeShared<FJsonObject>(),
+			Actions,
+			ProofRows,
+			Errors);
+
+		bOk &= TestEqual(*FString::Printf(TEXT("%s gate result"), *Label), bSucceeded, bExpectedSuccess);
+		bOk &= TestEqual(*FString::Printf(TEXT("%s action row count"), *Label), Actions.Num(), 1);
+		bOk &= TestEqual(*FString::Printf(TEXT("%s proof row count"), *Label), ProofRows.Num(), 1);
+		bOk &= TestEqual(*FString::Printf(TEXT("%s workflow error count"), *Label), Errors.Num(), bExpectedSuccess ? 0 : 1);
+
+		const TSharedPtr<FJsonObject> Row = Actions.Num() == 1 && Actions[0].IsValid()
+			? Actions[0]->AsObject()
+			: nullptr;
+		bOk &= TestTrue(*FString::Printf(TEXT("%s action row is an object"), *Label), Row.IsValid());
+		if (!Row.IsValid())
+		{
+			return;
+		}
+
+		FString RowStatus;
+		bOk &= TestTrue(*FString::Printf(TEXT("%s action row has status"), *Label), Row->TryGetStringField(TEXT("status"), RowStatus));
+		bOk &= TestEqual(
+			*FString::Printf(TEXT("%s action row status"), *Label),
+			RowStatus,
+			bExpectedSuccess ? FString(TEXT("succeeded")) : FString(TEXT("failed")));
+
+		const TSharedPtr<FJsonObject>* PreservedResult = nullptr;
+		const bool bPayloadPreserved = Row->TryGetObjectField(TEXT("result"), PreservedResult)
+			&& PreservedResult
+			&& PreservedResult->IsValid();
+		bOk &= TestEqual(
+			*FString::Printf(TEXT("%s semantic payload preservation"), *Label),
+			bPayloadPreserved,
+			bExpectedPayloadPreserved);
+
+		if (!bExpectedSuccess)
+		{
+			bool bTransportSuccess = false;
+			bool bSemanticOk = true;
+			const TArray<TSharedPtr<FJsonValue>>* SemanticFailures = nullptr;
+			bOk &= TestTrue(
+				*FString::Printf(TEXT("%s records transport success"), *Label),
+				Row->TryGetBoolField(TEXT("transport_success"), bTransportSuccess) && bTransportSuccess);
+			bOk &= TestTrue(
+				*FString::Printf(TEXT("%s records semantic failure"), *Label),
+				Row->TryGetBoolField(TEXT("semantic_ok"), bSemanticOk) && !bSemanticOk);
+			bOk &= TestTrue(
+				*FString::Printf(TEXT("%s records semantic failure reasons"), *Label),
+				Row->TryGetArrayField(TEXT("semantic_failures"), SemanticFailures)
+					&& SemanticFailures
+					&& SemanticFailures->Num() > 0);
+			if (!ExpectedFailureSubstring.IsEmpty())
+			{
+				bOk &= TestTrue(
+					*FString::Printf(TEXT("%s records exact semantic failure class"), *Label),
+					JsonStringArrayContainsSubstring(SemanticFailures, ExpectedFailureSubstring));
+			}
+			bOk &= TestTrue(
+				*FString::Printf(TEXT("%s promotes semantic failure into workflow errors"), *Label),
+				Errors.Num() > 0 && Errors[0].Contains(TEXT("semantic gate failed")));
+		}
+	};
+
+	TSharedPtr<FJsonObject> PassPayload = MakeShared<FJsonObject>();
+	PassPayload->SetBoolField(TEXT("ok"), true);
+	PassPayload->SetStringField(TEXT("status"), TEXT("pass"));
+	PassPayload->SetNumberField(TEXT("error_count"), 0);
+	PassPayload->SetArrayField(TEXT("errors"), {});
+	TSharedPtr<FJsonObject> NestedPassLeaf = MakeShared<FJsonObject>();
+	NestedPassLeaf->SetBoolField(TEXT("passed"), true);
+	NestedPassLeaf->SetStringField(TEXT("status"), TEXT("passed"));
+	NestedPassLeaf->SetNumberField(TEXT("error_count"), 0);
+	NestedPassLeaf->SetArrayField(TEXT("errors"), {});
+	TArray<TSharedPtr<FJsonValue>> NestedPassInner;
+	NestedPassInner.Add(MakeShared<FJsonValueObject>(NestedPassLeaf));
+	PassPayload->SetArrayField(
+		TEXT("nested"),
+		{ MakeShared<FJsonValueArray>(NestedPassInner) });
+	RunCase(TEXT("passing nested array payload"), PassPayload, true, TEXT(""), true);
+
+	const TArray<FString> BooleanFailureFields = {
+		TEXT("ok"),
+		TEXT("success"),
+		TEXT("bSuccess"),
+		TEXT("passed")
+	};
+	for (const FString& FieldName : BooleanFailureFields)
+	{
+		TSharedPtr<FJsonObject> FailureLeaf = MakeShared<FJsonObject>();
+		FailureLeaf->SetBoolField(FieldName, false);
+		TArray<TSharedPtr<FJsonValue>> InnerValues;
+		InnerValues.Add(MakeShared<FJsonValueObject>(FailureLeaf));
+		TSharedPtr<FJsonObject> FlagPayload = MakeShared<FJsonObject>();
+		FlagPayload->SetArrayField(TEXT("layers"), { MakeShared<FJsonValueArray>(InnerValues) });
+		RunCase(
+			FieldName + TEXT("=false in nested array"),
+			FlagPayload,
+			false,
+			TEXT("$.layers[0][0].") + FieldName + TEXT("=false"),
+			true);
+	}
+
+	const TArray<FString> FailureStatuses = {
+		TEXT("fail"),
+		TEXT("failed"),
+		TEXT("failure"),
+		TEXT("error"),
+		TEXT("errored"),
+		TEXT("critical"),
+		TEXT("fatal"),
+		TEXT("blocked"),
+		TEXT("unavailable"),
+		TEXT("invalid"),
+		TEXT("rejected"),
+		TEXT("cancelled"),
+		TEXT("canceled"),
+		TEXT("aborted"),
+		TEXT("timeout"),
+		TEXT("timed-out"),
+		TEXT("missing"),
+		TEXT("disabled"),
+		TEXT("unsupported"),
+		TEXT("issues"),
+		TEXT("not_found"),
+		TEXT("not-supported"),
+		TEXT("not available"),
+		TEXT("not_installed"),
+		TEXT("not_started"),
+		TEXT("reindex_not_started"),
+		TEXT("function_not_found"),
+		TEXT("no_editor_world"),
+		TEXT("module_not_loaded"),
+		TEXT("Preflight-Failed"),
+		TEXT("partial_failure"),
+		TEXT("launch_failed"),
+		TEXT("unavailable_render_path"),
+		TEXT("blocked_external_reporting_disabled")
+	};
+	for (const FString& FailureStatus : FailureStatuses)
+	{
+		TSharedPtr<FJsonObject> StatusPayload = MakeShared<FJsonObject>();
+		StatusPayload->SetStringField(TEXT("status"), FailureStatus);
+		RunCase(
+			FString::Printf(TEXT("status=%s"), *FailureStatus),
+			StatusPayload,
+			false,
+			TEXT("$.status=") + FailureStatus,
+			true);
+	}
+
+	TSharedPtr<FJsonObject> ErrorCountPayload = MakeShared<FJsonObject>();
+	ErrorCountPayload->SetNumberField(TEXT("error_count"), 2);
+	RunCase(TEXT("compile error_count"), ErrorCountPayload, false, TEXT("$.error_count=2"), true);
+
+	TSharedPtr<FJsonObject> ErrorsPayload = MakeShared<FJsonObject>();
+	ErrorsPayload->SetArrayField(TEXT("errors"), { MakeShared<FJsonValueString>(TEXT("compile failed")) });
+	RunCase(TEXT("compile errors array"), ErrorsPayload, false, TEXT("$.errors[1] is non-empty"), true);
+
+	for (const FString& Severity : { FString(TEXT("high")), FString(TEXT("error")) })
+	{
+		TSharedPtr<FJsonObject> RequiredFinding = MakeShared<FJsonObject>();
+		RequiredFinding->SetBoolField(TEXT("required"), true);
+		RequiredFinding->SetStringField(TEXT("severity"), Severity);
+		RequiredFinding->SetStringField(TEXT("message"), TEXT("Required proof is missing."));
+		TArray<TSharedPtr<FJsonValue>> FindingInner;
+		FindingInner.Add(MakeShared<FJsonValueObject>(RequiredFinding));
+		TSharedPtr<FJsonObject> RequiredFindingPayload = MakeShared<FJsonObject>();
+		RequiredFindingPayload->SetArrayField(
+			TEXT("findings"),
+			{ MakeShared<FJsonValueArray>(FindingInner) });
+		RunCase(
+			TEXT("required ") + Severity + TEXT(" finding in nested array"),
+			RequiredFindingPayload,
+			false,
+			TEXT("required ") + Severity + TEXT(" finding at $.findings[0][0]"),
+			true);
+	}
+
+	for (const TPair<bool, FString>& NonBlockingFinding : {
+		TPair<bool, FString>(false, TEXT("error")),
+		TPair<bool, FString>(true, TEXT("warning")) })
+	{
+		TSharedPtr<FJsonObject> Finding = MakeShared<FJsonObject>();
+		Finding->SetBoolField(TEXT("required"), NonBlockingFinding.Key);
+		Finding->SetStringField(TEXT("severity"), NonBlockingFinding.Value);
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetArrayField(TEXT("findings"), { MakeShared<FJsonValueObject>(Finding) });
+		RunCase(
+			FString::Printf(TEXT("required=%s severity=%s remains non-blocking"),
+				NonBlockingFinding.Key ? TEXT("true") : TEXT("false"),
+				*NonBlockingFinding.Value),
+			Payload,
+			true,
+			TEXT(""),
+			true);
+	}
+
+	auto RunMalformedFieldCase = [&RunCase](
+		const FString& Label,
+		const FString& FieldName,
+		const TSharedPtr<FJsonValue>& FieldValue,
+		const FString& ExpectedType)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetField(FieldName, FieldValue);
+		RunCase(
+			Label,
+			Payload,
+			false,
+			TEXT("malformed semantic field $.") + FieldName + TEXT(": expected ") + ExpectedType,
+			true);
+	};
+
+	RunMalformedFieldCase(TEXT("ok string is rejected"), TEXT("ok"), MakeShared<FJsonValueString>(TEXT("true")), TEXT("boolean"));
+	RunMalformedFieldCase(TEXT("success number is rejected"), TEXT("success"), MakeShared<FJsonValueNumber>(1.0), TEXT("boolean"));
+	RunMalformedFieldCase(TEXT("bSuccess null is rejected"), TEXT("bSuccess"), MakeShared<FJsonValueNull>(), TEXT("boolean"));
+	RunMalformedFieldCase(TEXT("passed array is rejected"), TEXT("passed"), MakeShared<FJsonValueArray>(TArray<TSharedPtr<FJsonValue>>{}), TEXT("boolean"));
+	RunMalformedFieldCase(TEXT("status boolean is rejected"), TEXT("status"), MakeShared<FJsonValueBoolean>(true), TEXT("string"));
+	RunMalformedFieldCase(TEXT("error_count string is rejected"), TEXT("error_count"), MakeShared<FJsonValueString>(TEXT("0")), TEXT("non-negative integer"));
+	RunMalformedFieldCase(TEXT("errors object is rejected"), TEXT("errors"), MakeShared<FJsonValueObject>(MakeShared<FJsonObject>()), TEXT("array"));
+	RunMalformedFieldCase(TEXT("findings object is rejected"), TEXT("findings"), MakeShared<FJsonValueObject>(MakeShared<FJsonObject>()), TEXT("array"));
+
+	TSharedPtr<FJsonObject> NestedMalformedLeaf = MakeShared<FJsonObject>();
+	NestedMalformedLeaf->SetBoolField(TEXT("status"), true);
+	TArray<TSharedPtr<FJsonValue>> NestedMalformedInner;
+	NestedMalformedInner.Add(MakeShared<FJsonValueObject>(NestedMalformedLeaf));
+	TSharedPtr<FJsonObject> NestedMalformedPayload = MakeShared<FJsonObject>();
+	NestedMalformedPayload->SetArrayField(
+		TEXT("layers"),
+		{ MakeShared<FJsonValueArray>(NestedMalformedInner) });
+	RunCase(
+		TEXT("nested malformed status is rejected"),
+		NestedMalformedPayload,
+		false,
+		TEXT("$.layers[0][0].status: expected string"),
+		true);
+
+	TSharedPtr<FJsonObject> EmptyStatusPayload = MakeShared<FJsonObject>();
+	EmptyStatusPayload->SetStringField(TEXT("status"), TEXT("  "));
+	RunCase(TEXT("empty status is rejected"), EmptyStatusPayload, false, TEXT("$.status is empty"), true);
+
+	for (const double InvalidErrorCount : { -1.0, 0.5 })
+	{
+		TSharedPtr<FJsonObject> InvalidErrorCountPayload = MakeShared<FJsonObject>();
+		InvalidErrorCountPayload->SetNumberField(TEXT("error_count"), InvalidErrorCount);
+		RunCase(
+			FString::Printf(TEXT("invalid error_count=%g"), InvalidErrorCount),
+			InvalidErrorCountPayload,
+			false,
+			TEXT("expected non-negative integer"),
+			true);
+	}
+
+	TSharedPtr<FJsonObject> MalformedRequiredFinding = MakeShared<FJsonObject>();
+	MalformedRequiredFinding->SetStringField(TEXT("required"), TEXT("true"));
+	MalformedRequiredFinding->SetStringField(TEXT("severity"), TEXT("error"));
+	TSharedPtr<FJsonObject> MalformedRequiredPayload = MakeShared<FJsonObject>();
+	MalformedRequiredPayload->SetArrayField(TEXT("findings"), { MakeShared<FJsonValueObject>(MalformedRequiredFinding) });
+	RunCase(
+		TEXT("required finding boolean type is enforced"),
+		MalformedRequiredPayload,
+		false,
+		TEXT("$.findings[0].required: expected boolean"),
+		true);
+
+	TSharedPtr<FJsonObject> MalformedSeverityFinding = MakeShared<FJsonObject>();
+	MalformedSeverityFinding->SetBoolField(TEXT("required"), true);
+	MalformedSeverityFinding->SetNumberField(TEXT("severity"), 3.0);
+	TSharedPtr<FJsonObject> MalformedSeverityPayload = MakeShared<FJsonObject>();
+	MalformedSeverityPayload->SetArrayField(TEXT("findings"), { MakeShared<FJsonValueObject>(MalformedSeverityFinding) });
+	RunCase(
+		TEXT("required finding severity type is enforced"),
+		MalformedSeverityPayload,
+		false,
+		TEXT("$.findings[0].severity: expected string"),
+		true);
+
+	TSharedPtr<FJsonObject> InvalidValuePayload = MakeShared<FJsonObject>();
+	InvalidValuePayload->Values.Add(TEXT("opaque"), TSharedPtr<FJsonValue>());
+	RunCase(
+		TEXT("invalid JSON value is rejected"),
+		InvalidValuePayload,
+		false,
+		TEXT("malformed JSON value at $.opaque"),
+		true);
+
+	TSharedPtr<FJsonValue> DeepValue = MakeShared<FJsonValueObject>(MakeShared<FJsonObject>());
+	for (int32 Depth = 0; Depth < 34; ++Depth)
+	{
+		DeepValue = MakeShared<FJsonValueArray>(TArray<TSharedPtr<FJsonValue>>{ DeepValue });
+	}
+	TSharedPtr<FJsonObject> DeepPayload = MakeShared<FJsonObject>();
+	DeepPayload->SetField(TEXT("deep"), DeepValue);
+	RunCase(
+		TEXT("depth budget fails closed"),
+		DeepPayload,
+		false,
+		TEXT("semantic payload depth budget exceeded"),
+		true);
+
+	TArray<TSharedPtr<FJsonValue>> WideValues;
+	WideValues.Reserve(16384);
+	for (int32 Index = 0; Index < 16384; ++Index)
+	{
+		WideValues.Add(MakeShared<FJsonValueNull>());
+	}
+	TSharedPtr<FJsonObject> WidePayload = MakeShared<FJsonObject>();
+	WidePayload->SetArrayField(TEXT("wide"), MoveTemp(WideValues));
+	RunCase(
+		TEXT("node budget fails closed"),
+		WidePayload,
+		false,
+		TEXT("semantic payload node budget exceeded"),
+		true);
+
+	RunCase(
+		TEXT("missing semantic payload fails closed"),
+		nullptr,
+		false,
+		TEXT("semantic payload is missing at $"),
+		false);
+
+	return bOk;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithWorkflowPrimitiveSemanticGateReadOnlyContractTest,
+	"Monolith.Workflow.PrimitiveSemanticGate.ReadOnlyContract",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithWorkflowPrimitiveSemanticGateReadOnlyContractTest::RunTest(const FString& Parameters)
+{
+	static const FString TestNamespace = TEXT("workflow_semantic_gate_read_test");
+	static const FString TestAction = TEXT("read_payload");
+	FMonolithScopedTestNamespace Scope(*TestNamespace);
+
+	bool bReturnTransportError = false;
+	TSharedPtr<FJsonObject> CurrentPayload = MakeShared<FJsonObject>();
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	Registry.RegisterAction(
+		TestNamespace,
+		TestAction,
+		TEXT("Return controlled transport and semantic results for read-only workflow primitive tests."),
+		FMonolithActionHandler::CreateLambda([&bReturnTransportError, &CurrentPayload](const TSharedPtr<FJsonObject>&)
+		{
+			return bReturnTransportError
+				? FMonolithActionResult::Error(TEXT("synthetic transport failure"), -32000)
+				: FMonolithActionResult::Success(CurrentPayload);
+		}));
+
+	bool bOk = true;
+	TSharedPtr<FJsonObject> NestedFailure = MakeShared<FJsonObject>();
+	NestedFailure->SetBoolField(TEXT("passed"), false);
+	TArray<TSharedPtr<FJsonValue>> FailureInner;
+	FailureInner.Add(MakeShared<FJsonValueObject>(NestedFailure));
+	CurrentPayload = MakeShared<FJsonObject>();
+	CurrentPayload->SetArrayField(TEXT("read_back"), { MakeShared<FJsonValueArray>(FailureInner) });
+
+	TSharedPtr<FJsonObject> Proof;
+	TArray<TSharedPtr<FJsonValue>> Actions;
+	TArray<FString> Errors;
+	const bool bSemanticSuccess = MonolithWorkflowActionsTestSupport::ExecuteReadOnlyPrimitiveForTest(
+		TestNamespace,
+		TestAction,
+		MakeShared<FJsonObject>(),
+		Proof,
+		Actions,
+		Errors);
+	bOk &= TestFalse(TEXT("read-only primitive rejects nested semantic failure"), bSemanticSuccess);
+	bOk &= TestTrue(TEXT("read-only semantic proof exists"), Proof.IsValid());
+	if (Proof.IsValid())
+	{
+		bool bTransportSuccess = false;
+		bool bSemanticOk = true;
+		const TArray<TSharedPtr<FJsonValue>>* SemanticFailures = nullptr;
+		bOk &= TestTrue(TEXT("read-only proof separates transport success"),
+			Proof->TryGetBoolField(TEXT("transport_success"), bTransportSuccess) && bTransportSuccess);
+		bOk &= TestTrue(TEXT("read-only proof records semantic failure"),
+			Proof->TryGetBoolField(TEXT("semantic_ok"), bSemanticOk) && !bSemanticOk);
+		bOk &= TestTrue(TEXT("read-only proof records nested passed=false path"),
+			Proof->TryGetArrayField(TEXT("semantic_failures"), SemanticFailures)
+				&& JsonStringArrayContainsSubstring(SemanticFailures, TEXT("$.read_back[0][0].passed=false")));
+		bOk &= TestEqual(TEXT("read-only proof status is failed"), Proof->GetStringField(TEXT("status")), TEXT("failed"));
+	}
+	bOk &= TestEqual(TEXT("read-only semantic failure emits one action row"), Actions.Num(), 1);
+	bOk &= TestTrue(TEXT("read-only semantic failure is promoted to workflow error"),
+		Errors.Num() == 1 && Errors[0].Contains(TEXT("semantic gate failed")));
+
+	bReturnTransportError = true;
+	Proof.Reset();
+	Actions.Reset();
+	Errors.Reset();
+	const bool bTransportSuccess = MonolithWorkflowActionsTestSupport::ExecuteReadOnlyPrimitiveForTest(
+		TestNamespace,
+		TestAction,
+		MakeShared<FJsonObject>(),
+		Proof,
+		Actions,
+		Errors);
+	bOk &= TestFalse(TEXT("read-only primitive preserves transport failure"), bTransportSuccess);
+	bOk &= TestTrue(TEXT("transport-failure proof exists"), Proof.IsValid());
+	if (Proof.IsValid())
+	{
+		bool bUnexpectedTransportField = false;
+		bOk &= TestFalse(TEXT("transport failure is not mislabeled as semantic transport success"),
+			Proof->TryGetBoolField(TEXT("transport_success"), bUnexpectedTransportField));
+		bOk &= TestEqual(TEXT("transport failure preserves error code"),
+			static_cast<int32>(Proof->GetNumberField(TEXT("error_code"))), -32000);
+		bOk &= TestEqual(TEXT("transport failure preserves error"),
+			Proof->GetStringField(TEXT("error")), TEXT("synthetic transport failure"));
+	}
+	bOk &= TestTrue(TEXT("transport failure is promoted without semantic-gate wording"),
+		Errors.Num() == 1
+			&& Errors[0].Contains(TEXT("synthetic transport failure"))
+			&& !Errors[0].Contains(TEXT("semantic gate failed")));
+
+	bReturnTransportError = false;
+	CurrentPayload = MakeShared<FJsonObject>();
+	CurrentPayload->SetBoolField(TEXT("passed"), true);
+	CurrentPayload->SetStringField(TEXT("status"), TEXT("pass"));
+	Proof.Reset();
+	Actions.Reset();
+	Errors.Reset();
+	const bool bReadSuccess = MonolithWorkflowActionsTestSupport::ExecuteReadOnlyPrimitiveForTest(
+		TestNamespace,
+		TestAction,
+		MakeShared<FJsonObject>(),
+		Proof,
+		Actions,
+		Errors);
+	bOk &= TestTrue(TEXT("read-only primitive accepts valid semantic payload"), bReadSuccess);
+	bOk &= TestTrue(TEXT("read-only valid proof reports success"),
+		Proof.IsValid() && Proof->GetBoolField(TEXT("success")));
+	bOk &= TestEqual(TEXT("read-only valid payload has no workflow errors"), Errors.Num(), 0);
 
 	return bOk;
 }

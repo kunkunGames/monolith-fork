@@ -20,7 +20,9 @@ adversarial failure modes score LOW while a healthy response scores high:
   error_path                    : an isError that does NOT name the offending identifier FAILS; one
                                   that names it PASSES (a reject-everything canned message cannot pass).
   duplicate_reject              : a server that silently succeeds on the 2nd create FAILS; one that
-                                  returns a duplicate isError PASSES.
+                                   returns a duplicate isError PASSES.
+  catalog_schema                : schema discovery must be a non-error response with planning/skill
+                                   metadata; failures lower only the unweighted full-catalog metric.
 
 The compile_gate is built entirely from REAL Behavior Tree validate actions
 (validate_behavior_tree); StateTree is compiled out on this build (WITH_STATETREE=0), so its
@@ -71,8 +73,107 @@ def with_mcp(rules: List[Any], fn):
         B.mcp_call = original
 
 
-def status_env() -> Dict[str, Any]:
-    return env({"server_running": True, "catalog_version": "sha256:test"})
+def status_env(catalog_version: str = "sha256:test") -> Dict[str, Any]:
+    """Return a healthy status bound to the local Speed project identity."""
+    return env({
+        "server_running": True,
+        "catalog_version": catalog_version,
+        "project_name": "Speed",
+    })
+
+
+def curated_schema_actions() -> List[str]:
+    return B.schema_discovery_actions(B.build_static_tasks())
+
+
+def fake_live_ai_actions(total: int = 182) -> List[str]:
+    curated = curated_schema_actions()
+    required_extras = [
+        "add_st_state",
+        "create_bt_from_template",
+        "create_state_tree",
+        "runtime_get_st_active_states",
+        "runtime_send_st_event",
+    ]
+    extras = list(required_extras)
+    suffix = 0
+    while len(curated) + len(extras) < total:
+        candidate = f"catalog_action_{suffix:03d}"
+        suffix += 1
+        if candidate not in curated and candidate not in extras:
+            extras.append(candidate)
+    assert len(curated) + len(extras) == total
+    return sorted(curated + extras)
+
+
+class GenerationMCP:
+    """Strict status/summary/paginated-actions/status fake for corpus generation."""
+
+    def __init__(
+        self,
+        live_actions: List[str],
+        *,
+        start_catalog_version: str = "sha256:test",
+        end_catalog_version: str = "sha256:test",
+        page_catalog_version: str = "sha256:test",
+    ) -> None:
+        self.live_actions = list(live_actions)
+        self.start_catalog_version = start_catalog_version
+        self.end_catalog_version = end_catalog_version
+        self.page_catalog_version = page_catalog_version
+        self.status_call_count = 0
+        self.calls: List[str] = []
+
+    def __call__(
+        self,
+        url: str,
+        tool: str,
+        arguments: Dict[str, Any],
+        timeout_s: float = 45.0,
+    ) -> Dict[str, Any]:
+        if tool == "monolith_status":
+            self.calls.append("monolith_status")
+            version = (
+                self.start_catalog_version
+                if self.status_call_count == 0
+                else self.end_catalog_version
+            )
+            self.status_call_count += 1
+            return status_env(version)
+        if tool != "monolith_discover":
+            raise AssertionError(f"unexpected generation tool: {tool}")
+        mode = arguments.get("mode")
+        if mode == "summary":
+            self.calls.append("monolith_discover:summary")
+            return env({
+                "catalog_version": self.start_catalog_version,
+                "namespaces": [{"namespace": "ai", "action_count": len(self.live_actions)}],
+                "total_actions": len(self.live_actions),
+            })
+        if mode == "actions" and arguments.get("namespace") == "ai":
+            self.calls.append("monolith_discover:actions")
+            offset = int(arguments.get("offset", 0))
+            limit = int(arguments.get("limit", 1000))
+            end = min(len(self.live_actions), offset + limit)
+            truncated = end < len(self.live_actions)
+            return env({
+                "catalog_version": self.page_catalog_version,
+                "actions": [
+                    {"action": action} for action in self.live_actions[offset:end]
+                ],
+                "truncated": truncated,
+                "next_offset": end if truncated else None,
+            })
+        raise AssertionError(f"unexpected generation discovery args: {arguments}")
+
+
+def with_generation_mcp(router: GenerationMCP, fn):
+    original = B.mcp_call
+    B.mcp_call = router
+    try:
+        return fn(router)
+    finally:
+        B.mcp_call = original
 
 
 def run_task(index: int) -> Dict[str, Any]:
@@ -772,6 +873,68 @@ def test_status_transport_rpc_error_and_invalid_payload_abort_before_tasks():
         assert calls == 0
 
 
+def test_canonical_stale_catalog_identity_aborts_before_task_calls():
+    task = run_task(1)
+    status_calls = 0
+    task_calls = 0
+
+    def fake_call(url, tool, arguments, timeout_s=45.0):
+        nonlocal status_calls
+        assert tool == "monolith_status", f"unexpected MCP call before catalog gate: {tool}"
+        status_calls += 1
+        return status_env("sha256:live")
+
+    def fake_score(url, scored_task, timeout_s):
+        nonlocal task_calls
+        task_calls += 1
+        return run_row(scored_task)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        output = root / "run"
+        corpus = B.TaskCorpus(
+            tasks=[task],
+            canonical=True,
+            comparable=True,
+            mode="canonical",
+            manifest={"catalog_version": "sha256:stale"},
+            manifest_path=root / "manifest.json",
+        )
+        original_load = B.load_task_corpus
+        original_call = B.mcp_call
+        original_score = B.score_task
+        B.load_task_corpus = lambda *args, **kwargs: corpus
+        B.mcp_call = fake_call
+        B.score_task = fake_score
+        try:
+            result = B.run_benchmark(
+                "http://unused",
+                root / "tasks.jsonl",
+                output,
+                "stale-catalog",
+                1.0,
+                require_fixtures=False,
+            )
+        finally:
+            B.load_task_corpus = original_load
+            B.mcp_call = original_call
+            B.score_task = original_score
+
+        failure = json.loads((output / "run_failure.json").read_text(encoding="utf-8"))
+        assert result["completion_status"] == "aborted_catalog_identity_mismatch"
+        assert result["failure_stage"] == "status_preflight"
+        assert result["failure_kind"] == "catalog_identity_mismatch"
+        assert result["completed_task_count"] == 0
+        assert result["expected_catalog_version"] == "sha256:stale"
+        assert result["observed_catalog_version"] == "sha256:live"
+        assert failure["failure_kind"] == "catalog_identity_mismatch"
+        assert status_calls == 1
+        assert task_calls == 0
+        assert not (output / "summary.json").exists()
+        assert not (output / "per_task.json").exists()
+        assert not (output / "per_task.jsonl").exists()
+
+
 def test_compile_cleanup_exception_invalidates_run_and_preserves_trigger_row():
     task = json.loads(json.dumps(NEG_GATE_TASK))
     task.update({
@@ -970,15 +1133,257 @@ def test_task_protocol_error_and_runner_exception_write_invalid_artifacts():
         assert not (exception_output / "summary.json").exists()
 
 
+def test_catalog_schema_scoring_is_strict_and_unweighted():
+    task = {
+        "id": "T-catalog-schema",
+        "category": "catalog_schema",
+        "namespace": "ai",
+        "action": "future_ai_action",
+        "tool": "monolith_discover",
+        "arguments": {"namespace": "ai", "action": "future_ai_action", "mode": "schema"},
+        "expected": {"requires_planning_signals": True, "requires_skill": True},
+        "safety": "read_only_discovery",
+        "subsystem": "catalog",
+        "description": "future action schema",
+    }
+
+    def run(scripted):
+        healthy = B.score_task("unused", task, 1.0)
+        assert healthy["direct_success"] is True
+
+    with_mcp([
+        (lambda tool, args: True,
+         env({"schema": {"planning_signals": ["skill:ai"], "skill": "ai"}})),
+    ], run)
+
+    def run_error(scripted):
+        failed = B.score_task("unused", task, 1.0)
+        assert failed["direct_success"] is False
+
+    with_mcp([
+        (lambda tool, args: True,
+         env({"schema": {"planning_signals": ["skill:ai"], "skill": "ai"}}, True)),
+    ], run_error)
+
+    healthy_rows = [
+        {"category": category, "direct_success": True, "transport_error": False,
+         "response_is_error": False, "subsystem": "catalog"}
+        for category in B.WEIGHTS
+    ]
+    healthy_tasks = [{"category": category} for category in B.WEIGHTS]
+    baseline = B.aggregate("baseline", {}, healthy_tasks, healthy_rows)
+    failed_catalog_row = {
+        "category": "catalog_schema", "direct_success": False, "transport_error": False,
+        "response_is_error": True, "subsystem": "catalog",
+    }
+    with_catalog = B.aggregate(
+        "catalog-failure", {}, healthy_tasks + [{"category": "catalog_schema"}],
+        healthy_rows + [failed_catalog_row],
+    )
+    assert baseline["metrics"]["ai_capability_score"] == 1.0
+    assert with_catalog["metrics"]["ai_capability_score"] == 1.0
+    assert with_catalog["metrics"]["catalog_schema_rate"] < 1.0
+
+
+def test_generate_closes_live_schema_coverage_and_preserves_curated_prefix():
+    curated_tasks = B.build_static_tasks()
+    live_actions = fake_live_ai_actions()
+    router = GenerationMCP(live_actions)
+
+    def run_generation(fake):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            manifest = B.generate_tasks(
+                "http://offline", root / "tasks.jsonl", root / "manifest.json"
+            )
+            generated_tasks = [
+                json.loads(line)
+                for line in (root / "tasks.jsonl").read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+        return manifest, generated_tasks
+
+    manifest, generated_tasks = with_generation_mcp(router, run_generation)
+    assert router.calls == [
+        "monolith_status",
+        "monolith_discover:summary",
+        "monolith_discover:actions",
+        "monolith_status",
+    ]
+    assert generated_tasks[:len(curated_tasks)] == curated_tasks
+    assert len(curated_tasks) == 74
+    assert len(generated_tasks) == 212
+    assert [task["id"] for task in generated_tasks] == [
+        f"AIB-{index:03d}" for index in range(1, 213)
+    ]
+    appended = generated_tasks[len(curated_tasks):]
+    expected_added = sorted(set(live_actions) - set(curated_schema_actions()))
+    assert [task["action"] for task in appended] == expected_added
+    assert all(task["category"] == "catalog_schema" for task in appended)
+    assert all(task["tool"] == "monolith_discover" for task in appended)
+    assert all(task["safety"] == "read_only_discovery" for task in appended)
+    assert all(task["arguments"] == {
+        "action": task["action"], "mode": "schema", "namespace": "ai",
+    } for task in appended)
+    assert B.schema_discovery_actions(generated_tasks) == sorted(live_actions)
+    assert manifest["task_count"] == 212
+    assert manifest["curated_task_count"] == 74
+    assert manifest["catalog_action_count"] == 182
+    assert manifest["category_counts"]["catalog_schema"] == 138
+    validation = manifest["catalog_validation"]
+    assert validation["live_action_count"] == 182
+    assert validation["preexisting_schema_covered_action_count"] == 44
+    assert validation["generated_schema_coverage_count"] == 138
+    assert validation["schema_covered_action_count"] == 182
+    assert validation["uncovered_action_count"] == 0
+    assert validation["uncovered_actions"] == []
+    assert manifest["weights"] == B.WEIGHTS
+    assert manifest["score_dimensions"] == B.SCORE_DIMENSIONS
+
+    for state_tree_action in ("add_st_state", "create_state_tree"):
+        matches = [task for task in generated_tasks if task["action"] == state_tree_action]
+        assert len(matches) == 1
+        assert matches[0]["category"] == "catalog_schema"
+        assert matches[0]["tool"] == "monolith_discover"
+
+
+def test_checked_in_canonical_has_verified_182_of_182_schema_coverage():
+    tasks_path = B.resolve_plugin_path(B.DEFAULT_TASKS)
+    manifest_path = B.resolve_plugin_path(B.DEFAULT_MANIFEST)
+    canonical_tasks = B.load_jsonl(tasks_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    curated_tasks = B.build_static_tasks()
+    schema_actions = B.schema_discovery_actions(canonical_tasks)
+
+    assert len(curated_tasks) == 74
+    assert canonical_tasks[:74] == curated_tasks
+    assert len(canonical_tasks) == 212
+    assert [task["id"] for task in canonical_tasks] == [
+        f"AIB-{index:03d}" for index in range(1, 213)
+    ]
+    assert len(schema_actions) == 182
+    assert len(set(schema_actions)) == 182
+    assert manifest["task_count"] == 212
+    assert manifest["curated_task_count"] == 74
+    assert manifest["catalog_action_count"] == 182
+    assert manifest["category_counts"] == {
+        "catalog_schema": 138,
+        "compile_gate": 2,
+        "discovery": 6,
+        "duplicate_reject": 4,
+        "edit_execute": 10,
+        "edit_schema": 28,
+        "error_path": 8,
+        "read_schema": 16,
+    }
+    assert manifest["catalog_action_set_sha256"] == B.action_set_sha256(schema_actions)
+    validation = manifest["catalog_validation"]
+    assert validation["live_action_count"] == 182
+    assert validation["schema_covered_action_count"] == 182
+    assert validation["preexisting_schema_covered_action_count"] == 44
+    assert validation["generated_schema_coverage_count"] == 138
+    assert validation["uncovered_action_count"] == 0
+    assert validation["uncovered_actions"] == []
+    assert validation["generated_schema_coverage_actions"] == [
+        task["action"] for task in canonical_tasks[74:]
+    ]
+
+
+def test_generate_rejects_missing_curated_action_without_overwrite():
+    live_actions = [
+        action for action in fake_live_ai_actions() if action != "get_blackboard"
+    ]
+    router = GenerationMCP(live_actions)
+
+    def run_generation(fake):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            tasks_path = root / "tasks.jsonl"
+            manifest_path = root / "manifest.json"
+            tasks_path.write_text("TASKS_SENTINEL\n", encoding="utf-8")
+            manifest_path.write_text("MANIFEST_SENTINEL\n", encoding="utf-8")
+            try:
+                B.generate_tasks("http://offline", tasks_path, manifest_path)
+            except RuntimeError as exc:
+                error = str(exc)
+            else:
+                raise AssertionError("missing curated live action must fail generation")
+            assert "get_blackboard" in error
+            assert tasks_path.read_text(encoding="utf-8") == "TASKS_SENTINEL\n"
+            assert manifest_path.read_text(encoding="utf-8") == "MANIFEST_SENTINEL\n"
+
+    with_generation_mcp(router, run_generation)
+
+
+def test_generate_rejects_catalog_drift_without_overwrite():
+    router = GenerationMCP(
+        fake_live_ai_actions(),
+        start_catalog_version="sha256:start",
+        end_catalog_version="sha256:end",
+        page_catalog_version="sha256:start",
+    )
+
+    def run_generation(fake):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            tasks_path = root / "tasks.jsonl"
+            manifest_path = root / "manifest.json"
+            tasks_path.write_text("TASKS_SENTINEL\n", encoding="utf-8")
+            manifest_path.write_text("MANIFEST_SENTINEL\n", encoding="utf-8")
+            try:
+                B.generate_tasks("http://offline", tasks_path, manifest_path)
+            except RuntimeError as exc:
+                error = str(exc)
+            else:
+                raise AssertionError("catalog drift must fail generation")
+            assert "catalog changed during generation" in error
+            assert tasks_path.read_text(encoding="utf-8") == "TASKS_SENTINEL\n"
+            assert manifest_path.read_text(encoding="utf-8") == "MANIFEST_SENTINEL\n"
+
+    with_generation_mcp(router, run_generation)
+
+
+def test_generate_rejects_transport_failure_without_overwrite():
+    def run_generation(fake):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            tasks_path = root / "tasks.jsonl"
+            manifest_path = root / "manifest.json"
+            tasks_path.write_text("TASKS_SENTINEL\n", encoding="utf-8")
+            manifest_path.write_text("MANIFEST_SENTINEL\n", encoding="utf-8")
+            try:
+                B.generate_tasks("http://offline", tasks_path, manifest_path)
+            except RuntimeError as exc:
+                error = str(exc)
+            else:
+                raise AssertionError("catalog transport failure must fail generation")
+            assert "transport_error" in error
+            assert tasks_path.read_text(encoding="utf-8") == "TASKS_SENTINEL\n"
+            assert manifest_path.read_text(encoding="utf-8") == "MANIFEST_SENTINEL\n"
+
+    with_mcp([
+        (lambda tool, args: tool == "monolith_status",
+         {"transport_error": True, "raw": "editor endpoint unavailable"}),
+    ], run_generation)
+
+
 def test_manifest_run_gates_match_runner_defaults():
-    with tempfile.TemporaryDirectory() as tmp:
-        root = pathlib.Path(tmp)
-        manifest = B.generate_tasks(root / "tasks.jsonl", root / "manifest.json")
-        gates = manifest["run_gates"]
-        assert gates["max_transport_failed_fraction"] == B.DEFAULT_MAX_TRANSPORT_FAILED_FRACTION
-        assert gates["max_consecutive_transport_failures"] == B.DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES
-        assert gates["min_transport_fraction_sample"] == B.DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES
-        assert gates["invalid_run_writes_summary"] is False
+    router = GenerationMCP(fake_live_ai_actions())
+
+    def run_generation(fake):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            return B.generate_tasks(
+                "http://offline", root / "tasks.jsonl", root / "manifest.json"
+            )
+
+    manifest = with_generation_mcp(router, run_generation)
+    gates = manifest["run_gates"]
+    assert gates["max_transport_failed_fraction"] == B.DEFAULT_MAX_TRANSPORT_FAILED_FRACTION
+    assert gates["max_consecutive_transport_failures"] == B.DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES
+    assert gates["min_transport_fraction_sample"] == B.DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES
+    assert gates["invalid_run_writes_summary"] is False
+    assert gates["canonical_catalog_version_mismatch_aborts_before_tasks"] is True
 
 
 def test_main_returns_nonzero_for_invalid_run():

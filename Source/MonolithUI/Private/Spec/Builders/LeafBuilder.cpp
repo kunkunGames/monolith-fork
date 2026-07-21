@@ -3,7 +3,7 @@
 //
 // Phase H — leaf + content widget sub-builder. Constructs the widget,
 // attaches it under its parent, applies the FUISpecContent sub-bag fields
-// (text / font size / brush). Most heavy lifting goes through the same
+// (text / font / layout / brush). Most heavy lifting goes through the same
 // reflection helper the property-write action uses, so any field the
 // allowlist exposes is writable here too.
 
@@ -46,6 +46,7 @@
 #include "WidgetBlueprint.h"
 
 #include "Materials/MaterialInterface.h"
+#include "Engine/Font.h"
 #include "Engine/Texture2D.h"
 
 #include "Dom/JsonObject.h"
@@ -74,6 +75,37 @@ namespace MonolithUI::LeafBuilderInternal
         return Token == TEXT("Wrap") || Token == TEXT("WrapAtWordBoundary");
     }
 
+    static bool TryParseTextJustification(const FName& Token, ETextJustify::Type& OutJustification)
+    {
+        const FString Value = Token.ToString();
+        if (Value == TEXT("Left"))
+        {
+            OutJustification = ETextJustify::Left;
+            return true;
+        }
+        if (Value == TEXT("Center"))
+        {
+            OutJustification = ETextJustify::Center;
+            return true;
+        }
+        if (Value == TEXT("Right"))
+        {
+            OutJustification = ETextJustify::Right;
+            return true;
+        }
+        if (Value == TEXT("InvariantLeft"))
+        {
+            OutJustification = ETextJustify::InvariantLeft;
+            return true;
+        }
+        if (Value == TEXT("InvariantRight"))
+        {
+            OutJustification = ETextJustify::InvariantRight;
+            return true;
+        }
+        return false;
+    }
+
     template <typename SlotType>
     static void ApplyAlignmentAndPadding(const FUISpecSlot& S, SlotType* Slot)
     {
@@ -89,7 +121,7 @@ namespace MonolithUI::LeafBuilderInternal
         {
             Slot->SetVerticalAlignment(MonolithUI::ParseVAlign(S.VAlign.ToString()));
         }
-        if (HasAnyPadding(S.Padding))
+        if (S.bPaddingSpecified || HasAnyPadding(S.Padding))
         {
             Slot->SetPadding(S.Padding);
         }
@@ -338,13 +370,59 @@ namespace MonolithUI::LeafBuilderInternal
             {
                 T->SetText(FText::FromString(C.Text));
             }
+            FSlateFontInfo Font = T->GetFont();
             if (C.FontSize > 0.f)
             {
-                FSlateFontInfo F = T->GetFont();
-                F.Size = (int32)C.FontSize;
-                T->SetFont(F);
+                Font.Size = C.FontSize;
             }
+            if (!C.FontFamily.IsEmpty())
+            {
+                UFont* FontObject = FMonolithAssetUtils::LoadAssetByPath<UFont>(C.FontFamily);
+                if (!FontObject)
+                {
+                    FUISpecError E;
+                    E.Severity = EUISpecErrorSeverity::Error;
+                    E.Category = TEXT("Asset");
+                    E.WidgetId = Node.Id;
+                    E.Message = FString::Printf(
+                        TEXT("TextBlock font-family asset '%s' could not be loaded as UFont."),
+                        *C.FontFamily);
+                    E.SuggestedFix = TEXT("Provide a valid UFont object path in content.fontFamily.");
+                    Context.Errors.Add(MoveTemp(E));
+                    return;
+                }
+                Font.FontObject = FontObject;
+            }
+            if (!C.Typeface.IsNone())
+            {
+                Font.TypefaceFontName = C.Typeface;
+            }
+            Font.LetterSpacing = C.LetterSpacing;
+            Font.OutlineSettings.OutlineSize = C.OutlineSize;
+            Font.OutlineSettings.OutlineColor = C.OutlineColor;
+            T->SetFont(Font);
             T->SetColorAndOpacity(FSlateColor(C.FontColor));
+            ETextJustify::Type Justification = ETextJustify::Left;
+            if (!TryParseTextJustification(C.Justification, Justification))
+            {
+                FUISpecError E;
+                E.Severity = EUISpecErrorSeverity::Error;
+                E.Category = TEXT("Content");
+                E.WidgetId = Node.Id;
+                E.Message = FString::Printf(
+                    TEXT("TextBlock justification token '%s' is invalid."),
+                    *C.Justification.ToString());
+                E.SuggestedFix = TEXT("Use Left, Center, Right, InvariantLeft, or InvariantRight.");
+                E.ValidOptions = {
+                    TEXT("Left"), TEXT("Center"), TEXT("Right"),
+                    TEXT("InvariantLeft"), TEXT("InvariantRight") };
+                Context.Errors.Add(MoveTemp(E));
+                return;
+            }
+            T->SetJustification(Justification);
+            T->SetShadowOffset(C.ShadowOffset);
+            T->SetShadowColorAndOpacity(C.ShadowColor);
+            T->SetLineHeightPercentage(C.LineHeightPercentage);
             if (!C.WrapMode.IsNone())
             {
                 T->SetAutoWrapText(IsWrapModeEnabled(C.WrapMode));
@@ -505,7 +583,7 @@ namespace MonolithUI::LeafBuilderInternal
             {
                 Border->SetBrushColor(S.Background);
             }
-            if (HasAnyPadding(S.Padding))
+            if (S.bPaddingSpecified || HasAnyPadding(S.Padding))
             {
                 Border->SetPadding(S.Padding);
             }

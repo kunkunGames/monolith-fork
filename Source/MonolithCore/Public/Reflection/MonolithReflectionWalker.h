@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+﻿// SPDX-License-Identifier: MIT
 // FMonolithReflectionWalker — JSON-tree -> FProperty schema walker.
 // Game-thread only. Adapters in Phases 1-5 invoke WriteTree / InspectTree / DescribeStruct.
 

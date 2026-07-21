@@ -33,6 +33,11 @@ namespace
 		return MakeShared<FJsonValueNumber>(Value);
 	}
 
+	TSharedPtr<FJsonValue> JsonNull()
+	{
+		return MakeShared<FJsonValueNull>();
+	}
+
 	TSharedPtr<FJsonValue> JsonObjectValue(const TSharedPtr<FJsonObject>& Object)
 	{
 		return MakeShared<FJsonValueObject>(Object);
@@ -87,6 +92,55 @@ namespace
 		Tree->SetStringField(TEXT("SoftTexture"), TEXT("Texture2D'/Engine/EngineResources/DefaultTexture.DefaultTexture'"));
 		Tree->SetStringField(TEXT("EnumValue"), HeavyToken);
 		Tree->SetObjectField(TEXT("Nested"), MakeNestedObject(7, TEXT("Inner")));
+		return Tree;
+	}
+
+	TSharedPtr<FJsonObject> MakeClassReferenceTree(const FString& ClassPath)
+	{
+		TSharedPtr<FJsonObject> HardMap = MakeShared<FJsonObject>();
+		HardMap->SetStringField(TEXT("Entry"), ClassPath);
+		TSharedPtr<FJsonObject> SoftMap = MakeShared<FJsonObject>();
+		SoftMap->SetStringField(TEXT("Entry"), ClassPath);
+
+		TSharedPtr<FJsonObject> Nested = MakeShared<FJsonObject>();
+		Nested->SetStringField(TEXT("HardActorClass"), ClassPath);
+		Nested->SetStringField(TEXT("NestedLabel"), TEXT("ChangedByRequest"));
+		Nested->SetStringField(TEXT("SoftActorClass"), ClassPath);
+
+		TSharedPtr<FJsonObject> Tree = MakeShared<FJsonObject>();
+		Tree->SetStringField(TEXT("HardActorClass"), ClassPath);
+		Tree->SetStringField(TEXT("SoftActorClass"), ClassPath);
+		Tree->SetArrayField(TEXT("HardActorClassArray"), {JsonString(ClassPath)});
+		Tree->SetArrayField(TEXT("SoftActorClassArray"), {JsonString(ClassPath)});
+		Tree->SetObjectField(TEXT("HardActorClassMap"), HardMap);
+		Tree->SetObjectField(TEXT("SoftActorClassMap"), SoftMap);
+		Tree->SetArrayField(TEXT("HardActorClassSet"), {JsonString(ClassPath)});
+		Tree->SetArrayField(TEXT("SoftActorClassSet"), {JsonString(ClassPath)});
+		Tree->SetObjectField(TEXT("Nested"), Nested);
+		return Tree;
+	}
+
+	TSharedPtr<FJsonObject> MakeNullClassReferenceTree()
+	{
+		TSharedPtr<FJsonObject> HardMap = MakeShared<FJsonObject>();
+		HardMap->SetField(TEXT("Entry"), JsonNull());
+		TSharedPtr<FJsonObject> SoftMap = MakeShared<FJsonObject>();
+		SoftMap->SetField(TEXT("Entry"), JsonNull());
+
+		TSharedPtr<FJsonObject> Nested = MakeShared<FJsonObject>();
+		Nested->SetField(TEXT("HardActorClass"), JsonNull());
+		Nested->SetField(TEXT("SoftActorClass"), JsonNull());
+
+		TSharedPtr<FJsonObject> Tree = MakeShared<FJsonObject>();
+		Tree->SetField(TEXT("HardActorClass"), JsonNull());
+		Tree->SetField(TEXT("SoftActorClass"), JsonNull());
+		Tree->SetArrayField(TEXT("HardActorClassArray"), {JsonNull()});
+		Tree->SetArrayField(TEXT("SoftActorClassArray"), {JsonNull()});
+		Tree->SetObjectField(TEXT("HardActorClassMap"), HardMap);
+		Tree->SetObjectField(TEXT("SoftActorClassMap"), SoftMap);
+		Tree->SetArrayField(TEXT("HardActorClassSet"), {JsonNull()});
+		Tree->SetArrayField(TEXT("SoftActorClassSet"), {JsonNull()});
+		Tree->SetObjectField(TEXT("Nested"), Nested);
 		return Tree;
 	}
 
@@ -287,6 +341,171 @@ bool FMonolithReflectionWalkerDryRunNoSideEffectsTest::RunTest(const FString& /*
 	TestEqual(TEXT("EnumValue unchanged"), Object->EnumValue, EMonolithReflectionWalkerTestEnum::Light);
 	TestEqual(TEXT("NestedCount unchanged"), Object->Nested.NestedCount, 1);
 	TestEqual(TEXT("NestedLabel unchanged"), Object->Nested.NestedLabel, FString(TEXT("BeforeNested")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithReflectionWalkerClassMetaRejectsWithoutMutationTest,
+	"Leviathan.Monolith.Reflection.ClassMetaConstraintsRejectWithoutMutation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithReflectionWalkerClassMetaRejectsWithoutMutationTest::RunTest(const FString& /*Parameters*/)
+{
+	UMonolithReflectionWalkerTestObject* Object = NewObject<UMonolithReflectionWalkerTestObject>();
+	TestNotNull(TEXT("fixture object"), Object);
+	if (!Object)
+	{
+		return false;
+	}
+
+	const TSoftClassPtr<AActor> OriginalSoftClass(AActor::StaticClass());
+	Object->HardActorClass = AActor::StaticClass();
+	Object->SoftActorClass = OriginalSoftClass;
+	Object->HardActorClassArray = {AActor::StaticClass()};
+	Object->SoftActorClassArray = {OriginalSoftClass};
+	Object->HardActorClassMap.Add(FName(TEXT("Original")), AActor::StaticClass());
+	Object->SoftActorClassMap.Add(FName(TEXT("Original")), OriginalSoftClass);
+	Object->HardActorClassSet.Add(AActor::StaticClass());
+	Object->SoftActorClassSet.Add(OriginalSoftClass);
+	Object->Nested.HardActorClass = AActor::StaticClass();
+	Object->Nested.SoftActorClass = OriginalSoftClass;
+	Object->Nested.NestedLabel = TEXT("OriginalNested");
+
+	const FDryRunReport Report = FMonolithReflectionWalker::WriteTree(
+		MakeClassReferenceTree(UTexture2D::StaticClass()->GetPathName()),
+		UMonolithReflectionWalkerTestObject::StaticClass(), Object, Object, MakeSpec(true));
+
+	TestTrue(TEXT("incompatible hard/soft class paths report errors"), Report.Errors > 0);
+	TestFalse(TEXT("strict class errors block apply"), Report.bWouldApply);
+	TestFalse(TEXT("at least one class write is rejected"), AllWritesOk(Report));
+
+	TestEqual(TEXT("direct hard class unchanged"), Object->HardActorClass.Get(), AActor::StaticClass());
+	TestEqual(TEXT("direct soft class unchanged"), Object->SoftActorClass.Get(), AActor::StaticClass());
+	TestEqual(TEXT("hard class array count unchanged"), Object->HardActorClassArray.Num(), 1);
+	TestEqual(TEXT("hard class array value unchanged"), Object->HardActorClassArray[0].Get(), AActor::StaticClass());
+	TestEqual(TEXT("soft class array count unchanged"), Object->SoftActorClassArray.Num(), 1);
+	TestEqual(TEXT("soft class array value unchanged"), Object->SoftActorClassArray[0].Get(), AActor::StaticClass());
+
+	TestEqual(TEXT("hard class map count unchanged"), Object->HardActorClassMap.Num(), 1);
+	const TSubclassOf<AActor>* HardMapValue = Object->HardActorClassMap.Find(FName(TEXT("Original")));
+	TestNotNull(TEXT("hard class map original entry remains"), HardMapValue);
+	if (HardMapValue)
+	{
+		TestEqual(TEXT("hard class map value unchanged"), HardMapValue->Get(), AActor::StaticClass());
+	}
+	TestFalse(TEXT("hard class map rejected entry absent"), Object->HardActorClassMap.Contains(FName(TEXT("Entry"))));
+
+	TestEqual(TEXT("soft class map count unchanged"), Object->SoftActorClassMap.Num(), 1);
+	const TSoftClassPtr<AActor>* SoftMapValue = Object->SoftActorClassMap.Find(FName(TEXT("Original")));
+	TestNotNull(TEXT("soft class map original entry remains"), SoftMapValue);
+	if (SoftMapValue)
+	{
+		TestEqual(TEXT("soft class map value unchanged"), SoftMapValue->Get(), AActor::StaticClass());
+	}
+	TestFalse(TEXT("soft class map rejected entry absent"), Object->SoftActorClassMap.Contains(FName(TEXT("Entry"))));
+
+	TestEqual(TEXT("hard class set count unchanged"), Object->HardActorClassSet.Num(), 1);
+	for (const TSubclassOf<AActor>& ClassValue : Object->HardActorClassSet)
+	{
+		TestEqual(TEXT("hard class set value unchanged"), ClassValue.Get(), AActor::StaticClass());
+	}
+	TestEqual(TEXT("soft class set count unchanged"), Object->SoftActorClassSet.Num(), 1);
+	for (const TSoftClassPtr<AActor>& ClassValue : Object->SoftActorClassSet)
+	{
+		TestEqual(TEXT("soft class set value unchanged"), ClassValue.Get(), AActor::StaticClass());
+	}
+
+	TestEqual(TEXT("nested hard class unchanged"), Object->Nested.HardActorClass.Get(), AActor::StaticClass());
+	TestEqual(TEXT("nested soft class unchanged"), Object->Nested.SoftActorClass.Get(), AActor::StaticClass());
+	TestEqual(TEXT("nested sibling write is rolled back"), Object->Nested.NestedLabel, FString(TEXT("OriginalNested")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithReflectionWalkerClassMetaAcceptsValidAndNullTest,
+	"Leviathan.Monolith.Reflection.ClassMetaConstraintsAcceptValidAndNull",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithReflectionWalkerClassMetaAcceptsValidAndNullTest::RunTest(const FString& /*Parameters*/)
+{
+	UMonolithReflectionWalkerTestObject* Object = NewObject<UMonolithReflectionWalkerTestObject>();
+	TestNotNull(TEXT("fixture object"), Object);
+	if (!Object)
+	{
+		return false;
+	}
+
+	const FDryRunReport ValidReport = FMonolithReflectionWalker::WriteTree(
+		MakeClassReferenceTree(AActor::StaticClass()->GetPathName()),
+		UMonolithReflectionWalkerTestObject::StaticClass(), Object, Object, MakeSpec(true));
+
+	TestEqual(TEXT("valid class write errors"), ValidReport.Errors, 0);
+	TestTrue(TEXT("valid class writes apply"), ValidReport.bWouldApply);
+	TestTrue(TEXT("all valid class writes accepted"), AllWritesOk(ValidReport));
+	TestEqual(TEXT("direct hard class set"), Object->HardActorClass.Get(), AActor::StaticClass());
+	TestEqual(TEXT("direct soft class set"), Object->SoftActorClass.Get(), AActor::StaticClass());
+	TestEqual(TEXT("hard class array set"), Object->HardActorClassArray[0].Get(), AActor::StaticClass());
+	TestEqual(TEXT("soft class array set"), Object->SoftActorClassArray[0].Get(), AActor::StaticClass());
+	const TSubclassOf<AActor>* HardMapValue = Object->HardActorClassMap.Find(FName(TEXT("Entry")));
+	TestNotNull(TEXT("valid hard class map entry"), HardMapValue);
+	if (HardMapValue)
+	{
+		TestEqual(TEXT("valid hard class map value"), HardMapValue->Get(), AActor::StaticClass());
+	}
+	const TSoftClassPtr<AActor>* SoftMapValue = Object->SoftActorClassMap.Find(FName(TEXT("Entry")));
+	TestNotNull(TEXT("valid soft class map entry"), SoftMapValue);
+	if (SoftMapValue)
+	{
+		TestEqual(TEXT("valid soft class map value"), SoftMapValue->Get(), AActor::StaticClass());
+	}
+	for (const TSubclassOf<AActor>& ClassValue : Object->HardActorClassSet)
+	{
+		TestEqual(TEXT("valid hard class set value"), ClassValue.Get(), AActor::StaticClass());
+	}
+	for (const TSoftClassPtr<AActor>& ClassValue : Object->SoftActorClassSet)
+	{
+		TestEqual(TEXT("valid soft class set value"), ClassValue.Get(), AActor::StaticClass());
+	}
+	TestEqual(TEXT("valid nested hard class"), Object->Nested.HardActorClass.Get(), AActor::StaticClass());
+	TestEqual(TEXT("valid nested soft class"), Object->Nested.SoftActorClass.Get(), AActor::StaticClass());
+
+	const FDryRunReport NullReport = FMonolithReflectionWalker::WriteTree(
+		MakeNullClassReferenceTree(), UMonolithReflectionWalkerTestObject::StaticClass(), Object, Object,
+		MakeSpec(true));
+
+	TestEqual(TEXT("null class write errors"), NullReport.Errors, 0);
+	TestTrue(TEXT("null class writes apply"), NullReport.bWouldApply);
+	TestTrue(TEXT("all null class writes accepted"), AllWritesOk(NullReport));
+	TestNull(TEXT("direct hard class cleared"), Object->HardActorClass.Get());
+	TestTrue(TEXT("direct soft class cleared"), Object->SoftActorClass.IsNull());
+	TestEqual(TEXT("null hard class array count"), Object->HardActorClassArray.Num(), 1);
+	TestNull(TEXT("null hard class array element"), Object->HardActorClassArray[0].Get());
+	TestEqual(TEXT("null soft class array count"), Object->SoftActorClassArray.Num(), 1);
+	TestTrue(TEXT("null soft class array element"), Object->SoftActorClassArray[0].IsNull());
+	HardMapValue = Object->HardActorClassMap.Find(FName(TEXT("Entry")));
+	TestNotNull(TEXT("null hard class map entry exists"), HardMapValue);
+	if (HardMapValue)
+	{
+		TestNull(TEXT("null hard class map value"), HardMapValue->Get());
+	}
+	SoftMapValue = Object->SoftActorClassMap.Find(FName(TEXT("Entry")));
+	TestNotNull(TEXT("null soft class map entry exists"), SoftMapValue);
+	if (SoftMapValue)
+	{
+		TestTrue(TEXT("null soft class map value"), SoftMapValue->IsNull());
+	}
+	TestEqual(TEXT("null hard class set count"), Object->HardActorClassSet.Num(), 1);
+	for (const TSubclassOf<AActor>& ClassValue : Object->HardActorClassSet)
+	{
+		TestNull(TEXT("null hard class set value"), ClassValue.Get());
+	}
+	TestEqual(TEXT("null soft class set count"), Object->SoftActorClassSet.Num(), 1);
+	for (const TSoftClassPtr<AActor>& ClassValue : Object->SoftActorClassSet)
+	{
+		TestTrue(TEXT("null soft class set value"), ClassValue.IsNull());
+	}
+	TestNull(TEXT("nested hard class cleared"), Object->Nested.HardActorClass.Get());
+	TestTrue(TEXT("nested soft class cleared"), Object->Nested.SoftActorClass.IsNull());
 	return true;
 }
 

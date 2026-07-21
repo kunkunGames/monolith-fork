@@ -16,6 +16,23 @@
 
 namespace MonolithBulkFillActionsInternal
 {
+	static FMonolithActionExecutionPolicy MakeBulkFillDispatchPolicy()
+	{
+		FMonolithActionExecutionPolicy Policy;
+		Policy.PolicyId = TEXT("track_dirty_packages");
+		Policy.bDefaulted = false;
+		Policy.bDirtyPackageTracking = true;
+		// Each adapter owns the only transaction around its preflighted mutation.
+		// UE coalesces nested FScopedTransaction scopes into one buffer entry; an
+		// inner Cancel(Index > 0) warns that partial cancellation is unsupported
+		// and cancels the entire outer transaction. One owner keeps cancellation
+		// and the undo title unambiguous.
+		Policy.bTransactionWrapping = false;
+		Policy.bPostEditValidation = false;
+		Policy.bEnforced = true;
+		return Policy;
+	}
+
 	static TSharedPtr<FJsonObject> BuildBulkFillSchema()
 	{
 		return FParamSchemaBuilder()
@@ -435,9 +452,11 @@ void FMonolithBulkFillActions::RegisterAll()
 	Reg.RegisterAction(
 		TEXT("bulk_fill"),
 		TEXT("apply"),
-		TEXT("Apply a JSON-tree fill to an asset via the target namespace's adapter. Supports dry_run + strict."),
+		TEXT("Apply a JSON-tree fill through the target namespace adapter, which owns the single undo transaction. The registry tracks dirty packages and supports dry_run + strict."),
 		FMonolithActionHandler::CreateStatic(&HandleBulkFillApply),
-		BuildBulkFillSchema());
+		BuildBulkFillSchema(),
+		FString(),
+		MakeBulkFillDispatchPolicy());
 
 	Reg.RegisterAction(
 		TEXT("bulk_fill"),

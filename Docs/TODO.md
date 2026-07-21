@@ -625,7 +625,7 @@ The mesh module ships horror defaults (storytelling patterns, room templates, ac
 
 - [x] **Automation status/history (2026-05-19)** — `editor.run_automation_tests` now records `run_id`, state/progress counters, compact recent history, and last-run summaries. Added `editor.get_automation_run_status`, `editor.stop_automation_tests` structured no-op cancellation contract, and `editor.list_automation_history`.
 - [x] **Live Coding diagnostics (2026-05-19)** — `editor.get_live_coding_diagnostics` returns normalized Live Coding state, availability/enabled flags, fresh compile log excerpts, diagnostic freshness, and explicit no-UBT-scrape metadata.
-- [ ] **Automation async cancellation** — Deferred until Monolith has an async automation runner. Current synchronous runner reports `stop_status="unsupported_cancel"` by design.
+- [x] **Automation async cancellation (2026-07-16)** — `editor.start_automation_tests` / `poll_automation_tests` now use the engine-owned `AutomationController` frame loop for latent and PIE tests, and `stop_automation_tests` performs owned, bounded two-phase cancellation. The synchronous compatibility runner retains `stop_status="unsupported_cancel"` by design.
 
 ### Platform
 

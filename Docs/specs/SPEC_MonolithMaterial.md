@@ -1,4 +1,4 @@
-# Monolith — MonolithMaterial Module
+﻿# Monolith — MonolithMaterial Module
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
@@ -26,7 +26,7 @@
 | `get_expression_details` | Full property reflection, inputs, outputs for a single expression |
 | `get_full_connection_graph` | Complete connection graph (all wires) of a material |
 | `export_material_graph` | Export complete graph to JSON (round-trippable with build_material_graph) |
-| `validate_material` | BFS reachability check — detects islands, broken textures, missing functions, duplicate params, unused params, high expression count (>200). Optional auto-fix |
+| `validate_material` | Accepts a base `UMaterial` or `UMaterialInstance` asset. Material instances are validated through their explicit parent chain and resolved base-material graph without engine-default fallback; missing/cyclic parents are hard errors. Returns `asset_type`, `validation_scope`, `validated_graph_asset_path`, and `instance_parent_chain`; graph issues retain the existing BFS reachability checks for islands, broken textures, missing functions, duplicate/unused params, and high expression count (>200). A texture sample with a connected `TextureObject` input is not reported as broken merely because its direct `Texture` field is empty; the connected source expression is validated independently. Named-reroute Usage→Declaration edges participate in reachability. `fix_issues=true` is allowed only when the requested asset itself owns the base graph and is rejected for instances. |
 | `render_preview` | Save preview PNG to Saved/Monolith/previews/ |
 | `get_thumbnail` | Return thumbnail as base64 PNG or save to file |
 | `get_layer_info` | Material Layer / Material Layer Blend info |
@@ -39,7 +39,7 @@
 | `create_material` | Create new UMaterial at path with configurable defaults (blend mode, shading model, material domain) |
 | `create_material_instance` | Create UMaterialInstanceConstant from parent material with optional parameter overrides |
 | `set_material_property` | Set material properties (blend_mode, shading_model, two_sided, etc.) via UMaterialEditingLibrary |
-| `build_material_graph` | Build entire graph from JSON spec in single undo transaction (4 phases: standard nodes, Custom HLSL, wires, output properties). The spec must be passed as `{ "graph_spec": { "nodes": [...], "connections": [...], ... } }` — not as a bare object |
+| `build_material_graph` | Build entire graph from JSON spec in single undo transaction (4 phases: standard nodes, Custom HLSL, wires, output properties). Expression-valued UObject properties are deferred and remapped through destination node IDs, and material-function call pins are refreshed before wire restoration. The spec must be passed as `{ "graph_spec": { "nodes": [...], "connections": [...], ... } }` — not as a bare object |
 | `disconnect_expression` | Disconnect inputs or outputs on a named expression (supports expr→expr and expr→material property; supports targeted single-connection disconnection via optional `input_name`/`output_name` params) |
 | `delete_expression` | Delete expression node by name from material graph |
 | `create_custom_hlsl_node` | Create Custom HLSL expression with inputs, outputs, and code |
@@ -50,7 +50,7 @@
 | `refresh_copied_material_graphs` | Post-copy material graph refresh for copied `UMaterialInterface` and `UMaterialFunctionInterface` assets. Accepts a single asset path, arrays of asset/package paths, or `asset.plan/copy_package_graph_with_remap` `package_map` rows; skips caller-preserved destination packages; defaults to `dry_run=true`; requires `confirm=true` when `dry_run=false`; calls `PostEditChange`, marks dirty, and optionally saves only confirmed destination graph assets. |
 | `duplicate_material` | Duplicate material asset to new path |
 | `recompile_material` | Force material recompile |
-| `import_material_graph` | Import graph from JSON. Mode: "overwrite" (clear+rebuild) or "merge" (offset +500 X) |
+| `import_material_graph` | Import graph from JSON. Mode: "overwrite" (clear+rebuild) or "merge" (offset +500 X). Round-trip imports remap private expression references such as named-reroute declarations into the destination package instead of retaining illegal source-package subobject references. |
 | `begin_transaction` | Begin named undo transaction for batching edits |
 | `end_transaction` | End current undo transaction |
 

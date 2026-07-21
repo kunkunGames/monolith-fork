@@ -8,20 +8,17 @@
   "route_edit_domain": "blueprint_prefab_guard",
   "module_id": "asset_authoring.level_instance.blueprint_prefab_guard",
   "asset_operation_modules": {
-    "creation_or_import": "asset_operation.creation_or_import.level_instance.blueprint_prefab_guard",
-    "edit": "asset_operation.edit.level_instance.blueprint_prefab_guard",
-    "save": "asset_operation.save.level_instance.blueprint_prefab_guard",
     "readback_verify": "asset_operation.readback_verify.level_instance.blueprint_prefab_guard"
   },
   "task_count": 1,
   "operation_counts": {
-    "creation_or_import": 1,
-    "edit": 1,
-    "save": 1,
+    "creation_or_import": 0,
+    "edit": 0,
+    "save": 0,
     "readback_verify": 1
   },
   "lifecycle_counts": {
-    "create_save": 1
+    "not_applicable": 1
   },
   "task_ids": [
     "BEB-429"
@@ -37,12 +34,9 @@
       "edit_domain": "blueprint_prefab_guard",
       "blueprint_type": "",
       "workflow": "level_instance_rootless_prefab_rejected",
-      "operation_semantics": "create_save",
-      "lifecycle_phase": "create_save",
+      "operation_semantics": "rejection_guard",
+      "lifecycle_phase": "not_applicable",
       "asset_operations": [
-        "creation_or_import",
-        "save",
-        "edit",
         "readback_verify"
       ],
       "actions": [
@@ -177,8 +171,8 @@
       "workflow": "level_instance_rootless_prefab_rejected",
       "description": "Spawn bare rootless Actors, confirm create_blueprint_prefab rejects them by name instead of crashing the editor, and confirm no prefab asset was written",
       "reference_context": [],
-      "operation_semantics": "create_save",
-      "lifecycle_phase": "create_save",
+      "operation_semantics": "rejection_guard",
+      "lifecycle_phase": "not_applicable",
       "capabilities": {
         "actions": [
           "op_chain",
@@ -188,18 +182,18 @@
           "create_blueprint_prefab",
           "inspect_asset"
         ],
-        "creates_or_imports_assets": true,
-        "saves_assets": true,
-        "asset_edits": true,
+        "creates_or_imports_assets": false,
+        "saves_assets": false,
+        "asset_edits": false,
         "readback_verifies": true,
         "asset_operations": [
-          "creation_or_import",
-          "save",
-          "edit",
           "readback_verify"
         ],
-        "operation_semantics": "create_save",
-        "lifecycle_phase": "create_save"
+        "operation_semantics": "rejection_guard",
+        "lifecycle_phase": "not_applicable",
+        "expected_rejection_actions": [
+          "create_blueprint_prefab"
+        ]
       }
     }
   ]

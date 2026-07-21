@@ -308,6 +308,11 @@ void FMonolithEditorModule::OnPreSlateModal(const FCoreDelegates::FModalWindowCo
 
 void FMonolithEditorModule::ShutdownModule()
 {
+	// The automation observer is module-owned code registered in the engine-lifetime
+	// core ticker and shared AutomationController delegates. Tear it down before
+	// unregistering actions or unloading this module.
+	FMonolithEditorActions::ShutdownAutomationSessions();
+
 	GMonolithHeadlessLayoutSaveGuard.Unregister();
 	GMonolithPieTransactionBufferGuard.Unregister();
 

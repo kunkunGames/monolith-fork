@@ -350,6 +350,7 @@ class GenerationTests(unittest.TestCase):
             if tool == "monolith_status":
                 return mcp_envelope({
                     "server_running": True,
+                    "project_name": "Speed",
                     "catalog_version": "sha256:v1",
                     "catalog_action_count": 1,
                     "catalog_namespace_count": 1,
@@ -364,7 +365,7 @@ class GenerationTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "catalog version mismatch"):
                 agb.read_generation_catalog_fingerprint("http://unused")
 
-    def test_compact_structured_summary_enumerates_all_action_pages(self):
+    def test_detailed_structured_summary_enumerates_and_caches_all_action_pages(self):
         calls = []
 
         def fake_mcp_call(url, tool, arguments, timeout_s=45.0):
@@ -376,13 +377,16 @@ class GenerationTests(unittest.TestCase):
                 }
             elif arguments.get("mode") == "actions" and arguments.get("offset") == 0:
                 payload = {
-                    "actions": [{"action": "list_opened"}, {"action": "map_depot_paths"}],
+                    "actions": [
+                        {"action": "list_opened", "params": {}},
+                        {"action": "map_depot_paths", "params": {"paths": {"type": "array"}}},
+                    ],
                     "truncated": True,
                     "next_offset": 2,
                 }
             elif arguments.get("mode") == "actions" and arguments.get("offset") == 2:
                 payload = {
-                    "actions": [{"action": "status"}],
+                    "actions": [{"action": "status", "params": {}}],
                     "truncated": False,
                 }
             else:
@@ -398,8 +402,16 @@ class GenerationTests(unittest.TestCase):
             rows = agb.discover_catalog_namespaces("http://unused")
 
         self.assertEqual(rows[0]["actions"], ["list_opened", "map_depot_paths", "status"])
+        self.assertEqual(
+            rows[0]["schemas"]["map_depot_paths"]["params"],
+            {"paths": {"type": "array"}},
+        )
         self.assertEqual(calls[0], {"mode": "summary", "limit": 1000})
         self.assertEqual([call["offset"] for call in calls[1:]], [0, 2])
+        for call in calls[1:]:
+            self.assertIs(call["detail"], True)
+            self.assertEqual(call["planning_detail"], "compact")
+            self.assertEqual(call["schema_detail"], "full")
 
     def test_compact_summary_action_count_mismatch_fails_fast(self):
         def fake_mcp_call(url, tool, arguments, timeout_s=45.0):
@@ -415,6 +427,31 @@ class GenerationTests(unittest.TestCase):
         with mock.patch.object(agb, "mcp_call", side_effect=fake_mcp_call):
             with self.assertRaisesRegex(RuntimeError, "action count mismatch"):
                 agb.discover_catalog_namespaces("http://unused")
+
+    def test_detailed_action_pagination_rejects_invalid_continuation_contract(self):
+        invalid_pages = [
+            ({"actions": [{"action": "status"}], "truncated": True}, "integer next_offset"),
+            (
+                {"actions": [{"action": "status"}], "truncated": True, "next_offset": True},
+                "integer next_offset",
+            ),
+            (
+                {"actions": [{"action": "status"}], "truncated": "false"},
+                "non-boolean truncated",
+            ),
+        ]
+        for payload, expected_error in invalid_pages:
+            with self.subTest(payload=payload):
+                with mock.patch.object(
+                    agb,
+                    "mcp_call",
+                    return_value={"result": {"structuredContent": payload}},
+                ):
+                    with self.assertRaisesRegex(RuntimeError, expected_error):
+                        agb.discover_namespace_catalog_strict(
+                            "http://unused",
+                            "source_control",
+                        )
 
     def test_static_supplement_builds_routing_tasks_with_weights(self):
         tasks: list = []
@@ -460,6 +497,9 @@ class GenerationTests(unittest.TestCase):
             manifest_path = root / "manifest.json"
             tasks_path.write_text("sentinel tasks\n", encoding="utf-8")
             manifest_path.write_text('{"sentinel":true}\n', encoding="utf-8")
+            # This fixture intentionally models only the catalog-identity
+            # boundary. Production static-action coverage is exercised against
+            # the immutable bundled catalog by test_action_guidance_benchmark.py.
             with mock.patch.object(
                 agb,
                 "read_generation_catalog_fingerprint",
@@ -468,7 +508,14 @@ class GenerationTests(unittest.TestCase):
                 agb,
                 "discover_catalog_namespaces",
                 return_value=namespaces,
-            ), mock.patch.object(agb, "discover_schema", return_value=None):
+            ), mock.patch.object(
+                agb,
+                "validate_static_unreal_practical_action_contracts",
+            ) as validate_static_contracts, mock.patch.object(
+                agb,
+                "discover_schema",
+                return_value=None,
+            ):
                 with self.assertRaisesRegex(RuntimeError, "refusing to overwrite"):
                     agb.generate_tasks(
                         "http://unused",
@@ -476,6 +523,8 @@ class GenerationTests(unittest.TestCase):
                         tasks_path,
                         manifest_path,
                     )
+            validate_static_contracts.assert_called_once()
+            self.assertIs(validate_static_contracts.call_args.args[0], namespaces)
             self.assertEqual(tasks_path.read_text(encoding="utf-8"), "sentinel tasks\n")
             self.assertEqual(
                 manifest_path.read_text(encoding="utf-8"),
@@ -491,6 +540,9 @@ class GenerationTests(unittest.TestCase):
         namespaces = [{"namespace": "source", "actions": ["read_file"]}]
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
+            # Keep the synthetic one-action catalog focused on provenance. The
+            # mock is asserted below so generate_tasks must still invoke the
+            # separate fail-closed static contract validation phase.
             with mock.patch.object(
                 agb,
                 "read_generation_catalog_fingerprint",
@@ -499,13 +551,22 @@ class GenerationTests(unittest.TestCase):
                 agb,
                 "discover_catalog_namespaces",
                 return_value=namespaces,
-            ), mock.patch.object(agb, "discover_schema", return_value=None):
+            ), mock.patch.object(
+                agb,
+                "validate_static_unreal_practical_action_contracts",
+            ) as validate_static_contracts, mock.patch.object(
+                agb,
+                "discover_schema",
+                return_value=None,
+            ):
                 manifest = agb.generate_tasks(
                     "http://unused",
                     1,
                     root / "tasks.jsonl",
                     root / "manifest.json",
                 )
+            validate_static_contracts.assert_called_once()
+            self.assertIs(validate_static_contracts.call_args.args[0], namespaces)
             self.assertEqual(manifest["catalog_version"], "sha256:stable")
             self.assertEqual(
                 json.loads((root / "manifest.json").read_text(encoding="utf-8"))[
@@ -513,6 +574,52 @@ class GenerationTests(unittest.TestCase):
                 ],
                 "sha256:stable",
             )
+
+    def test_generate_reuses_bulk_inline_schemas_without_focused_round_trips(self):
+        fingerprint = {
+            "catalog_version": "sha256:stable",
+            "catalog_action_count": 1,
+            "catalog_namespace_count": 1,
+        }
+        inline_schema = {
+            "action": "read_file",
+            "execution_policy": {"policy_id": "read_only"},
+            "params": {
+                "file_path": {"type": "string", "required": True},
+            },
+        }
+        namespaces = [{
+            "namespace": "source",
+            "actions": ["read_file"],
+            "schemas": {"read_file": inline_schema},
+        }]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            with mock.patch.object(
+                agb,
+                "read_generation_catalog_fingerprint",
+                side_effect=[fingerprint, dict(fingerprint)],
+            ), mock.patch.object(
+                agb,
+                "discover_catalog_namespaces",
+                return_value=namespaces,
+            ), mock.patch.object(
+                agb,
+                "validate_static_unreal_practical_action_contracts",
+            ), mock.patch.object(
+                agb,
+                "discover_schema",
+                side_effect=AssertionError("focused schema discovery must not run"),
+            ) as focused_schema:
+                manifest = agb.generate_tasks(
+                    "http://unused",
+                    1,
+                    root / "tasks.jsonl",
+                    root / "manifest.json",
+                )
+
+        focused_schema.assert_not_called()
+        self.assertEqual(manifest["catalog_action_count"], 1)
 
 
 class TransportGateTests(unittest.TestCase):
@@ -531,7 +638,11 @@ class TransportGateTests(unittest.TestCase):
         def fake_call(url, tool, arguments, timeout_s=45.0):
             calls.append(tool)
             if tool == "monolith_status":
-                return mcp_envelope({"server_running": True, "catalog_version": "sha256:v1"})
+                return mcp_envelope({
+                    "server_running": True,
+                    "project_name": "Speed",
+                    "catalog_version": "sha256:v1",
+                })
             return []
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -582,8 +693,14 @@ class TransportGateTests(unittest.TestCase):
             "response_text": "",
         }
         statuses = iter([
-            mcp_envelope({"server_running": True, "catalog_version": "sha256:v1", "editor_pid": 10}),
-            mcp_envelope({"server_running": True, "catalog_version": "sha256:v2", "editor_pid": 10}),
+            mcp_envelope({
+                "server_running": True, "project_name": "Speed",
+                "catalog_version": "sha256:v1", "editor_pid": 10,
+            }),
+            mcp_envelope({
+                "server_running": True, "project_name": "Speed",
+                "catalog_version": "sha256:v2", "editor_pid": 10,
+            }),
         ])
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
@@ -647,7 +764,11 @@ class TransportGateTests(unittest.TestCase):
                 encoding="utf-8",
             )
             output_dir = root / "run"
-            with mock.patch.object(agb, "mcp_call", return_value=mcp_envelope({"server_running": True})):
+            with mock.patch.object(
+                agb,
+                "mcp_call",
+                return_value=mcp_envelope({"server_running": True, "project_name": "Speed"}),
+            ):
                 with mock.patch.object(agb, "score_task", side_effect=fake_score):
                     result = agb.run_benchmark(
                         "http://unused",
@@ -718,7 +839,7 @@ class TransportGateTests(unittest.TestCase):
             with mock.patch.object(
                 agb,
                 "mcp_call",
-                return_value=mcp_envelope({"server_running": True}),
+                return_value=mcp_envelope({"server_running": True, "project_name": "Speed"}),
             ), mock.patch.object(
                 agb,
                 "score_task",
@@ -792,7 +913,7 @@ class TransportGateTests(unittest.TestCase):
             with mock.patch.object(
                 agb,
                 "mcp_call",
-                return_value=mcp_envelope({"server_running": True}),
+                return_value=mcp_envelope({"server_running": True, "project_name": "Speed"}),
             ), mock.patch.object(agb, "score_task", side_effect=fake_score):
                 result = agb.run_benchmark(
                     "http://unused",
@@ -851,7 +972,7 @@ class TransportGateTests(unittest.TestCase):
             with mock.patch.object(
                 agb,
                 "mcp_call",
-                return_value=mcp_envelope({"server_running": True}),
+                return_value=mcp_envelope({"server_running": True, "project_name": "Speed"}),
             ), mock.patch.object(agb, "score_task", return_value=healthy_row):
                 result = agb.run_benchmark(
                     "http://unused", tasks_path, output_dir, "success", 3, 1.0,

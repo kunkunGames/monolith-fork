@@ -78,7 +78,7 @@ These exist because Epic's `FNiagaraStackGraphUtilities` functions lack `NIAGARA
 | `get_ordered_modules` | Get ordered modules in a script stage. Supports standard stages plus `usage: "particle_event"` with `usage_id`/`handler_index` and `usage: "particle_simulation_stage"` with `usage_id`/`stage_name`/`stage_index` (PR #65) |
 | `get_module_inputs` | Get all inputs (floats, vectors, colors, data interfaces, enums, bools) with override values, linked params, and actual DI curve data. Uses engine's `FNiagaraStackGraphUtilities::GetStackFunctionInputs`. Returns short names (no `Module.` prefix). LinearColor/vector defaults deserialized from JSON string if needed |
 | `get_module_graph` | Node graph of a module script |
-| `add_module` | Add module to script stage (uses FNiagaraStackGraphUtilities). Supports `usage: "particle_event"` with `usage_id`/`handler_index` and `usage: "particle_simulation_stage"` with `usage_id`/`stage_name`/`stage_index` (PR #65) |
+| `add_module` | Add module to script stage (uses FNiagaraStackGraphUtilities). The schema requires `asset_path`, `emitter`, `usage`, and `module_script`; the handler also rejects missing, wrong-type, empty, or whitespace-only `emitter`/`usage`/`module_script` values with `ErrInvalidParams` (`-32602`). Supports `usage: "particle_event"` with `usage_id`/`handler_index` and `usage: "particle_simulation_stage"` with `usage_id`/`stage_name`/`stage_index` (PR #65) |
 | `remove_module` | Remove module from stack |
 | `move_module` | Move module to new index (remove+re-add — **loses input overrides**). Accepts the `particle_event` / `particle_simulation_stage` selector forms (PR #65) |
 | `set_module_enabled` | Enable/disable a module |

@@ -4,6 +4,7 @@
 #include "Misc/AutomationTest.h"
 
 #include "MonolithBulkFillRegistry.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithToolRegistry.h"
 
 #include "Dom/JsonObject.h"

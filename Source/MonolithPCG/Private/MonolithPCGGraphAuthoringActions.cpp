@@ -6,6 +6,7 @@
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
+#include "MonolithSourceControlUtils.h"
 #include "Reflection/MonolithDryRunGuard.h"
 #include "Reflection/MonolithReflectionReader.h"
 #include "Reflection/MonolithReflectionWalker.h"
@@ -16,8 +17,10 @@
 #include "PCGNode.h"
 #include "PCGPin.h"
 #include "PCGSettings.h"
+#include "PCGSubgraph.h"
 #include "Data/Registry/PCGDataTypeCommon.h"
 
+#include "AssetRegistry/IAssetRegistry.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -26,10 +29,80 @@
 #include "Misc/EngineVersionComparison.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
+#include "Misc/ScopeExit.h"
+#include "Misc/StringOutputDevice.h"
+#include "Modules/ModuleManager.h"
+#include "Serialization/MemoryWriter.h"
+#include "Serialization/ObjectAndNameAsStringProxyArchive.h"
+#include "Serialization/StructuredArchiveAdapters.h"
 #include "Subsystems/EditorAssetSubsystem.h"
 #include "UObject/Package.h"
+#include "UObject/PropertyPortFlags.h"
 #include "UObject/SavePackage.h"
+#include "UObject/SoftObjectPath.h"
+#include "UObject/UObjectGlobals.h"
+#include "UObject/UObjectHash.h"
 #include "UObject/UnrealType.h"
+
+#if WITH_DEV_AUTOMATION_TESTS
+namespace UE::MonolithPCG::Private
+{
+namespace
+{
+FString GGraphContentsFaultTarget;
+EPCGGraphContentsReplacementTestFault GGraphContentsFault =
+	EPCGGraphContentsReplacementTestFault::None;
+}
+
+void ConfigureGraphContentsReplacementTestFault(
+	const FString& ExactTargetObjectPath,
+	EPCGGraphContentsReplacementTestFault Fault)
+{
+	GGraphContentsFaultTarget = ExactTargetObjectPath;
+	GGraphContentsFault = Fault;
+}
+
+void ResetGraphContentsReplacementTestFault()
+{
+	GGraphContentsFaultTarget.Reset();
+	GGraphContentsFault = EPCGGraphContentsReplacementTestFault::None;
+}
+
+bool ConsumeGraphContentsReplacementTestFault(
+	const FString& ExactTargetObjectPath,
+	EPCGGraphContentsReplacementTestFault Fault)
+{
+	if (GGraphContentsFault != Fault ||
+		!GGraphContentsFaultTarget.Equals(ExactTargetObjectPath, ESearchCase::CaseSensitive))
+	{
+		return false;
+	}
+	GGraphContentsFault = EPCGGraphContentsReplacementTestFault::None;
+	return true;
+}
+
+bool TryBuildGraphContentsReplacementTestSourceControl(
+	const FString& ExactTargetObjectPath,
+	TSharedPtr<FJsonObject>& OutPrepare)
+{
+	if (GGraphContentsFaultTarget.IsEmpty() ||
+		!GGraphContentsFaultTarget.Equals(ExactTargetObjectPath, ESearchCase::CaseSensitive))
+	{
+		return false;
+	}
+	TSharedPtr<FJsonObject> BeforeAction = MakeShared<FJsonObject>();
+	BeforeAction->SetBoolField(TEXT("ok"), true);
+	BeforeAction->SetBoolField(TEXT("available"), true);
+	BeforeAction->SetStringField(TEXT("status"), TEXT("prepared_test_fixture"));
+	BeforeAction->SetStringField(TEXT("provider"), TEXT("MonolithPCGReplacementFixture"));
+	OutPrepare = MakeShared<FJsonObject>();
+	OutPrepare->SetStringField(TEXT("mode"), TEXT("handler_owned_pre_mutation"));
+	OutPrepare->SetStringField(TEXT("status"), TEXT("prepared"));
+	OutPrepare->SetObjectField(TEXT("before_action"), BeforeAction);
+	return true;
+}
+}
+#endif
 
 namespace MonolithPCGAuthoring
 {
@@ -39,6 +112,15 @@ static constexpr int32 MaxValidationIssues = 1000;
 static constexpr int32 MaxNodeTypes = 1000;
 static constexpr int32 MaxPinsPerDirection = 1024;
 static constexpr int32 MaxGraphInfoResponseItems = 100000;
+static constexpr int32 MaxGraphUserParameterOperations = 256;
+static constexpr int32 MaxGraphUserParameterStringChars = 4096;
+static constexpr double MaxExactJsonInteger = 9007199254740991.0; // 2^53 - 1
+// Whole-graph replacement already caps authored topology. These independent
+// reflection bounds prevent a malformed graph with a small node count but an
+// unbounded inner-object tree or property payload from monopolizing the editor.
+static constexpr int32 MaxPersistentGraphObjects = 250000;
+static constexpr int32 MaxPersistentGraphObjectDepth = 256;
+static constexpr int64 MaxPersistentGraphSerializedBytes = 128ll * 1024ll * 1024ll;
 
 FMonolithActionExecutionPolicy MutationPolicy()
 {
@@ -165,22 +247,6 @@ bool ReadStringArray(const TSharedPtr<FJsonObject>& Params, const TCHAR* Field, 
 	return true;
 }
 
-bool IsProjectOwnedPackage(const FString& PackageName)
-{
-	FString Filename;
-	if (!FPackageName::TryConvertLongPackageNameToFilename(PackageName, Filename,
-														   FPackageName::GetAssetPackageExtension()))
-	{
-		return false;
-	}
-
-	Filename = FPaths::ConvertRelativePathToFull(Filename);
-	FPaths::NormalizeFilename(Filename);
-	FString ProjectDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
-	FPaths::NormalizeDirectoryName(ProjectDirectory);
-	return Filename.StartsWith(ProjectDirectory + TEXT("/"), ESearchCase::IgnoreCase);
-}
-
 bool NormalizeGraphPath(const FString& InputPath, FString& OutPackageName, FString& OutObjectPath, FString& OutError)
 {
 	FString ResolvedPath = FMonolithAssetUtils::ResolveAssetPath(InputPath);
@@ -204,7 +270,8 @@ bool NormalizeGraphPath(const FString& InputPath, FString& OutPackageName, FStri
 		OutPackageName = ResolvedPath;
 	}
 
-	if (!FPackageName::IsValidLongPackageName(OutPackageName) || !IsProjectOwnedPackage(OutPackageName))
+	if (!FPackageName::IsValidLongPackageName(OutPackageName) ||
+		!FMonolithAssetUtils::IsProjectOwnedPackage(OutPackageName))
 	{
 		OutError = FString::Printf(TEXT("asset_path must resolve to a mounted "
 										"package inside the current project: %s"),
@@ -237,6 +304,190 @@ bool LoadGraph(const FString& InputPath, UPCGGraph*& OutGraph, FString& OutObjec
 	if (!FMonolithAssetUtils::TryLoadAssetByPath<UPCGGraph>(OutObjectPath, OutGraph, ResolvedPath, OutError))
 	{
 		OutError = FString::Printf(TEXT("Could not load PCG graph '%s': %s"), *OutObjectPath, *OutError);
+		return false;
+	}
+	const FString LoadedObjectPath = OutGraph ? OutGraph->GetPathName() : FString();
+	if (!LoadedObjectPath.Equals(OutObjectPath, ESearchCase::CaseSensitive))
+	{
+		OutError = FString::Printf(
+			TEXT("asset_path must be the exact canonical object path; aliases, redirectors, and "
+				 "case-only variants are rejected (requested '%s', resolved '%s')"),
+			*OutObjectPath,
+			*LoadedObjectPath);
+		OutGraph = nullptr;
+		return false;
+	}
+	return true;
+}
+
+FString GraphUserParameterTypeToString(EPropertyBagPropertyType Type)
+{
+	switch (Type)
+	{
+	case EPropertyBagPropertyType::Bool: return TEXT("bool");
+	case EPropertyBagPropertyType::Byte: return TEXT("byte");
+	case EPropertyBagPropertyType::Int32: return TEXT("int32");
+	case EPropertyBagPropertyType::Int64: return TEXT("int64");
+	case EPropertyBagPropertyType::Float: return TEXT("float");
+	case EPropertyBagPropertyType::Double: return TEXT("double");
+	case EPropertyBagPropertyType::Name: return TEXT("name");
+	case EPropertyBagPropertyType::String: return TEXT("string");
+	default: return TEXT("unsupported");
+	}
+}
+
+bool ParseGraphUserParameterType(const FString& Input, EPropertyBagPropertyType& OutType)
+{
+	if (Input.Equals(TEXT("bool"), ESearchCase::IgnoreCase)) { OutType = EPropertyBagPropertyType::Bool; return true; }
+	if (Input.Equals(TEXT("byte"), ESearchCase::IgnoreCase)) { OutType = EPropertyBagPropertyType::Byte; return true; }
+	if (Input.Equals(TEXT("int32"), ESearchCase::IgnoreCase)) { OutType = EPropertyBagPropertyType::Int32; return true; }
+	if (Input.Equals(TEXT("int64"), ESearchCase::IgnoreCase)) { OutType = EPropertyBagPropertyType::Int64; return true; }
+	if (Input.Equals(TEXT("float"), ESearchCase::IgnoreCase)) { OutType = EPropertyBagPropertyType::Float; return true; }
+	if (Input.Equals(TEXT("double"), ESearchCase::IgnoreCase)) { OutType = EPropertyBagPropertyType::Double; return true; }
+	if (Input.Equals(TEXT("name"), ESearchCase::IgnoreCase)) { OutType = EPropertyBagPropertyType::Name; return true; }
+	if (Input.Equals(TEXT("string"), ESearchCase::IgnoreCase)) { OutType = EPropertyBagPropertyType::String; return true; }
+	return false;
+}
+
+bool GraphUserParameterJsonToSerialized(EPropertyBagPropertyType Type,
+	const TSharedPtr<FJsonValue>& JsonValue, FString& OutSerialized, FString& OutError)
+{
+	if (!JsonValue.IsValid() || JsonValue->IsNull())
+	{
+		OutError = TEXT("default_value must not be null");
+		return false;
+	}
+	switch (Type)
+	{
+	case EPropertyBagPropertyType::Bool:
+	{
+		bool Value = false;
+		if (JsonValue->Type != EJson::Boolean || !JsonValue->TryGetBool(Value))
+		{
+			OutError = TEXT("expected a JSON boolean");
+			return false;
+		}
+		OutSerialized = Value ? TEXT("True") : TEXT("False");
+		return true;
+	}
+	case EPropertyBagPropertyType::Int64:
+	{
+		if (JsonValue->Type == EJson::String)
+		{
+			FString Decimal;
+			JsonValue->TryGetString(Decimal);
+			int64 Parsed = 0;
+			LexFromString(Parsed, FStringView(Decimal));
+			if (LexToString(Parsed) != Decimal)
+			{
+				OutError = TEXT("expected a canonical decimal int64 string in signed 64-bit range");
+				return false;
+			}
+			OutSerialized = MoveTemp(Decimal);
+			return true;
+		}
+		double Value = 0.0;
+		if (JsonValue->Type != EJson::Number || !JsonValue->TryGetNumber(Value) || !FMath::IsFinite(Value) ||
+			FMath::TruncToDouble(Value) != Value || FMath::Abs(Value) > MaxExactJsonInteger)
+		{
+			OutError = TEXT("expected an exact integral JSON number or canonical decimal int64 string");
+			return false;
+		}
+		OutSerialized = FString::Printf(TEXT("%.0f"), Value);
+		return true;
+	}
+	case EPropertyBagPropertyType::Byte:
+	case EPropertyBagPropertyType::Int32:
+	{
+		double Value = 0.0;
+		if (JsonValue->Type != EJson::Number || !JsonValue->TryGetNumber(Value) || !FMath::IsFinite(Value) ||
+			FMath::TruncToDouble(Value) != Value)
+		{
+			OutError = TEXT("expected an integral JSON number");
+			return false;
+		}
+		if (Type == EPropertyBagPropertyType::Byte && (Value < 0.0 || Value > 255.0))
+		{
+			OutError = TEXT("byte value must be in range 0..255");
+			return false;
+		}
+		if (Type == EPropertyBagPropertyType::Int32 &&
+			(Value < static_cast<double>(MIN_int32) || Value > static_cast<double>(MAX_int32)))
+		{
+			OutError = TEXT("int32 value is out of range");
+			return false;
+		}
+		OutSerialized = FString::Printf(TEXT("%.0f"), Value);
+		return true;
+	}
+	case EPropertyBagPropertyType::Float:
+	case EPropertyBagPropertyType::Double:
+	{
+		double Value = 0.0;
+		if (JsonValue->Type != EJson::Number || !JsonValue->TryGetNumber(Value) || !FMath::IsFinite(Value) ||
+			(Type == EPropertyBagPropertyType::Float &&
+			 FMath::Abs(Value) > static_cast<double>(TNumericLimits<float>::Max())))
+		{
+			OutError = TEXT("expected a finite in-range JSON number");
+			return false;
+		}
+		OutSerialized = FString::Printf(TEXT("%.17g"), Value);
+		return true;
+	}
+	case EPropertyBagPropertyType::Name:
+	case EPropertyBagPropertyType::String:
+	{
+		if (JsonValue->Type != EJson::String || !JsonValue->TryGetString(OutSerialized))
+		{
+			OutError = TEXT("expected a JSON string");
+			return false;
+		}
+		if (OutSerialized.Len() > MaxGraphUserParameterStringChars)
+		{
+			OutError = FString::Printf(TEXT("string exceeds the %d-character limit"),
+				MaxGraphUserParameterStringChars);
+			return false;
+		}
+		return true;
+	}
+	default:
+		OutError = TEXT("unsupported graph user-parameter type");
+		return false;
+	}
+}
+
+bool LoadGraphInterface(const FString& InputPath, UPCGGraphInterface*& OutInterface, FString& OutObjectPath,
+						FString& OutError)
+{
+	OutInterface = nullptr;
+	FString PackageName;
+	if (!NormalizeGraphPath(InputPath, PackageName, OutObjectPath, OutError))
+	{
+		return false;
+	}
+
+	FString ResolvedPath;
+	if (!FMonolithAssetUtils::TryLoadAssetByPath<UPCGGraphInterface>(
+			OutObjectPath, OutInterface, ResolvedPath, OutError))
+	{
+		OutError = FString::Printf(TEXT("Could not load PCG graph interface '%s': %s"), *OutObjectPath, *OutError);
+		return false;
+	}
+	const FString LoadedObjectPath = OutInterface ? OutInterface->GetPathName() : FString();
+	if (!LoadedObjectPath.Equals(OutObjectPath, ESearchCase::CaseSensitive))
+	{
+		OutError = FString::Printf(
+			TEXT("subgraph_asset_path must be the exact canonical object path; aliases, redirectors, and "
+				 "case-only variants are rejected (requested '%s', resolved '%s')"),
+			*OutObjectPath,
+			*LoadedObjectPath);
+		OutInterface = nullptr;
+		return false;
+	}
+	if (!OutInterface || !OutInterface->GetGraph())
+	{
+		OutError = FString::Printf(TEXT("PCG graph interface '%s' has no concrete graph"), *OutObjectPath);
+		OutInterface = nullptr;
 		return false;
 	}
 	return true;
@@ -852,6 +1103,7 @@ bool WouldCreateCycle(const UPCGNode* SourceNode, const UPCGNode* TargetNode)
 struct FSettingsWriteUnit
 {
 	TSharedPtr<FJsonObject> Tree;
+	TSharedPtr<FJsonValue> LeafValue;
 	TArray<FProperty*> PropertyChain;
 	FString Path;
 };
@@ -938,6 +1190,7 @@ bool CollectSettingsWriteUnits(UStruct* Struct, const TSharedPtr<FJsonObject>& T
 			FSettingsWriteUnit& Unit = OutUnits.AddDefaulted_GetRef();
 			Unit.PropertyChain = PropertyChain;
 			Unit.Tree = BuildPartialSettingsTree(PropertyChain, Pair.Value);
+			Unit.LeafValue = Pair.Value;
 			TArray<FString> PathSegments;
 			PathSegments.Reserve(PropertyChain.Num());
 			for (const FProperty* PathProperty : PropertyChain)
@@ -947,6 +1200,57 @@ bool CollectSettingsWriteUnits(UStruct* Struct, const TSharedPtr<FJsonObject>& T
 			Unit.Path = FString::Join(PathSegments, TEXT("."));
 		}
 		PropertyChain.Pop();
+	}
+	return true;
+}
+
+bool ValidateClassPropertyUnit(const UPCGSettings* Settings, const FSettingsWriteUnit& Unit, FString& OutError)
+{
+	if (Unit.PropertyChain.IsEmpty())
+	{
+		return true;
+	}
+
+	FClassProperty* ClassProperty = CastField<FClassProperty>(Unit.PropertyChain.Last());
+	if (!ClassProperty)
+	{
+		return true;
+	}
+	if (!Unit.LeafValue.IsValid() || Unit.LeafValue->Type != EJson::String)
+	{
+		OutError = FString::Printf(
+			TEXT("Class settings property '%s' requires an exact class object-path string"),
+			*Unit.Path);
+		return false;
+	}
+
+	const FString ClassPath = Unit.LeafValue->AsString();
+	if (ClassPath.IsEmpty())
+	{
+		return true;
+	}
+
+	void* Scratch = FMemory::Malloc(ClassProperty->GetSize(), FMath::Max(1, ClassProperty->GetMinAlignment()));
+	ClassProperty->InitializeValue(Scratch);
+	FStringOutputDevice ErrorText;
+	const TCHAR* ImportResult = ClassProperty->ImportText_Direct(
+		*ClassPath,
+		Scratch,
+		const_cast<UPCGSettings*>(Settings),
+		PPF_None,
+		&ErrorText);
+	ClassProperty->DestroyValue(Scratch);
+	FMemory::Free(Scratch);
+
+	if (!ImportResult)
+	{
+		OutError = FString::Printf(
+			TEXT("Class settings property '%s' rejected '%s'%s%s"),
+			*Unit.Path,
+			*ClassPath,
+			ErrorText.IsEmpty() ? TEXT("") : TEXT(": "),
+			*ErrorText);
+		return false;
 	}
 	return true;
 }
@@ -985,6 +1289,10 @@ bool ValidateEditableTree(const UPCGSettings* Settings, const TSharedPtr<FJsonOb
 		{
 			OutError = FString::Printf(TEXT("Settings property path ending in '%s' is disabled for this PCG settings instance"),
 				*Unit.PropertyChain.Last()->GetName());
+			return false;
+		}
+		if (!ValidateClassPropertyUnit(Settings, Unit, OutError))
+		{
 			return false;
 		}
 	}
@@ -1533,6 +1841,988 @@ void RestorePackageDirtyState(UPCGGraph* Graph, bool bWasDirty)
 	}
 }
 
+int32 GetUserParameterCount(const UPCGGraph* Graph)
+{
+	const FInstancedPropertyBag* Bag = Graph ? Graph->GetUserParametersStruct() : nullptr;
+	const UPropertyBag* BagStruct = Bag ? Bag->GetPropertyBagStruct() : nullptr;
+	return BagStruct ? BagStruct->GetPropertyDescs().Num() : 0;
+}
+
+bool BuildRelativeOuterNameClassKey(
+	const UObject* Object,
+	const UObject* Root,
+	FString& OutKey);
+
+class FBoundedPersistentPropertyWriter final : public FMemoryWriter
+{
+public:
+	FBoundedPersistentPropertyWriter(TArray<uint8>& InBytes, const int64 InMaxBytes)
+		: FMemoryWriter(InBytes, /*bIsPersistent=*/true)
+		, MaxBytes(InMaxBytes)
+	{
+	}
+
+	virtual void Serialize(void* Data, int64 Num) override
+	{
+		const int64 CurrentOffset = Tell();
+		if (Num < 0 || CurrentOffset < 0 || CurrentOffset > MaxBytes || Num > MaxBytes - CurrentOffset)
+		{
+			bExceededBound = true;
+			SetError();
+			return;
+		}
+		FMemoryWriter::Serialize(Data, Num);
+	}
+
+	bool ExceededBound() const
+	{
+		return bExceededBound;
+	}
+
+private:
+	int64 MaxBytes = 0;
+	bool bExceededBound = false;
+};
+
+/**
+ * Serializes one reflected property with package-persistent archive semantics
+ * and without recursively serializing referenced UObjects. Persistent mode is
+ * important for nested structs: UE's normal ShouldSerializeValue path then
+ * excludes transient/deprecated cache fields just as package saving does.
+ * Duplicate port flags are deliberately not used: DuplicateTransient controls
+ * duplicate replay, but a non-Transient value can still belong to saved state.
+ * References owned by the compared graph are replaced by a stable root-relative
+ * outer/name/class key; external references retain their exact object path. This
+ * gives corresponding source/preview/target objects the same byte representation
+ * without conflating distinct external assets.
+ */
+class FCanonicalPersistentPropertyArchive final : public FObjectAndNameAsStringProxyArchive
+{
+public:
+	FCanonicalPersistentPropertyArchive(
+		FArchive& InInnerArchive,
+		const UObject* InRoot,
+		TSet<FString>& OutReferencedInnerKeys,
+		FString& OutError)
+		: FObjectAndNameAsStringProxyArchive(InInnerArchive, /*bInLoadIfFindFails=*/false)
+		, Root(InRoot)
+		, ReferencedInnerKeys(OutReferencedInnerKeys)
+		, Error(OutError)
+	{
+	}
+
+	virtual FArchive& operator<<(UObject*& Object) override
+	{
+		FString Token;
+		if (!Object)
+		{
+			Token = TEXT("$NULL");
+		}
+		else if (Object == Root)
+		{
+			Token = TEXT("$ROOT");
+		}
+		else if (Root && Object->IsIn(Root))
+		{
+			FString RelativeKey;
+			if (!BuildRelativeOuterNameClassKey(Object, Root, RelativeKey))
+			{
+				Error = FString::Printf(
+					TEXT("could not build a bounded relative identity for graph-owned object '%s'"),
+					*Object->GetPathName());
+				SetError();
+				Token = TEXT("$INVALID_INNER");
+			}
+			else
+			{
+				ReferencedInnerKeys.Add(RelativeKey);
+				Token = TEXT("$INNER:") + RelativeKey;
+			}
+		}
+		else
+		{
+			Token = TEXT("$EXTERNAL:") + Object->GetPathName();
+		}
+		InnerArchive << Token;
+		return *this;
+	}
+
+private:
+	const UObject* Root = nullptr;
+	TSet<FString>& ReferencedInnerKeys;
+	FString& Error;
+};
+
+bool BuildPersistentObjectIndex(
+	const UPCGGraph* Root,
+	TMap<FString, const UObject*>& OutObjectsByKey,
+	FString& OutError)
+{
+	OutObjectsByKey.Reset();
+	if (!Root)
+	{
+		OutError = TEXT("cannot index a null persistent graph root");
+		return false;
+	}
+	OutObjectsByKey.Add(TEXT("$ROOT"), Root);
+
+	TArray<UObject*> NestedObjects;
+	GetObjectsWithOuter(
+		const_cast<UPCGGraph*>(Root), NestedObjects, EGetObjectsFlags::IncludeNestedObjects);
+	const int64 TotalObjectCount = static_cast<int64>(NestedObjects.Num()) + 1;
+	if (TotalObjectCount > MaxPersistentGraphObjects)
+	{
+		OutError = FString::Printf(
+			TEXT("persistent graph object count %lld exceeds comparison bound %d"),
+			TotalObjectCount, MaxPersistentGraphObjects);
+		return false;
+	}
+	OutObjectsByKey.Reserve(NestedObjects.Num() + 1);
+	for (const UObject* const Object : NestedObjects)
+	{
+		FString RelativeKey;
+		if (!BuildRelativeOuterNameClassKey(Object, Root, RelativeKey))
+		{
+			OutError = FString::Printf(
+				TEXT("graph-owned object '%s' exceeds the relative identity depth bound %d"),
+				Object ? *Object->GetPathName() : TEXT("<null>"),
+				MaxPersistentGraphObjectDepth);
+			return false;
+		}
+		if (OutObjectsByKey.Contains(RelativeKey))
+		{
+			OutError = FString::Printf(
+				TEXT("persistent graph contains duplicate relative object identity '%s'"),
+				*RelativeKey);
+			return false;
+		}
+		OutObjectsByKey.Add(MoveTemp(RelativeKey), Object);
+	}
+	return true;
+}
+
+bool SerializeCanonicalPersistentProperty(
+	const FProperty* Property,
+	const void* Value,
+	const UPCGGraph* Root,
+	int64& InOutSerializedBytes,
+	TSet<FString>& OutReferencedInnerKeys,
+	TArray<uint8>& OutBytes,
+	FString& OutError)
+{
+	OutBytes.Reset();
+	if (!Property || !Value || !Root)
+	{
+		OutError = TEXT("cannot serialize a null persistent property, value, or graph root");
+		return false;
+	}
+	if (InOutSerializedBytes > MaxPersistentGraphSerializedBytes)
+	{
+		OutError = FString::Printf(
+			TEXT("persistent property payload exceeds comparison bound of %lld bytes"),
+			MaxPersistentGraphSerializedBytes);
+		return false;
+	}
+
+	const int64 RemainingBytes = MaxPersistentGraphSerializedBytes - InOutSerializedBytes;
+	FBoundedPersistentPropertyWriter MemoryWriter(OutBytes, RemainingBytes);
+	FCanonicalPersistentPropertyArchive CanonicalArchive(
+		MemoryWriter, Root, OutReferencedInnerKeys, OutError);
+	CanonicalArchive.SetIsSaving(true);
+	CanonicalArchive.ArNoDelta = true;
+	FStructuredArchiveFromArchive StructuredArchive(CanonicalArchive);
+	Property->SerializeItem(
+		StructuredArchive.GetSlot(),
+		const_cast<void*>(Value),
+		/*Defaults=*/nullptr);
+	if (MemoryWriter.ExceededBound())
+	{
+		OutError = FString::Printf(
+			TEXT("persistent property '%s' exceeds remaining comparison bound of %lld bytes"),
+			*Property->GetName(), RemainingBytes);
+		return false;
+	}
+	if (CanonicalArchive.IsError() || MemoryWriter.IsError())
+	{
+		if (OutError.IsEmpty())
+		{
+			OutError = FString::Printf(
+				TEXT("persistent property '%s' could not be serialized canonically"),
+				*Property->GetName());
+		}
+		return false;
+	}
+	InOutSerializedBytes += OutBytes.Num();
+	return true;
+}
+
+bool AreUserParametersPersistentlyIdentical(
+	const UPCGGraph* A,
+	const UPCGGraph* B,
+	int64& InOutABytes,
+	int64& InOutBBytes,
+	TSet<FString>& OutAReferencedInnerKeys,
+	TSet<FString>& OutBReferencedInnerKeys,
+	FString& OutMismatch,
+	FString& OutError)
+{
+	OutMismatch.Reset();
+	const FInstancedPropertyBag* AParameters = A ? A->GetUserParametersStruct() : nullptr;
+	const FInstancedPropertyBag* BParameters = B ? B->GetUserParametersStruct() : nullptr;
+	if (!AParameters || !BParameters)
+	{
+		if (AParameters == BParameters)
+		{
+			return true;
+		}
+		OutMismatch = TEXT("UserParameters.presence");
+		return false;
+	}
+
+	const UPropertyBag* AStruct = AParameters->GetPropertyBagStruct();
+	const UPropertyBag* BStruct = BParameters->GetPropertyBagStruct();
+	if (!AStruct || !BStruct)
+	{
+		if (AStruct == BStruct)
+		{
+			return true;
+		}
+		OutMismatch = TEXT("UserParameters.schema.presence");
+		return false;
+	}
+
+	const TConstArrayView<FPropertyBagPropertyDesc> ADescs = AStruct->GetPropertyDescs();
+	const TConstArrayView<FPropertyBagPropertyDesc> BDescs = BStruct->GetPropertyDescs();
+	if (ADescs.Num() != BDescs.Num())
+	{
+		OutMismatch = TEXT("UserParameters.schema.count");
+		return false;
+	}
+
+	const uint8* const AMemory = AParameters->GetValue().GetMemory();
+	const uint8* const BMemory = BParameters->GetValue().GetMemory();
+	if (!AMemory || !BMemory)
+	{
+		OutMismatch = TEXT("UserParameters.value_memory");
+		return false;
+	}
+
+	TArray<uint8> ABytes;
+	TArray<uint8> BBytes;
+	for (int32 Index = 0; Index < ADescs.Num(); ++Index)
+	{
+		const FPropertyBagPropertyDesc& ADesc = ADescs[Index];
+		const FPropertyBagPropertyDesc& BDesc = BDescs[Index];
+		const bool bSamePersistentDescriptor =
+			ADesc.ValueTypeObject.Get() == BDesc.ValueTypeObject.Get() &&
+			ADesc.ID == BDesc.ID &&
+			ADesc.Name == BDesc.Name &&
+			ADesc.ValueType == BDesc.ValueType &&
+			ADesc.ContainerTypes == BDesc.ContainerTypes &&
+			ADesc.PropertyFlags == BDesc.PropertyFlags &&
+			ADesc.KeyType == BDesc.KeyType &&
+			ADesc.KeyTypeObject.Get() == BDesc.KeyTypeObject.Get()
+#if WITH_EDITORONLY_DATA
+			&& ADesc.MetaData == BDesc.MetaData
+			&& ADesc.MetaClass.Get() == BDesc.MetaClass.Get()
+#endif
+			;
+		if (!bSamePersistentDescriptor)
+		{
+			OutMismatch = FString::Printf(
+				TEXT("UserParameters.schema[%d:%s]"), Index, *ADesc.Name.ToString());
+			return false;
+		}
+
+		const FProperty* const AProperty = ADesc.CachedProperty;
+		const FProperty* const BProperty = BDesc.CachedProperty;
+		if (!AProperty || !BProperty || !AProperty->SameType(BProperty))
+		{
+			OutMismatch = FString::Printf(
+				TEXT("UserParameters.runtime_property[%d:%s]"), Index, *ADesc.Name.ToString());
+			return false;
+		}
+
+		const void* const AValue = AMemory + AProperty->GetOffset_ForInternal();
+		const void* const BValue = BMemory + BProperty->GetOffset_ForInternal();
+		if (!SerializeCanonicalPersistentProperty(
+				AProperty, AValue, A, InOutABytes, OutAReferencedInnerKeys, ABytes, OutError) ||
+			!SerializeCanonicalPersistentProperty(
+				BProperty, BValue, B, InOutBBytes, OutBReferencedInnerKeys, BBytes, OutError))
+		{
+			return false;
+		}
+		if (ABytes != BBytes)
+		{
+			OutMismatch = FString::Printf(
+				TEXT("UserParameters.value[%d:%s]"), Index, *ADesc.Name.ToString());
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool ArePersistentGraphPropertiesIdentical(
+	const UPCGGraph* A,
+	const UPCGGraph* B,
+	FString& OutMismatch,
+	FString& OutError)
+{
+	OutMismatch.Reset();
+	OutError.Reset();
+	if (!A || !B || A->GetClass() != B->GetClass())
+	{
+		OutMismatch = TEXT("graph classes differ");
+		return false;
+	}
+
+	TMap<FString, const UObject*> AObjectsByKey;
+	TMap<FString, const UObject*> BObjectsByKey;
+	if (!BuildPersistentObjectIndex(A, AObjectsByKey, OutError) ||
+		!BuildPersistentObjectIndex(B, BObjectsByKey, OutError))
+	{
+		return false;
+	}
+
+	const FProperty* const UserParametersProperty =
+		FindFProperty<FProperty>(A->GetClass(), TEXT("UserParameters"));
+	if (!UserParametersProperty)
+	{
+		OutError = TEXT("UPCGGraph has no reflected UserParameters property");
+		return false;
+	}
+
+	int64 ASerializedBytes = 0;
+	int64 BSerializedBytes = 0;
+	TArray<FString> PendingKeys;
+	PendingKeys.Add(TEXT("$ROOT"));
+	TSet<FString> QueuedKeys;
+	QueuedKeys.Add(TEXT("$ROOT"));
+	TSet<FString> AReferencedInnerKeys;
+	TSet<FString> BReferencedInnerKeys;
+	TArray<FString> SortedReferencedKeys;
+	TArray<uint8> ABytes;
+	TArray<uint8> BBytes;
+	for (int32 PendingIndex = 0; PendingIndex < PendingKeys.Num(); ++PendingIndex)
+	{
+		if (PendingKeys.Num() > MaxPersistentGraphObjects)
+		{
+			OutError = FString::Printf(
+				TEXT("reachable persistent graph object count exceeds comparison bound %d"),
+				MaxPersistentGraphObjects);
+			return false;
+		}
+
+		const FString ObjectKey = PendingKeys[PendingIndex];
+		const UObject* const* AObjectPtr = AObjectsByKey.Find(ObjectKey);
+		const UObject* const* BObjectPtr = BObjectsByKey.Find(ObjectKey);
+		if (!AObjectPtr || !BObjectPtr || !*AObjectPtr || !*BObjectPtr)
+		{
+			OutMismatch = ObjectKey + TEXT(".presence");
+			return false;
+		}
+		const UObject* const AObject = *AObjectPtr;
+		const UObject* const BObject = *BObjectPtr;
+		if (AObject->GetClass() != BObject->GetClass())
+		{
+			OutMismatch = ObjectKey + TEXT(".class");
+			return false;
+		}
+
+		AReferencedInnerKeys.Reset();
+		BReferencedInnerKeys.Reset();
+		if (PendingIndex == 0 &&
+			!AreUserParametersPersistentlyIdentical(
+				A, B,
+				ASerializedBytes, BSerializedBytes,
+				AReferencedInnerKeys, BReferencedInnerKeys,
+				OutMismatch, OutError))
+		{
+			return false;
+		}
+
+		for (TFieldIterator<FProperty> It(
+				AObject->GetClass(), EFieldIteratorFlags::IncludeSuper); It; ++It)
+		{
+			const FProperty* const Property = *It;
+#if WITH_EDITORONLY_DATA
+			const bool bIdentityBoundEditorWorkspaceState =
+				PendingIndex == 0
+				&& Property
+				&& Property->GetFName() ==
+					GET_MEMBER_NAME_CHECKED(UPCGGraphInterface, LastEditedDocuments);
+#else
+			const bool bIdentityBoundEditorWorkspaceState = false;
+#endif
+			if (!Property || !Property->ShouldDuplicateValue() ||
+				(PendingIndex == 0 && Property == UserParametersProperty) ||
+				bIdentityBoundEditorWorkspaceState)
+			{
+				continue;
+			}
+			for (int32 ArrayIndex = 0; ArrayIndex < Property->ArrayDim; ++ArrayIndex)
+			{
+				const void* const AValue = Property->ContainerPtrToValuePtr<void>(AObject, ArrayIndex);
+				const void* const BValue = Property->ContainerPtrToValuePtr<void>(BObject, ArrayIndex);
+				if (!SerializeCanonicalPersistentProperty(
+						Property, AValue, A, ASerializedBytes,
+						AReferencedInnerKeys, ABytes, OutError) ||
+					!SerializeCanonicalPersistentProperty(
+						Property, BValue, B, BSerializedBytes,
+						BReferencedInnerKeys, BBytes, OutError))
+				{
+					return false;
+				}
+				if (ABytes != BBytes)
+				{
+					OutMismatch = ObjectKey == TEXT("$ROOT")
+						? Property->GetName()
+						: ObjectKey + TEXT(".") + Property->GetName();
+					return false;
+				}
+			}
+		}
+
+		// Preserve the native/intrinsic comparison hook used by CoreUObject's
+		// deep comparator. Current PCG graph-owned classes use the UObject default,
+		// but this keeps the walker correct for a future graph inner that overrides it.
+		if (PendingIndex > 0 &&
+			!AObject->AreNativePropertiesIdenticalTo(const_cast<UObject*>(BObject)))
+		{
+			OutMismatch = ObjectKey + TEXT(".native_properties");
+			return false;
+		}
+
+		if (AReferencedInnerKeys.Num() != BReferencedInnerKeys.Num())
+		{
+			OutMismatch = ObjectKey + TEXT(".referenced_inner_count");
+			return false;
+		}
+		SortedReferencedKeys.Reset(AReferencedInnerKeys.Num());
+		for (const FString& ReferencedKey : AReferencedInnerKeys)
+		{
+			SortedReferencedKeys.Add(ReferencedKey);
+		}
+		SortedReferencedKeys.Sort();
+		for (const FString& ReferencedKey : SortedReferencedKeys)
+		{
+			if (!BReferencedInnerKeys.Contains(ReferencedKey))
+			{
+				OutMismatch = ObjectKey + TEXT(".referenced_inner_identity");
+				return false;
+			}
+			if (!QueuedKeys.Contains(ReferencedKey))
+			{
+				QueuedKeys.Add(ReferencedKey);
+				PendingKeys.Add(ReferencedKey);
+			}
+		}
+	}
+	return true;
+}
+
+bool PrepareGraphReplacementSourceControl(
+	UPCGGraph* Target,
+	TSharedPtr<FJsonObject>& OutPrepare,
+	FMonolithActionResult& OutError)
+{
+	OutPrepare.Reset();
+#if WITH_DEV_AUTOMATION_TESTS
+	if (Target && UE::MonolithPCG::Private::TryBuildGraphContentsReplacementTestSourceControl(
+			Target->GetPathName(), OutPrepare))
+	{
+		return true;
+	}
+#endif
+	FMonolithSourceControlPrepareOptions Options;
+	Options.bUnavailableIsSuccess = true;
+	TSharedPtr<FJsonObject> BeforeAction =
+		FMonolithSourceControlUtils::CheckoutOrAddPackage(Target ? Target->GetPackage() : nullptr, Options);
+	bool bOk = false;
+	bool bAvailable = false;
+	if (BeforeAction.IsValid())
+	{
+		BeforeAction->TryGetBoolField(TEXT("ok"), bOk);
+		BeforeAction->TryGetBoolField(TEXT("available"), bAvailable);
+	}
+	else
+	{
+		BeforeAction = MakeShared<FJsonObject>();
+		BeforeAction->SetBoolField(TEXT("ok"), false);
+		BeforeAction->SetStringField(TEXT("status"), TEXT("missing_before_action"));
+		BeforeAction->SetStringField(
+			TEXT("message"), TEXT("Source-control utility returned no result"));
+	}
+
+	OutPrepare = MakeShared<FJsonObject>();
+	OutPrepare->SetStringField(TEXT("mode"), TEXT("handler_owned_pre_mutation"));
+	OutPrepare->SetStringField(
+		TEXT("status"), !bOk ? TEXT("failed") :
+			(bAvailable ? TEXT("prepared") : TEXT("skipped_provider_unavailable")));
+	OutPrepare->SetObjectField(TEXT("before_action"), BeforeAction);
+	if (bOk)
+	{
+		return true;
+	}
+
+	TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+	ErrorData->SetObjectField(TEXT("source_control_prepare"), OutPrepare);
+	OutError = FMonolithActionResult::Error(
+		TEXT("replace_pcg_graph_contents aborted before mutation because source-control preparation failed"))
+		.WithErrorData(ErrorData);
+	return false;
+}
+
+FMonolithActionResult AttachGraphReplacementSourceControl(
+	FMonolithActionResult Result,
+	const TSharedPtr<FJsonObject>& Prepare)
+{
+	if (!Prepare.IsValid())
+	{
+		return Result;
+	}
+	if (Result.bSuccess && Result.Result.IsValid())
+	{
+		Result.Result->SetObjectField(TEXT("source_control_prepare"), Prepare);
+	}
+	else
+	{
+		if (!Result.ErrorData.IsValid())
+		{
+			Result.ErrorData = MakeShared<FJsonObject>();
+		}
+		Result.ErrorData->SetObjectField(TEXT("source_control_prepare"), Prepare);
+	}
+	return Result;
+}
+
+void PrepareGraphForUndo(UPCGGraph* Graph)
+{
+	if (!Graph)
+	{
+		return;
+	}
+	Graph->Modify();
+	TArray<UObject*> NestedObjects;
+	GetObjectsWithOuter(Graph, NestedObjects, EGetObjectsFlags::IncludeNestedObjects);
+	for (UObject* Object : NestedObjects)
+	{
+		if (Object && Object->HasAnyFlags(RF_Transactional))
+		{
+			Object->Modify();
+		}
+	}
+}
+
+void RebindGraphNodeDelegates(UPCGGraph* Graph)
+{
+#if WITH_EDITOR
+	if (!Graph)
+	{
+		return;
+	}
+	auto Rebind = [Graph](UPCGNode* Node)
+	{
+		if (Node)
+		{
+			Graph->PreNodeUndo(Node);
+			Graph->PostNodeUndo(Node);
+		}
+	};
+	Rebind(Graph->GetInputNode());
+	Rebind(Graph->GetOutputNode());
+	for (UPCGNode* Node : Graph->GetNodes())
+	{
+		Rebind(Node);
+	}
+#endif
+}
+
+void DiscardTransientGraph(UPCGGraph*& Graph)
+{
+	if (!Graph)
+	{
+		return;
+	}
+	Graph->ClearFlags(RF_Public | RF_Standalone);
+	Graph->MarkAsGarbage();
+	Graph = nullptr;
+}
+
+UPCGGraph* DuplicateGraphToTransient(const UPCGGraph* Graph, const TCHAR* BaseName, FString& OutError)
+{
+	if (!Graph)
+	{
+		OutError = TEXT("cannot duplicate a null PCG graph");
+		return nullptr;
+	}
+	const FName UniqueName = MakeUniqueObjectName(
+		GetTransientPackage(), UPCGGraph::StaticClass(), FName(BaseName));
+	UPCGGraph* Duplicate = DuplicateObject<UPCGGraph>(Graph, GetTransientPackage(), UniqueName);
+	if (!Duplicate || Duplicate->GetClass() != Graph->GetClass())
+	{
+		OutError = TEXT("failed to create an exact transient UPCGGraph snapshot");
+		return nullptr;
+	}
+	return Duplicate;
+}
+
+bool ValidateDuplicablePropertyArchetype(const UObject* Object, FString& OutError)
+{
+	if (!Object)
+	{
+		OutError = TEXT("cannot reset a null seeded-duplication destination");
+		return false;
+	}
+
+	const UObject* const Archetype = Object->GetArchetype();
+	if (!Archetype || Archetype == Object || Archetype->GetClass() != Object->GetClass())
+	{
+		OutError = FString::Printf(
+			TEXT("seeded-duplication destination '%s' has no exact class archetype baseline"),
+			*Object->GetPathName());
+		return false;
+	}
+	return true;
+}
+
+void ResetDuplicablePropertiesToArchetype(UObject* Object)
+{
+	check(Object && Object->GetArchetype() && Object->GetArchetype() != Object);
+	UObject* const Archetype = Object->GetArchetype();
+	for (TFieldIterator<FProperty> It(Object->GetClass(), EFieldIteratorFlags::IncludeSuper); It; ++It)
+	{
+		FProperty* const Property = *It;
+		if (Property && Property->ShouldDuplicateValue())
+		{
+			Property->CopyCompleteValue_InContainer(Object, Archetype);
+		}
+	}
+}
+
+bool BuildRelativeOuterNameClassKey(
+	const UObject* Object,
+	const UObject* Root,
+	FString& OutKey)
+{
+	OutKey.Reset();
+	if (!Object || !Root || Object == Root)
+	{
+		return false;
+	}
+
+	TArray<const UObject*> RelativeChain;
+	for (const UObject* Cursor = Object; Cursor && Cursor != Root; Cursor = Cursor->GetOuter())
+	{
+		if (RelativeChain.Num() >= MaxPersistentGraphObjectDepth)
+		{
+			return false;
+		}
+		RelativeChain.Add(Cursor);
+	}
+	if (RelativeChain.IsEmpty() || RelativeChain.Last()->GetOuter() != Root)
+	{
+		return false;
+	}
+
+	// Encode every ancestor's exact name and class with length prefixes. This
+	// preserves the old recursive contract: a same-name leaf is reusable only
+	// when every parent in its source-relative lineage also matches exactly.
+	for (int32 Index = RelativeChain.Num() - 1; Index >= 0; --Index)
+	{
+		const UObject* const Segment = RelativeChain[Index];
+		const FString Name = Segment->GetFName().ToString();
+		const FString ClassPath = Segment->GetClass()->GetPathName();
+		OutKey += FString::Printf(
+			TEXT("%d:%s%d:%s"),
+			Name.Len(), *Name,
+			ClassPath.Len(), *ClassPath);
+	}
+	return true;
+}
+
+void CollectReusableSeededDuplicationDestinations(
+	const UObject* Source,
+	UObject* Target,
+	TArray<UObject*>& OutTargets)
+{
+	OutTargets.Reset();
+	if (!Source || !Target)
+	{
+		return;
+	}
+	OutTargets.Add(Target);
+
+	TArray<UObject*> TargetObjects;
+	GetObjectsWithOuter(Target, TargetObjects, EGetObjectsFlags::IncludeNestedObjects);
+	TMap<FString, UObject*> TargetsByRelativeLineage;
+	TargetsByRelativeLineage.Reserve(TargetObjects.Num());
+	for (UObject* const TargetObject : TargetObjects)
+	{
+		FString RelativeKey;
+		if (BuildRelativeOuterNameClassKey(TargetObject, Target, RelativeKey))
+		{
+			TargetsByRelativeLineage.Add(MoveTemp(RelativeKey), TargetObject);
+		}
+	}
+
+	TArray<UObject*> SourceObjects;
+	GetObjectsWithOuter(Source, SourceObjects, EGetObjectsFlags::IncludeNestedObjects);
+	OutTargets.Reserve(FMath::Min(SourceObjects.Num(), TargetObjects.Num()) + 1);
+	for (const UObject* const SourceObject : SourceObjects)
+	{
+		FString RelativeKey;
+		if (!BuildRelativeOuterNameClassKey(SourceObject, Source, RelativeKey))
+		{
+			continue;
+		}
+		if (UObject* const* ReusableTarget = TargetsByRelativeLineage.Find(RelativeKey))
+		{
+			OutTargets.Add(*ReusableTarget);
+		}
+	}
+}
+
+bool ResetSeededDuplicationDestinationBaselines(
+	const UPCGGraph* Source,
+	UPCGGraph* Target,
+	FString& OutError)
+{
+	if (!Source || !Target)
+	{
+		OutError = TEXT("cannot reset a null PCG graph source or destination");
+		return false;
+	}
+
+	// StaticDuplicateObjectEx normally constructs its destination from the class
+	// archetype before applying the source's delta-serialized values. A root in
+	// DuplicationSeed is deliberately reused instead, as are any same-name inner
+	// objects that the writer maps onto the existing graph. Without recreating
+	// that archetype baseline first, a source value equal to its default is
+	// omitted from the duplicate stream and the previous target value survives.
+	// Reset exactly the source-relative objects that the duplicate writer can
+	// reuse by outer/name/class. Unmatched target-only editor objects are not
+	// touched; unmatched persistent graph objects are removed by the replacement.
+	TArray<UObject*> ExistingObjects;
+	CollectReusableSeededDuplicationDestinations(Source, Target, ExistingObjects);
+
+	// Preflight the entire tree before the first property is reset so this
+	// preparation step cannot fail after a partial mutation.
+	for (const UObject* const Object : ExistingObjects)
+	{
+		if (!ValidateDuplicablePropertyArchetype(Object, OutError))
+		{
+			return false;
+		}
+	}
+	for (UObject* const Object : ExistingObjects)
+	{
+		ResetDuplicablePropertiesToArchetype(Object);
+	}
+	return true;
+}
+
+bool ReplaceGraphObjectState(
+	const UPCGGraph* Source,
+	UPCGGraph* Target,
+	bool bTransactionalAndNotify,
+	FString& OutError)
+{
+	OutError.Reset();
+	if (!Source || !Target || Source == Target ||
+		Source->GetClass() != UPCGGraph::StaticClass() ||
+		Target->GetClass() != UPCGGraph::StaticClass())
+	{
+		OutError = TEXT("graph state replacement requires distinct exact UPCGGraph objects");
+		return false;
+	}
+
+	const FString TargetPathBefore = Target->GetPathName();
+	const FName TargetNameBefore = Target->GetFName();
+	UObject* const TargetOuterBefore = Target->GetOuter();
+	UPCGNode* const TargetInputNodeBefore = Target->GetInputNode();
+	UPCGNode* const TargetOutputNodeBefore = Target->GetOutputNode();
+	UPCGSettings* const TargetInputSettingsBefore =
+		TargetInputNodeBefore ? TargetInputNodeBefore->GetSettings() : nullptr;
+	UPCGSettings* const TargetOutputSettingsBefore =
+		TargetOutputNodeBefore ? TargetOutputNodeBefore->GetSettings() : nullptr;
+#if WITH_EDITORONLY_DATA
+	// LastEditedDocuments is persisted by PCG solely to restore the target
+	// asset's editor workspace.  It is identity-bound UI state, not graph
+	// contents: importing the donor's soft paths would point the canonical
+	// target back at the donor package.  Preserve it across both preview and
+	// commit replacement, while the deep comparator intentionally ignores it.
+	const TArray<FPCGGraphDocumentInfo> TargetLastEditedDocumentsBefore =
+		Target->LastEditedDocuments;
+#endif
+	TArray<TWeakObjectPtr<UPCGNode>> PreviousElementNodes;
+	PreviousElementNodes.Reserve(Target->GetNodes().Num());
+	for (UPCGNode* Node : Target->GetNodes())
+	{
+		PreviousElementNodes.Add(Node);
+	}
+
+	auto DuplicateIntoExistingTarget = [&]() -> bool
+	{
+		if (bTransactionalAndNotify)
+		{
+			PrepareGraphForUndo(Target);
+		}
+		if (!ResetSeededDuplicationDestinationBaselines(Source, Target, OutError))
+		{
+			return false;
+		}
+
+		FObjectDuplicationParameters DuplicationParameters(
+			const_cast<UPCGGraph*>(Source), TargetOuterBefore);
+		DuplicationParameters.DestName = TargetNameBefore;
+		DuplicationParameters.DestClass = Target->GetClass();
+		DuplicationParameters.bAssignExternalPackages = false;
+		DuplicationParameters.DuplicationSeed.Add(const_cast<UPCGGraph*>(Source), Target);
+		TMap<UObject*, UObject*> CreatedObjects;
+		DuplicationParameters.CreatedObjects = &CreatedObjects;
+		if (StaticDuplicateObjectEx(DuplicationParameters) != Target)
+		{
+			return false;
+		}
+#if WITH_EDITORONLY_DATA
+		Target->LastEditedDocuments = TargetLastEditedDocumentsBefore;
+#endif
+		return true;
+	};
+
+	if (bTransactionalAndNotify)
+	{
+		FMonolithPCGScopedGraphEditNotifications NotificationScope(Target);
+		if (!DuplicateIntoExistingTarget())
+		{
+			if (OutError.IsEmpty())
+			{
+				OutError = TEXT("StaticDuplicateObjectEx did not reuse the exact target UPCGGraph identity");
+			}
+			return false;
+		}
+		RebindGraphNodeDelegates(Target);
+		Target->ForceNotificationForEditor(
+			EPCGChangeType::Structural | EPCGChangeType::Settings |
+			EPCGChangeType::Edge | EPCGChangeType::Input |
+			EPCGChangeType::GenerationGrid);
+		NotificationScope.MarkExternalModification();
+	}
+	else if (!DuplicateIntoExistingTarget())
+	{
+		if (OutError.IsEmpty())
+		{
+			OutError = TEXT("StaticDuplicateObjectEx did not reuse the exact preview UPCGGraph identity");
+		}
+		return false;
+	}
+	if (bTransactionalAndNotify)
+	{
+		// Seeded duplication may reuse an element node when names match. Mirror
+		// UPCGGraph::RemoveNodes_Internal for old nodes no longer referenced by the
+		// graph: move them to the transient package but keep them alive so the
+		// surrounding editor transaction can restore them on Undo.
+		for (const TWeakObjectPtr<UPCGNode>& PreviousNode : PreviousElementNodes)
+		{
+			UPCGNode* Node = PreviousNode.Get();
+			if (Node && !Target->Contains(Node) && Node->GetOuter() == Target)
+			{
+				Node->Rename(
+					nullptr,
+					GetTransientPackage(),
+					REN_DontCreateRedirectors | REN_AllowPackageLinkerMismatch);
+			}
+		}
+	}
+
+	if (Target->GetOuter() != TargetOuterBefore || Target->GetFName() != TargetNameBefore ||
+		!Target->GetPathName().Equals(TargetPathBefore, ESearchCase::CaseSensitive))
+	{
+		OutError = TEXT("graph state replacement changed the target package/object identity");
+		return false;
+	}
+
+	for (UPCGNode* Node : Target->GetNodes())
+	{
+		if (!Node || Node->GetGraph() != Target || !Target->Contains(Node))
+		{
+			OutError = TEXT("graph state replacement produced an element node outside the target graph");
+			return false;
+		}
+	}
+	if (!Target->GetInputNode() || !Target->GetOutputNode() ||
+		Target->GetInputNode()->GetGraph() != Target ||
+		Target->GetOutputNode()->GetGraph() != Target)
+	{
+		OutError = TEXT("graph state replacement did not preserve target-owned input/output nodes");
+		return false;
+	}
+	if (Target->GetInputNode() != TargetInputNodeBefore ||
+		Target->GetOutputNode() != TargetOutputNodeBefore ||
+		Target->GetInputNode()->GetSettings() != TargetInputSettingsBefore ||
+		Target->GetOutputNode()->GetSettings() != TargetOutputSettingsBefore)
+	{
+		OutError = TEXT(
+			"graph state replacement did not reuse the target's default input/output nodes and settings");
+		return false;
+	}
+
+	FString Mismatch;
+	FString ComparisonError;
+	if (!ArePersistentGraphPropertiesIdentical(Source, Target, Mismatch, ComparisonError))
+	{
+		OutError = !ComparisonError.IsEmpty()
+			? FString::Printf(
+				TEXT("graph state replacement could not verify persistent properties: %s"),
+				*ComparisonError)
+			: FString::Printf(
+				TEXT("graph state replacement failed exact persistent-property read-back at '%s'"),
+				*Mismatch);
+		return false;
+	}
+
+	return true;
+}
+
+bool RestoreGraphFromSnapshot(
+	UPCGGraph* Target,
+	const UPCGGraph* Snapshot,
+	bool bWasDirty,
+	FString& OutError)
+{
+	if (!ReplaceGraphObjectState(Snapshot, Target, true, OutError))
+	{
+		if (Target && Target->GetPackage())
+		{
+			Target->GetPackage()->SetDirtyFlag(true);
+		}
+		return false;
+	}
+	RestorePackageDirtyState(Target, bWasDirty);
+	FString Mismatch;
+	FString ComparisonError;
+	if (!ArePersistentGraphPropertiesIdentical(Snapshot, Target, Mismatch, ComparisonError))
+	{
+		OutError = !ComparisonError.IsEmpty()
+			? FString::Printf(
+				TEXT("rollback persistent-property verification could not complete: %s"),
+				*ComparisonError)
+			: FString::Printf(
+				TEXT("rollback verification failed at persistent property '%s'"), *Mismatch);
+		Target->GetPackage()->SetDirtyFlag(true);
+		return false;
+	}
+	if (Target->GetPackage()->IsDirty() != bWasDirty)
+	{
+		OutError = TEXT("rollback could not restore the original package dirty state");
+		Target->GetPackage()->SetDirtyFlag(true);
+		return false;
+	}
+	return true;
+}
+
 struct FGraphEdgeDescriptor
 {
 	UPCGNode* SourceNode = nullptr;
@@ -1560,6 +2850,27 @@ TArray<FGraphEdgeDescriptor> CaptureIncidentEdges(UPCGGraph* Graph, const UPCGNo
 		}
 	}
 	return Descriptors;
+}
+
+bool AreEdgeDescriptorsEqual(
+	const TArray<FGraphEdgeDescriptor>& A,
+	const TArray<FGraphEdgeDescriptor>& B)
+{
+	if (A.Num() != B.Num())
+	{
+		return false;
+	}
+	for (int32 Index = 0; Index < A.Num(); ++Index)
+	{
+		if (A[Index].SourceNode != B[Index].SourceNode ||
+			A[Index].SourcePin != B[Index].SourcePin ||
+			A[Index].TargetNode != B[Index].TargetNode ||
+			A[Index].TargetPin != B[Index].TargetPin)
+		{
+			return false;
+		}
+	}
+	return true;
 }
 
 bool RestoreRemovedNode(UPCGGraph* Graph, UPCGNode* Node, const FName OriginalNodeName,
@@ -1688,6 +2999,55 @@ bool RestoreSettingsMutation(UPCGGraph* Graph, UPCGNode* Node, UPCGSettings* Set
 	}
 	RestorePackageDirtyState(Graph, bWasDirty);
 	bRestored &= Graph->GetPackage() && Graph->GetPackage()->IsDirty() == bWasDirty;
+	return bRestored;
+}
+
+bool RestoreSubgraphMutation(UPCGGraph* Graph, UPCGNode* Node, UPCGSubgraphSettings* Settings,
+							 UPCGGraphInterface* PreviousInterface,
+							 const TArray<FGraphEdgeDescriptor>& OriginalIncidentEdges, bool bWasDirty)
+{
+	if (!Graph || !Node || !Settings || !Settings->SubgraphInstance)
+	{
+		return false;
+	}
+
+	bool bRestored = true;
+	{
+		FMonolithPCGScopedGraphEditNotifications NotificationScope(Graph);
+		Settings->Modify();
+		Settings->SetSubgraph(PreviousInterface);
+		bRestored &= Settings->SubgraphInstance->Graph.Get() == PreviousInterface;
+
+		for (const FGraphEdgeDescriptor& CurrentEdge : CaptureIncidentEdges(Graph, Node))
+		{
+			if (!CurrentEdge.SourceNode || !CurrentEdge.TargetNode)
+			{
+				bRestored = false;
+				continue;
+			}
+			Graph->RemoveEdge(CurrentEdge.SourceNode, CurrentEdge.SourcePin, CurrentEdge.TargetNode,
+				CurrentEdge.TargetPin);
+		}
+
+		for (const FGraphEdgeDescriptor& OriginalEdge : OriginalIncidentEdges)
+		{
+			if (!OriginalEdge.SourceNode || !OriginalEdge.TargetNode || OriginalEdge.SourcePin.IsNone() ||
+				OriginalEdge.TargetPin.IsNone())
+			{
+				bRestored = false;
+				continue;
+			}
+			Graph->AddLabeledEdge(OriginalEdge.SourceNode, OriginalEdge.SourcePin, OriginalEdge.TargetNode,
+				OriginalEdge.TargetPin);
+			bRestored &= AreConnected(OriginalEdge.SourceNode->GetOutputPin(OriginalEdge.SourcePin),
+				OriginalEdge.TargetNode->GetInputPin(OriginalEdge.TargetPin));
+		}
+		NotificationScope.MarkExternalModification();
+	}
+
+	RestorePackageDirtyState(Graph, bWasDirty);
+	bRestored &= Graph->GetPackage() && Graph->GetPackage()->IsDirty() == bWasDirty;
+	bRestored &= AreEdgeDescriptorsEqual(CaptureIncidentEdges(Graph, Node), OriginalIncidentEdges);
 	return bRestored;
 }
 
@@ -1900,6 +3260,68 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 		TEXT("Graph Authoring"), MonolithPCGAuthoring::MutationPolicy());
 
 	Registry.RegisterAction(
+		TEXT("pcg"), TEXT("set_pcg_subgraph"),
+		TEXT("Assign one exact project-owned UPCGGraph or UPCGGraphInstance to an existing "
+			 "UPCGSubgraphSettings node through UE's SetSubgraph contract. Supports side-effect-free "
+			 "dry-run, recursion/filter guards, exact read-back, incident-topology preservation, "
+			 "rollback, and optional save."),
+		FMonolithActionHandler::CreateStatic(&SetSubgraph),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Project-owned parent PCG graph package or object path"))
+			.Required(TEXT("node_id"), TEXT("string"),
+				TEXT("Exact UPCGSubgraphSettings node_id returned by add/get, or a unique authored title"))
+			.Required(TEXT("subgraph_asset_path"), TEXT("string"),
+				TEXT("Exact project-owned UPCGGraph or UPCGGraphInstance package or object path"))
+			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Validate and report without mutation"), TEXT("false"))
+			.Optional(TEXT("save"), TEXT("bool"), TEXT("Persist the parent graph after mutation"), TEXT("true"))
+			.Build(),
+		TEXT("Graph Authoring"), MonolithPCGAuthoring::MutationPolicy());
+
+	Registry.RegisterAction(
+		TEXT("pcg"), TEXT("set_pcg_graph_user_parameters"),
+		TEXT("Atomically add, update, type-change, or remove bounded scalar user parameters on an exact "
+			 "project-owned UPCGGraph. Every upsert requires an explicit default_value; dry-run defaults true."),
+		FMonolithActionHandler::CreateStatic(&SetGraphUserParameters),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Exact project-owned PCG graph package or object path"))
+			.Optional(TEXT("upsert"), TEXT("array"),
+				TEXT("Parameter objects with name, type, and explicit default_value"))
+			.Optional(TEXT("remove"), TEXT("array"), TEXT("Exact existing parameter names to remove"))
+			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Validate and preview the atomic schema/value change"),
+				TEXT("true"))
+			.Optional(TEXT("save"), TEXT("bool"), TEXT("Persist the graph after mutation"), TEXT("true"))
+			.Build(),
+		TEXT("Graph Authoring"), MonolithPCGAuthoring::MutationPolicy());
+
+	Registry.RegisterAction(
+		TEXT("pcg"), TEXT("replace_pcg_graph_contents"),
+		TEXT("Replace an existing target UPCGGraph's complete persistent object graph from a distinct "
+			 "exact project-owned source while preserving the target package/object identity. Copies graph-level "
+			 "properties, user parameters, input/output settings and pins, element settings/editor properties, "
+			 "embedded subobjects, and exact edges through CoreUObject seeded duplication. Recursive donors and "
+			 "donors containing the target fail closed. Dry-run defaults true; commit requires confirm=true."),
+		FMonolithActionHandler::CreateStatic(&ReplaceGraphContents),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Required(TEXT("source_asset_path"), TEXT("string"),
+				TEXT("Exact project-owned source UPCGGraph package or object path"))
+			.Required(TEXT("target_asset_path"), TEXT("string"),
+				TEXT("Exact existing project-owned target UPCGGraph package or object path whose identity is preserved"))
+			.Optional(TEXT("dry_run"), TEXT("bool"),
+				TEXT("Build and verify a transient replacement preview without mutating the target"), TEXT("true"))
+			.Optional(TEXT("confirm"), TEXT("bool"),
+				TEXT("Required true when dry_run=false because target contents are replaced"), TEXT("false"))
+			.Optional(TEXT("save"), TEXT("bool"), TEXT("Persist the replaced target graph"), TEXT("true"))
+			.Optional(TEXT("node_limit"), TEXT("integer"),
+				TEXT("Maximum source or target element nodes accepted (1-5000)"), TEXT("5000"))
+			.Optional(TEXT("edge_limit"), TEXT("integer"),
+				TEXT("Maximum source or target edges accepted (1-20000)"), TEXT("20000"))
+			.Build(),
+		TEXT("Graph Authoring"), MonolithPCGAuthoring::MutationPolicy());
+
+	Registry.RegisterAction(
 		TEXT("pcg"), TEXT("validate_pcg_graph"),
 		TEXT("Validate PCG graph node ownership, settings, edge "
 			 "endpoints/directions/types/capacity, duplicate ids/edges, directed "
@@ -1921,7 +3343,9 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 	const TArray<FString> AuthoringActions = {
 		TEXT("list_pcg_node_types"),  TEXT("create_pcg_graph"),	   TEXT("get_pcg_graph_info"),
 		TEXT("add_pcg_node"),		  TEXT("remove_pcg_node"),	   TEXT("connect_pcg_nodes"),
-		TEXT("disconnect_pcg_nodes"), TEXT("set_pcg_node_params"), TEXT("validate_pcg_graph")};
+		TEXT("disconnect_pcg_nodes"), TEXT("set_pcg_node_params"), TEXT("set_pcg_graph_user_parameters"),
+		TEXT("set_pcg_subgraph"),
+		TEXT("replace_pcg_graph_contents"), TEXT("validate_pcg_graph")};
 	for (const FString& Action : AuthoringActions)
 	{
 		Registry.SetActionSearchMetadata(
@@ -1941,6 +3365,25 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 											 "dry_run=true before unfamiliar settings writes")},
 									   {TEXT("Per-field canonical reflection-walker report plus save status")},
 									   {TEXT("pcg.get_pcg_graph_info"), TEXT("pcg.validate_pcg_graph")});
+	Registry.SetActionPlanningMetadata(TEXT("pcg"), TEXT("set_pcg_subgraph"), TEXT("unreal-pcg"),
+									   {TEXT("The node must be UPCGSubgraphSettings and both graphs must be project-owned; "
+											 "dry-run before changing an existing assignment")},
+									   {TEXT("Exact previous/requested/read-back graph-interface paths, recursion/filter "
+											 "validation, incident-topology evidence, pin summaries, and save status")},
+									   {TEXT("pcg.get_pcg_graph_info"), TEXT("pcg.validate_pcg_graph")});
+	Registry.SetActionPlanningMetadata(
+		TEXT("pcg"), TEXT("set_pcg_graph_user_parameters"), TEXT("unreal-pcg"),
+		{TEXT("Use dry_run=true first; every upsert must name a supported scalar type and explicit default_value")},
+		{TEXT("Exact atomic add/update/remove rows, before/after parameter counts, canonical default values, and save status")},
+		{TEXT("pcg.get_pcg_graph_info"), TEXT("pcg.set_component_user_parameters")});
+	Registry.SetActionPlanningMetadata(
+		TEXT("pcg"), TEXT("replace_pcg_graph_contents"), TEXT("unreal-pcg"),
+		{TEXT("Source and target must be distinct exact project-owned UPCGGraph assets, and the source must "
+			  "neither be recursive nor contain the target; run the default dry-run and inspect bounded counts "
+			  "before repeating with dry_run=false and confirm=true")},
+		{TEXT("Exact source/target paths, preserved target identity, before/after node-edge-parameter counts, "
+			  "deep persistent-property read-back, structural validation, rollback status, and save status")},
+		{TEXT("pcg.get_pcg_graph_info"), TEXT("pcg.validate_pcg_graph")});
 	Registry.SetActionPlanningMetadata(TEXT("pcg"), TEXT("validate_pcg_graph"), TEXT("unreal-pcg"), {},
 									   {TEXT("Bounded structural validation report with valid, errors, "
 											 "warnings, node_count, and edge_count")},
@@ -2941,6 +4384,796 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::SetNodeParams(const TSh
 		Result->SetStringField(TEXT("saved_filename"), SavedFilename);
 	}
 	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithPCGGraphAuthoringActions::SetGraphUserParameters(
+	const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	FString Error;
+	if (!MonolithPCGAuthoring::ReadRequiredString(Params, TEXT("asset_path"), AssetPath, Error))
+	{
+		return MonolithPCGAuthoring::InvalidParam(TEXT("asset_path"), Error);
+	}
+	bool bDryRun = true;
+	bool bSave = true;
+	if (!MonolithPCGAuthoring::ReadOptionalBool(Params, TEXT("dry_run"), true, bDryRun, Error) ||
+		!MonolithPCGAuthoring::ReadOptionalBool(Params, TEXT("save"), true, bSave, Error))
+	{
+		return MonolithPCGAuthoring::InvalidParam(TEXT("params"), Error);
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* UpsertArray = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* RemoveArray = nullptr;
+	if (Params->HasField(TEXT("upsert")) && !Params->TryGetArrayField(TEXT("upsert"), UpsertArray))
+	{
+		return MonolithPCGAuthoring::InvalidParam(TEXT("upsert"), TEXT("upsert must be an array"));
+	}
+	if (Params->HasField(TEXT("remove")) && !Params->TryGetArrayField(TEXT("remove"), RemoveArray))
+	{
+		return MonolithPCGAuthoring::InvalidParam(TEXT("remove"), TEXT("remove must be an array of names"));
+	}
+	const int32 UpsertCount = UpsertArray ? UpsertArray->Num() : 0;
+	const int32 RemoveCount = RemoveArray ? RemoveArray->Num() : 0;
+	if (UpsertCount + RemoveCount == 0 ||
+		UpsertCount + RemoveCount > MonolithPCGAuthoring::MaxGraphUserParameterOperations)
+	{
+		return MonolithPCGAuthoring::InvalidParam(TEXT("params"), FString::Printf(
+			TEXT("Provide 1..%d total upsert/remove operations"),
+			MonolithPCGAuthoring::MaxGraphUserParameterOperations));
+	}
+
+	UPCGGraph* Graph = nullptr;
+	FString ObjectPath;
+	if (!MonolithPCGAuthoring::LoadGraph(AssetPath, Graph, ObjectPath, Error))
+	{
+		return MonolithPCGAuthoring::InvalidParam(TEXT("asset_path"), Error);
+	}
+	const FInstancedPropertyBag* LiveBag = Graph->GetUserParametersStruct();
+	if (!LiveBag)
+	{
+		return FMonolithActionResult::Error(TEXT("PCG graph has no user-parameter property bag"));
+	}
+
+	struct FUpsertOperation
+	{
+		FName Name;
+		EPropertyBagPropertyType Type = EPropertyBagPropertyType::None;
+		FString SerializedValue;
+	};
+	TArray<FUpsertOperation> Upserts;
+	TArray<FName> Removes;
+	TSet<FName> SeenNames;
+	if (UpsertArray)
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *UpsertArray)
+		{
+			const TSharedPtr<FJsonObject>* ObjectPtr = nullptr;
+			if (!Value.IsValid() || !Value->TryGetObject(ObjectPtr) || !ObjectPtr || !ObjectPtr->IsValid())
+			{
+				return MonolithPCGAuthoring::InvalidParam(TEXT("upsert"),
+					TEXT("Every upsert entry must be an object"));
+			}
+			FString NameString;
+			FString TypeString;
+			if (!(*ObjectPtr)->TryGetStringField(TEXT("name"), NameString) ||
+				!(*ObjectPtr)->TryGetStringField(TEXT("type"), TypeString) ||
+				!(*ObjectPtr)->HasField(TEXT("default_value")))
+			{
+				return MonolithPCGAuthoring::InvalidParam(TEXT("upsert"),
+					TEXT("Every upsert entry requires string name, string type, and default_value"));
+			}
+			NameString.TrimStartAndEndInline();
+			TypeString.TrimStartAndEndInline();
+			const FName Name(*NameString);
+			if (!FInstancedPropertyBag::IsPropertyNameValid(Name))
+			{
+				return MonolithPCGAuthoring::InvalidParam(TEXT("upsert"),
+					FString::Printf(TEXT("Invalid user-parameter name '%s'"), *NameString));
+			}
+			if (SeenNames.Contains(Name))
+			{
+				return MonolithPCGAuthoring::InvalidParam(TEXT("upsert"), FString::Printf(
+					TEXT("Duplicate case-insensitive user-parameter name '%s'"), *NameString));
+			}
+			FUpsertOperation Operation;
+			Operation.Name = Name;
+			if (!MonolithPCGAuthoring::ParseGraphUserParameterType(TypeString, Operation.Type))
+			{
+				return MonolithPCGAuthoring::InvalidParam(TEXT("upsert"), FString::Printf(
+					TEXT("Unsupported type '%s'; use bool, byte, int32, int64, float, double, name, or string"),
+					*TypeString));
+			}
+			if (!MonolithPCGAuthoring::GraphUserParameterJsonToSerialized(Operation.Type,
+				(*ObjectPtr)->TryGetField(TEXT("default_value")), Operation.SerializedValue, Error))
+			{
+				return MonolithPCGAuthoring::InvalidParam(TEXT("upsert"), FString::Printf(
+					TEXT("Invalid default_value for '%s': %s"), *NameString, *Error));
+			}
+			SeenNames.Add(Name);
+			Upserts.Add(MoveTemp(Operation));
+		}
+	}
+	if (RemoveArray)
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *RemoveArray)
+		{
+			FString NameString;
+			if (!Value.IsValid() || Value->Type != EJson::String || !Value->TryGetString(NameString))
+			{
+				return MonolithPCGAuthoring::InvalidParam(TEXT("remove"),
+					TEXT("Every remove entry must be a string"));
+			}
+			NameString.TrimStartAndEndInline();
+			const FName Name(*NameString);
+			if (NameString.IsEmpty() || Name.IsNone() || SeenNames.Contains(Name))
+			{
+				return MonolithPCGAuthoring::InvalidParam(TEXT("remove"), FString::Printf(
+					TEXT("Invalid, duplicate, or conflicting remove name '%s'"), *NameString));
+			}
+			if (!LiveBag->FindPropertyDescByName(Name))
+			{
+				return MonolithPCGAuthoring::InvalidParam(TEXT("remove"), FString::Printf(
+					TEXT("Unknown graph user parameter '%s'"), *NameString));
+			}
+			SeenNames.Add(Name);
+			Removes.Add(Name);
+		}
+	}
+
+	FInstancedPropertyBag StagedBag = *LiveBag;
+	if (!Removes.IsEmpty() &&
+		StagedBag.RemovePropertiesByName(Removes) != EPropertyBagAlterationResult::Success)
+	{
+		return FMonolithActionResult::Error(TEXT("UE property bag rejected the staged parameter removals"));
+	}
+	for (const FUpsertOperation& Operation : Upserts)
+	{
+		const FPropertyBagPropertyDesc* Existing = StagedBag.FindPropertyDescByName(Operation.Name);
+		if (!Existing || Existing->ValueType != Operation.Type || !Existing->ContainerTypes.IsEmpty())
+		{
+			const FPropertyBagPropertyDesc Descriptor(Operation.Name, Operation.Type);
+			if (StagedBag.AddProperties({Descriptor}, true) != EPropertyBagAlterationResult::Success)
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("UE property bag rejected staged schema for '%s'"), *Operation.Name.ToString()));
+			}
+		}
+		if (StagedBag.SetValueSerializedString(Operation.Name, Operation.SerializedValue) !=
+			EPropertyBagResult::Success)
+		{
+			return MonolithPCGAuthoring::InvalidParam(TEXT("upsert"), FString::Printf(
+				TEXT("UE property bag rejected default_value for '%s'"), *Operation.Name.ToString()));
+		}
+	}
+
+	auto BuildRows = [&]()
+	{
+		TArray<TSharedPtr<FJsonValue>> Rows;
+		for (const FUpsertOperation& Operation : Upserts)
+		{
+			const FPropertyBagPropertyDesc* BeforeDesc = LiveBag->FindPropertyDescByName(Operation.Name);
+			const FPropertyBagPropertyDesc* AfterDesc = StagedBag.FindPropertyDescByName(Operation.Name);
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("name"), Operation.Name.ToString());
+			Row->SetStringField(TEXT("operation"), BeforeDesc ? TEXT("update") : TEXT("add"));
+			Row->SetStringField(TEXT("before_type"), BeforeDesc
+				? MonolithPCGAuthoring::GraphUserParameterTypeToString(BeforeDesc->ValueType) : TEXT("missing"));
+			Row->SetStringField(TEXT("after_type"), AfterDesc
+				? MonolithPCGAuthoring::GraphUserParameterTypeToString(AfterDesc->ValueType) : TEXT("missing"));
+			const TValueOrError<FString, EPropertyBagResult> AfterValue =
+				StagedBag.GetValueSerializedString(Operation.Name);
+			Row->SetStringField(TEXT("after_serialized_value"),
+				AfterValue.IsValid() ? AfterValue.GetValue() : FString());
+			Rows.Add(MakeShared<FJsonValueObject>(Row));
+		}
+		for (const FName Name : Removes)
+		{
+			const FPropertyBagPropertyDesc* BeforeDesc = LiveBag->FindPropertyDescByName(Name);
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("name"), Name.ToString());
+			Row->SetStringField(TEXT("operation"), TEXT("remove"));
+			Row->SetStringField(TEXT("before_type"), BeforeDesc
+				? MonolithPCGAuthoring::GraphUserParameterTypeToString(BeforeDesc->ValueType) : TEXT("missing"));
+			Row->SetStringField(TEXT("after_type"), TEXT("missing"));
+			Rows.Add(MakeShared<FJsonValueObject>(Row));
+		}
+		return Rows;
+	};
+
+	bool bChanged = !Removes.IsEmpty();
+	for (const FUpsertOperation& Operation : Upserts)
+	{
+		const FPropertyBagPropertyDesc* BeforeDesc = LiveBag->FindPropertyDescByName(Operation.Name);
+		const FPropertyBagPropertyDesc* AfterDesc = StagedBag.FindPropertyDescByName(Operation.Name);
+		if (!BeforeDesc || !AfterDesc || BeforeDesc->ValueType != AfterDesc->ValueType ||
+			BeforeDesc->ContainerTypes != AfterDesc->ContainerTypes)
+		{
+			bChanged = true;
+			continue;
+		}
+		const TValueOrError<FString, EPropertyBagResult> BeforeValue =
+			LiveBag->GetValueSerializedString(Operation.Name);
+		const TValueOrError<FString, EPropertyBagResult> AfterValue =
+			StagedBag.GetValueSerializedString(Operation.Name);
+		if (!BeforeValue.IsValid() || !AfterValue.IsValid() || BeforeValue.GetValue() != AfterValue.GetValue())
+		{
+			bChanged = true;
+		}
+	}
+	const int32 ParameterCountBefore =
+		LiveBag->GetPropertyBagStruct() ? LiveBag->GetPropertyBagStruct()->GetPropertyDescs().Num() : 0;
+	const int32 ParameterCountAfter =
+		StagedBag.GetPropertyBagStruct() ? StagedBag.GetPropertyBagStruct()->GetPropertyDescs().Num() : 0;
+	const TArray<TSharedPtr<FJsonValue>> ChangeRows = BuildRows();
+	auto BuildResult = [&](const TCHAR* Status, bool bSaved, const FString& SavedFilename)
+	{
+		TSharedPtr<FJsonObject> Result = MonolithPCGAuthoring::MutationResult(
+			TEXT("set_pcg_graph_user_parameters"), ObjectPath, Status, bSaved, SavedFilename);
+		Result->SetBoolField(TEXT("dry_run"), bDryRun);
+		Result->SetBoolField(TEXT("changed"), bChanged);
+		Result->SetNumberField(TEXT("operation_count"), UpsertCount + RemoveCount);
+		Result->SetNumberField(TEXT("parameter_count_before"), ParameterCountBefore);
+		Result->SetNumberField(TEXT("parameter_count_after"), ParameterCountAfter);
+		Result->SetArrayField(TEXT("changes"), ChangeRows);
+		return Result;
+	};
+	if (bDryRun)
+	{
+		return FMonolithActionResult::Success(BuildResult(
+			bChanged ? TEXT("would_update") : TEXT("unchanged"), false, FString()));
+	}
+	if (!bChanged)
+	{
+		return FMonolithActionResult::Success(BuildResult(TEXT("unchanged"), false, FString()));
+	}
+
+	const FInstancedPropertyBag OriginalBag = *LiveBag;
+	const bool bWasDirty = Graph->GetPackage()->IsDirty();
+	Graph->Modify();
+	Graph->UpdateUserParametersStruct([&StagedBag](FInstancedPropertyBag& Parameters)
+	{
+		Parameters = StagedBag;
+	});
+	Graph->MarkPackageDirty();
+	TSharedPtr<FJsonObject> ValidationReport;
+	if (!MonolithPCGAuthoring::ValidateGraphForCommit(Graph, ObjectPath, ValidationReport, Error))
+	{
+		Graph->UpdateUserParametersStruct([&OriginalBag](FInstancedPropertyBag& Parameters)
+		{
+			Parameters = OriginalBag;
+		});
+		Graph->GetPackage()->SetDirtyFlag(bWasDirty);
+		return FMonolithActionResult::Error(Error).WithErrorData(ValidationReport);
+	}
+	bool bSaved = false;
+	FString SavedFilename;
+	if (!MonolithPCGAuthoring::SaveGraph(Graph, bSave, bSaved, SavedFilename, Error))
+	{
+		Graph->UpdateUserParametersStruct([&OriginalBag](FInstancedPropertyBag& Parameters)
+		{
+			Parameters = OriginalBag;
+		});
+		Graph->GetPackage()->SetDirtyFlag(bWasDirty);
+		return FMonolithActionResult::Error(Error);
+	}
+	return FMonolithActionResult::Success(BuildResult(TEXT("updated"), bSaved, SavedFilename));
+}
+
+FMonolithActionResult FMonolithPCGGraphAuthoringActions::SetSubgraph(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	FString NodeIdentifier;
+	FString SubgraphAssetPath;
+	FString Error;
+	if (!MonolithPCGAuthoring::ReadRequiredString(Params, TEXT("asset_path"), AssetPath, Error) ||
+		!MonolithPCGAuthoring::ReadRequiredString(Params, TEXT("node_id"), NodeIdentifier, Error) ||
+		!MonolithPCGAuthoring::ReadRequiredString(
+			Params, TEXT("subgraph_asset_path"), SubgraphAssetPath, Error))
+	{
+		return MonolithPCGAuthoring::InvalidParam(TEXT("params"), Error);
+	}
+
+	bool bDryRun = false;
+	bool bSave = true;
+	if (!MonolithPCGAuthoring::ReadOptionalBool(Params, TEXT("dry_run"), false, bDryRun, Error) ||
+		!MonolithPCGAuthoring::ReadOptionalBool(Params, TEXT("save"), true, bSave, Error))
+	{
+		return MonolithPCGAuthoring::InvalidParam(TEXT("params"), Error);
+	}
+
+	UPCGGraph* Graph = nullptr;
+	FString ObjectPath;
+	if (!MonolithPCGAuthoring::LoadGraph(AssetPath, Graph, ObjectPath, Error))
+	{
+		return MonolithPCGAuthoring::InvalidParam(TEXT("asset_path"), Error);
+	}
+	UPCGNode* Node = MonolithPCGAuthoring::ResolveNode(Graph, NodeIdentifier, false, Error);
+	if (!Node)
+	{
+		return MonolithPCGAuthoring::InvalidParam(TEXT("node_id"), Error);
+	}
+	UPCGSubgraphSettings* Settings = Cast<UPCGSubgraphSettings>(Node->GetSettings());
+	if (!Settings || !Settings->SubgraphInstance)
+	{
+		return MonolithPCGAuthoring::InvalidParam(
+			TEXT("node_id"),
+			FString::Printf(TEXT("PCG node '%s' must use UPCGSubgraphSettings, got %s"),
+				*NodeIdentifier,
+				Node->GetSettings() ? *Node->GetSettings()->GetClass()->GetName() : TEXT("no settings")));
+	}
+	if (Settings->SubgraphOverride)
+	{
+		return MonolithPCGAuthoring::InvalidParam(
+			TEXT("node_id"),
+			TEXT("The subgraph node has an active SubgraphOverride; refusing to change a hidden default "
+				 "assignment that would not be the effective graph"));
+	}
+
+	UPCGGraphInterface* RequestedInterface = nullptr;
+	FString RequestedObjectPath;
+	if (!MonolithPCGAuthoring::LoadGraphInterface(
+			SubgraphAssetPath, RequestedInterface, RequestedObjectPath, Error))
+	{
+		return MonolithPCGAuthoring::InvalidParam(TEXT("subgraph_asset_path"), Error);
+	}
+	if (!Settings->SubgraphInstance->CanGraphInterfaceBeSet(RequestedInterface))
+	{
+		return MonolithPCGAuthoring::InvalidParam(
+			TEXT("subgraph_asset_path"),
+			FString::Printf(
+				TEXT("Assigning '%s' would create a recursive PCG graph-instance hierarchy"),
+				*RequestedObjectPath));
+	}
+	UPCGGraph* RequestedGraph = RequestedInterface->GetGraph();
+	if (RequestedGraph == Graph || RequestedGraph->Contains(Graph))
+	{
+		return MonolithPCGAuthoring::InvalidParam(
+			TEXT("subgraph_asset_path"),
+			FString::Printf(TEXT("Assigning '%s' to '%s' would create a recursive PCG subgraph hierarchy"),
+				*RequestedObjectPath, *ObjectPath));
+	}
+
+	IAssetRegistry& AssetRegistry =
+		FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+	const FAssetData RequestedAssetData =
+		AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(RequestedObjectPath));
+	if (Graph->GraphCustomization.FiltersSubgraphs() && !RequestedAssetData.IsValid())
+	{
+		return MonolithPCGAuthoring::InvalidParam(
+			TEXT("subgraph_asset_path"),
+			FString::Printf(
+				TEXT("AssetRegistry metadata is required to evaluate the parent graph's subgraph filter: '%s'"),
+				*RequestedObjectPath));
+	}
+	if (RequestedAssetData.IsValid() && Settings->SubgraphAssetFilter(RequestedAssetData))
+	{
+		return MonolithPCGAuthoring::InvalidParam(
+			TEXT("subgraph_asset_path"),
+			FString::Printf(TEXT("Parent graph customization rejects subgraph '%s'"), *RequestedObjectPath));
+	}
+
+	UPCGGraphInterface* PreviousInterface = Settings->SubgraphInstance->Graph.Get();
+	const FString PreviousPath = PreviousInterface ? PreviousInterface->GetPathName() : FString();
+	const bool bWouldChange = PreviousInterface != RequestedInterface;
+	auto BuildResult = [&](const TCHAR* Status, bool bSaved, const FString& SavedFilename)
+	{
+		TSharedPtr<FJsonObject> Result = MonolithPCGAuthoring::MutationResult(
+			TEXT("set_pcg_subgraph"), ObjectPath, Status, bSaved, SavedFilename);
+		Result->SetStringField(TEXT("node_id"), MonolithPCGAuthoring::NodeId(Graph, Node));
+		Result->SetStringField(TEXT("node_path"), Node->GetPathName());
+		Result->SetStringField(TEXT("settings_class"), Settings->GetClass()->GetName());
+		Result->SetStringField(TEXT("previous_subgraph_path"), PreviousPath);
+		Result->SetStringField(TEXT("requested_subgraph_path"), RequestedObjectPath);
+		Result->SetStringField(TEXT("requested_graph_path"), RequestedGraph->GetPathName());
+		UPCGGraphInterface* AssignedInterface =
+			Settings->SubgraphInstance ? Settings->SubgraphInstance->Graph.Get() : nullptr;
+		UPCGGraph* AssignedGraph = Settings->GetSubgraph();
+		Result->SetStringField(
+			TEXT("assigned_subgraph_path"), AssignedInterface ? AssignedInterface->GetPathName() : FString());
+		Result->SetStringField(
+			TEXT("assigned_graph_path"), AssignedGraph ? AssignedGraph->GetPathName() : FString());
+		Result->SetNumberField(
+			TEXT("incident_edge_count"), MonolithPCGAuthoring::CaptureIncidentEdges(Graph, Node).Num());
+		Result->SetBoolField(TEXT("changed"), bWouldChange);
+		Result->SetBoolField(TEXT("dry_run"), bDryRun);
+		MonolithPCGAuthoring::AddBoundedPinFields(Result, Node);
+		return Result;
+	};
+
+	if (bDryRun)
+	{
+		return FMonolithActionResult::Success(
+			BuildResult(bWouldChange ? TEXT("would_update") : TEXT("unchanged"), false, FString()));
+	}
+	if (!bWouldChange)
+	{
+		return FMonolithActionResult::Success(BuildResult(TEXT("unchanged"), false, FString()));
+	}
+
+	const bool bWasDirty = Graph->GetPackage()->IsDirty();
+	const TArray<MonolithPCGAuthoring::FGraphEdgeDescriptor> OriginalIncidentEdges =
+		MonolithPCGAuthoring::CaptureIncidentEdges(Graph, Node);
+	{
+		FMonolithPCGScopedGraphEditNotifications NotificationScope(Graph);
+		Graph->Modify();
+		Node->Modify();
+		Settings->Modify();
+		Settings->SetSubgraph(RequestedInterface);
+		NotificationScope.MarkExternalModification();
+	}
+
+	const bool bReadBackMatches = Settings->SubgraphInstance &&
+		Settings->SubgraphInstance->Graph.Get() == RequestedInterface &&
+		Settings->GetSubgraph() == RequestedGraph;
+	if (!bReadBackMatches)
+	{
+		const bool bRestored = MonolithPCGAuthoring::RestoreSubgraphMutation(
+			Graph, Node, Settings, PreviousInterface, OriginalIncidentEdges, bWasDirty);
+		return FMonolithActionResult::Error(
+			bRestored ? TEXT("UPCGBaseSubgraphSettings::SetSubgraph did not preserve the exact requested interface")
+					  : TEXT("Subgraph assignment read-back failed and rollback was incomplete"));
+	}
+	if (!MonolithPCGAuthoring::AreEdgeDescriptorsEqual(
+			MonolithPCGAuthoring::CaptureIncidentEdges(Graph, Node), OriginalIncidentEdges))
+	{
+		const bool bRestored = MonolithPCGAuthoring::RestoreSubgraphMutation(
+			Graph, Node, Settings, PreviousInterface, OriginalIncidentEdges, bWasDirty);
+		return FMonolithActionResult::Error(
+			bRestored
+				? TEXT("Subgraph assignment changed incident topology; disconnect or reconnect edges explicitly")
+				: TEXT("Subgraph assignment changed incident topology and rollback was incomplete"));
+	}
+
+	Graph->MarkPackageDirty();
+	TSharedPtr<FJsonObject> ValidationReport;
+	if (!MonolithPCGAuthoring::ValidateGraphForCommit(Graph, ObjectPath, ValidationReport, Error))
+	{
+		const bool bRestored = MonolithPCGAuthoring::RestoreSubgraphMutation(
+			Graph, Node, Settings, PreviousInterface, OriginalIncidentEdges, bWasDirty);
+		if (!bRestored)
+		{
+			Error += TEXT("; subgraph assignment rollback was incomplete");
+		}
+		return FMonolithActionResult::Error(Error).WithErrorData(ValidationReport);
+	}
+
+	bool bSaved = false;
+	FString SavedFilename;
+	if (!MonolithPCGAuthoring::SaveGraph(Graph, bSave, bSaved, SavedFilename, Error))
+	{
+		const bool bRestored = MonolithPCGAuthoring::RestoreSubgraphMutation(
+			Graph, Node, Settings, PreviousInterface, OriginalIncidentEdges, bWasDirty);
+		if (!bRestored)
+		{
+			Error += TEXT("; subgraph assignment rollback was incomplete");
+		}
+		return FMonolithActionResult::Error(Error);
+	}
+
+	return FMonolithActionResult::Success(BuildResult(TEXT("updated"), bSaved, SavedFilename));
+}
+
+FMonolithActionResult FMonolithPCGGraphAuthoringActions::ReplaceGraphContents(
+	const TSharedPtr<FJsonObject>& Params)
+{
+	FString SourceAssetPath;
+	FString TargetAssetPath;
+	FString Error;
+	if (!MonolithPCGAuthoring::ReadRequiredString(
+			Params, TEXT("source_asset_path"), SourceAssetPath, Error) ||
+		!MonolithPCGAuthoring::ReadRequiredString(
+			Params, TEXT("target_asset_path"), TargetAssetPath, Error))
+	{
+		return MonolithPCGAuthoring::InvalidParam(TEXT("params"), Error);
+	}
+
+	bool bDryRun = true;
+	bool bConfirm = false;
+	bool bSave = true;
+	int32 NodeLimit = MonolithPCGAuthoring::MaxGraphNodes;
+	int32 EdgeLimit = MonolithPCGAuthoring::MaxGraphEdges;
+	if (!MonolithPCGAuthoring::ReadOptionalBool(Params, TEXT("dry_run"), true, bDryRun, Error) ||
+		!MonolithPCGAuthoring::ReadOptionalBool(Params, TEXT("confirm"), false, bConfirm, Error) ||
+		!MonolithPCGAuthoring::ReadOptionalBool(Params, TEXT("save"), true, bSave, Error) ||
+		!MonolithPCGAuthoring::ReadOptionalInt(
+			Params, TEXT("node_limit"), MonolithPCGAuthoring::MaxGraphNodes, 1,
+			MonolithPCGAuthoring::MaxGraphNodes, NodeLimit, Error) ||
+		!MonolithPCGAuthoring::ReadOptionalInt(
+			Params, TEXT("edge_limit"), MonolithPCGAuthoring::MaxGraphEdges, 1,
+			MonolithPCGAuthoring::MaxGraphEdges, EdgeLimit, Error))
+	{
+		return MonolithPCGAuthoring::InvalidParam(TEXT("params"), Error);
+	}
+	if (!bDryRun && !bConfirm)
+	{
+		return MonolithPCGAuthoring::InvalidParam(
+			TEXT("confirm"),
+			TEXT("confirm=true is required when dry_run=false because the target graph contents are replaced"));
+	}
+
+	UPCGGraph* Source = nullptr;
+	UPCGGraph* Target = nullptr;
+	FString SourceObjectPath;
+	FString TargetObjectPath;
+	if (!MonolithPCGAuthoring::LoadGraph(SourceAssetPath, Source, SourceObjectPath, Error))
+	{
+		return MonolithPCGAuthoring::InvalidParam(TEXT("source_asset_path"), Error);
+	}
+	if (!MonolithPCGAuthoring::LoadGraph(TargetAssetPath, Target, TargetObjectPath, Error))
+	{
+		return MonolithPCGAuthoring::InvalidParam(TEXT("target_asset_path"), Error);
+	}
+	if (Source == Target || SourceObjectPath.Equals(TargetObjectPath, ESearchCase::CaseSensitive))
+	{
+		return MonolithPCGAuthoring::InvalidParam(
+			TEXT("target_asset_path"), TEXT("source_asset_path and target_asset_path must identify distinct graphs"));
+	}
+	if (Source->GetClass() != UPCGGraph::StaticClass() || Target->GetClass() != UPCGGraph::StaticClass())
+	{
+		return MonolithPCGAuthoring::InvalidParam(
+			TEXT("params"),
+			FString::Printf(
+				TEXT("source and target must both be exact UPCGGraph assets (source=%s, target=%s)"),
+				*Source->GetClass()->GetPathName(), *Target->GetClass()->GetPathName()));
+	}
+	if (Source->Contains(Source))
+	{
+		return MonolithPCGAuthoring::InvalidParam(
+			TEXT("source_asset_path"),
+			TEXT("source graph contains a recursive static-subgraph hierarchy"));
+	}
+	if (Source->Contains(Target))
+	{
+		return MonolithPCGAuthoring::InvalidParam(
+			TEXT("source_asset_path"),
+			TEXT("source graph contains the target graph; replacement would create a recursive target hierarchy"));
+	}
+	if (Source->GetPackage()->IsDirty())
+	{
+		return MonolithPCGAuthoring::InvalidParam(
+			TEXT("source_asset_path"),
+			TEXT("source graph package has unsaved changes; save or revert it before using it as an exact replacement source"));
+	}
+	if (Target->GetPackage()->IsDirty())
+	{
+		return MonolithPCGAuthoring::InvalidParam(
+			TEXT("target_asset_path"),
+			TEXT("target graph package has unsaved changes; save or revert it before replacing its complete contents"));
+	}
+
+	const int32 SourceNodeCount = Source->GetNodes().Num();
+	const int32 TargetNodeCountBefore = Target->GetNodes().Num();
+	const int32 SourceEdgeCount = MonolithPCGAuthoring::GetGraphEdges(Source).Num();
+	const int32 TargetEdgeCountBefore = MonolithPCGAuthoring::GetGraphEdges(Target).Num();
+	if (SourceNodeCount > NodeLimit || TargetNodeCountBefore > NodeLimit)
+	{
+		return MonolithPCGAuthoring::InvalidParam(
+			TEXT("node_limit"),
+			FString::Printf(
+				TEXT("source/target element node counts (%d/%d) exceed node_limit=%d"),
+				SourceNodeCount, TargetNodeCountBefore, NodeLimit));
+	}
+	if (SourceEdgeCount > EdgeLimit || TargetEdgeCountBefore > EdgeLimit)
+	{
+		return MonolithPCGAuthoring::InvalidParam(
+			TEXT("edge_limit"),
+			FString::Printf(
+				TEXT("source/target edge counts (%d/%d) exceed edge_limit=%d"),
+				SourceEdgeCount, TargetEdgeCountBefore, EdgeLimit));
+	}
+
+	TSharedPtr<FJsonObject> SourceValidation;
+	if (!MonolithPCGAuthoring::ValidateGraphForCommit(
+			Source, SourceObjectPath, SourceValidation, Error))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("source graph is not structurally safe to clone: %s"), *Error))
+			.WithErrorData(SourceValidation);
+	}
+
+	UPCGGraph* Preview = MonolithPCGAuthoring::DuplicateGraphToTransient(
+		Target, TEXT("MonolithPCGGraphReplacementPreview"), Error);
+	if (!Preview)
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+	ON_SCOPE_EXIT
+	{
+		MonolithPCGAuthoring::DiscardTransientGraph(Preview);
+	};
+	if (!MonolithPCGAuthoring::ReplaceGraphObjectState(Source, Preview, false, Error))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("could not build an exact transient replacement preview: %s"), *Error));
+	}
+	TSharedPtr<FJsonObject> PreviewValidation;
+	if (!MonolithPCGAuthoring::ValidateGraphForCommit(
+			Preview, Preview->GetPathName(), PreviewValidation, Error))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("transient replacement preview is structurally invalid: %s"), *Error))
+			.WithErrorData(PreviewValidation);
+	}
+
+	FString ExistingMismatch;
+	FString ExistingComparisonError;
+	const bool bExistingPropertiesIdentical =
+		MonolithPCGAuthoring::ArePersistentGraphPropertiesIdentical(
+			Target, Preview, ExistingMismatch, ExistingComparisonError);
+	if (!ExistingComparisonError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("could not compare target and replacement preview within persistent-state bounds: %s"),
+			*ExistingComparisonError));
+	}
+	const bool bWouldChange = !bExistingPropertiesIdentical;
+	const FString TargetIdentityBefore = Target->GetPathName();
+	const int32 TargetUserParameterCountBefore = MonolithPCGAuthoring::GetUserParameterCount(Target);
+	auto BuildResult = [&](const TCHAR* Status, bool bSaved, const FString& SavedFilename,
+		const TCHAR* RollbackStatus)
+	{
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("namespace"), TEXT("pcg"));
+		Result->SetStringField(TEXT("action"), TEXT("replace_pcg_graph_contents"));
+		Result->SetStringField(TEXT("status"), Status);
+		Result->SetStringField(TEXT("source_asset_path"), SourceObjectPath);
+		Result->SetStringField(TEXT("target_asset_path"), TargetObjectPath);
+		Result->SetStringField(TEXT("target_identity_before"), TargetIdentityBefore);
+		Result->SetStringField(TEXT("target_identity_after"), Target->GetPathName());
+		Result->SetStringField(TEXT("source_class"), Source->GetClass()->GetPathName());
+		Result->SetStringField(TEXT("target_class"), Target->GetClass()->GetPathName());
+		Result->SetBoolField(TEXT("dry_run"), bDryRun);
+		Result->SetBoolField(TEXT("confirmed"), bConfirm);
+		Result->SetBoolField(TEXT("changed"), bWouldChange);
+		Result->SetBoolField(TEXT("saved"), bSaved);
+		Result->SetBoolField(TEXT("target_identity_preserved"),
+			Target->GetPathName().Equals(TargetIdentityBefore, ESearchCase::CaseSensitive));
+		Result->SetBoolField(TEXT("preview_persistent_properties_verified"), true);
+		Result->SetBoolField(TEXT("persistent_properties_verified"), true);
+		Result->SetStringField(TEXT("rollback_status"), RollbackStatus);
+		Result->SetNumberField(TEXT("node_limit"), NodeLimit);
+		Result->SetNumberField(TEXT("edge_limit"), EdgeLimit);
+		Result->SetNumberField(TEXT("source_element_node_count"), SourceNodeCount);
+		Result->SetNumberField(TEXT("source_edge_count"), SourceEdgeCount);
+		Result->SetNumberField(TEXT("source_user_parameter_count"),
+			MonolithPCGAuthoring::GetUserParameterCount(Source));
+		Result->SetNumberField(TEXT("target_element_node_count_before"), TargetNodeCountBefore);
+		Result->SetNumberField(TEXT("target_edge_count_before"), TargetEdgeCountBefore);
+		Result->SetNumberField(TEXT("target_user_parameter_count_before"),
+			TargetUserParameterCountBefore);
+		Result->SetNumberField(TEXT("target_element_node_count_after"), Target->GetNodes().Num());
+		Result->SetNumberField(TEXT("target_edge_count_after"),
+			MonolithPCGAuthoring::GetGraphEdges(Target).Num());
+		Result->SetNumberField(TEXT("target_user_parameter_count_after"),
+			MonolithPCGAuthoring::GetUserParameterCount(Target));
+		if (!ExistingMismatch.IsEmpty())
+		{
+			Result->SetStringField(TEXT("first_changed_persistent_property"), ExistingMismatch);
+		}
+		if (!SavedFilename.IsEmpty())
+		{
+			Result->SetStringField(TEXT("saved_filename"), SavedFilename);
+		}
+		if (bDryRun || !bWouldChange)
+		{
+			TSharedPtr<FJsonObject> Prepare = MakeShared<FJsonObject>();
+			Prepare->SetStringField(TEXT("mode"), TEXT("handler_owned_pre_mutation"));
+			Prepare->SetStringField(
+				TEXT("status"), bDryRun ? TEXT("skipped_by_dry_run") : TEXT("skipped_no_change"));
+			Result->SetObjectField(TEXT("source_control_prepare"), Prepare);
+		}
+		return Result;
+	};
+
+	if (bDryRun)
+	{
+		return FMonolithActionResult::Success(BuildResult(
+			bWouldChange ? TEXT("would_replace") : TEXT("unchanged"),
+			false, FString(), TEXT("not_required_dry_run")));
+	}
+	if (!bWouldChange)
+	{
+		return FMonolithActionResult::Success(
+			BuildResult(TEXT("unchanged"), false, FString(), TEXT("not_required_no_change")));
+	}
+
+	TSharedPtr<FJsonObject> SourceControlPrepare;
+	FMonolithActionResult SourceControlError;
+	if (!MonolithPCGAuthoring::PrepareGraphReplacementSourceControl(
+			Target, SourceControlPrepare, SourceControlError))
+	{
+		return SourceControlError;
+	}
+
+	UPCGGraph* OriginalSnapshot = MonolithPCGAuthoring::DuplicateGraphToTransient(
+		Target, TEXT("MonolithPCGGraphReplacementRollback"), Error);
+	if (!OriginalSnapshot)
+	{
+		return MonolithPCGAuthoring::AttachGraphReplacementSourceControl(
+			FMonolithActionResult::Error(Error), SourceControlPrepare);
+	}
+	ON_SCOPE_EXIT
+	{
+		MonolithPCGAuthoring::DiscardTransientGraph(OriginalSnapshot);
+	};
+	const bool bWasDirty = Target->GetPackage()->IsDirty();
+	auto RollbackFailure = [&](const FString& Failure) -> FMonolithActionResult
+	{
+		FString RollbackError;
+		const bool bRolledBack = MonolithPCGAuthoring::RestoreGraphFromSnapshot(
+			Target, OriginalSnapshot, bWasDirty, RollbackError);
+		TSharedPtr<FJsonObject> Data = BuildResult(
+			TEXT("failed"), false, FString(), bRolledBack ? TEXT("verified") : TEXT("incomplete"));
+		Data->SetBoolField(TEXT("persistent_properties_verified"), false);
+		Data->SetBoolField(TEXT("rollback_persistent_properties_verified"), bRolledBack);
+		Data->SetNumberField(TEXT("target_user_parameter_count_before"), TargetUserParameterCountBefore);
+		if (!RollbackError.IsEmpty())
+		{
+			Data->SetStringField(TEXT("rollback_error"), RollbackError);
+		}
+		return MonolithPCGAuthoring::AttachGraphReplacementSourceControl(FMonolithActionResult::Error(
+			FString::Printf(
+				TEXT("%s; rollback=%s%s%s"), *Failure,
+				bRolledBack ? TEXT("verified") : TEXT("INCOMPLETE"),
+				RollbackError.IsEmpty() ? TEXT("") : TEXT(": "), *RollbackError))
+			.WithErrorData(Data), SourceControlPrepare);
+	};
+
+	if (!MonolithPCGAuthoring::ReplaceGraphObjectState(Source, Target, true, Error))
+	{
+		return RollbackFailure(FString::Printf(TEXT("target graph replacement failed: %s"), *Error));
+	}
+	if (!Target->GetPathName().Equals(TargetIdentityBefore, ESearchCase::CaseSensitive))
+	{
+		return RollbackFailure(TEXT("target graph identity changed during replacement"));
+	}
+	FString AppliedMismatch;
+	FString AppliedComparisonError;
+	if (!MonolithPCGAuthoring::ArePersistentGraphPropertiesIdentical(
+			Preview, Target, AppliedMismatch, AppliedComparisonError))
+	{
+		return RollbackFailure(!AppliedComparisonError.IsEmpty()
+			? FString::Printf(
+				TEXT("target read-back comparison could not complete: %s"),
+				*AppliedComparisonError)
+			: FString::Printf(
+				TEXT("target read-back differs from the verified preview at persistent property '%s'"),
+				*AppliedMismatch));
+	}
+	Target->MarkPackageDirty();
+	TSharedPtr<FJsonObject> TargetValidation;
+	if (!MonolithPCGAuthoring::ValidateGraphForCommit(
+			Target, TargetObjectPath, TargetValidation, Error))
+	{
+		FMonolithActionResult Failure = RollbackFailure(Error);
+		if (Failure.ErrorData.IsValid())
+		{
+			Failure.ErrorData->SetObjectField(TEXT("target_validation"), TargetValidation);
+		}
+		return Failure;
+	}
+
+#if WITH_DEV_AUTOMATION_TESTS
+	if (UE::MonolithPCG::Private::ConsumeGraphContentsReplacementTestFault(
+			TargetObjectPath,
+			UE::MonolithPCG::Private::EPCGGraphContentsReplacementTestFault::BeforeSave))
+	{
+		return RollbackFailure(TEXT("injected graph replacement failure before save"));
+	}
+#endif
+
+	bool bSaved = false;
+	FString SavedFilename;
+	if (!MonolithPCGAuthoring::SaveGraph(Target, bSave, bSaved, SavedFilename, Error))
+	{
+		return RollbackFailure(Error);
+	}
+	TSharedPtr<FJsonObject> Result = BuildResult(
+		TEXT("replaced"), bSaved, SavedFilename, TEXT("not_required"));
+	Result->SetNumberField(TEXT("target_user_parameter_count_before"), TargetUserParameterCountBefore);
+	return MonolithPCGAuthoring::AttachGraphReplacementSourceControl(
+		FMonolithActionResult::Success(Result), SourceControlPrepare);
 }
 
 FMonolithActionResult FMonolithPCGGraphAuthoringActions::ValidateGraph(const TSharedPtr<FJsonObject>& Params)

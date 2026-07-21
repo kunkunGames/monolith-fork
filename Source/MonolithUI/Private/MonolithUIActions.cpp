@@ -64,6 +64,14 @@ namespace MonolithUIActionsPhase2
 
 namespace MonolithUIVisualArtifactsInternal
 {
+    static constexpr int32 MaxVisualArtifactCaptures = 256;
+    static constexpr int32 MaxVisualArtifactRegionsPerCapture = 128;
+    static constexpr int32 MaxVisualArtifactExclusionsPerOwner = 32;
+    static constexpr int32 MaxVisualArtifactDimension = 16384;
+    static constexpr int64 MaxVisualArtifactPixels = 67108864;
+    static constexpr int64 MaxVisualDiffWorkUnits = MaxVisualArtifactPixels * 2;
+    static constexpr TCHAR VisualDiffWorkUnitModel[] = TEXT("scanline_pixels_plus_exclusion_rects_per_row");
+
     struct FVerifiedPngInfo
     {
         FString Path;
@@ -74,7 +82,201 @@ namespace MonolithUIVisualArtifactsInternal
         double TransparentRatio = 0.0;
         int32 UniqueColorEstimate = 0;
         bool bBlank = true;
+        TArray<uint8> RawBgra;
     };
+
+    struct FVisualDiffMetrics
+    {
+        int64 PixelCount = 0;
+        int64 ChangedPixelCount = 0;
+        int64 ExcludedPixelCount = 0;
+        double ChangedPixelRatio = 0.0;
+        double MeanAbsoluteError = 0.0;
+        double RootMeanSquareError = 0.0;
+        double MaxChannelError = 0.0;
+    };
+
+    /** One rectangle removed from changed-pixel counting; excluded pixels leave
+     * both the numerator and the denominator of the compared ratio. */
+    struct FVisualDiffExclusion
+    {
+        int32 X = 0;
+        int32 Y = 0;
+        int32 Width = 0;
+        int32 Height = 0;
+    };
+
+    struct FVisualDiffRegion
+    {
+        FString Id;
+        int32 X = 0;
+        int32 Y = 0;
+        int32 Width = 0;
+        int32 Height = 0;
+        double DiffThreshold = 0.0;
+        double PixelTolerance = 0.0;
+        TArray<FVisualDiffExclusion> Exclusions;
+    };
+
+    /**
+     * Visits a rectangular pixel range while rasterizing all exclusion rects
+     * with one row-delta scanline. Exclusion membership therefore costs
+     * O(Height * (Width + ExclusionCount)) instead of testing every rectangle
+     * for every pixel.
+     */
+    template <typename FPixelVisitor>
+    static void VisitVisualDiffPixelsByScanline(
+        int32 X,
+        int32 Y,
+        int32 Width,
+        int32 Height,
+        const TArray<FVisualDiffExclusion>& Exclusions,
+        FPixelVisitor&& VisitPixel)
+    {
+        if (Exclusions.IsEmpty())
+        {
+            for (int32 Row = Y; Row < Y + Height; ++Row)
+            {
+                for (int32 Column = X; Column < X + Width; ++Column)
+                {
+                    VisitPixel(Column, Row, false);
+                }
+            }
+            return;
+        }
+
+        TArray<int32> RowDeltas;
+        RowDeltas.SetNumUninitialized(Width + 1);
+        for (int32 Row = Y; Row < Y + Height; ++Row)
+        {
+            FMemory::Memzero(RowDeltas.GetData(), RowDeltas.Num() * sizeof(int32));
+            for (const FVisualDiffExclusion& Exclusion : Exclusions)
+            {
+                if (Row < Exclusion.Y || Row >= Exclusion.Y + Exclusion.Height)
+                {
+                    continue;
+                }
+
+                const int32 LocalStart = FMath::Clamp(Exclusion.X - X, 0, Width);
+                const int32 LocalEnd = FMath::Clamp(Exclusion.X + Exclusion.Width - X, 0, Width);
+                if (LocalStart < LocalEnd)
+                {
+                    ++RowDeltas[LocalStart];
+                    --RowDeltas[LocalEnd];
+                }
+            }
+
+            int32 Coverage = 0;
+            for (int32 LocalColumn = 0; LocalColumn < Width; ++LocalColumn)
+            {
+                Coverage += RowDeltas[LocalColumn];
+                VisitPixel(X + LocalColumn, Row, Coverage > 0);
+            }
+        }
+    }
+
+    static bool TryReserveVisualDiffWorkPass(
+        int64 Multiplier,
+        int64 UnitsPerMultiplier,
+        int64& InOutWorkUnits,
+        int64& OutRequestedWorkUnits)
+    {
+        OutRequestedWorkUnits = InOutWorkUnits;
+        if (Multiplier <= 0
+            || UnitsPerMultiplier <= 0
+            || InOutWorkUnits < 0
+            || InOutWorkUnits > MaxVisualDiffWorkUnits)
+        {
+            OutRequestedWorkUnits = MAX_int64;
+            return false;
+        }
+
+        const int64 RemainingWorkUnits = MaxVisualDiffWorkUnits - InOutWorkUnits;
+        if (UnitsPerMultiplier > RemainingWorkUnits / Multiplier)
+        {
+            // Preserve exact requested/limit evidence whenever representable,
+            // while still checking int64 overflow before multiplication.
+            if (UnitsPerMultiplier > (MAX_int64 - InOutWorkUnits) / Multiplier)
+            {
+                OutRequestedWorkUnits = MAX_int64;
+            }
+            else
+            {
+                OutRequestedWorkUnits = InOutWorkUnits + Multiplier * UnitsPerMultiplier;
+            }
+            return false;
+        }
+
+        InOutWorkUnits += Multiplier * UnitsPerMultiplier;
+        OutRequestedWorkUnits = InOutWorkUnits;
+        return true;
+    }
+
+    static bool TryReserveVisualDiffComparisonWork(
+        int32 ImageWidth,
+        int32 ImageHeight,
+        int32 CaptureExclusionCount,
+        const TArray<FVisualDiffRegion>& Regions,
+        int64 CurrentActionWorkUnits,
+        int64& OutReservedActionWorkUnits,
+        int64& OutRequestedActionWorkUnits)
+    {
+        OutReservedActionWorkUnits = CurrentActionWorkUnits;
+        OutRequestedActionWorkUnits = CurrentActionWorkUnits;
+        int64 CandidateActionWorkUnits = CurrentActionWorkUnits;
+
+        const int64 ImageRowWorkUnits = static_cast<int64>(ImageWidth)
+            + static_cast<int64>(CaptureExclusionCount);
+        if (!TryReserveVisualDiffWorkPass(
+            ImageHeight,
+            ImageRowWorkUnits,
+            CandidateActionWorkUnits,
+            OutRequestedActionWorkUnits))
+        {
+            return false;
+        }
+        for (const FVisualDiffRegion& Region : Regions)
+        {
+            const int64 RegionRowWorkUnits = static_cast<int64>(Region.Width)
+                + static_cast<int64>(Region.Exclusions.Num());
+            if (!TryReserveVisualDiffWorkPass(
+                Region.Height,
+                RegionRowWorkUnits,
+                CandidateActionWorkUnits,
+                OutRequestedActionWorkUnits))
+            {
+                return false;
+            }
+        }
+        if (!TryReserveVisualDiffWorkPass(
+            ImageHeight,
+            ImageRowWorkUnits,
+            CandidateActionWorkUnits,
+            OutRequestedActionWorkUnits))
+        {
+            return false;
+        }
+
+        // Comparison admission is atomic: partial candidate passes never leak
+        // into the action-wide reservation when a later pass exceeds the cap.
+        OutReservedActionWorkUnits = CandidateActionWorkUnits;
+        return true;
+    }
+
+    static void SetVisualDiffWorkEvidence(
+        const TSharedPtr<FJsonObject>& Object,
+        int64 RequestedWorkUnits,
+        int64 ReservedWorkUnits)
+    {
+        if (!Object.IsValid())
+        {
+            return;
+        }
+        Object->SetNumberField(TEXT("work_units_requested"), static_cast<double>(RequestedWorkUnits));
+        Object->SetNumberField(TEXT("work_units_reserved"), static_cast<double>(ReservedWorkUnits));
+        Object->SetNumberField(TEXT("work_units_limit"), static_cast<double>(MaxVisualDiffWorkUnits));
+        Object->SetStringField(TEXT("work_unit_model"), VisualDiffWorkUnitModel);
+    }
 
     static FString NormalizeArtifactPath(FString Path)
     {
@@ -136,15 +338,29 @@ namespace MonolithUIVisualArtifactsInternal
             return false;
         }
 
-        TArray<uint8> RawBgra;
-        if (!Wrapper->GetRaw(ERGBFormat::BGRA, 8, RawBgra) || RawBgra.Num() < 4)
+        const int64 PixelCount = static_cast<int64>(OutInfo.Width) * static_cast<int64>(OutInfo.Height);
+        if (OutInfo.Width > MaxVisualArtifactDimension
+            || OutInfo.Height > MaxVisualArtifactDimension
+            || PixelCount <= 0
+            || PixelCount > MaxVisualArtifactPixels)
+        {
+            OutError = FString::Printf(
+                TEXT("image_budget_exceeded: PNG dimensions %dx%d exceed the %d-axis/%lld-pixel verification budget '%s'"),
+                OutInfo.Width,
+                OutInfo.Height,
+                MaxVisualArtifactDimension,
+                MaxVisualArtifactPixels,
+                *OutInfo.Path);
+            return false;
+        }
+
+        if (!Wrapper->GetRaw(ERGBFormat::BGRA, 8, OutInfo.RawBgra) || OutInfo.RawBgra.Num() < 4)
         {
             OutError = FString::Printf(TEXT("invalid_png: failed to decode PNG pixels '%s'"), *OutInfo.Path);
             return false;
         }
 
-        const int64 PixelCount = static_cast<int64>(OutInfo.Width) * static_cast<int64>(OutInfo.Height);
-        if (PixelCount <= 0 || RawBgra.Num() < PixelCount * 4)
+        if (PixelCount <= 0 || OutInfo.RawBgra.Num() < PixelCount * 4)
         {
             OutError = FString::Printf(TEXT("invalid_png: decoded pixel count does not match dimensions '%s'"), *OutInfo.Path);
             return false;
@@ -156,10 +372,10 @@ namespace MonolithUIVisualArtifactsInternal
         for (int64 PixelIndex = 0; PixelIndex < PixelCount; ++PixelIndex)
         {
             const int64 Base = PixelIndex * 4;
-            const uint8 B = RawBgra[Base + 0];
-            const uint8 G = RawBgra[Base + 1];
-            const uint8 R = RawBgra[Base + 2];
-            const uint8 A = RawBgra[Base + 3];
+            const uint8 B = OutInfo.RawBgra[Base + 0];
+            const uint8 G = OutInfo.RawBgra[Base + 1];
+            const uint8 R = OutInfo.RawBgra[Base + 2];
+            const uint8 A = OutInfo.RawBgra[Base + 3];
             if (A == 0)
             {
                 ++TransparentPixels;
@@ -180,19 +396,536 @@ namespace MonolithUIVisualArtifactsInternal
         return true;
     }
 
-    static bool TryGetResolution(const TSharedPtr<FJsonObject>& Obj, int32& OutWidth, int32& OutHeight)
+    static bool TryReadUnitInterval(
+        const TSharedPtr<FJsonObject>& Obj,
+        const TCHAR* FieldName,
+        double Fallback,
+        double& OutValue,
+        FString& OutError)
     {
-        OutWidth = 0;
-        OutHeight = 0;
-        if (!Obj.IsValid())
+        OutValue = Fallback;
+        if (!Obj.IsValid() || !Obj->HasField(FieldName))
         {
+            return true;
+        }
+
+        if (!Obj->TryGetNumberField(FieldName, OutValue)
+            || !FMath::IsFinite(OutValue)
+            || OutValue < 0.0
+            || OutValue > 1.0)
+        {
+            OutError = FString::Printf(TEXT("%s must be a finite number in [0, 1]"), FieldName);
+            return false;
+        }
+        return true;
+    }
+
+    static bool TryReadExactInt(
+        const TSharedPtr<FJsonObject>& Obj,
+        const TCHAR* FieldName,
+        int32& OutValue,
+        FString& OutError)
+    {
+        double Number = 0.0;
+        if (!Obj.IsValid()
+            || !Obj->TryGetNumberField(FieldName, Number)
+            || !FMath::IsFinite(Number)
+            || Number < static_cast<double>(MIN_int32)
+            || Number > static_cast<double>(MAX_int32)
+            || FMath::TruncToDouble(Number) != Number)
+        {
+            OutError = FString::Printf(TEXT("region.%s must be an exact int32"), FieldName);
+            return false;
+        }
+        OutValue = static_cast<int32>(Number);
+        return true;
+    }
+
+    static bool ParseVisualDiffExclusions(
+        const TSharedPtr<FJsonObject>& Owner,
+        const FString& OwnerLabel,
+        int32 BoundsX,
+        int32 BoundsY,
+        int32 BoundsWidth,
+        int32 BoundsHeight,
+        TArray<FVisualDiffExclusion>& OutExclusions,
+        FString& OutError)
+    {
+        OutExclusions.Reset();
+        if (!Owner.IsValid() || !Owner->HasField(TEXT("exclusions")))
+        {
+            return true;
+        }
+        const TArray<TSharedPtr<FJsonValue>>* ExclusionInputs = nullptr;
+        if (!Owner->TryGetArrayField(TEXT("exclusions"), ExclusionInputs) || !ExclusionInputs)
+        {
+            OutError = FString::Printf(TEXT("%s.exclusions must be an array"), *OwnerLabel);
+            return false;
+        }
+        if (ExclusionInputs->Num() > MaxVisualArtifactExclusionsPerOwner)
+        {
+            OutError = FString::Printf(
+                TEXT("%s.exclusions contains %d rows; maximum is %d"),
+                *OwnerLabel,
+                ExclusionInputs->Num(),
+                MaxVisualArtifactExclusionsPerOwner);
+            return false;
+        }
+        for (int32 Index = 0; Index < ExclusionInputs->Num(); ++Index)
+        {
+            const TSharedPtr<FJsonObject>* ExclusionObj = nullptr;
+            if (!(*ExclusionInputs)[Index].IsValid()
+                || !(*ExclusionInputs)[Index]->TryGetObject(ExclusionObj)
+                || !ExclusionObj
+                || !ExclusionObj->IsValid())
+            {
+                OutError = FString::Printf(TEXT("%s.exclusions[%d] must be an object"), *OwnerLabel, Index);
+                return false;
+            }
+            FVisualDiffExclusion Exclusion;
+            if (!TryReadExactInt(*ExclusionObj, TEXT("x"), Exclusion.X, OutError)
+                || !TryReadExactInt(*ExclusionObj, TEXT("y"), Exclusion.Y, OutError)
+                || !TryReadExactInt(*ExclusionObj, TEXT("width"), Exclusion.Width, OutError)
+                || !TryReadExactInt(*ExclusionObj, TEXT("height"), Exclusion.Height, OutError))
+            {
+                return false;
+            }
+            const int64 ExclusionRight = static_cast<int64>(Exclusion.X) + static_cast<int64>(Exclusion.Width);
+            const int64 ExclusionBottom = static_cast<int64>(Exclusion.Y) + static_cast<int64>(Exclusion.Height);
+            if (Exclusion.X < BoundsX || Exclusion.Y < BoundsY || Exclusion.Width <= 0 || Exclusion.Height <= 0
+                || ExclusionRight > static_cast<int64>(BoundsX) + static_cast<int64>(BoundsWidth)
+                || ExclusionBottom > static_cast<int64>(BoundsY) + static_cast<int64>(BoundsHeight))
+            {
+                OutError = FString::Printf(
+                    TEXT("%s.exclusions[%d] bounds [%d,%d,%d,%d] exceed owner bounds [%d,%d,%d,%d]"),
+                    *OwnerLabel,
+                    Index,
+                    Exclusion.X,
+                    Exclusion.Y,
+                    Exclusion.Width,
+                    Exclusion.Height,
+                    BoundsX,
+                    BoundsY,
+                    BoundsWidth,
+                    BoundsHeight);
+                return false;
+            }
+            OutExclusions.Add(Exclusion);
+        }
+        return true;
+    }
+
+    static bool ParseVisualDiffRegions(
+        const TArray<TSharedPtr<FJsonValue>>* RegionInputs,
+        int32 ImageWidth,
+        int32 ImageHeight,
+        double DefaultDiffThreshold,
+        double DefaultPixelTolerance,
+        TArray<FVisualDiffRegion>& OutRegions,
+        FString& OutError)
+    {
+        OutRegions.Reset();
+        if (!RegionInputs)
+        {
+            return true;
+        }
+        if (RegionInputs->Num() > MaxVisualArtifactRegionsPerCapture)
+        {
+            OutError = FString::Printf(
+                TEXT("regions[] contains %d rows; maximum is %d"),
+                RegionInputs->Num(),
+                MaxVisualArtifactRegionsPerCapture);
             return false;
         }
 
-        const TArray<TSharedPtr<FJsonValue>>* Resolution = nullptr;
-        if (!Obj->TryGetArrayField(TEXT("expected_resolution"), Resolution) || !Resolution || Resolution->Num() < 2)
+        TSet<FString> RegionIds;
+        for (int32 Index = 0; Index < RegionInputs->Num(); ++Index)
+        {
+            const TSharedPtr<FJsonObject>* RegionObj = nullptr;
+            if (!(*RegionInputs)[Index].IsValid()
+                || !(*RegionInputs)[Index]->TryGetObject(RegionObj)
+                || !RegionObj
+                || !RegionObj->IsValid())
+            {
+                OutError = FString::Printf(TEXT("regions[%d] must be an object"), Index);
+                return false;
+            }
+
+            FVisualDiffRegion Region;
+            if (!(*RegionObj)->TryGetStringField(TEXT("id"), Region.Id) || Region.Id.IsEmpty())
+            {
+                OutError = FString::Printf(TEXT("regions[%d].id is required"), Index);
+                return false;
+            }
+            if (RegionIds.Contains(Region.Id))
+            {
+                OutError = FString::Printf(TEXT("duplicate visual diff region id '%s'"), *Region.Id);
+                return false;
+            }
+            RegionIds.Add(Region.Id);
+
+            if (!TryReadExactInt(*RegionObj, TEXT("x"), Region.X, OutError)
+                || !TryReadExactInt(*RegionObj, TEXT("y"), Region.Y, OutError)
+                || !TryReadExactInt(*RegionObj, TEXT("width"), Region.Width, OutError)
+                || !TryReadExactInt(*RegionObj, TEXT("height"), Region.Height, OutError))
+            {
+                return false;
+            }
+            const int64 RegionRight = static_cast<int64>(Region.X) + static_cast<int64>(Region.Width);
+            const int64 RegionBottom = static_cast<int64>(Region.Y) + static_cast<int64>(Region.Height);
+            if (Region.X < 0 || Region.Y < 0 || Region.Width <= 0 || Region.Height <= 0
+                || RegionRight > static_cast<int64>(ImageWidth)
+                || RegionBottom > static_cast<int64>(ImageHeight))
+            {
+                OutError = FString::Printf(
+                    TEXT("region '%s' bounds [%d,%d,%d,%d] exceed image %dx%d"),
+                    *Region.Id,
+                    Region.X,
+                    Region.Y,
+                    Region.Width,
+                    Region.Height,
+                    ImageWidth,
+                    ImageHeight);
+                return false;
+            }
+            if (!TryReadUnitInterval(*RegionObj, TEXT("diff_threshold"), DefaultDiffThreshold, Region.DiffThreshold, OutError)
+                || !TryReadUnitInterval(*RegionObj, TEXT("pixel_tolerance"), DefaultPixelTolerance, Region.PixelTolerance, OutError))
+            {
+                return false;
+            }
+            if (!ParseVisualDiffExclusions(
+                *RegionObj,
+                FString::Printf(TEXT("region '%s'"), *Region.Id),
+                Region.X,
+                Region.Y,
+                Region.Width,
+                Region.Height,
+                Region.Exclusions,
+                OutError))
+            {
+                return false;
+            }
+            OutRegions.Add(MoveTemp(Region));
+        }
+        return true;
+    }
+
+    static double SrgbByteToLinear(uint8 Value)
+    {
+        static const TArray<double> LinearTable = []
+        {
+            TArray<double> Values;
+            Values.SetNumUninitialized(256);
+            for (int32 Index = 0; Index < Values.Num(); ++Index)
+            {
+                const double Srgb = static_cast<double>(Index) / 255.0;
+                Values[Index] = Srgb <= 0.04045
+                    ? Srgb / 12.92
+                    : FMath::Pow((Srgb + 0.055) / 1.055, 2.4);
+            }
+            return Values;
+        }();
+        return LinearTable[Value];
+    }
+
+    static void ReadPremultipliedLinearPixel(const TArray<uint8>& RawBgra, int64 PixelIndex, double OutChannels[4])
+    {
+        const int64 Base = PixelIndex * 4;
+        const double Alpha = static_cast<double>(RawBgra[Base + 3]) / 255.0;
+        OutChannels[0] = SrgbByteToLinear(RawBgra[Base + 2]) * Alpha;
+        OutChannels[1] = SrgbByteToLinear(RawBgra[Base + 1]) * Alpha;
+        OutChannels[2] = SrgbByteToLinear(RawBgra[Base + 0]) * Alpha;
+        OutChannels[3] = Alpha;
+    }
+
+    static FVisualDiffMetrics ComputeVisualDiffMetrics(
+        const FVerifiedPngInfo& Capture,
+        const FVerifiedPngInfo& Baseline,
+        int32 X,
+        int32 Y,
+        int32 Width,
+        int32 Height,
+        double PixelTolerance,
+        const TArray<FVisualDiffExclusion>& Exclusions)
+    {
+        FVisualDiffMetrics Metrics;
+        double AbsoluteErrorSum = 0.0;
+        double SquaredErrorSum = 0.0;
+
+        VisitVisualDiffPixelsByScanline(
+            X,
+            Y,
+            Width,
+            Height,
+            Exclusions,
+            [&](int32 Column, int32 Row, bool bExcluded)
+            {
+                if (bExcluded)
+                {
+                    ++Metrics.ExcludedPixelCount;
+                    return;
+                }
+                ++Metrics.PixelCount;
+                const int64 PixelIndex = static_cast<int64>(Row) * Capture.Width + Column;
+                double CaptureChannels[4];
+                double BaselineChannels[4];
+                ReadPremultipliedLinearPixel(Capture.RawBgra, PixelIndex, CaptureChannels);
+                ReadPremultipliedLinearPixel(Baseline.RawBgra, PixelIndex, BaselineChannels);
+
+                double PixelMaxError = 0.0;
+                for (int32 Channel = 0; Channel < 4; ++Channel)
+                {
+                    const double Error = FMath::Abs(CaptureChannels[Channel] - BaselineChannels[Channel]);
+                    AbsoluteErrorSum += Error;
+                    SquaredErrorSum += Error * Error;
+                    PixelMaxError = FMath::Max(PixelMaxError, Error);
+                    Metrics.MaxChannelError = FMath::Max(Metrics.MaxChannelError, Error);
+                }
+                if (PixelMaxError > PixelTolerance)
+                {
+                    ++Metrics.ChangedPixelCount;
+                }
+            });
+
+        if (Metrics.PixelCount > 0)
+        {
+            const double ChannelSampleCount = static_cast<double>(Metrics.PixelCount) * 4.0;
+            Metrics.ChangedPixelRatio = static_cast<double>(Metrics.ChangedPixelCount) / static_cast<double>(Metrics.PixelCount);
+            Metrics.MeanAbsoluteError = AbsoluteErrorSum / ChannelSampleCount;
+            Metrics.RootMeanSquareError = FMath::Sqrt(SquaredErrorSum / ChannelSampleCount);
+        }
+        return Metrics;
+    }
+
+    static TSharedPtr<FJsonObject> MakeMetricsObject(
+        const FVisualDiffMetrics& Metrics,
+        double DiffThreshold,
+        double PixelTolerance)
+    {
+        TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+        Obj->SetNumberField(TEXT("pixel_count"), static_cast<double>(Metrics.PixelCount));
+        Obj->SetNumberField(TEXT("changed_pixel_count"), static_cast<double>(Metrics.ChangedPixelCount));
+        Obj->SetNumberField(TEXT("excluded_pixel_count"), static_cast<double>(Metrics.ExcludedPixelCount));
+        Obj->SetNumberField(TEXT("changed_pixel_ratio"), Metrics.ChangedPixelRatio);
+        Obj->SetNumberField(TEXT("diff_ratio"), Metrics.ChangedPixelRatio);
+        Obj->SetNumberField(TEXT("mean_absolute_error"), Metrics.MeanAbsoluteError);
+        Obj->SetNumberField(TEXT("root_mean_square_error"), Metrics.RootMeanSquareError);
+        Obj->SetNumberField(TEXT("max_channel_error"), Metrics.MaxChannelError);
+        Obj->SetNumberField(TEXT("diff_threshold"), DiffThreshold);
+        Obj->SetNumberField(TEXT("pixel_tolerance"), PixelTolerance);
+        Obj->SetBoolField(TEXT("passed"), Metrics.ChangedPixelRatio <= DiffThreshold);
+        return Obj;
+    }
+
+    static bool WriteDiffHeatmap(
+        const FString& Path,
+        const FVerifiedPngInfo& Capture,
+        const FVerifiedPngInfo& Baseline,
+        const TArray<FVisualDiffExclusion>& Exclusions,
+        FString& OutError)
+    {
+        TArray<uint8> Heatmap;
+        const int64 PixelCount = static_cast<int64>(Capture.Width) * static_cast<int64>(Capture.Height);
+        if (PixelCount <= 0 || PixelCount > MAX_int32 / 4)
+        {
+            OutError = FString::Printf(TEXT("diff heatmap dimensions exceed supported array size '%s'"), *Path);
+            return false;
+        }
+        Heatmap.SetNumUninitialized(static_cast<int32>(PixelCount * 4));
+
+        VisitVisualDiffPixelsByScanline(
+            0,
+            0,
+            Capture.Width,
+            Capture.Height,
+            Exclusions,
+            [&](int32 Column, int32 Row, bool bExcluded)
+            {
+                const int64 PixelIndex = static_cast<int64>(Row) * Capture.Width + Column;
+                const int64 Base = PixelIndex * 4;
+                if (bExcluded)
+                {
+                    // Deterministic dim-blue marker: reviewers can see the masked area
+                    // and the globally excluded pixels never contribute diff intensity.
+                    Heatmap[Base + 0] = 96;
+                    Heatmap[Base + 1] = 32;
+                    Heatmap[Base + 2] = 0;
+                    Heatmap[Base + 3] = 255;
+                    return;
+                }
+                double CaptureChannels[4];
+                double BaselineChannels[4];
+                ReadPremultipliedLinearPixel(Capture.RawBgra, PixelIndex, CaptureChannels);
+                ReadPremultipliedLinearPixel(Baseline.RawBgra, PixelIndex, BaselineChannels);
+                double PixelMaxError = 0.0;
+                for (int32 Channel = 0; Channel < 4; ++Channel)
+                {
+                    PixelMaxError = FMath::Max(PixelMaxError, FMath::Abs(CaptureChannels[Channel] - BaselineChannels[Channel]));
+                }
+                const uint8 Intensity = static_cast<uint8>(FMath::RoundToInt(FMath::Clamp(PixelMaxError * 4.0, 0.0, 1.0) * 255.0));
+                Heatmap[Base + 0] = 0;
+                Heatmap[Base + 1] = static_cast<uint8>(Intensity / 5);
+                Heatmap[Base + 2] = Intensity;
+                Heatmap[Base + 3] = 255;
+            });
+
+        IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
+        TSharedPtr<IImageWrapper> Wrapper = ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
+        if (!Wrapper.IsValid()
+            || !Wrapper->SetRaw(Heatmap.GetData(), Heatmap.Num(), Capture.Width, Capture.Height, ERGBFormat::BGRA, 8))
+        {
+            OutError = FString::Printf(TEXT("failed to encode diff heatmap '%s'"), *Path);
+            return false;
+        }
+
+        const TArray64<uint8> PngBytes64 = Wrapper->GetCompressed(100);
+        if (PngBytes64.Num() <= 0 || PngBytes64.Num() > MAX_int32)
+        {
+            OutError = FString::Printf(TEXT("encoded diff heatmap has invalid size '%s'"), *Path);
+            return false;
+        }
+        TArray<uint8> PngBytes;
+        PngBytes.Append(PngBytes64.GetData(), static_cast<int32>(PngBytes64.Num()));
+        IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path), true);
+        if (!FFileHelper::SaveArrayToFile(PngBytes, *Path))
+        {
+            OutError = FString::Printf(TEXT("failed to write diff heatmap '%s'"), *Path);
+            return false;
+        }
+        return true;
+    }
+
+    struct FCaptureProvenance
+    {
+        bool bProvided = false;
+        FString StateId;
+        FString FixtureId;
+        FString FixtureSha256;
+        FString SourceSha256;
+        FString UISpecSha256;
+    };
+
+    static bool IsSha256HexDigest(const FString& Value)
+    {
+        if (Value.Len() != 64)
         {
             return false;
+        }
+        for (const TCHAR Character : Value)
+        {
+            if (!FChar::IsHexDigit(Character))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static bool TryReadCaptureProvenance(
+        const TSharedPtr<FJsonObject>& Input,
+        FCaptureProvenance& OutProvenance,
+        FString& OutError)
+    {
+        OutProvenance = FCaptureProvenance{};
+        OutError.Reset();
+        if (!Input.IsValid())
+        {
+            return true;
+        }
+
+        static const TCHAR* Fields[] = {
+            TEXT("state_id"),
+            TEXT("fixture_id"),
+            TEXT("fixture_sha256"),
+            TEXT("source_sha256"),
+            TEXT("ui_spec_sha256")
+        };
+        int32 ProvidedFieldCount = 0;
+        for (const TCHAR* Field : Fields)
+        {
+            ProvidedFieldCount += Input->HasField(Field) ? 1 : 0;
+        }
+        if (ProvidedFieldCount == 0)
+        {
+            return true;
+        }
+
+        OutProvenance.bProvided = true;
+        if (ProvidedFieldCount != UE_ARRAY_COUNT(Fields)
+            || !Input->TryGetStringField(TEXT("state_id"), OutProvenance.StateId)
+            || !Input->TryGetStringField(TEXT("fixture_id"), OutProvenance.FixtureId)
+            || !Input->TryGetStringField(TEXT("fixture_sha256"), OutProvenance.FixtureSha256)
+            || !Input->TryGetStringField(TEXT("source_sha256"), OutProvenance.SourceSha256)
+            || !Input->TryGetStringField(TEXT("ui_spec_sha256"), OutProvenance.UISpecSha256))
+        {
+            OutError = TEXT("capture provenance must provide state_id, fixture_id, fixture_sha256, source_sha256, and ui_spec_sha256 together as strings");
+            return false;
+        }
+
+        OutProvenance.StateId.TrimStartAndEndInline();
+        OutProvenance.FixtureId.TrimStartAndEndInline();
+        OutProvenance.FixtureSha256.TrimStartAndEndInline();
+        OutProvenance.SourceSha256.TrimStartAndEndInline();
+        OutProvenance.UISpecSha256.TrimStartAndEndInline();
+        if (OutProvenance.StateId.IsEmpty() || OutProvenance.StateId != OutProvenance.FixtureId)
+        {
+            OutError = TEXT("capture provenance requires non-empty state_id == fixture_id");
+            return false;
+        }
+        if (!IsSha256HexDigest(OutProvenance.FixtureSha256)
+            || !IsSha256HexDigest(OutProvenance.SourceSha256)
+            || !IsSha256HexDigest(OutProvenance.UISpecSha256))
+        {
+            OutError = TEXT("fixture_sha256, source_sha256, and ui_spec_sha256 must each be exactly 64 hexadecimal characters");
+            return false;
+        }
+
+        OutProvenance.FixtureSha256.ToLowerInline();
+        OutProvenance.SourceSha256.ToLowerInline();
+        OutProvenance.UISpecSha256.ToLowerInline();
+        return true;
+    }
+
+    static void CopyCaptureProvenance(
+        const FCaptureProvenance& Provenance,
+        const TSharedPtr<FJsonObject>& Output)
+    {
+        if (!Provenance.bProvided || !Output.IsValid())
+        {
+            return;
+        }
+        Output->SetStringField(TEXT("state_id"), Provenance.StateId);
+        Output->SetStringField(TEXT("fixture_id"), Provenance.FixtureId);
+        Output->SetStringField(TEXT("fixture_sha256"), Provenance.FixtureSha256);
+        Output->SetStringField(TEXT("source_sha256"), Provenance.SourceSha256);
+        Output->SetStringField(TEXT("ui_spec_sha256"), Provenance.UISpecSha256);
+    }
+
+    enum class EResolutionParseResult : uint8
+    {
+        Absent,
+        Valid,
+        Invalid
+    };
+
+    static EResolutionParseResult TryGetResolution(
+        const TSharedPtr<FJsonObject>& Obj,
+        int32& OutWidth,
+        int32& OutHeight)
+    {
+        OutWidth = 0;
+        OutHeight = 0;
+        if (!Obj.IsValid() || !Obj->HasField(TEXT("expected_resolution")))
+        {
+            return EResolutionParseResult::Absent;
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* Resolution = nullptr;
+        if (!Obj->TryGetArrayField(TEXT("expected_resolution"), Resolution)
+            || !Resolution
+            || Resolution->Num() != 2)
+        {
+            return EResolutionParseResult::Invalid;
         }
 
         double Width = 0.0;
@@ -200,12 +933,23 @@ namespace MonolithUIVisualArtifactsInternal
         if (!(*Resolution)[0].IsValid() || !(*Resolution)[0]->TryGetNumber(Width) ||
             !(*Resolution)[1].IsValid() || !(*Resolution)[1]->TryGetNumber(Height))
         {
-            return false;
+            return EResolutionParseResult::Invalid;
+        }
+        if (!FMath::IsFinite(Width)
+            || !FMath::IsFinite(Height)
+            || Width < 1.0
+            || Height < 1.0
+            || Width > static_cast<double>(MAX_int32)
+            || Height > static_cast<double>(MAX_int32)
+            || FMath::TruncToDouble(Width) != Width
+            || FMath::TruncToDouble(Height) != Height)
+        {
+            return EResolutionParseResult::Invalid;
         }
 
-        OutWidth = FMath::RoundToInt(Width);
-        OutHeight = FMath::RoundToInt(Height);
-        return OutWidth > 0 && OutHeight > 0;
+        OutWidth = static_cast<int32>(Width);
+        OutHeight = static_cast<int32>(Height);
+        return EResolutionParseResult::Valid;
     }
 
     static TSharedPtr<FJsonObject> MakeCheck(
@@ -225,6 +969,22 @@ namespace MonolithUIVisualArtifactsInternal
         Check->SetStringField(TEXT("failure_code"), FailureCode);
         Check->SetStringField(TEXT("message"), Message);
         return Check;
+    }
+
+    static TSharedPtr<FJsonObject> MakeNotRequestedDiff()
+    {
+        TSharedPtr<FJsonObject> Diff = MakeShared<FJsonObject>();
+        Diff->SetStringField(TEXT("baseline_path"), TEXT(""));
+        Diff->SetStringField(TEXT("diff_path"), TEXT(""));
+        Diff->SetNumberField(TEXT("diff_ratio"), 0.0);
+        Diff->SetBoolField(TEXT("metrics_available"), false);
+        Diff->SetBoolField(TEXT("passed"), true);
+        Diff->SetStringField(TEXT("status"), TEXT("not_requested"));
+        Diff->SetStringField(TEXT("failure_code"), TEXT(""));
+        Diff->SetStringField(TEXT("message"), TEXT("No baseline_path or baseline_dir was supplied."));
+        Diff->SetStringField(TEXT("comparison_space"), TEXT("premultiplied_linear_srgb_alpha"));
+        Diff->SetArrayField(TEXT("regions"), {});
+        return Diff;
     }
 
     static TSharedPtr<FJsonObject> MakeCaptureResult(
@@ -249,14 +1009,288 @@ namespace MonolithUIVisualArtifactsInternal
         Capture->SetStringField(TEXT("failure_code"), FailureCode);
         Capture->SetStringField(TEXT("message"), Message);
 
-        TSharedPtr<FJsonObject> Diff = MakeShared<FJsonObject>();
-        Diff->SetStringField(TEXT("baseline_path"), TEXT(""));
-        Diff->SetStringField(TEXT("diff_path"), TEXT(""));
-        Diff->SetNumberField(TEXT("diff_ratio"), 0.0);
-        Diff->SetBoolField(TEXT("passed"), true);
-        Diff->SetStringField(TEXT("status"), TEXT("not_requested"));
-        Capture->SetObjectField(TEXT("diff"), Diff);
+        Capture->SetObjectField(TEXT("diff"), MakeNotRequestedDiff());
         return Capture;
+    }
+
+    static FString MakeVisualDiffOutputPath(const FString& OutputDir, const FString& Profile)
+    {
+        FString FileName = FPaths::MakeValidFileName(Profile);
+        if (FileName.IsEmpty())
+        {
+            FileName = TEXT("capture");
+        }
+        return NormalizeArtifactPath(FPaths::Combine(OutputDir, TEXT("diffs"), FileName + TEXT(".diff.png")));
+    }
+
+    static TSharedPtr<FJsonObject> MakeFailedDiff(
+        const FString& BaselinePath,
+        const FString& DiffPath,
+        const FString& FailureCode,
+        const FString& Message,
+        double DiffThreshold,
+        double PixelTolerance)
+    {
+        TSharedPtr<FJsonObject> Diff = MakeShared<FJsonObject>();
+        Diff->SetStringField(TEXT("status"), TEXT("fail"));
+        Diff->SetBoolField(TEXT("passed"), false);
+        Diff->SetStringField(TEXT("failure_code"), FailureCode);
+        Diff->SetStringField(TEXT("message"), Message);
+        Diff->SetStringField(TEXT("baseline_path"), NormalizeArtifactPath(BaselinePath));
+        Diff->SetStringField(TEXT("diff_path"), NormalizeArtifactPath(DiffPath));
+        Diff->SetField(TEXT("diff_ratio"), MakeShared<FJsonValueNull>());
+        Diff->SetBoolField(TEXT("metrics_available"), false);
+        Diff->SetNumberField(TEXT("diff_threshold"), DiffThreshold);
+        Diff->SetNumberField(TEXT("pixel_tolerance"), PixelTolerance);
+        Diff->SetStringField(TEXT("comparison_space"), TEXT("premultiplied_linear_srgb_alpha"));
+        Diff->SetArrayField(TEXT("regions"), {});
+        return Diff;
+    }
+
+    static bool BuildVisualDiff(
+        const TSharedPtr<FJsonObject>& Params,
+        const TSharedPtr<FJsonObject>& CaptureInput,
+        const FString& Profile,
+        const FString& BaselineDir,
+        const FString& OutputDir,
+        const FVerifiedPngInfo& Capture,
+        double GlobalDiffThreshold,
+        double GlobalPixelTolerance,
+        int64& InOutActionWorkUnits,
+        TSharedPtr<FJsonObject>& OutDiff,
+        FString& OutFailureCode,
+        FString& OutMessage)
+    {
+        FString BaselinePath;
+        CaptureInput->TryGetStringField(TEXT("baseline_path"), BaselinePath);
+        if (BaselinePath.IsEmpty() && !BaselineDir.IsEmpty())
+        {
+            FString BaselineFileName = FPaths::MakeValidFileName(Profile);
+            if (BaselineFileName.IsEmpty())
+            {
+                BaselineFileName = TEXT("capture");
+            }
+            BaselinePath = FPaths::Combine(BaselineDir, BaselineFileName + TEXT(".png"));
+        }
+
+        if (BaselinePath.IsEmpty())
+        {
+            OutDiff = MakeNotRequestedDiff();
+            return true;
+        }
+
+        BaselinePath = NormalizeArtifactPath(BaselinePath);
+        FString DiffPath;
+        CaptureInput->TryGetStringField(TEXT("diff_path"), DiffPath);
+        if (DiffPath.IsEmpty())
+        {
+            DiffPath = MakeVisualDiffOutputPath(OutputDir, Profile);
+        }
+        else
+        {
+            DiffPath = NormalizeArtifactPath(DiffPath);
+        }
+
+        double DiffThreshold = GlobalDiffThreshold;
+        double PixelTolerance = GlobalPixelTolerance;
+        FString ThresholdError;
+        if (!TryReadUnitInterval(CaptureInput, TEXT("diff_threshold"), GlobalDiffThreshold, DiffThreshold, ThresholdError)
+            || !TryReadUnitInterval(CaptureInput, TEXT("pixel_tolerance"), GlobalPixelTolerance, PixelTolerance, ThresholdError))
+        {
+            OutFailureCode = TEXT("invalid_diff_threshold");
+            OutMessage = ThresholdError;
+            OutDiff = MakeFailedDiff(BaselinePath, DiffPath, OutFailureCode, OutMessage, DiffThreshold, PixelTolerance);
+            return false;
+        }
+
+        FVerifiedPngInfo Baseline;
+        FString BaselineError;
+        if (!DecodePngInfo(BaselinePath, Baseline, BaselineError))
+        {
+            OutFailureCode = TEXT("baseline_artifact_invalid");
+            OutMessage = BaselineError;
+            OutDiff = MakeFailedDiff(BaselinePath, DiffPath, OutFailureCode, OutMessage, DiffThreshold, PixelTolerance);
+            return false;
+        }
+        if (Capture.Width != Baseline.Width || Capture.Height != Baseline.Height)
+        {
+            OutFailureCode = TEXT("baseline_dimension_mismatch");
+            OutMessage = FString::Printf(
+                TEXT("capture dimensions %dx%d do not match baseline %dx%d"),
+                Capture.Width,
+                Capture.Height,
+                Baseline.Width,
+                Baseline.Height);
+            OutDiff = MakeFailedDiff(BaselinePath, DiffPath, OutFailureCode, OutMessage, DiffThreshold, PixelTolerance);
+            OutDiff->SetNumberField(TEXT("baseline_width"), Baseline.Width);
+            OutDiff->SetNumberField(TEXT("baseline_height"), Baseline.Height);
+            return false;
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* RegionInputs = nullptr;
+        if (!CaptureInput->TryGetArrayField(TEXT("regions"), RegionInputs))
+        {
+            Params->TryGetArrayField(TEXT("regions"), RegionInputs);
+        }
+        TArray<FVisualDiffRegion> Regions;
+        FString RegionError;
+        if (!ParseVisualDiffRegions(
+            RegionInputs,
+            Capture.Width,
+            Capture.Height,
+            DiffThreshold,
+            PixelTolerance,
+            Regions,
+            RegionError))
+        {
+            OutFailureCode = TEXT("invalid_diff_region");
+            OutMessage = RegionError;
+            OutDiff = MakeFailedDiff(BaselinePath, DiffPath, OutFailureCode, OutMessage, DiffThreshold, PixelTolerance);
+            return false;
+        }
+
+        TArray<FVisualDiffExclusion> CaptureExclusions;
+        FString ExclusionError;
+        if (!ParseVisualDiffExclusions(
+            CaptureInput,
+            TEXT("capture"),
+            0,
+            0,
+            Capture.Width,
+            Capture.Height,
+            CaptureExclusions,
+            ExclusionError))
+        {
+            OutFailureCode = TEXT("invalid_diff_exclusion");
+            OutMessage = ExclusionError;
+            OutDiff = MakeFailedDiff(BaselinePath, DiffPath, OutFailureCode, OutMessage, DiffThreshold, PixelTolerance);
+            return false;
+        }
+
+        int64 ReservedActionWorkUnits = InOutActionWorkUnits;
+        int64 RequestedActionWorkUnits = InOutActionWorkUnits;
+        if (!TryReserveVisualDiffComparisonWork(
+            Capture.Width,
+            Capture.Height,
+            CaptureExclusions.Num(),
+            Regions,
+            InOutActionWorkUnits,
+            ReservedActionWorkUnits,
+            RequestedActionWorkUnits))
+        {
+            OutFailureCode = TEXT("visual_diff_work_budget_exceeded");
+            OutMessage = FString::Printf(
+                TEXT("visual diff requested %lld cumulative work units; limit is %lld"),
+                RequestedActionWorkUnits,
+                MaxVisualDiffWorkUnits);
+            OutDiff = MakeFailedDiff(BaselinePath, DiffPath, OutFailureCode, OutMessage, DiffThreshold, PixelTolerance);
+            SetVisualDiffWorkEvidence(OutDiff, RequestedActionWorkUnits, ReservedActionWorkUnits);
+            return false;
+        }
+        InOutActionWorkUnits = ReservedActionWorkUnits;
+
+        const FVisualDiffMetrics GlobalMetrics = ComputeVisualDiffMetrics(
+            Capture,
+            Baseline,
+            0,
+            0,
+            Capture.Width,
+            Capture.Height,
+            PixelTolerance,
+            CaptureExclusions);
+        if (GlobalMetrics.PixelCount <= 0)
+        {
+            OutFailureCode = TEXT("comparison_fully_excluded");
+            OutMessage = TEXT("capture exclusions removed every compared pixel");
+            OutDiff = MakeFailedDiff(BaselinePath, DiffPath, OutFailureCode, OutMessage, DiffThreshold, PixelTolerance);
+            return false;
+        }
+        const bool bGlobalPassed = GlobalMetrics.ChangedPixelRatio <= DiffThreshold;
+
+        TArray<TSharedPtr<FJsonValue>> RegionResults;
+        bool bRegionsPassed = true;
+        for (const FVisualDiffRegion& Region : Regions)
+        {
+            const FVisualDiffMetrics RegionMetrics = ComputeVisualDiffMetrics(
+                Capture,
+                Baseline,
+                Region.X,
+                Region.Y,
+                Region.Width,
+                Region.Height,
+                Region.PixelTolerance,
+                Region.Exclusions);
+            TSharedPtr<FJsonObject> RegionResult = MakeMetricsObject(
+                RegionMetrics,
+                Region.DiffThreshold,
+                Region.PixelTolerance);
+            RegionResult->SetStringField(TEXT("id"), Region.Id);
+            RegionResult->SetNumberField(TEXT("x"), Region.X);
+            RegionResult->SetNumberField(TEXT("y"), Region.Y);
+            RegionResult->SetNumberField(TEXT("width"), Region.Width);
+            RegionResult->SetNumberField(TEXT("height"), Region.Height);
+            RegionResult->SetNumberField(TEXT("exclusion_count"), Region.Exclusions.Num());
+            // A region whose exclusions removed every pixel would otherwise
+            // auto-pass with ratio 0; that defeats the gate, so it fails closed.
+            const bool bRegionFullyExcluded = RegionMetrics.PixelCount <= 0;
+            const bool bRegionPassed = !bRegionFullyExcluded
+                && RegionMetrics.ChangedPixelRatio <= Region.DiffThreshold;
+            RegionResult->SetStringField(TEXT("status"), bRegionPassed ? TEXT("pass") : TEXT("fail"));
+            RegionResult->SetBoolField(TEXT("passed"), bRegionPassed);
+            if (bRegionFullyExcluded)
+            {
+                RegionResult->SetStringField(TEXT("failure_code"), TEXT("region_fully_excluded"));
+            }
+            bRegionsPassed &= bRegionPassed;
+            RegionResults.Add(MakeShared<FJsonValueObject>(RegionResult));
+        }
+
+        FString HeatmapError;
+        // A region-only exclusion changes only that region's metric. The global
+        // heatmap remains truthful and masks only capture/global exclusions.
+        const bool bHeatmapWritten = WriteDiffHeatmap(DiffPath, Capture, Baseline, CaptureExclusions, HeatmapError);
+        const bool bPassed = bGlobalPassed && bRegionsPassed && bHeatmapWritten;
+
+        OutDiff = MakeMetricsObject(GlobalMetrics, DiffThreshold, PixelTolerance);
+        OutDiff->SetBoolField(TEXT("metrics_available"), true);
+        OutDiff->SetStringField(TEXT("status"), bPassed ? TEXT("pass") : TEXT("fail"));
+        OutDiff->SetBoolField(TEXT("passed"), bPassed);
+        OutDiff->SetStringField(TEXT("baseline_path"), Baseline.Path);
+        OutDiff->SetStringField(TEXT("baseline_sha256"), Baseline.Sha256);
+        OutDiff->SetStringField(TEXT("capture_sha256"), Capture.Sha256);
+        OutDiff->SetStringField(TEXT("diff_path"), DiffPath);
+        OutDiff->SetBoolField(TEXT("diff_written"), bHeatmapWritten);
+        OutDiff->SetStringField(TEXT("comparison_space"), TEXT("premultiplied_linear_srgb_alpha"));
+        OutDiff->SetNumberField(TEXT("exclusion_count"), CaptureExclusions.Num());
+        SetVisualDiffWorkEvidence(OutDiff, ReservedActionWorkUnits, InOutActionWorkUnits);
+        OutDiff->SetArrayField(TEXT("regions"), RegionResults);
+
+        if (!bHeatmapWritten)
+        {
+            OutFailureCode = TEXT("diff_artifact_write_failed");
+            OutMessage = HeatmapError;
+        }
+        else if (!bGlobalPassed)
+        {
+            OutFailureCode = TEXT("visual_diff_exceeds_threshold");
+            OutMessage = FString::Printf(
+                TEXT("global changed-pixel ratio %.8f exceeds threshold %.8f"),
+                GlobalMetrics.ChangedPixelRatio,
+                DiffThreshold);
+        }
+        else if (!bRegionsPassed)
+        {
+            OutFailureCode = TEXT("visual_diff_region_exceeds_threshold");
+            OutMessage = TEXT("one or more named visual regions exceeded their diff threshold");
+        }
+        else
+        {
+            OutFailureCode.Reset();
+            OutMessage = TEXT("capture matches the baseline within global and named-region thresholds");
+        }
+        OutDiff->SetStringField(TEXT("failure_code"), OutFailureCode);
+        OutDiff->SetStringField(TEXT("message"), OutMessage);
+        return bPassed;
     }
 
     static bool WriteManifest(const FString& ManifestPath, const TSharedPtr<FJsonObject>& Manifest, FString& OutError)
@@ -1208,7 +2242,7 @@ void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
             .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Required(TEXT("widget_name"), TEXT("string"), TEXT("Target widget name"))
             .Required(TEXT("property_name"), TEXT("string"), TEXT("Property path. Dotted segments allowed (e.g. 'Padding.Left'). Allowlist-gated unless raw_mode=true. `IsVariable`/`bIsVariable` is accepted as a compatibility route to set_widget_is_variable."))
-            .Required(TEXT("value"), TEXT("string"), TEXT("Property value (alias: 'property_value'). Strings, numbers, booleans, JSON arrays/objects all accepted; struct types (Vector2D/LinearColor/Margin/Vector4/SlateColor) accept multiple shapes."))
+            .Required(TEXT("value"), TEXT("any"), TEXT("Property value (alias: 'property_value'). Strings, numbers, booleans, JSON arrays/objects all accepted; struct types (Vector2D/LinearColor/Margin/Vector4/SlateColor) accept multiple shapes."))
             .Optional(TEXT("compile"), TEXT("boolean"), TEXT("Compile after setting"), TEXT("false"))
             .Optional(TEXT("raw_mode"), TEXT("boolean"), TEXT("Bypass the allowlist gate (legacy unconditional ImportText_Direct path). Default false."), TEXT("false"))
             .Build()
@@ -1270,16 +2304,18 @@ void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
 
     Registry.RegisterAction(
         TEXT("ui"), TEXT("verify_widget_visual_artifacts"),
-        TEXT("Verify widget preview PNG artifacts produced by editor.capture_scene_preview(asset_type=\"widget\"): file exists, byte count, dimensions, SHA-256, transparent ratio, and nonblank/non-uniform pixels. Accepts capture rows with path or the editor action's output_file field."),
+        TEXT("Verify widget preview PNG artifacts and, when a baseline is supplied, run an alpha-aware linear-sRGB pixel comparison with global and named-region thresholds. Capture/global and region-local exclusion rects are rasterized by a shared scanline; only capture exclusions mask the global heatmap. Comparisons reserve one cumulative 134217728-work-unit action budget and fail closed before metric/heatmap work when exceeded. A fully excluded comparison also fails closed. Produces deterministic diff heatmaps with dim-blue global-exclusion markers and a provenance-bearing manifest."),
         FMonolithActionHandler::CreateStatic(&MonolithUIActionsPhase2::HandleVerifyWidgetVisualArtifacts),
         FParamSchemaBuilder()
             .OptionalAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path the artifact represents. Echo-only for provenance."))
-            .Optional(TEXT("captures"), TEXT("array"), TEXT("Capture rows: {profile?, path? or output_file?, expected_resolution?}."))
+            .Optional(TEXT("captures"), TEXT("array"), TEXT("Capture rows: {profile?, path|output_file, expected_resolution?, baseline_path?, diff_path?, diff_threshold?, pixel_tolerance?, regions?, exclusions?, state_id?, fixture_id?, fixture_sha256?, source_sha256?, ui_spec_sha256?}. Capture exclusions {x,y,width,height} are removed from the global ratio and marked dim blue in the heatmap."))
             .OptionalDiskPath(TEXT("path"), TEXT("Single PNG path when captures[] is omitted."))
             .OptionalDiskPath(TEXT("output_file"), TEXT("Alias for path; matches editor.capture_scene_preview output."))
             .OptionalDiskPath(TEXT("output_dir"), TEXT("Directory for manifest.json. Defaults under Saved/Monolith/UIVisualQA/<run_id>."))
-            .Optional(TEXT("baseline_dir"), TEXT("string"), TEXT("Reserved for future baseline diff. v1 records diff fields as not_requested."))
-            .Optional(TEXT("diff_threshold"), TEXT("number"), TEXT("Reserved for future baseline diff."))
+            .OptionalDiskPath(TEXT("baseline_dir"), TEXT("Baseline PNG directory. A capture without baseline_path resolves <baseline_dir>/<profile>.png."))
+            .Optional(TEXT("diff_threshold"), TEXT("number"), TEXT("Maximum changed-pixel ratio in [0,1]. Capture rows may override it."), TEXT("0.0"))
+            .Optional(TEXT("pixel_tolerance"), TEXT("number"), TEXT("Per-channel premultiplied-linear difference tolerance in [0,1] before a pixel is counted as changed."), TEXT("0.0"))
+            .Optional(TEXT("regions"), TEXT("array"), TEXT("Named regions applied to captures that omit their own regions: {id,x,y,width,height,diff_threshold?,pixel_tolerance?,exclusions?}. Region exclusions {x,y,width,height} must lie inside the region and affect only that region's ratio; they never hide pixels in the global heatmap."))
             .Optional(TEXT("fail_on_blank"), TEXT("boolean"), TEXT("Fail transparent or near-uniform captures."), TEXT("true"))
             .Optional(TEXT("request_id"), TEXT("string"), TEXT("Optional caller request id echoed in the manifest."))
             .Optional(TEXT("run_id"), TEXT("string"), TEXT("Optional run id used for default manifest directory."))
@@ -1329,9 +2365,9 @@ void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
 		{ TEXT("compile WBP_HUD and report any errors"), TEXT("recompile the menu widget after editing it") });
 
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ui"), TEXT("verify_widget_visual_artifacts"),
-		{ TEXT("verify widget screenshot"), TEXT("UMG visual artifact proof"), TEXT("nonblank PNG"), TEXT("capture hash"), TEXT("widget visual QA") },
+		{ TEXT("verify widget screenshot"), TEXT("UMG visual artifact proof"), TEXT("baseline pixel diff"), TEXT("named region threshold"), TEXT("capture hash"), TEXT("widget visual QA") },
 		{ TEXT("verify_widget_preview"), TEXT("validate_widget_png"), TEXT("visual_artifact_check"), TEXT("verify_umg_capture") },
-		{ TEXT("verify the PNG returned by editor.capture_scene_preview for WBP_Menu"), TEXT("check that a widget preview artifact is not blank") });
+		{ TEXT("compare the WBP_Menu preview to a web golden with region thresholds"), TEXT("check that a widget preview artifact is nonblank and matches its baseline") });
 }
 
 // --- create_widget_blueprint ---
@@ -3187,9 +4223,18 @@ FMonolithActionResult FMonolithUIActions::HandleSetWidgetProperty(const TSharedP
         TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
         Result->SetStringField(TEXT("widget"), WidgetName);
         Result->SetStringField(TEXT("property"), PropertyName);
-        // Echo the value as its string serialisation for compat with existing
-        // call-site expectations (legacy result included a `value` string).
-        Result->SetStringField(TEXT("value"), ValueJson->AsString());
+        // Preserve the legacy string echo without calling AsString() on a
+        // number/bool/array/object (which is a type error for those values).
+        // The typed echo is also returned losslessly for read-back workflows.
+        FString ValueText;
+        if (!ValueJson->TryGetString(ValueText))
+        {
+            TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ValueText);
+            FJsonSerializer::Serialize(ValueJson.ToSharedRef(), TEXT(""), Writer);
+            Writer->Close();
+        }
+        Result->SetStringField(TEXT("value"), ValueText);
+        Result->SetField(TEXT("value_json"), ValueJson);
         Result->SetBoolField(TEXT("compiled"), bCompile);
         Result->SetBoolField(TEXT("raw_mode"), bRawMode);
         return FMonolithActionResult::Success(Result);
@@ -3489,6 +4534,27 @@ namespace MonolithUIActionsPhase2
         bool bFailOnBlank = true;
         Params->TryGetBoolField(TEXT("fail_on_blank"), bFailOnBlank);
 
+        double GlobalDiffThreshold = 0.0;
+        double GlobalPixelTolerance = 0.0;
+        FString ThresholdError;
+        if (!TryReadUnitInterval(Params, TEXT("diff_threshold"), 0.0, GlobalDiffThreshold, ThresholdError)
+            || !TryReadUnitInterval(Params, TEXT("pixel_tolerance"), 0.0, GlobalPixelTolerance, ThresholdError))
+        {
+            return FMonolithActionResult::Error(ThresholdError, -32602);
+        }
+
+        FString OutputDir;
+        Params->TryGetStringField(TEXT("output_dir"), OutputDir);
+        if (OutputDir.IsEmpty())
+        {
+            OutputDir = FPaths::ProjectSavedDir() / TEXT("Monolith/UIVisualQA") / RunId;
+        }
+        OutputDir = NormalizeArtifactPath(OutputDir);
+
+        FString BaselineDir;
+        Params->TryGetStringField(TEXT("baseline_dir"), BaselineDir);
+        BaselineDir = NormalizeArtifactPath(BaselineDir);
+
         TArray<TSharedPtr<FJsonValue>> CaptureInputs;
         const TArray<TSharedPtr<FJsonValue>>* Captures = nullptr;
         if (Params->TryGetArrayField(TEXT("captures"), Captures) && Captures)
@@ -3515,12 +4581,23 @@ namespace MonolithUIActionsPhase2
         {
             return FMonolithActionResult::Error(TEXT("Missing captures[] or path/output_file for verify_widget_visual_artifacts"), -32602);
         }
+        if (CaptureInputs.Num() > MaxVisualArtifactCaptures)
+        {
+            return FMonolithActionResult::Error(
+                FString::Printf(
+                    TEXT("captures[] contains %d rows; maximum is %d"),
+                    CaptureInputs.Num(),
+                    MaxVisualArtifactCaptures),
+                -32602);
+        }
 
         TArray<TSharedPtr<FJsonValue>> CaptureResults;
         TArray<TSharedPtr<FJsonValue>> Checks;
         TArray<TSharedPtr<FJsonValue>> Warnings;
         TArray<TSharedPtr<FJsonValue>> Limitations;
+        TSet<FString> OutputProfileKeys;
         bool bOk = true;
+        int64 VisualDiffWorkUnits = 0;
 
         for (int32 Index = 0; Index < CaptureInputs.Num(); ++Index)
         {
@@ -3538,6 +4615,21 @@ namespace MonolithUIActionsPhase2
             {
                 Profile = FString::Printf(TEXT("capture_%d"), Index);
             }
+            Profile.TrimStartAndEndInline();
+            const FString OutputProfileKey = FPaths::MakeValidFileName(Profile).ToLower();
+            if (OutputProfileKey.IsEmpty() || OutputProfileKeys.Contains(OutputProfileKey))
+            {
+                bOk = false;
+                Checks.Add(MakeShared<FJsonValueObject>(MakeCheck(
+                    FString::Printf(TEXT("visual_artifact:%d"), Index),
+                    TEXT("fail"),
+                    TEXT("duplicate_or_invalid_profile"),
+                    FString::Printf(
+                        TEXT("capture profile '%s' is empty or collides with another sanitized output profile"),
+                        *Profile))));
+                continue;
+            }
+            OutputProfileKeys.Add(OutputProfileKey);
 
             FString Path;
             if (!(*CaptureObj)->TryGetStringField(TEXT("path"), Path))
@@ -3546,6 +4638,24 @@ namespace MonolithUIActionsPhase2
             }
 
             const FString CheckId = FString::Printf(TEXT("visual_artifact:%s"), *Profile);
+            FCaptureProvenance Provenance;
+            FString ProvenanceError;
+            const bool bProvenanceValid = TryReadCaptureProvenance(*CaptureObj, Provenance, ProvenanceError);
+            if (Provenance.bProvided)
+            {
+                Checks.Add(MakeShared<FJsonValueObject>(MakeCheck(
+                    FString::Printf(TEXT("visual_provenance:%s"), *Profile),
+                    bProvenanceValid ? TEXT("pass") : TEXT("fail"),
+                    bProvenanceValid ? FString() : TEXT("invalid_provenance"),
+                    bProvenanceValid
+                        ? TEXT("capture provenance is complete, canonical, and cryptographically shaped")
+                        : ProvenanceError)));
+            }
+            if (!bProvenanceValid)
+            {
+                bOk = false;
+            }
+
             FVerifiedPngInfo Info;
             FString Error;
             if (!DecodePngInfo(Path, Info, Error))
@@ -3553,34 +4663,78 @@ namespace MonolithUIActionsPhase2
                 bOk = false;
                 FVerifiedPngInfo FailedInfo;
                 FailedInfo.Path = NormalizeArtifactPath(Path);
-                CaptureResults.Add(MakeShared<FJsonValueObject>(MakeCaptureResult(Profile, FailedInfo, false, TEXT("artifact_missing"), Error)));
+                TSharedPtr<FJsonObject> CaptureResult = MakeCaptureResult(Profile, FailedInfo, false, TEXT("artifact_missing"), Error);
+                FString MissingCaptureBaselinePath;
+                (*CaptureObj)->TryGetStringField(TEXT("baseline_path"), MissingCaptureBaselinePath);
+                if (!MissingCaptureBaselinePath.IsEmpty() || !BaselineDir.IsEmpty())
+                {
+                    if (MissingCaptureBaselinePath.IsEmpty())
+                    {
+                        MissingCaptureBaselinePath = FPaths::Combine(
+                            BaselineDir,
+                            FPaths::MakeValidFileName(Profile) + TEXT(".png"));
+                    }
+                    const FString DiffMessage = TEXT("baseline comparison was blocked because the capture artifact is missing or invalid");
+                    CaptureResult->SetObjectField(TEXT("diff"), MakeFailedDiff(
+                        MissingCaptureBaselinePath,
+                        MakeVisualDiffOutputPath(OutputDir, Profile),
+                        TEXT("artifact_validation_failed"),
+                        DiffMessage,
+                        GlobalDiffThreshold,
+                        GlobalPixelTolerance));
+                    Checks.Add(MakeShared<FJsonValueObject>(MakeCheck(
+                        FString::Printf(TEXT("visual_diff:%s"), *Profile),
+                        TEXT("fail"),
+                        TEXT("artifact_validation_failed"),
+                        DiffMessage)));
+                }
+                if (bProvenanceValid)
+                {
+                    CopyCaptureProvenance(Provenance, CaptureResult);
+                }
+                CaptureResults.Add(MakeShared<FJsonValueObject>(CaptureResult));
                 Checks.Add(MakeShared<FJsonValueObject>(MakeCheck(CheckId, TEXT("fail"), TEXT("artifact_missing"), Error)));
                 continue;
             }
 
             int32 ExpectedWidth = 0;
             int32 ExpectedHeight = 0;
-            FString FailureCode;
-            FString Message = TEXT("visual artifact passed PNG existence, dimensions, hash, and nonblank checks");
-            bool bPassed = true;
-
-            if (TryGetResolution(*CaptureObj, ExpectedWidth, ExpectedHeight) &&
-                (Info.Width != ExpectedWidth || Info.Height != ExpectedHeight))
+            FString ArtifactFailureCode;
+            FString ArtifactMessage = TEXT("visual artifact passed PNG existence, dimensions, hash, and nonblank checks");
+            bool bArtifactPassed = bProvenanceValid;
+            if (!bProvenanceValid)
             {
-                bPassed = false;
-                FailureCode = TEXT("dimension_mismatch");
-                Message = FString::Printf(TEXT("PNG dimensions %dx%d did not match expected %dx%d"),
+                ArtifactFailureCode = TEXT("invalid_provenance");
+                ArtifactMessage = ProvenanceError;
+            }
+
+            const EResolutionParseResult ResolutionResult = TryGetResolution(
+                *CaptureObj,
+                ExpectedWidth,
+                ExpectedHeight);
+            if (ResolutionResult == EResolutionParseResult::Invalid)
+            {
+                bArtifactPassed = false;
+                ArtifactFailureCode = TEXT("invalid_expected_resolution");
+                ArtifactMessage = TEXT("expected_resolution must contain exactly two finite positive int32 values");
+            }
+            else if (ResolutionResult == EResolutionParseResult::Valid
+                && (Info.Width != ExpectedWidth || Info.Height != ExpectedHeight))
+            {
+                bArtifactPassed = false;
+                ArtifactFailureCode = TEXT("dimension_mismatch");
+                ArtifactMessage = FString::Printf(TEXT("PNG dimensions %dx%d did not match expected %dx%d"),
                     Info.Width, Info.Height, ExpectedWidth, ExpectedHeight);
             }
 
-            if (bPassed && bFailOnBlank && Info.bBlank)
+            if (bArtifactPassed && bFailOnBlank && Info.bBlank)
             {
-                bPassed = false;
-                FailureCode = TEXT("pixel_blank_or_uniform");
-                Message = TEXT("PNG exists and decodes, but pixels are fully transparent or near-uniform");
+                bArtifactPassed = false;
+                ArtifactFailureCode = TEXT("pixel_blank_or_uniform");
+                ArtifactMessage = TEXT("PNG exists and decodes, but pixels are fully transparent or near-uniform");
             }
 
-            if (!bPassed)
+            if (!bArtifactPassed)
             {
                 bOk = false;
             }
@@ -3590,25 +4744,106 @@ namespace MonolithUIActionsPhase2
                     FString::Printf(TEXT("Capture '%s' is blank/uniform, but fail_on_blank=false."), *Profile)));
             }
 
-            CaptureResults.Add(MakeShared<FJsonValueObject>(MakeCaptureResult(Profile, Info, bPassed, FailureCode, Message)));
-            Checks.Add(MakeShared<FJsonValueObject>(MakeCheck(CheckId, bPassed ? TEXT("pass") : TEXT("fail"), FailureCode, Message)));
+            Checks.Add(MakeShared<FJsonValueObject>(MakeCheck(
+                CheckId,
+                bArtifactPassed ? TEXT("pass") : TEXT("fail"),
+                ArtifactFailureCode,
+                ArtifactMessage)));
+
+            FString ExplicitBaselinePath;
+            (*CaptureObj)->TryGetStringField(TEXT("baseline_path"), ExplicitBaselinePath);
+            const bool bDiffRequested = !ExplicitBaselinePath.IsEmpty() || !BaselineDir.IsEmpty();
+            bool bDiffPassed = true;
+            FString DiffFailureCode;
+            FString DiffMessage;
+            TSharedPtr<FJsonObject> Diff;
+
+            if (bArtifactPassed)
+            {
+                bDiffPassed = BuildVisualDiff(
+                    Params,
+                    *CaptureObj,
+                    Profile,
+                    BaselineDir,
+                    OutputDir,
+                    Info,
+                    GlobalDiffThreshold,
+                    GlobalPixelTolerance,
+                    VisualDiffWorkUnits,
+                    Diff,
+                    DiffFailureCode,
+                    DiffMessage);
+            }
+            else if (bDiffRequested)
+            {
+                FString ResolvedBaselinePath = ExplicitBaselinePath;
+                if (ResolvedBaselinePath.IsEmpty())
+                {
+                    ResolvedBaselinePath = FPaths::Combine(
+                        BaselineDir,
+                        FPaths::MakeValidFileName(Profile) + TEXT(".png"));
+                }
+                DiffFailureCode = TEXT("artifact_validation_failed");
+                DiffMessage = TEXT("baseline comparison was blocked because the capture artifact failed validation");
+                Diff = MakeFailedDiff(
+                    ResolvedBaselinePath,
+                    MakeVisualDiffOutputPath(OutputDir, Profile),
+                    DiffFailureCode,
+                    DiffMessage,
+                    GlobalDiffThreshold,
+                    GlobalPixelTolerance);
+                bDiffPassed = false;
+            }
+            else
+            {
+                Diff = MakeNotRequestedDiff();
+            }
+
+            if (bDiffRequested)
+            {
+                Checks.Add(MakeShared<FJsonValueObject>(MakeCheck(
+                    FString::Printf(TEXT("visual_diff:%s"), *Profile),
+                    bDiffPassed ? TEXT("pass") : TEXT("fail"),
+                    DiffFailureCode,
+                    DiffMessage)));
+            }
+
+            const bool bCapturePassed = bArtifactPassed && bDiffPassed;
+            if (!bCapturePassed)
+            {
+                bOk = false;
+            }
+            const FString CaptureFailureCode = bArtifactPassed ? DiffFailureCode : ArtifactFailureCode;
+            const FString CaptureMessage = bArtifactPassed
+                ? (bDiffRequested ? DiffMessage : ArtifactMessage)
+                : ArtifactMessage;
+            TSharedPtr<FJsonObject> CaptureResult = MakeCaptureResult(
+                Profile,
+                Info,
+                bCapturePassed,
+                CaptureFailureCode,
+                CaptureMessage);
+            CaptureResult->SetObjectField(TEXT("diff"), Diff);
+            if (bProvenanceValid)
+            {
+                CopyCaptureProvenance(Provenance, CaptureResult);
+            }
+            CaptureResults.Add(MakeShared<FJsonValueObject>(CaptureResult));
         }
 
-        FString OutputDir;
-        Params->TryGetStringField(TEXT("output_dir"), OutputDir);
-        if (OutputDir.IsEmpty())
-        {
-            OutputDir = FPaths::ProjectSavedDir() / TEXT("Monolith/UIVisualQA") / RunId;
-        }
-        OutputDir = NormalizeArtifactPath(OutputDir);
         const FString ManifestPath = FPaths::Combine(OutputDir, TEXT("manifest.json"));
 
         TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
         Result->SetBoolField(TEXT("ok"), bOk);
-        Result->SetStringField(TEXT("schema_version"), TEXT("ui_visual_artifacts.v1"));
+        Result->SetStringField(TEXT("schema_version"), TEXT("ui_visual_artifacts.v2"));
         Result->SetStringField(TEXT("run_id"), RunId);
         Result->SetStringField(TEXT("request_id"), RequestId);
         Result->SetStringField(TEXT("asset_path"), AssetPath);
+        Result->SetStringField(TEXT("baseline_dir"), BaselineDir);
+        Result->SetNumberField(TEXT("diff_threshold"), GlobalDiffThreshold);
+        Result->SetNumberField(TEXT("pixel_tolerance"), GlobalPixelTolerance);
+        Result->SetStringField(TEXT("comparison_space"), TEXT("premultiplied_linear_srgb_alpha"));
+        SetVisualDiffWorkEvidence(Result, VisualDiffWorkUnits, VisualDiffWorkUnits);
         Result->SetStringField(TEXT("status"), bOk ? TEXT("pass") : TEXT("fail"));
         Result->SetStringField(TEXT("manifest_path"), ManifestPath);
         Result->SetArrayField(TEXT("captures"), CaptureResults);
@@ -3620,7 +4855,16 @@ namespace MonolithUIActionsPhase2
         FString ManifestError;
         if (!WriteManifest(ManifestPath, Result, ManifestError))
         {
+            bOk = false;
             Result->SetBoolField(TEXT("manifest_written"), false);
+            Result->SetBoolField(TEXT("ok"), false);
+            Result->SetStringField(TEXT("status"), TEXT("fail"));
+            Checks.Add(MakeShared<FJsonValueObject>(MakeCheck(
+                TEXT("visual_artifact_manifest"),
+                TEXT("fail"),
+                TEXT("manifest_write_failed"),
+                ManifestError)));
+            Result->SetArrayField(TEXT("checks"), Checks);
             Warnings.Add(MakeShared<FJsonValueString>(ManifestError));
             Result->SetArrayField(TEXT("warnings"), Warnings);
         }

@@ -1,6 +1,7 @@
-// MonolithUISlotActions.cpp
+﻿// MonolithUISlotActions.cpp
 #include "MonolithUISlotActions.h"
 #include "MonolithUIInternal.h"
+#include "MonolithUIMoveWidgetTransaction.h"
 #include "MonolithParamSchema.h"
 
 #include "Components/CanvasPanelSlot.h"
@@ -256,12 +257,14 @@ void FMonolithUISlotActions::RegisterActions(FMonolithToolRegistry& Registry)
 
     Registry.RegisterAction(
         TEXT("ui"), TEXT("move_widget"),
-        TEXT("Move a widget to a different parent panel, preserving compatible slot layout data"),
+        TEXT("Move a widget to a parent panel or reorder it within its current panel, preserving compatible slot layout data"),
         FMonolithActionHandler::CreateStatic(&HandleMoveWidget),
         FParamSchemaBuilder()
             .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Required(TEXT("widget_name"), TEXT("string"), TEXT("Widget to move"))
             .Required(TEXT("new_parent_name"), TEXT("string"), TEXT("New parent panel name"))
+            .Optional(TEXT("sibling_index"), TEXT("integer"), TEXT("Zero-based final child index in the target panel; same-parent reorders preserve the exact slot object")).Minimum(TEXT("sibling_index"), 0.0)
+            .Optional(TEXT("expected_parent_name"), TEXT("string"), TEXT("Optional fail-closed assertion for the widget's current direct parent"))
             .Optional(TEXT("compile"), TEXT("boolean"), TEXT("Compile after moving"), TEXT("true"))
             .Build()
     );
@@ -629,6 +632,31 @@ FMonolithActionResult FMonolithUISlotActions::HandleMoveWidget(const TSharedPtr<
     FString NewParentName;
     if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("new_parent_name"), NewParentName, ParamError)) return ParamError;
 
+    FString ExpectedParentName;
+    Params->TryGetStringField(TEXT("expected_parent_name"), ExpectedParentName);
+
+    const bool bHasSiblingIndex = Params->HasField(TEXT("sibling_index"));
+    int32 RequestedSiblingIndex = INDEX_NONE;
+    if (bHasSiblingIndex)
+    {
+        double RawSiblingIndex = 0.0;
+        if (!Params->TryGetNumberField(TEXT("sibling_index"), RawSiblingIndex)
+            || !FMath::IsFinite(RawSiblingIndex)
+            || RawSiblingIndex < 0.0
+            || RawSiblingIndex > static_cast<double>(MAX_int32)
+            || RawSiblingIndex != FMath::FloorToDouble(RawSiblingIndex))
+        {
+            FUISpecError E = MonolithUIInternal::MakeSpecError(
+                TEXT("Range"),
+                TEXT("/sibling_index"),
+                TEXT("sibling_index must be a non-negative integer."),
+                TEXT("Pass the zero-based final child index in the target panel."));
+            E.WidgetId = FName(*WidgetName);
+            return MonolithUIInternal::MakeErrorFromSpecError(E);
+        }
+        RequestedSiblingIndex = static_cast<int32>(RawSiblingIndex);
+    }
+
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
     if (!WBP) return Err;
@@ -671,6 +699,41 @@ FMonolithActionResult FMonolithUISlotActions::HandleMoveWidget(const TSharedPtr<
         return MonolithUIInternal::MakeErrorFromSpecError(E);
     }
 
+    if (!ExpectedParentName.IsEmpty() && OldParent->GetFName() != FName(*ExpectedParentName))
+    {
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("Conflict"),
+            TEXT("/expected_parent_name"),
+            FString::Printf(
+                TEXT("Widget '%s' is a direct child of '%s', not the asserted parent '%s'."),
+                *WidgetName,
+                *OldParent->GetName(),
+                *ExpectedParentName),
+            TEXT("Refresh ui::get_widget_tree or ui::diff_ui_spec and retry with the current direct parent."));
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
+    }
+
+    for (UWidget* Ancestor = NewParent; Ancestor; )
+    {
+        if (Ancestor == Widget)
+        {
+            FUISpecError E = MonolithUIInternal::MakeSpecError(
+                TEXT("Hierarchy"),
+                TEXT("/new_parent_name"),
+                FString::Printf(
+                    TEXT("Widget '%s' cannot be moved under itself or its descendant '%s'."),
+                    *WidgetName,
+                    *NewParentName),
+                TEXT("Choose a target panel outside the widget's own subtree."));
+            E.WidgetId = FName(*WidgetName);
+            return MonolithUIInternal::MakeErrorFromSpecError(E);
+        }
+
+        int32 AncestorIndex = INDEX_NONE;
+        Ancestor = UWidgetTree::FindWidgetParent(Ancestor, AncestorIndex);
+    }
+
     if (OldParent != NewParent && !NewParent->CanAddMoreChildren())
     {
         FUISpecError E = MonolithUIInternal::MakeSpecError(
@@ -685,15 +748,124 @@ FMonolithActionResult FMonolithUISlotActions::HandleMoveWidget(const TSharedPtr<
         return MonolithUIInternal::MakeErrorFromSpecError(E);
     }
 
-    const FMonolithUISlotSnapshot SlotSnapshot = CaptureCompatibleSlotProperties(Widget->Slot);
-
-    if (OldParent)
+    if (bHasSiblingIndex)
     {
-        OldParent->RemoveChild(Widget);
+        // A same-parent reorder addresses an existing final slot [0, N-1]. A
+        // cross-parent move inserts into the target's final child list [0, N].
+        const int32 MaximumSiblingIndex = OldParent == NewParent
+            ? OldParent->GetChildrenCount() - 1
+            : NewParent->GetChildrenCount();
+        if (RequestedSiblingIndex > MaximumSiblingIndex)
+        {
+            FUISpecError E = MonolithUIInternal::MakeSpecError(
+                TEXT("Range"),
+                TEXT("/sibling_index"),
+                FString::Printf(
+                    TEXT("sibling_index %d is outside the valid range [0, %d] for target panel '%s'."),
+                    RequestedSiblingIndex,
+                    MaximumSiblingIndex,
+                    *NewParentName),
+                TEXT("Use the desired zero-based final child index from ui::diff_ui_spec."));
+            E.WidgetId = FName(*WidgetName);
+            return MonolithUIInternal::MakeErrorFromSpecError(E);
+        }
     }
 
-    UPanelSlot* NewSlot = NewParent->AddChild(Widget);
-    const int32 NewIndex = NewParent->GetChildIndex(Widget);
+    const int32 TargetSiblingIndex = bHasSiblingIndex
+        ? RequestedSiblingIndex
+        : NewParent->GetChildrenCount() - (OldParent == NewParent ? 1 : 0);
+
+    if (OldParent == NewParent)
+    {
+        UPanelSlot* const OriginalSlot = Widget->Slot;
+        NewParent->ShiftChild(TargetSiblingIndex, Widget);
+        const int32 NewIndex = NewParent->GetChildIndex(Widget);
+        const bool bChanged = OldIndex != NewIndex;
+
+        if (bChanged)
+        {
+            FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
+        }
+
+        bool bCompile = true;
+        Params->TryGetBoolField(TEXT("compile"), bCompile);
+        if (bCompile) FKismetEditorUtilities::CompileBlueprint(WBP);
+
+        TSharedPtr<FJsonObject> SlotPreservation = MakeShared<FJsonObject>();
+        SlotPreservation->SetBoolField(TEXT("attempted"), true);
+        SlotPreservation->SetStringField(TEXT("old_slot_type"), OriginalSlot ? OriginalSlot->GetClass()->GetName() : TEXT("none"));
+        SlotPreservation->SetStringField(TEXT("new_slot_type"), Widget->Slot ? Widget->Slot->GetClass()->GetName() : TEXT("none"));
+        SlotPreservation->SetNumberField(TEXT("old_parent_index"), OldIndex);
+        SlotPreservation->SetNumberField(TEXT("new_parent_index"), NewIndex);
+        SlotPreservation->SetStringField(TEXT("status"), TEXT("preserved_same_slot_instance"));
+        SlotPreservation->SetBoolField(TEXT("same_slot_instance"), Widget->Slot == OriginalSlot);
+        SlotPreservation->SetArrayField(TEXT("copied_fields"), TArray<TSharedPtr<FJsonValue>>());
+
+        TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+        Result->SetStringField(TEXT("widget"), WidgetName);
+        Result->SetStringField(TEXT("operation_source"), TEXT("monolith_equivalent"));
+        Result->SetStringField(TEXT("old_parent"), OldParent->GetName());
+        Result->SetStringField(TEXT("new_parent"), NewParentName);
+        Result->SetNumberField(TEXT("old_sibling_index"), OldIndex);
+        Result->SetNumberField(TEXT("new_sibling_index"), NewIndex);
+        Result->SetStringField(TEXT("new_slot_type"), Widget->Slot ? Widget->Slot->GetClass()->GetName() : TEXT("none"));
+        Result->SetObjectField(TEXT("slot_preservation"), SlotPreservation);
+        Result->SetBoolField(TEXT("changed"), bChanged);
+        Result->SetBoolField(TEXT("compiled"), bCompile);
+        return FMonolithActionResult::Success(Result);
+    }
+
+    const FMonolithUISlotSnapshot SlotSnapshot = CaptureCompatibleSlotProperties(Widget->Slot);
+    TSharedPtr<FJsonObject> RollbackSlotPreservation;
+    const MonolithUI::MoveWidgetTransaction::FResult MoveResult =
+        MonolithUI::MoveWidgetTransaction::MoveCrossParent(
+            *OldParent,
+            *NewParent,
+            *Widget,
+            OldIndex,
+            bHasSiblingIndex,
+            RequestedSiblingIndex,
+            [](UPanelWidget& TargetParent, UWidget& Child) -> UPanelSlot*
+            {
+                return TargetParent.AddChild(&Child);
+            },
+            [&SlotSnapshot, OldIndex, &RollbackSlotPreservation](UPanelSlot& RestoredSlot, int32 RestoredIndex)
+            {
+                RollbackSlotPreservation = RestoreCompatibleSlotProperties(
+                    SlotSnapshot,
+                    &RestoredSlot,
+                    OldIndex,
+                    RestoredIndex);
+                FString PreservationStatus;
+                return !SlotSnapshot.IsValid()
+                    || (RollbackSlotPreservation.IsValid()
+                        && RollbackSlotPreservation->TryGetStringField(TEXT("status"), PreservationStatus)
+                        && PreservationStatus == TEXT("preserved"));
+            });
+
+    if (!MoveResult.bSucceeded)
+    {
+        const FString RecoveryMessage = MoveResult.bRollbackSucceeded
+            ? TEXT("The original parent, sibling index, and compatible slot properties remain intact.")
+            : TEXT("Rollback did not fully restore the original hierarchy and slot state; reload the Widget Blueprint before retrying.");
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("Mutation"),
+            TEXT("/new_parent_name"),
+            FString::Printf(
+                TEXT("Moving widget '%s' to '%s' failed: %s. %s"),
+                *WidgetName,
+                *NewParentName,
+                *MoveResult.FailureReason,
+                *RecoveryMessage),
+            MoveResult.bRollbackSucceeded
+                ? TEXT("Refresh ui::get_widget_tree, verify the target panel still accepts the widget, and retry.")
+                : TEXT("Reload the Widget Blueprint to recover a canonical tree before issuing another mutation."));
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
+    }
+
+    UPanelSlot* const NewSlot = MoveResult.NewSlot;
+    const int32 NewIndex = MoveResult.NewIndex;
     TSharedPtr<FJsonObject> SlotPreservation = RestoreCompatibleSlotProperties(SlotSnapshot, NewSlot, OldIndex, NewIndex);
 
     FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
@@ -707,6 +879,8 @@ FMonolithActionResult FMonolithUISlotActions::HandleMoveWidget(const TSharedPtr<
     Result->SetStringField(TEXT("operation_source"), TEXT("monolith_equivalent"));
     Result->SetStringField(TEXT("old_parent"), OldParent ? OldParent->GetName() : TEXT("none"));
     Result->SetStringField(TEXT("new_parent"), NewParentName);
+    Result->SetNumberField(TEXT("old_sibling_index"), OldIndex);
+    Result->SetNumberField(TEXT("new_sibling_index"), NewIndex);
     Result->SetStringField(TEXT("new_slot_type"), NewSlot ? NewSlot->GetClass()->GetName() : TEXT("none"));
     Result->SetObjectField(TEXT("slot_preservation"), SlotPreservation);
     Result->SetBoolField(TEXT("compiled"), bCompile);

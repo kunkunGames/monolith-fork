@@ -1,4 +1,5 @@
 #include "Misc/AutomationTest.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithPieTimeseries.h"
 #include "Dom/JsonObject.h"
 

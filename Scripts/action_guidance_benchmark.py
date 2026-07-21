@@ -406,14 +406,93 @@ def discover_schema(
     return schema if isinstance(schema, dict) else None
 
 
-def discover_namespace_actions_strict(url: str, namespace: str, timeout_s: float = 45.0) -> List[str]:
-    """Enumerate one namespace without turning catalog drift into missing tasks."""
+def discover_namespace_catalog_strict(
+    url: str,
+    namespace: str,
+    timeout_s: float = 45.0,
+) -> Tuple[List[str], Dict[str, Dict[str, Any]]]:
+    """Enumerate one namespace and cache its inline action schemas.
 
-    def fetch_page(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    ``monolith_discover(detail=true)`` already returns the same action rows used
+    by focused ``mode=schema`` calls.  Fetching those rows once per paginated
+    namespace avoids hundreds of redundant round trips while retaining exact
+    action-set, pagination, policy, and parameter-schema validation.
+    """
+
+    actions: List[str] = []
+    schemas: Dict[str, Dict[str, Any]] = {}
+    offset = 0
+    page_limit = 50
+    max_pages = 1000
+    for _page in range(max_pages):
+        arguments = {
+            "namespace": namespace,
+            "mode": "actions",
+            "limit": page_limit,
+            "offset": offset,
+            "detail": True,
+            "planning_detail": "compact",
+            "schema_detail": "full",
+        }
         response = mcp_call(url, "monolith_discover", arguments, timeout_s=timeout_s)
-        return result_data(response) or {}
+        payload = result_data(response) or {}
+        rows = payload.get("actions") if isinstance(payload, dict) else None
+        if not isinstance(rows, list):
+            raise RuntimeError(
+                f"monolith_discover(namespace={namespace}, mode=actions, offset={offset}, "
+                "detail=true) returned no 'actions' list -- discover contract drift"
+            )
+        for row_index, row in enumerate(rows):
+            if not isinstance(row, dict):
+                raise RuntimeError(
+                    f"monolith_discover(namespace={namespace}, detail=true) action row "
+                    f"{offset + row_index} is not an object"
+                )
+            action = str(row.get("action", "")).strip()
+            if not action:
+                raise RuntimeError(
+                    f"monolith_discover(namespace={namespace}, detail=true) action row "
+                    f"{offset + row_index} has no action name"
+                )
+            if action in schemas:
+                raise RuntimeError(
+                    f"monolith_discover returned duplicate action '{namespace}.{action}'"
+                )
+            actions.append(action)
+            schemas[action] = dict(row)
 
-    return paginate_discover_action_names(fetch_page, namespace)
+        truncated = payload.get("truncated")
+        if not isinstance(truncated, bool):
+            raise RuntimeError(
+                f"monolith_discover(namespace={namespace}, mode=actions, detail=true) "
+                f"returned non-boolean truncated={truncated!r} at offset={offset}"
+            )
+        next_offset = payload.get("next_offset")
+        if not truncated:
+            return actions, schemas
+        if isinstance(next_offset, bool) or not isinstance(next_offset, int):
+            raise RuntimeError(
+                f"monolith_discover(namespace={namespace}, mode=actions, detail=true) "
+                f"returned truncated=true without an integer next_offset at offset={offset}"
+            )
+        if next_offset <= offset:
+            raise RuntimeError(
+                f"monolith_discover(namespace={namespace}, mode=actions, detail=true) "
+                f"pagination did not advance (offset={offset}, next_offset={next_offset})"
+            )
+        offset = next_offset
+
+    raise RuntimeError(
+        f"monolith_discover(namespace={namespace}, mode=actions, detail=true) pagination "
+        f"did not terminate after {max_pages} pages"
+    )
+
+
+def discover_namespace_actions_strict(url: str, namespace: str, timeout_s: float = 45.0) -> List[str]:
+    """Compatibility wrapper returning only the strict action-name list."""
+
+    actions, _schemas = discover_namespace_catalog_strict(url, namespace, timeout_s)
+    return actions
 
 
 def discover_catalog_namespaces(
@@ -467,7 +546,7 @@ def discover_catalog_namespaces(
                 f"monolith_discover summary namespace '{namespace}' has invalid action_count={expected_count!r}"
             )
 
-        actions = discover_namespace_actions_strict(url, namespace, timeout_s=timeout_s)
+        actions, schemas = discover_namespace_catalog_strict(url, namespace, timeout_s=timeout_s)
         if len(actions) != len(set(actions)):
             raise RuntimeError(f"monolith_discover returned duplicate actions for namespace '{namespace}'")
         if len(actions) != expected_count:
@@ -479,6 +558,7 @@ def discover_catalog_namespaces(
         normalized_row = dict(row)
         normalized_row["namespace"] = namespace
         normalized_row["actions"] = actions
+        normalized_row["schemas"] = schemas
         normalized.append(normalized_row)
 
     total_actions = summary.get("total_actions")
@@ -619,31 +699,31 @@ def append_unique_task(tasks: List[Dict[str, Any]], seen: set[str], task: Dict[s
     return True
 
 
-_STATIC_DISCOVERY_TASKS_20260617 = [
+_STATIC_DISCOVERY_TASKS_20260717 = [
     ("gas", "list_abilities"),
-    ("gas", "get_ability"),
+    ("gas", "get_ability_info"),
     ("gas", "list_gameplay_effects"),
     ("gas", "get_gameplay_effect"),
     ("gas", "find_abilities_by_tag"),
     ("niagara", "list_systems"),
-    ("niagara", "get_system_info"),
+    ("niagara", "get_system_summary"),
     ("niagara", "validate_system"),
-    ("material", "get_material_info"),
+    ("material", "get_material_properties"),
     ("material", "list_material_instances"),
     ("material", "validate_material"),
-    ("ui", "list_widgets"),
-    ("ui", "get_widget_hierarchy"),
-    ("ui", "get_viewmodel_bindings"),
+    ("ui", "list_widget_types"),
+    ("ui", "get_widget_tree"),
+    ("ui", "get_widget_bindings"),
     ("blueprint", "list_graphs"),
     ("blueprint", "get_blueprint_info"),
     ("blueprint", "validate_blueprint"),
-    ("animation", "list_montages"),
-    ("animation", "get_anim_graph"),
+    ("animation", "get_graphs"),
+    ("animation", "get_abp_info"),
     ("animation", "get_montage_info"),
-    ("audio", "list_sound_cues"),
+    ("audio", "list_audio_assets"),
     ("audio", "search_audio_assets"),
     ("asset", "inspect_asset"),
-    ("scene", "list_actors"),
+    ("scene", "get_level_actors"),
     ("source", "review_context"),
 ]
 
@@ -652,11 +732,22 @@ _STATIC_READ_ONLY_POLICY_TASKS_20260711 = [
     ("source_control", "map_depot_paths"),
 ]
 
-_STATIC_UNKNOWN_ACTION_TASKS_20260617 = [
+_STATIC_UNKNOWN_ACTION_TASKS_20260717 = [
     # Log-derived stale or imagined action names that frequently tempt agents.
+    # Renamed legacy actions stay here as migration regressions: the old name
+    # must remain absent and the response must route to the current contract.
+    ("gas", "get_ability_info", "get_ability"),
+    ("niagara", "get_system_summary", "get_system_info"),
+    ("material", "get_material_properties", "get_material_info"),
+    ("ui", "get_widget_tree", "list_widgets"),
+    ("ui", "get_widget_tree", "get_widget_hierarchy"),
+    ("animation", "get_montage_info", "list_montages"),
+    ("animation", "get_graphs", "get_anim_graph"),
+    ("audio", "list_audio_assets", "list_sound_cues"),
+    ("scene", "get_level_actors", "list_actors"),
     ("source", "find_callees", "get_callee_tree"),
     ("source", "find_callers", "get_caller_tree"),
-    ("source", "read_source", "read_file"),
+    ("source", "read_file", "read_flie"),
     ("blueprint", "get_dependencies", "get_class_hierarchy"),
     ("blueprint", "find_variable_references", "find_references"),
     ("blueprint", "get_components", "list_components"),
@@ -668,20 +759,20 @@ _STATIC_UNKNOWN_ACTION_TASKS_20260617 = [
     ("niagara", "list_renderers", "list_rendererz"),
     ("material", "get_expression_details", "get_expression_detials"),
     ("material", "check_tiling_quality", "check_tiling_quailty"),
-    ("ui", "get_viewmodel_bindings", "get_viewmodel_bnidings"),
+    ("ui", "get_widget_bindings", "get_viewmodel_bindings"),
     ("ui", "configure_common_button", "configure_common_buton"),
     ("blueprint", "get_function_signature", "get_function_signatre"),
     ("blueprint", "search_nodes", "search_nodse"),
-    ("animation", "get_state_machine", "get_state_machnie"),
-    ("animation", "get_montage_sections", "get_montage_sectiosn"),
-    ("audio", "get_sound_cue", "get_sound_ceu"),
+    ("animation", "get_state_machines", "get_state_machine"),
+    ("animation", "get_montage_info", "get_montage_sections"),
+    ("audio", "get_sound_cue_graph", "get_sound_cue"),
     ("audio", "validate_sound_cue", "validate_sound_ceu"),
     ("asset", "inspect_assets_batch", "inspect_assets_bacth"),
     ("scene", "get_actor_properties", "get_actor_propreties"),
     ("scene", "query_raycast", "query_raycats"),
-    ("config", "get_config_value", "get_config_vlaue"),
+    ("config", "resolve_setting", "get_config_value"),
     ("input", "get_input_mapping_context", "get_input_mapping_conetxt"),
-    ("localization", "get_localized_string", "get_localized_strnig"),
+    ("localization", "get_string_table", "get_localized_string"),
     ("source", "review_context", "review_conetxt"),
     ("cppreflect", "get_uclass", "get_uclas"),
     ("risk", "get_hotspot_score", "get_hotpsot_score"),
@@ -689,27 +780,52 @@ _STATIC_UNKNOWN_ACTION_TASKS_20260617 = [
     ("mesh", "get_mesh_info", "get_mesh_ifno"),
 ]
 
-_STATIC_MISSING_PARAM_TASKS_20260617 = [
-    ("gas", "get_ability", "ability_path"),
+_STATIC_LEGACY_RETIRED_ACTION_IDS_20260717 = frozenset(
+    {
+        "gas.get_ability",
+        "niagara.get_system_info",
+        "material.get_material_info",
+        "ui.list_widgets",
+        "ui.get_widget_hierarchy",
+        "ui.get_viewmodel_bindings",
+        "animation.list_montages",
+        "animation.get_anim_graph",
+        "animation.get_state_machine",
+        "animation.get_montage_sections",
+        "audio.list_sound_cues",
+        "audio.get_sound_cue",
+        "scene.list_actors",
+        "config.get_config_value",
+        "localization.get_localized_string",
+    }
+)
+_STATIC_LEGACY_ACTION_MIGRATIONS_20260717 = [
+    row
+    for row in _STATIC_UNKNOWN_ACTION_TASKS_20260717
+    if f"{row[0]}.{row[2]}".casefold() in _STATIC_LEGACY_RETIRED_ACTION_IDS_20260717
+]
+
+_STATIC_MISSING_PARAM_TASKS_20260717 = [
+    ("gas", "get_ability_info", "asset_path"),
     ("gas", "get_gameplay_effect", "asset_path"),
     ("gas", "find_abilities_by_tag", "tag"),
     ("niagara", "get_ordered_modules", "asset_path"),
     ("niagara", "get_module_inputs", "asset_path"),
     ("material", "get_all_expressions", "asset_path"),
     ("material", "get_expression_details", "asset_path"),
-    ("ui", "get_widget_hierarchy", "asset_path"),
+    ("ui", "get_widget_tree", "asset_path"),
     ("ui", "get_animation_details", "asset_path"),
     ("blueprint", "list_graphs", "asset_path"),
     ("blueprint", "get_graph_data", "asset_path"),
     ("animation", "get_state_machines", "asset_path"),
     ("animation", "get_state_info", "asset_path"),
-    ("audio", "get_sound_cue", "asset_path"),
+    ("audio", "get_sound_cue_graph", "asset_path"),
     ("audio", "search_audio_assets", "query"),
     ("asset", "inspect_asset", "asset_path"),
-    ("scene", "get_actor_info", "actor"),
-    ("scene", "get_actor_properties", "actor"),
-    ("config", "get_config_value", "key"),
-    ("localization", "get_localized_string", "table"),
+    ("scene", "get_actor_info", "actor_name"),
+    ("scene", "get_actor_properties", "actor_name"),
+    ("config", "resolve_setting", "key"),
+    ("localization", "get_string_table", "asset_path"),
     ("source", "search_source", "query"),
     ("source", "review_context", "symbol"),
     ("source", "find_overrides", "symbol"),
@@ -717,14 +833,14 @@ _STATIC_MISSING_PARAM_TASKS_20260617 = [
     ("material", "validate_material", "asset_path"),
     ("material", "get_material_properties", "asset_path"),
     ("paper2d", "get_asset", "asset_path"),
-    ("mesh", "get_mesh_info", "mesh_path"),
+    ("mesh", "get_mesh_info", "asset_path"),
     ("project", "search", "query"),
     ("project", "get_asset_details", "asset_path"),
     ("collection", "get_collection", "name"),
 ]
 
-_STATIC_INVALID_PARAM_TASKS_20260617 = [
-    ("gas", "get_ability", {"ability_path": 12345}, "ability_path"),
+_STATIC_INVALID_PARAM_TASKS_20260717 = [
+    ("gas", "get_ability_info", {"asset_path": 12345}, "asset_path"),
     ("gas", "find_abilities_by_tag", {"tag": 12345}, "tag"),
     ("niagara", "get_ordered_modules", {"asset_path": 12345, "emitter": "BenchmarkValue"}, "asset_path"),
     (
@@ -741,7 +857,12 @@ _STATIC_INVALID_PARAM_TASKS_20260617 = [
         "asset_path",
     ),
     ("ui", "get_widget_tree", {"asset_path": 12345}, "asset_path"),
-    ("ui", "list_widget_properties", {"asset_path": 12345}, "asset_path"),
+    (
+        "ui",
+        "list_widget_properties",
+        {"asset_path": 12345, "widget_name": "BenchmarkValue"},
+        "asset_path",
+    ),
     ("blueprint", "list_graphs", {"asset_path": 12345}, "asset_path"),
     ("blueprint", "get_graph_data", {"asset_path": 12345}, "asset_path"),
     ("animation", "get_state_machines", {"asset_path": 12345}, "asset_path"),
@@ -751,19 +872,19 @@ _STATIC_INVALID_PARAM_TASKS_20260617 = [
         {"asset_path": 12345, "machine_name": "BenchmarkValue", "state_name": "BenchmarkValue"},
         "asset_path",
     ),
-    ("audio", "get_sound_cue", {"asset_path": 12345}, "asset_path"),
+    ("audio", "get_sound_cue_graph", {"asset_path": 12345}, "asset_path"),
     ("audio", "search_audio_assets", {"query": 12345}, "query"),
     ("asset", "inspect_asset", {"asset_path": 12345}, "asset_path"),
     ("asset", "inspect_assets_batch", {"asset_paths": "not_an_array"}, "asset_paths"),
     ("scene", "list_layers", {"include_actors": "not_a_bool"}, "include_actors"),
     ("scene", "list_streaming_levels", {"limit": "not_a_number"}, "limit"),
     ("config", "search_config", {"query": 12345}, "query"),
-    ("config", "get_config_value", {"key": 12345}, "key"),
-    ("localization", "get_localized_string", {"table": 12345, "key": "BenchmarkValue"}, "table"),
+    ("config", "resolve_setting", {"section": "BenchmarkSection", "key": 12345}, "key"),
+    ("localization", "get_string_table", {"asset_path": 12345}, "asset_path"),
     ("input", "get_input_mapping_context", {"asset_path": 12345}, "asset_path"),
     ("source", "search_source", {"query": 12345}, "query"),
-    ("mesh", "get_mesh_info", {"mesh_path": 12345}, "mesh_path"),
-    ("project", "get_asset_details", {"asset_path": 12345, "include_content": "not_a_bool"}, "asset_path"),
+    ("mesh", "get_mesh_info", {"asset_path": 12345}, "asset_path"),
+    ("project", "get_asset_details", {"asset_path": 12345}, "asset_path"),
 ]
 
 _STATIC_ALIAS_PARAM_TASKS_20260617 = [
@@ -828,16 +949,256 @@ _STATIC_NEEDED_ACTION_ROUTING_TASKS_20260618 = [
     # Non-existent / invented action names routed through monolith_discover: the
     # error must point at the real action rather than dead-ending.
     ("discover_unknown_action", {"namespace": "source", "action": "get_function_signature"}, "source.get_signature", "source", "get_signature"),
-    ("discover_unknown_action", {"namespace": "source", "action": "read_file"}, "source.read_source", "source", "read_source"),
+    ("discover_unknown_action", {"namespace": "source", "action": "read_cpp_file"}, "source.read_file", "source", "read_file"),
     ("discover_unknown_action", {"namespace": "blueprint", "action": "find_references"}, "blueprint.find_variable_references", "blueprint", "find_variable_references"),
     ("discover_unknown_action", {"namespace": "project", "action": "get_asset_detials"}, "project.get_asset_details", "project", "get_asset_details"),
 ]
 
 
+def static_unreal_practical_action_contracts() -> List[Dict[str, Any]]:
+    """Return every live action/schema assumption embedded in static tasks.
+
+    Generated catalog-driven rows cannot drift by construction, but the curated
+    practical rows can outlive renamed or removed actions.  Keeping their
+    assumptions in one normalized list lets generation fail closed before it
+    overwrites the canonical corpus.
+    """
+    contracts: List[Dict[str, Any]] = []
+
+    def add(source: str, namespace: str, action: str, **details: Any) -> None:
+        contract = {"source": source, "namespace": namespace, "action": action}
+        contract.update(details)
+        contracts.append(contract)
+
+    for namespace, action in _STATIC_DISCOVERY_TASKS_20260717:
+        add("discovery", namespace, action)
+    for namespace, action in _STATIC_READ_ONLY_POLICY_TASKS_20260711:
+        add(
+            "read_only_policy",
+            namespace,
+            action,
+            expected_execution_policy_id="read_only",
+            expected_execution_policy_defaulted=False,
+            expected_mutates_assets=False,
+        )
+    for namespace, candidate_action, typo in _STATIC_UNKNOWN_ACTION_TASKS_20260717:
+        add("unknown_action_candidate", namespace, candidate_action)
+        add("unknown_action_probe", namespace, typo, expected_absent=True)
+    for namespace, action, missing_param in _STATIC_MISSING_PARAM_TASKS_20260717:
+        add("missing_param", namespace, action, required_param=missing_param)
+    for namespace, action, params, invalid_param in _STATIC_INVALID_PARAM_TASKS_20260717:
+        add(
+            "invalid_param",
+            namespace,
+            action,
+            invalid_param=invalid_param,
+            provided_params=dict(params),
+        )
+    for namespace, action, params, missing_param in _STATIC_ALIAS_PARAM_TASKS_20260617:
+        add(
+            "alias_param",
+            namespace,
+            action,
+            required_param=missing_param,
+            provided_params=dict(params),
+            expects_unknown_alias=True,
+        )
+    for subtype, query_args, expected_action_id, namespace, action in _STATIC_NEEDED_ACTION_ROUTING_TASKS_20260618:
+        add(
+            "needed_action_routing",
+            namespace,
+            action,
+            expected_action_id=expected_action_id,
+        )
+        if subtype == "discover_unknown_action":
+            add(
+                "needed_action_unknown_probe",
+                str(query_args.get("namespace", "")),
+                str(query_args.get("action", "")),
+                expected_absent=True,
+            )
+    for action_id in _ACTION_STATS_20260618:
+        namespace, separator, action = action_id.partition(".")
+        if separator:
+            add("demand_weight", namespace, action, expected_action_id=action_id)
+
+    return contracts
+
+
+def _value_matches_declared_type(value: Any, type_spec: str) -> bool:
+    """Return whether a static invalid-param fixture accidentally became valid."""
+    for declared_type in type_names(type_spec):
+        if declared_type == "string" and isinstance(value, str):
+            return True
+        if declared_type == "integer" and isinstance(value, int) and not isinstance(value, bool):
+            return True
+        if declared_type == "number" and isinstance(value, (int, float)) and not isinstance(value, bool):
+            return True
+        if declared_type in {"boolean", "bool"} and isinstance(value, bool):
+            return True
+        if declared_type == "array" and isinstance(value, list):
+            return True
+        if declared_type == "object" and isinstance(value, dict):
+            return True
+        if declared_type == "null" and value is None:
+            return True
+    return False
+
+
+def validate_action_contracts(
+    contracts: Iterable[Dict[str, Any]],
+    namespaces: Iterable[Dict[str, Any]],
+    schema_loader: Optional[Callable[[str, str], Optional[Dict[str, Any]]]] = None,
+) -> None:
+    """Fail closed when curated benchmark assumptions drift from a catalog.
+
+    ``schema_loader`` is optional so offline corpus tests can still validate
+    action identity against the bundled catalog.  Live generation supplies it
+    and additionally verifies required/invalid parameter fixtures.
+    """
+    available: Dict[str, set[str]] = {}
+    for row in namespaces:
+        namespace = str(row.get("namespace", "")).strip()
+        actions = {str(action).strip() for action in row.get("actions", []) if str(action).strip()}
+        if namespace:
+            available[namespace] = actions
+
+    issues: set[str] = set()
+    schema_cache: Dict[Tuple[str, str], Optional[Dict[str, Any]]] = {}
+    for contract in contracts:
+        source = str(contract.get("source", "static"))
+        namespace = str(contract.get("namespace", "")).strip()
+        action = str(contract.get("action", "")).strip()
+        action_id = f"{namespace}.{action}"
+        expected_action_id = str(contract.get("expected_action_id", "")).strip()
+        if expected_action_id and expected_action_id != action_id:
+            issues.add(
+                f"{source}: expected_action_id={expected_action_id!r} does not match {action_id!r}"
+            )
+        if bool(contract.get("expected_absent")):
+            if action in available.get(namespace, set()):
+                issues.add(f"{source}: probe action {action_id!r} unexpectedly exists in the catalog")
+            continue
+        if action not in available.get(namespace, set()):
+            issues.add(f"{source}: action {action_id!r} is absent from the catalog")
+            continue
+
+        policy_contract_fields = {
+            "expected_execution_policy_id",
+            "expected_execution_policy_defaulted",
+            "expected_mutates_assets",
+        }
+        needs_schema = bool(
+            contract.get("required_param")
+            or contract.get("invalid_param")
+            or policy_contract_fields.intersection(contract)
+        )
+        if not needs_schema or schema_loader is None:
+            continue
+
+        key = (namespace, action)
+        if key not in schema_cache:
+            try:
+                schema_cache[key] = schema_loader(namespace, action)
+            except Exception as exc:  # noqa: BLE001 - aggregate all drift evidence
+                issues.add(f"{source}: schema load failed for {action_id!r}: {type(exc).__name__}: {exc}")
+                schema_cache[key] = None
+        schema = schema_cache[key]
+        if not isinstance(schema, dict) or not schema:
+            issues.add(f"{source}: schema for {action_id!r} is unavailable")
+            continue
+
+        params = schema_params(schema)
+        required_params = {name for name, meta in params.items() if bool(meta.get("required"))}
+        provided_params = contract.get("provided_params", {})
+        if not isinstance(provided_params, dict):
+            issues.add(f"{source}: provided_params for {action_id!r} is not an object")
+            provided_params = {}
+
+        required_param = str(contract.get("required_param", "")).strip()
+        if required_param:
+            if required_param not in required_params:
+                issues.add(
+                    f"{source}: {action_id!r} no longer requires {required_param!r}; "
+                    f"live required params are {sorted(required_params)!r}"
+                )
+            if required_param in provided_params:
+                issues.add(f"{source}: fixture unexpectedly supplies required param {required_param!r}")
+            if contract.get("expects_unknown_alias"):
+                unknown_aliases = sorted(set(provided_params) - set(params))
+                if not unknown_aliases:
+                    issues.add(f"{source}: {action_id!r} fixture no longer supplies an unknown alias")
+
+        invalid_param = str(contract.get("invalid_param", "")).strip()
+        if invalid_param:
+            meta = params.get(invalid_param)
+            if not isinstance(meta, dict):
+                issues.add(f"{source}: invalid-param target {invalid_param!r} is absent from {action_id!r}")
+                continue
+            type_spec = str(meta.get("type", "")).strip()
+            if not type_spec:
+                issues.add(f"{source}: invalid-param target {action_id!r}.{invalid_param} has no declared type")
+            if invalid_param not in provided_params:
+                issues.add(f"{source}: fixture does not supply invalid-param target {invalid_param!r}")
+            elif type_spec and _value_matches_declared_type(provided_params[invalid_param], type_spec):
+                issues.add(
+                    f"{source}: fixture value for {action_id!r}.{invalid_param} now matches type {type_spec!r}"
+                )
+
+            unknown_params = sorted(set(provided_params) - set(params))
+            if unknown_params:
+                issues.add(f"{source}: {action_id!r} fixture supplies unknown params {unknown_params!r}")
+            omitted_required = sorted(required_params - set(provided_params))
+            if omitted_required:
+                issues.add(
+                    f"{source}: {action_id!r} invalid-param fixture omits required params {omitted_required!r}"
+                )
+
+        if policy_contract_fields.intersection(contract):
+            policy = schema.get("execution_policy")
+            if not isinstance(policy, dict):
+                issues.add(f"{source}: {action_id!r} has no execution_policy object")
+                continue
+            expected_policy_id = contract.get("expected_execution_policy_id")
+            if expected_policy_id is not None and policy.get("policy_id") != expected_policy_id:
+                issues.add(
+                    f"{source}: {action_id!r} policy_id={policy.get('policy_id')!r}, "
+                    f"expected {expected_policy_id!r}"
+                )
+            if "expected_execution_policy_defaulted" in contract:
+                expected_defaulted = bool(contract["expected_execution_policy_defaulted"])
+                if bool(policy.get("defaulted")) != expected_defaulted:
+                    issues.add(
+                        f"{source}: {action_id!r} execution_policy.defaulted={bool(policy.get('defaulted'))!r}, "
+                        f"expected {expected_defaulted!r}"
+                    )
+            if "expected_mutates_assets" in contract:
+                expected_mutates = bool(contract["expected_mutates_assets"])
+                if bool(schema.get("mutates_assets")) != expected_mutates:
+                    issues.add(
+                        f"{source}: {action_id!r} mutates_assets={bool(schema.get('mutates_assets'))!r}, "
+                        f"expected {expected_mutates!r}"
+                    )
+
+    if issues:
+        details = "\n - ".join(sorted(issues))
+        raise RuntimeError(
+            "static ActionGuidance task contract drift; refusing to generate the canonical corpus:\n - "
+            + details
+        )
+
+
+def validate_static_unreal_practical_action_contracts(
+    namespaces: Iterable[Dict[str, Any]],
+    schema_loader: Optional[Callable[[str, str], Optional[Dict[str, Any]]]] = None,
+) -> None:
+    validate_action_contracts(static_unreal_practical_action_contracts(), namespaces, schema_loader)
+
+
 def append_static_unreal_practical_tasks(tasks: List[Dict[str, Any]]) -> None:
     seen = {task_fingerprint(task) for task in tasks}
 
-    for namespace, action in _STATIC_DISCOVERY_TASKS_20260617:
+    for namespace, action in _STATIC_DISCOVERY_TASKS_20260717:
         append_unique_task(tasks, seen, {
             "category": "discovery_planning",
             "namespace": namespace,
@@ -865,7 +1226,7 @@ def append_static_unreal_practical_tasks(tasks: List[Dict[str, Any]]) -> None:
             "safety": "read_only_discovery",
         })
 
-    for namespace, candidate_action, typo in _STATIC_UNKNOWN_ACTION_TASKS_20260617:
+    for namespace, candidate_action, typo in _STATIC_UNKNOWN_ACTION_TASKS_20260717:
         tool, args = action_tool(namespace, typo, {})
         append_unique_task(tasks, seen, {
             "category": "unknown_action_recovery",
@@ -877,7 +1238,7 @@ def append_static_unreal_practical_tasks(tasks: List[Dict[str, Any]]) -> None:
             "safety": "lookup_failure_before_handler",
         })
 
-    for namespace, action, missing_param in _STATIC_MISSING_PARAM_TASKS_20260617:
+    for namespace, action, missing_param in _STATIC_MISSING_PARAM_TASKS_20260717:
         tool, args = action_tool(namespace, action, {})
         append_unique_task(tasks, seen, {
             "category": "missing_required_param",
@@ -901,7 +1262,7 @@ def append_static_unreal_practical_tasks(tasks: List[Dict[str, Any]]) -> None:
             "safety": "schema_failure_before_handler",
         })
 
-    for namespace, action, params, invalid_param in _STATIC_INVALID_PARAM_TASKS_20260617:
+    for namespace, action, params, invalid_param in _STATIC_INVALID_PARAM_TASKS_20260717:
         tool, args = action_tool(namespace, action, dict(params))
         append_unique_task(tasks, seen, {
             "category": "invalid_param_type",
@@ -952,6 +1313,22 @@ def generate_tasks(url: str, min_tasks: int, tasks_path: pathlib.Path, manifest_
     namespace_rows = []
     tasks: List[Dict[str, Any]] = []
     schema_cache: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for ns_row in namespaces:
+        namespace = str(ns_row.get("namespace", ""))
+        inline_schemas = ns_row.get("schemas")
+        if not namespace or not isinstance(inline_schemas, dict):
+            continue
+        for action, schema in inline_schemas.items():
+            if isinstance(schema, dict):
+                schema_cache[(namespace, str(action))] = schema
+
+    def cached_schema(namespace: str, action: str) -> Optional[Dict[str, Any]]:
+        key = (namespace, action)
+        if key not in schema_cache:
+            schema_cache[key] = discover_schema(url, namespace, action) or {}
+        return schema_cache[key] or None
+
+    validate_static_unreal_practical_action_contracts(namespaces, cached_schema)
 
     def next_id() -> str:
         return f"AGB-{len(tasks) + 1:03d}"
@@ -1813,7 +2190,10 @@ def run_benchmark(
 
     try:
         benchmark_inputs = build_benchmark_inputs(
-            "ActionGuidance", tasks_path=tasks_path, mcp_status=status
+            "ActionGuidance",
+            tasks_path=tasks_path,
+            mcp_status=status,
+            extra_files={"runner": pathlib.Path(__file__)},
         )
     except Exception as exc:  # noqa: BLE001 - provenance defects invalidate the run.
         failure = {

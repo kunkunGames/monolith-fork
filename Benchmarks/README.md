@@ -14,21 +14,75 @@
 
 All primary scores are in [0.0, 1.0]. Higher is better for all primary scores.
 
+## Completion Inventory
+
+[`INVENTORY.md`](INVENTORY.md) is the fixed namespace-by-namespace completion
+ledger. It distinguishes missing test definitions (`unwritten`) from written
+rows that do not yet have an accepted current full-run result (`unverified`).
+Regenerate and validate it after any corpus, manifest, catalog snapshot, or
+accepted-run change:
+
+```powershell
+python Scripts\benchmark_inventory.py --write
+python Scripts\benchmark_inventory.py --portable-check
+python Scripts\benchmark_inventory.py --check
+```
+
+`--portable-check` is the hosted-CI/clean-checkout mode. It rederives accepted
+results from tracked `summary.json` plus every suite-specific artifact consumed
+by the validator (raw JSONL rows and JSON sidecars), verifies their pinned bundle
+manifest, and permits a required database to be absent only when the
+bundle contains the exact recorded size, mtime, signature, content SHA-256, and
+input fingerprint. If that database exists in the checkout, portable mode still
+verifies it and rejects drift. Missing `Saved/...` diagnostics for pending suites
+remain zero-credit gaps and are reported, rather than making hosted static CI
+depend on ignored local artifacts.
+
+`--check` is the full local/operator mode. It additionally requires every
+fingerprinted database and referenced pending diagnostic to exist, and rejects
+source-input mtime drift as well as size/content drift. `--write` uses this full
+contract so the checked-in ledger cannot be regenerated from attestations alone.
+
+The benchmark scope is complete only when the ledger reports zero failed,
+unverified, and unwritten items. Diagnostic subsets and interrupted prefixes
+remain evidence but do not reduce the accepted completion gap.
+
 ## Input Fingerprints
 
 Benchmark `summary.json` and `partial_summary.json` files include two top-level fields:
 
-- `benchmark_inputs`: task/probe file sha256 and line counts, manifest signature, available local DB file signatures, and compact MCP/catalog metadata.
+- `benchmark_inputs`: task/probe file SHA-256 and line counts, manifest signature, suite-specific database content SHA-256 values, and compact MCP/catalog metadata.
 - `input_fingerprint`: a stable sha256 digest of `benchmark_inputs` for stale-baseline detection.
 
 Runner defaults are resolved relative to the Monolith plugin root, so `Benchmarks\...\tasks.jsonl` means `Plugins\Monolith\Benchmarks\...\tasks.jsonl` regardless of the current working directory. Hosted static CI validates that configured task/probe JSONL non-empty line counts match each benchmark manifest count and that runner default paths resolve to the configured files without needing a live MCP server.
+
+Database identity is an exact dependency contract, not a scan of every DB that happens to exist locally:
+
+| Suite | Database files in accepted evidence |
+| --- | --- |
+| ActionGuidance | none; registry-routing scope marker |
+| SourceIndex | `Saved/EngineSource.db`, `Saved/graph.db` |
+| SchemaCompleteness | none; live schema-registry scope marker |
+| OfflineParity | `Saved/EngineSource.db` |
+| ProjectIndex | `Saved/ProjectIndex.db` |
+| AICapability | none; live editor AI-action scope marker |
+| AssetEditing | `Saved/ProjectIndex.db` because type-discovery tasks query the project index |
+
+Every listed database entry carries a full content SHA-256 in addition to size
+and mtime. A required database must exist when a run is produced, promoted, or
+checked with the full local contract. A tracked accepted bundle lets portable CI
+verify that recorded identity when the multi-gigabyte database is intentionally
+absent from a clean checkout; it never lets a present but changed database pass.
+An unrelated database change does not stale a suite whose answers cannot depend
+on it.
 
 Hosted static CI also treats the benchmark inventory as a closed contract. Every
 `Benchmarks/*/manifest.json` must have exactly one `benchmark_definitions` entry,
 and every lightweight `Scripts/test_*.py` or `Scripts/tests/test_*.py` check must
 appear in `benchmark_contract_tests`. `Scripts/tests/test_benchmark_ci_inventory.py`
-enforces both directions so adding a corpus or regression test cannot silently
-bypass CI.
+enforces both directions and runs the inventory's portable check, so adding a
+corpus, regression test, or untracked local-only completion dependency cannot
+silently bypass CI.
 
 ## Release Packaging
 

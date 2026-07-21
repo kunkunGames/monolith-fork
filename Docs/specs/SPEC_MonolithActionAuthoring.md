@@ -108,7 +108,7 @@ void RegisterAction(
 | `ParamSchema` | optional | `FParamSchemaBuilder()....Build()`; `nullptr` or `MakeShared<FJsonObject>()` means no params. |
 | `Category` | optional | Sub-group string within the namespace, e.g. `TEXT("Image")`, `TEXT("Test")`. |
 | `ExecutionPolicy` | optional | Defaults to `DefaultReadOnly()`; inference overrides it for write-verb names (§8). |
-| `SearchMetadata` | optional | `Keywords`/`Aliases`/`Examples` for `monolith.find` ranking ([`MonolithToolRegistry.h:92-102`](../../Source/MonolithCore/Public/MonolithToolRegistry.h)). |
+| `SearchMetadata` | optional | `Keywords`/`Aliases`/`Examples` for `monolith.find` ranking and alias-aware unknown-action recovery ([`MonolithToolRegistry.h:92-102`](../../Source/MonolithCore/Public/MonolithToolRegistry.h)). Action aliases are discovery metadata, not duplicate registered endpoints; see §4a. |
 
 Canonical read-only registration ([`MonolithSourceActions.cpp:293-307`](../../Source/MonolithSource/Private/MonolithSourceActions.cpp)):
 
@@ -126,11 +126,19 @@ Registry.RegisterAction(TEXT("source"), TEXT("search_source"),
 
 Registering an existing `(ns, action)` key logs a `Warning` and overwrites it ([`MonolithToolRegistry.cpp:469-472`](../../Source/MonolithCore/Private/MonolithToolRegistry.cpp)) — one action is registered exactly once per process.
 
+### 4a. Action search aliases and retired-action compatibility
+
+`FMonolithActionSearchMetadata::Aliases` describes alternate names by which an agent may search for an action. These are distinct from parameter aliases in `FParamSchemaBuilder`: an action-search alias is **not registered or dispatchable as another endpoint**, does not increase the action count, and never selects a legacy handler. `monolith.find` consumes this metadata for planning, while `FMonolithToolRegistry::FindSimilarActions` consumes it for the `ErrMethodNotFound` recovery path.
+
+`FindSimilarActions` snapshots the active-profile-allowed registered action names and their aliases under the registry lock, then scores outside the lock. For each registered action it applies the same case-insensitive prefix/substring/bounded-edit-distance policy to the current action name and every alias, retains that action's best score, and sorts ties deterministically by the current registered name. A match through an alias therefore returns the **current registered action ID** in `error.data.candidate_actions` (for example, an attempted retired `config.get_config_value` can suggest `config.resolve_setting`); the unregistered alias itself is never returned as a retry target.
+
+Retired public names with one unambiguous successor are owned centrally by the versioned legacy-alias seed table in `MonolithToolRegistry.cpp` (`GetLegacyActionAliasSeeds` / `ApplyLegacyActionAliasSeed`). Keep this table limited to compatibility migrations; domain-specific search vocabulary remains with the domain action's normal metadata. The registry appends these compatibility aliases when `RegisterAction` materializes `FMonolithActionInfo`, and **reapplies them after `SetActionSearchMetadata`**, because that setter intentionally replaces the caller-supplied keyword/alias/example arrays. Late domain metadata updates therefore cannot accidentally erase the retired-name recovery contract. Add aliases rather than duplicate actions only when the old name maps to exactly one supported current action; ambiguous or behavior-changing migrations require explicit discovery guidance instead.
+
 ---
 
 ## 5. STEP 4 — Build the parameter schema with `FParamSchemaBuilder`
 
-`FParamSchemaBuilder` is fluent (each call returns `*this`); terminate with `.Build()`, which returns the `TSharedPtr<FJsonObject>` internal Monolith param schema ([`MonolithParamSchema.h:214-217`](../../Source/MonolithCore/Public/MonolithParamSchema.h)). Each entry stores `{type, description, required, optional default, optional aliases[], optional kind}` via the private `AddParam` ([`MonolithParamSchema.h:223-253`](../../Source/MonolithCore/Public/MonolithParamSchema.h)).
+`FParamSchemaBuilder` is fluent (each call returns `*this`); terminate with `.Build()`, which returns the `TSharedPtr<FJsonObject>` internal Monolith param schema. Each entry stores `{type, description, required, optional default, optional aliases[], optional kind, optional enum/minimum/maximum, optional domain}` via the private `AddParam` plus the constraint/domain helpers in [`MonolithParamSchema.h`](../../Source/MonolithCore/Public/MonolithParamSchema.h).
 
 ### 5a. Required / Optional
 
@@ -139,8 +147,20 @@ Registering an existing `(ns, action)` key logs a `Warning` and overwrites it ([
 ### 5b. Constraints
 
 - `.Enum(name, {values…})` attaches an `enum[]` array ([`MonolithParamSchema.h:68-81`](../../Source/MonolithCore/Public/MonolithParamSchema.h)).
-- `.Range(name, min, max)` attaches `minimum`/`maximum` ([`MonolithParamSchema.h:83-91`](../../Source/MonolithCore/Public/MonolithParamSchema.h)).
-- `.EnableValidation()` sets `_validate_types=true` on the schema ([`MonolithParamSchema.h:62-66`](../../Source/MonolithCore/Public/MonolithParamSchema.h)). **Without it, `Enum`/`Range`/type are advisory only and NOT enforced** — see the `ValidateTypedParams` gate at [`MonolithToolRegistry.cpp:928-955`](../../Source/MonolithCore/Private/MonolithToolRegistry.cpp).
+- `.Range(name, min, max)` attaches both enforcing `minimum`/`maximum`; `.Minimum(...)` and `.Maximum(...)` attach one accepted boundary.
+- Type, enum, and numeric-bound validation is **enabled by default for every schema**. `.EnableValidation()` is an explicit but redundant marker; `.DisableValidation()` is the exceptional legacy-compatibility opt-out. `ValidateTypedParams` rejects a non-boolean `_validate_types` field and otherwise defaults it to `true` ([`MonolithToolRegistry.cpp`](../../Source/MonolithCore/Private/MonolithToolRegistry.cpp)).
+
+Numeric parameters must also declare their discoverable value-domain contract. Use enforcing `Range` / `Minimum` / `Maximum` when the handler accepts a real fixed bound. When the valid set cannot be represented as a fixed JSON Schema bound, use exactly one non-enforcing nested `domain` helper:
+
+| Helper | Use when | Required metadata |
+|--------|----------|-------------------|
+| `.UnboundedDomain(name, rationale)` | Every finite value of the declared numeric type is accepted | Non-empty rationale |
+| `.DynamicDomain(name, source, rationale)` | Bounds come from an asset, graph, world, or runtime collection | Machine-readable source description and rationale |
+| `.CrossFieldDomain(name, rule, {depends_on...})` | Validity depends on sibling parameters | Rule plus non-empty dependency list |
+| `.CompositeDomain(name, rule, {variants...})` | Several documented representations share one parameter | Rule plus non-empty variant list |
+| `.NormalizedDomain(name, min, max, rationale)` | The handler deliberately clamps rather than rejects | Clamp bounds plus rationale |
+
+`.Sentinel(name, value, meaning)` may annotate a declared domain with exceptional numeric meanings such as `-1 = all remaining rows`. Domain metadata is planning/discovery evidence only and `ValidateTypedParams` intentionally ignores it; never use it in place of an enforcing bound. The SchemaCompleteness benchmark treats an undocumented numeric domain as a contract defect, because an agent otherwise cannot know whether a value is bounded, asset-dependent, cross-field, clamped, or genuinely unbounded.
 
 ### 5c. Path-kind sugar (Survivor D)
 
@@ -165,7 +185,6 @@ FParamSchemaBuilder()
     .Optional(TEXT("depth"), TEXT("integer"), TEXT("Max hierarchy depth"), TEXT("5"))
     .Enum(TEXT("direction"), { TEXT("up"), TEXT("down"), TEXT("both") })
     .Range(TEXT("depth"), 1, 16)
-    .EnableValidation()  // makes the Enum + Range above enforced at dispatch
     .Build()
 ```
 
@@ -175,14 +194,14 @@ FParamSchemaBuilder()
 
 `ExecuteAction` runs these gates in order; your handler runs only after all pass ([`MonolithToolRegistry.cpp:599-1015`](../../Source/MonolithCore/Private/MonolithToolRegistry.cpp)):
 
-1. **Action lookup** — unknown action returns `ErrMethodNotFound` with `FindSimilarActions` "did you mean" suggestions ([`:645-676`](../../Source/MonolithCore/Private/MonolithToolRegistry.cpp)).
+1. **Action lookup** — unknown action returns `ErrMethodNotFound` with alias-aware `FindSimilarActions` "did you mean" suggestions. Scoring considers both current registered names and `SearchMetadata.Aliases`, but `candidate_actions[].action_id` always identifies the current registered action, never the alias (§4a; [`MonolithToolRegistry.cpp`](../../Source/MonolithCore/Private/MonolithToolRegistry.cpp)).
 2. **Tool-profile gate** — `IsActionAllowed` false returns `ErrInvalidRequest` ([`:680-698`](../../Source/MonolithCore/Private/MonolithToolRegistry.cpp)).
 3. **Handler-bound check** — null delegate returns `ErrInternalError` ([`:701-716`](../../Source/MonolithCore/Private/MonolithToolRegistry.cpp)).
 4. **K2 alias rewrite** — `ApplyAliases` rewrites alias keys to canonical; supplying both canonical and alias => `ErrInvalidParams` collision ([`:722-740`](../../Source/MonolithCore/Private/MonolithToolRegistry.cpp); impl `MonolithParamSchema` `ApplyAliases` at `:153-214`).
 5. **Required-param check** — missing required key => error listing missing + provided keys + alias hints ([`:749-826`](../../Source/MonolithCore/Private/MonolithToolRegistry.cpp)). `asset_path` is skipped here (the handler validates it).
 6. **Survivor D path-kind `\`→`/`** — AssetPath rewrite / DiskPath warn ([`:828-891`](../../Source/MonolithCore/Private/MonolithToolRegistry.cpp)).
 7. **K3 unknown-key detection** — soft `warnings[]` entry, promoted to `ErrInvalidParams` only when env `STRICT_PARAMS=1` ([`:893-926`](../../Source/MonolithCore/Private/MonolithToolRegistry.cpp); `FindUnknownKeys` / `IsStrictParamsEnabled`).
-8. **Typed/range/enum validation** — runs only when `_validate_types` is set ([`:928-955`](../../Source/MonolithCore/Private/MonolithToolRegistry.cpp)).
+8. **Typed/range/enum validation** — runs by default for every valid schema; only an explicit `_validate_types=false` legacy contract opts out.
 
 Each rejection calls `FMonolithActionExecutionGuard::RecordRejectedToolCall`.
 
@@ -196,18 +215,19 @@ A handler is a static method matching `FMonolithActionHandler`:
 FMonolithActionResult FMonolith<X>Actions::Handle<Y>(const TSharedPtr<FJsonObject>& Params);
 ```
 
-Read params with `TryGetStringField` / `TryGetNumberField` / `TryGetBoolField` (source handlers use thin `FMonolithSourceReview::PStr`/`PInt`/`PBool` wrappers with defaults — [`MonolithSourceActions.cpp:546-563`](../../Source/MonolithSource/Private/MonolithSourceActions.cpp)).
+Read params with the shared `MonolithParamUtils` helpers when a matching strict contract exists; `GetRequiredStringParam` rejects missing, wrong-type, empty, and whitespace-only strings and returns an error message suitable for `ErrInvalidParams`. Lower-level handlers may use `TryGetStringField` / `TryGetNumberField` / `TryGetBoolField` directly (source handlers use thin `FMonolithSourceReview::PStr`/`PInt`/`PBool` wrappers with defaults — [`MonolithSourceActions.cpp:546-563`](../../Source/MonolithSource/Private/MonolithSourceActions.cpp)).
 
 Even though the registry pre-checks required params, **handlers still defensively re-validate** and return `-32602` (`ErrInvalidParams`) for empty/malformed values — this is the contract the param-guard tests assert ([`HandleReadSource` at `MonolithSourceActions.cpp:1132-1136, 1159`](../../Source/MonolithSource/Private/MonolithSourceActions.cpp)):
 
 ```cpp
 FString Symbol;
-if (!Params->TryGetStringField(TEXT("symbol"), Symbol) || Symbol.IsEmpty())
+FString ParamError;
+if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("symbol"), Symbol, ParamError))
 {
-    return FMonolithActionResult::Error(TEXT("'symbol' parameter is required and must be a string"));
+    return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
 }
 // ...
-return FMonolithActionResult::Error(TEXT("'max_lines' parameter must be a number"), -32602);
+return FMonolithActionResult::Error(TEXT("'max_lines' parameter must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 ```
 
 ### 7a. `FMonolithActionResult` shape and helpers
@@ -374,6 +394,7 @@ python Scripts/ci_static_checks.py --config .github/monolith-static-ci.json --gi
 - Name reads with read verbs and writes with write verbs so policy inference is correct (§8).
 - Defensively re-validate params in the handler and return `-32602` (§7).
 - Use path-kind sugar for `/Game` and disk paths (§5c).
+- Declare every numeric parameter's fixed, dynamic, cross-field, normalized, composite, or unbounded value domain (§5b).
 - Return result asset paths under recognized field names so SCP/validation find them (§7b, §9a).
 - Add aliases and optional params **additively**.
 
@@ -381,7 +402,7 @@ python Scripts/ci_static_checks.py --config .github/monolith-static-ci.json --gi
 
 - Change public action contracts or JSON parameter schemas without explicit justification — prefer **additive** optional params and aliases over renaming, removing, or retyping existing params; a rename needs an alias on the old name for back-compat (§14).
 - Supply both a canonical key and one of its aliases in the same call (collision => `ErrInvalidParams`).
-- Rely on `Enum`/`Range` without `.EnableValidation()`.
+- Disable typed validation merely to preserve a malformed caller; repair the caller/schema contract instead.
 - Substitute `editor_query("run_python")` for a missing capability — extend the owning `Source/Monolith*` module instead.
 
 ---
@@ -398,7 +419,7 @@ python Scripts/ci_static_checks.py --config .github/monolith-static-ci.json --gi
 | Remove a param | No | deprecate via docs; keep accepting it (ignored or aliased) until a justified breaking change |
 | Retype a param (e.g. `string` → `integer`) | No | add a new param; keep parsing the old |
 | Make an optional param required | No | breaking; needs explicit justification |
-| Tighten enum/range under `_validate_types` | No (breaking) | broaden, don't narrow, unless justified |
+| Tighten enum/range | No (breaking) | validation is on by default; broaden, don't narrow, unless justified |
 
 When a rename is genuinely required, register the new canonical name and list the old name in the `{aliases…}` list so existing callers keep working through the K2 alias rewrite (§6 step 4). Never supply both — that is a collision error.
 
@@ -451,13 +472,12 @@ Registry.RegisterAction(
         .Range(TEXT("fov"), 5, 170)
         .Range(TEXT("width"), 16, 4096)
         .Range(TEXT("height"), 16, 4096)
-        .EnableValidation()  // enforce the enum + ranges above
         .Build(),
     TEXT("Capture"),
     FMonolithActionExecutionPolicy::DefaultReadOnly());  // explicit: 'capture' is not a read-verb, keep it read-only
 ```
 
-Notes: all camera params are optional so the bare call captures the current viewport; `projection`/`fov`/`width`/`height` are constrained and only enforced because of `.EnableValidation()`; `output_path` uses `OptionalDiskPath` so a backslash value warns rather than silently failing.
+Notes: all camera params are optional so the bare call captures the current viewport; `projection`/`fov`/`width`/`height` are constrained and enforced by the registry's default validation contract; `output_path` uses `OptionalDiskPath` so a backslash value warns rather than silently failing.
 
 ### 17b. Handler sketch
 
@@ -470,8 +490,8 @@ FMonolithActionResult FMonolithMeshDebugViewActions::HandleCaptureViewport(const
             TEXT("Editor is not available; capture_viewport requires a live editor viewport."), -32000);
     }
 
-    // Defensive re-validation of constrained params (the registry only enforces
-    // these when _validate_types is set; the handler still guards explicitly).
+    // Defensive re-validation of constrained params. The registry enforces the
+    // schema by default; the handler still guards explicitly at its domain boundary.
     FString Projection = TEXT("perspective");
     Params->TryGetStringField(TEXT("projection"), Projection);
     if (Projection != TEXT("perspective") && Projection != TEXT("orthographic"))
@@ -527,7 +547,7 @@ bool FMonolithParamGuardSceneCaptureViewportTest::RunTest(const FString& Paramet
     TestTrue(TEXT("action registered"),
         FMonolithToolRegistry::Get().HasAction(TEXT("scene"), TEXT("capture_viewport")));
 
-    // invalid enum / out-of-range, with _validate_types on => -32602
+    // invalid enum / out-of-range under default schema validation => -32602
     TSharedPtr<FJsonObject> BadProjection = MakeShared<FJsonObject>();
     BadProjection->SetStringField(TEXT("projection"), TEXT("isometric"));
     FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(

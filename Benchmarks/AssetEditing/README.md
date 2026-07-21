@@ -6,7 +6,7 @@ Measures Monolith MCP asset editing capability across Blueprint graph/class/comp
 
 | File | Purpose |
 |------|---------|
-| `tasks.jsonl` | 578 benchmark tasks across 11 categories |
+| `tasks.jsonl` | 579 benchmark tasks across 11 categories |
 | `manifest.json` | Benchmark metadata, score formula, weights, category counts |
 | `asset_types.json` | Generated AssetType support matrix and links to per-type directories |
 | `[AssetType]\README.md` | Generated summary for one asset type/domain, including supported operations and test cases |
@@ -62,7 +62,7 @@ directory contains `README.md`, `index.json`, `tasks.jsonl`, and `testcases\*.js
 | `imagegen` | 5 | 5 | 5 | 5 | 5 | 5 | `Benchmarks/AssetEditing/imagegen` |
 | `input` | 5 | 5 | 5 | 5 | 5 | 5 | `Benchmarks/AssetEditing/input` |
 | `interchange` | 8 | 8 | 8 | 8 | 8 | 8 | `Benchmarks/AssetEditing/interchange` |
-| `level_instance` | 3 | 3 | 3 | 3 | 3 | 3 | `Benchmarks/AssetEditing/level_instance` |
+| `level_instance` | 3 | 3 | 2 | 2 | 2 | 3 | `Benchmarks/AssetEditing/level_instance` |
 | `localization` | 6 | 6 | 6 | 6 | 6 | 6 | `Benchmarks/AssetEditing/localization` |
 | `logicdriver` | 1 | 1 | 1 | 1 | 1 | 1 | `Benchmarks/AssetEditing/logicdriver` |
 | `material` | 21 | 21 | 21 | 21 | 21 | 21 | `Benchmarks/AssetEditing/material` |
@@ -231,7 +231,7 @@ directory contains `README.md`, `index.json`, `tasks.jsonl`, and `testcases\*.js
 | `edit_schema` | 47 | `monolith_discover` | Schema has `planning_signals` + `skill` AND no isError (strict) |
 | `workflow_execute` | 11 | `blueprint_query` | Executed multi-step chains run, compile clean, and read back their end state |
 | `edit_execute` | 113 | `blueprint_query` | Edit call succeeds AND its mutation is observable via read-back; creates run delete-first so the read-back proves THIS run; includes UMG, AnimBP, GAS, ActorComponent, Interface, component/property value, exec- and data-pin wiring, pin literals, and delete round-trips |
-| `asset_authoring` | 268 | mixed owner namespaces | Cross-domain UE assets are created or routed to asset edit workflows through owning namespaces, then saved where persistable and inspected/read back |
+| `asset_authoring` | 269 | mixed owner namespaces | Cross-domain UE assets are created or routed to asset edit workflows through owning namespaces, then saved where persistable and inspected/read back |
 | `error_path` | 20 | `blueprint_query` | Server returns a structured `isError` whose message references the **offending identifier** (transport crash = fail; generic-only error = fail) |
 | `duplicate_reject` | 11 | `blueprint_query` | First call CLEANLY creates the entity (delete-reset each run) AND a second identical `add_*` call returns a duplicate-specific `isError` |
 | `negative_compile` | 1 | `blueprint_query` | A deliberately broken scratch Blueprint function signature must be REPORTED as a real compile failure (`error_count>0`); a transport/isError/clean envelope = fail |
@@ -329,11 +329,20 @@ python Scripts\asset_editing_benchmark.py generate `
   --testsets Benchmarks\AssetEditing\testsets
 ```
 
+<!-- asset-editing-generated-summary:start -->
+| Generated corpus metric | Count |
+|---|---:|
+| Canonical tasks | 579 |
+| Asset-authoring tasks | 269 |
+| Routable test-set modules | 1824 |
+| Module shard files | 39 |
+<!-- asset-editing-generated-summary:end -->
+
 `generate` keeps `tasks.jsonl` as the canonical full-suite stream and emits
 `asset_types.json`, `AssetEditing\[AssetType]\...` lookup folders, `testsets/index.json`,
 `testsets/modules.json`, and `testsets/module_shards/` for routable subsets. The module manifest
-advertises 1820 generated modules across 39 shard files, so a routed subset can load a small module
-payload without parsing the full route tree.
+and the generated summary above are synchronized from the same tasks, asset-type index, and test-set
+index, so a routed subset can load a small module payload without parsing the full route tree.
 
 ## Select Test Sets
 
@@ -488,6 +497,9 @@ AssetType tokens are accepted only as legacy selector input and normalize to the
 Most `asset_authoring` rows are `create_save`, but lifecycle routing is explicit rather than inferred:
 the dynamic Content Browser collection query row and blank UWorld map row are `create` only and are
 selected by `lifecycle.create` or `--lifecycle-phase create`, not by `lifecycle.create_save`.
+Expected mutation failures use `operation_semantics.rejection_guard` and
+`lifecycle.not_applicable`; they retain `asset_operation.readback_verify` for absence checks but do
+not claim successful creation/import, edit, or save roles.
 
 ## Run
 

@@ -24,6 +24,8 @@
 #include "Spec/UISpecBuilder.h"
 // Phase J: dump_ui_spec serializer.
 #include "Spec/UISpecSerializer.h"
+#include "Spec/UISpecJsonSerializer.h"
+#include "Spec/ResidentWidgetUISpecFingerprint.h"
 #include "MonolithAssetUtils.h"
 
 #include "Registry/MonolithUIRegistrySubsystem.h"
@@ -34,6 +36,7 @@
 #include "AssetRegistry/ARFilter.h"
 #include "AssetRegistry/IAssetRegistry.h"
 #include "Blueprint/WidgetTree.h"
+#include "Blueprint/WidgetBlueprintGeneratedClass.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/HorizontalBox.h"
@@ -42,6 +45,7 @@
 #include "Components/OverlaySlot.h"
 #include "Components/PanelSlot.h"
 #include "Components/PanelWidget.h"
+#include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Containers/Map.h"
@@ -138,7 +142,10 @@ namespace MonolithUI::SpecActionsInternal
         return FVector2D(GetNumberField(Obj, TEXT("x")), GetNumberField(Obj, TEXT("y")));
     }
 
-    static FLinearColor ParseColor(const TSharedPtr<FJsonObject>& Obj, const TCHAR* Field)
+    static FLinearColor ParseColorOrDefault(
+        const TSharedPtr<FJsonObject>& Obj,
+        const TCHAR* Field,
+        const FLinearColor& Default)
     {
         FString S;
         if (Obj.IsValid() && Obj->TryGetStringField(Field, S) && !S.IsEmpty())
@@ -149,8 +156,13 @@ namespace MonolithUI::SpecActionsInternal
                 return C;
             }
         }
-        // Default to white (matches the FUISpecStyle default).
-        return FLinearColor::White;
+        return Default;
+    }
+
+    static FLinearColor ParseColor(const TSharedPtr<FJsonObject>& Obj, const TCHAR* Field)
+    {
+        // White is the legacy UISpec default for font/fill colors.
+        return ParseColorOrDefault(Obj, Field, FLinearColor::White);
     }
 
     static FMargin ParseMargin(const TSharedPtr<FJsonObject>& Obj, const TCHAR* Field)
@@ -179,6 +191,7 @@ namespace MonolithUI::SpecActionsInternal
         if (Obj->TryGetObjectField(TEXT("position"), Sub) && Sub) OutSlot.Position = ParseVec2(*Sub);
         if (Obj->TryGetObjectField(TEXT("size"), Sub)     && Sub) OutSlot.Size     = ParseVec2(*Sub);
         if (Obj->TryGetObjectField(TEXT("alignment"), Sub) && Sub) OutSlot.Alignment = ParseVec2(*Sub);
+        OutSlot.bPaddingSpecified = Obj->HasTypedField<EJson::Object>(TEXT("padding"));
         OutSlot.Padding = ParseMargin(Obj, TEXT("padding"));
     }
 
@@ -218,6 +231,7 @@ namespace MonolithUI::SpecActionsInternal
         OutStyle.Visibility   = GetFNameField(Obj, TEXT("visibility"));
         OutStyle.Background   = ParseColor(Obj, TEXT("background"));
         OutStyle.BorderColor  = ParseColor(Obj, TEXT("borderColor"));
+        OutStyle.bPaddingSpecified = Obj->HasTypedField<EJson::Object>(TEXT("padding"));
         OutStyle.Padding      = ParseMargin(Obj, TEXT("padding"));
     }
 
@@ -226,10 +240,28 @@ namespace MonolithUI::SpecActionsInternal
         if (!Obj.IsValid()) return;
         OutContent.Text        = GetStringField(Obj, TEXT("text"));
         OutContent.FontSize    = (float)GetNumberField(Obj, TEXT("fontSize"));
+        OutContent.FontFamily  = GetStringField(Obj, TEXT("fontFamily"));
+        OutContent.Typeface    = GetFNameField(Obj, TEXT("typeface"));
+        OutContent.LetterSpacing = (int32)GetNumberField(Obj, TEXT("letterSpacing"));
+        const FName Justification = GetFNameField(Obj, TEXT("justification"));
+        if (!Justification.IsNone())
+        {
+            OutContent.Justification = Justification;
+        }
+        OutContent.OutlineSize = (int32)GetNumberField(Obj, TEXT("outlineSize"));
+        OutContent.OutlineColor = ParseColorOrDefault(Obj, TEXT("outlineColor"), FLinearColor::Black);
+        OutContent.ShadowColor = ParseColorOrDefault(Obj, TEXT("shadowColor"), FLinearColor::Transparent);
+        OutContent.LineHeightPercentage = (float)GetNumberField(Obj, TEXT("lineHeightPercentage"), 1.0);
         OutContent.WrapMode    = GetFNameField(Obj, TEXT("wrapMode"));
         OutContent.BrushPath   = GetStringField(Obj, TEXT("brushPath"));
         OutContent.Placeholder = GetStringField(Obj, TEXT("placeholder"));
         OutContent.FontColor   = ParseColor(Obj, TEXT("fontColor"));
+
+        const TSharedPtr<FJsonObject>* ShadowOffset = nullptr;
+        if (Obj->TryGetObjectField(TEXT("shadowOffset"), ShadowOffset) && ShadowOffset && ShadowOffset->IsValid())
+        {
+            OutContent.ShadowOffset = ParseVec2(*ShadowOffset);
+        }
     }
 
     static void ParseEffect(const TSharedPtr<FJsonObject>& Obj, FUISpecEffect& OutEffect)
@@ -305,6 +337,146 @@ namespace MonolithUI::SpecActionsInternal
                 if (V.IsValid() && V->Type == EJson::String)
                 {
                     OutCUI.StyleRefs.Add(FName(*V->AsString()));
+                }
+            }
+        }
+    }
+
+    static void AddContentParseError(
+        FUISpecValidationResult& OutValidation,
+        const FString& WidgetId,
+        const FString& Field,
+        const FString& Message,
+        const TArray<FString>& ValidOptions = {})
+    {
+        FUISpecError E;
+        E.Severity = EUISpecErrorSeverity::Error;
+        E.Category = TEXT("Content");
+        E.WidgetId = FName(*WidgetId);
+        E.JsonPath = FString::Printf(TEXT("/.../%s/content/%s"), *WidgetId, *Field);
+        E.Message = Message;
+        E.ValidOptions = ValidOptions;
+        OutValidation.Errors.Add(MoveTemp(E));
+    }
+
+    static void ValidateContentJsonRecursive(
+        const TSharedPtr<FJsonObject>& NodeObj,
+        FUISpecValidationResult& OutValidation)
+    {
+        if (!NodeObj.IsValid())
+        {
+            return;
+        }
+
+        FString WidgetId;
+        NodeObj->TryGetStringField(TEXT("id"), WidgetId);
+        if (WidgetId.IsEmpty())
+        {
+            WidgetId = TEXT("<unnamed>");
+        }
+
+        const TSharedPtr<FJsonObject>* Content = nullptr;
+        if (NodeObj->TryGetObjectField(TEXT("content"), Content) && Content && Content->IsValid())
+        {
+            auto ValidateStringField = [&](const TCHAR* Field)
+            {
+                const TSharedPtr<FJsonValue> Value = (*Content)->TryGetField(Field);
+                if (Value.IsValid() && Value->Type != EJson::String)
+                {
+                    AddContentParseError(
+                        OutValidation,
+                        WidgetId,
+                        Field,
+                        FString::Printf(TEXT("content.%s must be a string."), Field));
+                }
+            };
+            ValidateStringField(TEXT("fontFamily"));
+            ValidateStringField(TEXT("typeface"));
+
+            auto ValidateNumberField = [&](const TCHAR* Field)
+            {
+                const TSharedPtr<FJsonValue> Value = (*Content)->TryGetField(Field);
+                if (Value.IsValid() && Value->Type != EJson::Number)
+                {
+                    AddContentParseError(
+                        OutValidation,
+                        WidgetId,
+                        Field,
+                        FString::Printf(TEXT("content.%s must be a number."), Field));
+                }
+            };
+            ValidateNumberField(TEXT("fontSize"));
+            ValidateNumberField(TEXT("letterSpacing"));
+            ValidateNumberField(TEXT("outlineSize"));
+            ValidateNumberField(TEXT("lineHeightPercentage"));
+
+            static const TCHAR* const ColorFields[] = {
+                TEXT("fontColor"), TEXT("outlineColor"), TEXT("shadowColor") };
+            for (const TCHAR* ColorField : ColorFields)
+            {
+                const TSharedPtr<FJsonValue> Value = (*Content)->TryGetField(ColorField);
+                if (!Value.IsValid())
+                {
+                    continue;
+                }
+                FLinearColor ParsedColor;
+                if (Value->Type != EJson::String || !MonolithUI::TryParseColor(Value->AsString(), ParsedColor))
+                {
+                    AddContentParseError(
+                        OutValidation,
+                        WidgetId,
+                        ColorField,
+                        FString::Printf(TEXT("content.%s must be a parseable color string."), ColorField));
+                }
+            }
+
+            const TSharedPtr<FJsonValue> JustificationValue = (*Content)->TryGetField(TEXT("justification"));
+            if (JustificationValue.IsValid())
+            {
+                static const TArray<FString> ValidJustifications = {
+                    TEXT("Left"), TEXT("Center"), TEXT("Right"),
+                    TEXT("InvariantLeft"), TEXT("InvariantRight") };
+                if (JustificationValue->Type != EJson::String
+                    || !ValidJustifications.Contains(JustificationValue->AsString()))
+                {
+                    AddContentParseError(
+                        OutValidation,
+                        WidgetId,
+                        TEXT("justification"),
+                        TEXT("content.justification is not a supported ETextJustify token."),
+                        ValidJustifications);
+                }
+            }
+
+            const TSharedPtr<FJsonValue> ShadowOffsetValue = (*Content)->TryGetField(TEXT("shadowOffset"));
+            if (ShadowOffsetValue.IsValid())
+            {
+                const TSharedPtr<FJsonObject>* ShadowOffset = nullptr;
+                const bool bObject = ShadowOffsetValue->TryGetObject(ShadowOffset)
+                    && ShadowOffset
+                    && ShadowOffset->IsValid();
+                const bool bHasX = bObject && (*ShadowOffset)->HasTypedField<EJson::Number>(TEXT("x"));
+                const bool bHasY = bObject && (*ShadowOffset)->HasTypedField<EJson::Number>(TEXT("y"));
+                if (!bHasX || !bHasY)
+                {
+                    AddContentParseError(
+                        OutValidation,
+                        WidgetId,
+                        TEXT("shadowOffset"),
+                        TEXT("content.shadowOffset must be an object with numeric x and y fields."));
+                }
+            }
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* Children = nullptr;
+        if (NodeObj->TryGetArrayField(TEXT("children"), Children) && Children)
+        {
+            for (const TSharedPtr<FJsonValue>& ChildValue : *Children)
+            {
+                const TSharedPtr<FJsonObject>* ChildObject = nullptr;
+                if (ChildValue.IsValid() && ChildValue->TryGetObject(ChildObject) && ChildObject)
+                {
+                    ValidateContentJsonRecursive(*ChildObject, OutValidation);
                 }
             }
         }
@@ -473,6 +645,12 @@ namespace MonolithUI::SpecActionsInternal
         // Root.
         if (SpecObj->TryGetObjectField(TEXT("rootWidget"), Sub) && Sub)
         {
+            ValidateContentJsonRecursive(*Sub, OutValidation);
+            if (OutValidation.Errors.Num() > 0)
+            {
+                OutValidation.bIsValid = false;
+                return false;
+            }
             OutDoc.Root = ParseNode(*Sub);
         }
 
@@ -632,9 +810,20 @@ namespace MonolithUI::SpecActionsInternal
     {
         TArray<FString> Parts;
         SplitMarkupNumbers(Text, Parts);
-        if (Parts.Num() != 4)
+        if (Parts.Num() != 1 && Parts.Num() != 4)
         {
             return false;
+        }
+
+        if (Parts.Num() == 1)
+        {
+            float Uniform = 0.f;
+            if (!TryParseMarkupFloat(Parts[0], Uniform))
+            {
+                return false;
+            }
+            OutValue = FMargin(Uniform);
+            return true;
         }
 
         float Left = 0.f;
@@ -939,9 +1128,13 @@ namespace MonolithUI::SpecActionsInternal
         }
         if (AttrEquals(AttributeName, TEXT("style.padding")))
         {
-            if (!TryParseMarkupMargin(AttributeValue, Node.Style.Padding))
+            if (TryParseMarkupMargin(AttributeValue, Node.Style.Padding))
             {
-                AddBadValueFinding(Context, Node.Id, JsonPath, AttributeName, TEXT("four margin numbers: left,top,right,bottom"));
+                Node.Style.bPaddingSpecified = true;
+            }
+            else
+            {
+                AddBadValueFinding(Context, Node.Id, JsonPath, AttributeName, TEXT("one uniform number or four margin numbers: left,top,right,bottom"));
             }
             return true;
         }
@@ -1001,9 +1194,13 @@ namespace MonolithUI::SpecActionsInternal
         }
         if (AttrEquals(AttributeName, TEXT("slot.padding")))
         {
-            if (!TryParseMarkupMargin(AttributeValue, Node.Slot.Padding))
+            if (TryParseMarkupMargin(AttributeValue, Node.Slot.Padding))
             {
-                AddBadValueFinding(Context, Node.Id, JsonPath, AttributeName, TEXT("four margin numbers: left,top,right,bottom"));
+                Node.Slot.bPaddingSpecified = true;
+            }
+            else
+            {
+                AddBadValueFinding(Context, Node.Id, JsonPath, AttributeName, TEXT("one uniform number or four margin numbers: left,top,right,bottom"));
             }
             return true;
         }
@@ -1544,7 +1741,7 @@ namespace MonolithUI::SpecActionsInternal
             AddField(TEXT("id"),              TEXT("string"),  TEXT("Variable name of the widget on the WBP. Must be unique within the spec."));
             AddField(TEXT("slot"),            TEXT("object"),  TEXT("FUISpecSlot (anchorPreset / position / size / alignment / padding / autoSize / hAlign / vAlign / zOrder / sizeRule / fillWeight)."));
             AddField(TEXT("style"),           TEXT("object"),  TEXT("FUISpecStyle (width / height / minDesiredWidth / minDesiredHeight / maxDesiredWidth / maxDesiredHeight / override flags / padding / background / borderColor / borderWidth / opacity / visibility)."));
-            AddField(TEXT("content"),         TEXT("object"),  TEXT("FUISpecContent (text / fontSize / fontColor / wrapMode / brushPath / placeholder)."));
+            AddField(TEXT("content"),         TEXT("object"),  TEXT("FUISpecContent (text / fontFamily / typeface / fontSize / letterSpacing / fontColor / justification / outlineSize / outlineColor / shadowOffset / shadowColor / lineHeightPercentage / wrapMode / brushPath / placeholder)."));
             AddField(TEXT("effect"),          TEXT("object"),  TEXT("FUISpecEffect — UEffectSurface only. Sub-bag triggers bHasEffect."));
             AddField(TEXT("commonUI"),        TEXT("object"),  TEXT("FUISpecCommonUI (inputLayer / inputMode / styleRefs[]). Sub-bag triggers bHasCommonUI."));
             AddField(TEXT("styleRef"),        TEXT("string"),  TEXT("Named entry in document.styles."));
@@ -1622,12 +1819,18 @@ namespace MonolithUI::SpecActionsInternal
         Al->SetNumberField(TEXT("y"), S.Alignment.Y);
         Out->SetObjectField(TEXT("alignment"), Al);
 
-        TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
-        P->SetNumberField(TEXT("left"),   S.Padding.Left);
-        P->SetNumberField(TEXT("top"),    S.Padding.Top);
-        P->SetNumberField(TEXT("right"),  S.Padding.Right);
-        P->SetNumberField(TEXT("bottom"), S.Padding.Bottom);
-        Out->SetObjectField(TEXT("padding"), P);
+        const bool bHasPaddingValue =
+            S.Padding.GetTotalSpaceAlong<EOrientation::Orient_Horizontal>() != 0
+            || S.Padding.GetTotalSpaceAlong<EOrientation::Orient_Vertical>() != 0;
+        if (S.bPaddingSpecified || bHasPaddingValue)
+        {
+            TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+            P->SetNumberField(TEXT("left"),   S.Padding.Left);
+            P->SetNumberField(TEXT("top"),    S.Padding.Top);
+            P->SetNumberField(TEXT("right"),  S.Padding.Right);
+            P->SetNumberField(TEXT("bottom"), S.Padding.Bottom);
+            Out->SetObjectField(TEXT("padding"), P);
+        }
         return Out;
     }
 
@@ -1670,12 +1873,18 @@ namespace MonolithUI::SpecActionsInternal
         Out->SetStringField(TEXT("background"),  ColorToHexString(S.Background));
         Out->SetStringField(TEXT("borderColor"), ColorToHexString(S.BorderColor));
 
-        TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
-        P->SetNumberField(TEXT("left"),   S.Padding.Left);
-        P->SetNumberField(TEXT("top"),    S.Padding.Top);
-        P->SetNumberField(TEXT("right"),  S.Padding.Right);
-        P->SetNumberField(TEXT("bottom"), S.Padding.Bottom);
-        Out->SetObjectField(TEXT("padding"), P);
+        const bool bHasPaddingValue =
+            S.Padding.GetTotalSpaceAlong<EOrientation::Orient_Horizontal>() != 0
+            || S.Padding.GetTotalSpaceAlong<EOrientation::Orient_Vertical>() != 0;
+        if (S.bPaddingSpecified || bHasPaddingValue)
+        {
+            TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+            P->SetNumberField(TEXT("left"),   S.Padding.Left);
+            P->SetNumberField(TEXT("top"),    S.Padding.Top);
+            P->SetNumberField(TEXT("right"),  S.Padding.Right);
+            P->SetNumberField(TEXT("bottom"), S.Padding.Bottom);
+            Out->SetObjectField(TEXT("padding"), P);
+        }
         return Out;
     }
 
@@ -1685,6 +1894,31 @@ namespace MonolithUI::SpecActionsInternal
         TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
         if (!C.Text.IsEmpty())        Out->SetStringField(TEXT("text"), C.Text);
         if (C.FontSize != 0.f)        Out->SetNumberField(TEXT("fontSize"), C.FontSize);
+        if (!C.FontFamily.IsEmpty())  Out->SetStringField(TEXT("fontFamily"), C.FontFamily);
+        if (!C.Typeface.IsNone())     Out->SetStringField(TEXT("typeface"), C.Typeface.ToString());
+        if (C.LetterSpacing != 0)     Out->SetNumberField(TEXT("letterSpacing"), C.LetterSpacing);
+        if (!C.Justification.IsNone() && C.Justification != FName(TEXT("Left")))
+        {
+            Out->SetStringField(TEXT("justification"), C.Justification.ToString());
+        }
+        if (C.OutlineSize != 0 || !C.OutlineColor.Equals(FLinearColor::Black))
+        {
+            Out->SetNumberField(TEXT("outlineSize"), C.OutlineSize);
+            Out->SetStringField(TEXT("outlineColor"), ColorToHexString(C.OutlineColor));
+        }
+        if (!C.ShadowOffset.Equals(FVector2D(1.f, 1.f), 0.001f)
+            || !C.ShadowColor.Equals(FLinearColor::Transparent))
+        {
+            TSharedPtr<FJsonObject> ShadowOffset = MakeShared<FJsonObject>();
+            ShadowOffset->SetNumberField(TEXT("x"), C.ShadowOffset.X);
+            ShadowOffset->SetNumberField(TEXT("y"), C.ShadowOffset.Y);
+            Out->SetObjectField(TEXT("shadowOffset"), ShadowOffset);
+            Out->SetStringField(TEXT("shadowColor"), ColorToHexString(C.ShadowColor));
+        }
+        if (!FMath::IsNearlyEqual(C.LineHeightPercentage, 1.f, 0.001f))
+        {
+            Out->SetNumberField(TEXT("lineHeightPercentage"), C.LineHeightPercentage);
+        }
         if (!C.WrapMode.IsNone())     Out->SetStringField(TEXT("wrapMode"), C.WrapMode.ToString());
         if (!C.BrushPath.IsEmpty())   Out->SetStringField(TEXT("brushPath"), C.BrushPath);
         if (!C.Placeholder.IsEmpty()) Out->SetStringField(TEXT("placeholder"), C.Placeholder);
@@ -1962,7 +2196,7 @@ namespace MonolithUI::SpecActionsInternal
         ValidationObj->SetNumberField(TEXT("warning_count"), Validation.Warnings.Num());
         Out->SetObjectField(TEXT("validation"), ValidationObj);
 
-        Out->SetObjectField(TEXT("spec"), DocumentToJson(Document));
+        Out->SetObjectField(TEXT("spec"), FUISpecJsonSerializer::DocumentToJson(Document));
         SetValidationFindingArray(Out, TEXT("errors"), Validation.Errors);
         SetValidationFindingArray(Out, TEXT("warnings"), Validation.Warnings);
 
@@ -2053,7 +2287,7 @@ namespace MonolithUI::SpecActionsInternal
         Out->SetNumberField(TEXT("animations_captured"), R.AnimationsCaptured);
 
         // Document body -- mirrors the parser's input shape.
-        Out->SetObjectField(TEXT("spec"), DocumentToJson(R.Document));
+        Out->SetObjectField(TEXT("spec"), FUISpecJsonSerializer::DocumentToJson(R.Document));
 
         if (R.Errors.Num() > 0)
         {
@@ -2105,6 +2339,197 @@ namespace MonolithUI::SpecActionsInternal
 
         const FUISpecSerializerResult R = FUISpecSerializer::Dump(In);
         return FMonolithActionResult::Success(PackDumpResponse(R));
+    }
+
+    static FMonolithActionResult MakeUISpecFingerprintError(
+        const FString& FailureCode,
+        const FString& FailureReason,
+        int32 FailedInputIndex = INDEX_NONE,
+        const FString& InputPath = FString(),
+        int32 ErrorCode = FMonolithJsonUtils::ErrInvalidParams)
+    {
+        TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+        ErrorData->SetStringField(TEXT("failure_code"), FailureCode);
+        ErrorData->SetStringField(TEXT("failure_reason"), FailureReason);
+        ErrorData->SetNumberField(TEXT("failed_input_index"), FailedInputIndex);
+        if (!InputPath.IsEmpty())
+        {
+            ErrorData->SetStringField(TEXT("input_path"), InputPath);
+        }
+
+        FMonolithActionResult Error = FMonolithActionResult::Error(FailureReason, ErrorCode);
+        Error.WithErrorData(ErrorData);
+        return Error;
+    }
+
+    static FMonolithActionExecutionPolicy MakeExplicitUISpecFingerprintReadOnlyPolicy()
+    {
+        FMonolithActionExecutionPolicy Policy = FMonolithActionExecutionPolicy::DefaultReadOnly();
+        Policy.bDefaulted = false;
+        return Policy;
+    }
+
+    static FMonolithActionResult HandleComputeWidgetUISpecFingerprint(
+        const TSharedPtr<FJsonObject>& Params)
+    {
+        const TArray<TSharedPtr<FJsonValue>>* AssetPathValues = nullptr;
+        if (!Params.IsValid()
+            || !Params->TryGetArrayField(TEXT("asset_paths"), AssetPathValues)
+            || !AssetPathValues)
+        {
+            return MakeUISpecFingerprintError(
+                TEXT("MissingAssetPaths"),
+                TEXT("Required param 'asset_paths' must be an array containing 1..128 exact Widget Blueprint package/object paths."));
+        }
+        if (AssetPathValues->Num() < 1 || AssetPathValues->Num() > 128)
+        {
+            return MakeUISpecFingerprintError(
+                TEXT("InvalidAssetPathCount"),
+                FString::Printf(
+                    TEXT("Param 'asset_paths' must contain 1..128 entries; received %d."),
+                    AssetPathValues->Num()));
+        }
+
+        TArray<UClass*> ResidentGeneratedClasses;
+        ResidentGeneratedClasses.Reserve(AssetPathValues->Num());
+
+        for (int32 InputIndex = 0; InputIndex < AssetPathValues->Num(); ++InputIndex)
+        {
+            FString RequestedPath;
+            if (!(*AssetPathValues)[InputIndex].IsValid()
+                || !(*AssetPathValues)[InputIndex]->TryGetString(RequestedPath)
+                || RequestedPath.IsEmpty())
+            {
+                return MakeUISpecFingerprintError(
+                    TEXT("InvalidAssetPathEntry"),
+                    FString::Printf(TEXT("asset_paths[%d] must be a non-empty string."), InputIndex),
+                    InputIndex);
+            }
+
+            FString TrimmedPath = RequestedPath;
+            TrimmedPath.TrimStartAndEndInline();
+            if (!RequestedPath.Equals(TrimmedPath, ESearchCase::CaseSensitive))
+            {
+                return MakeUISpecFingerprintError(
+                    TEXT("NonExactAssetPath"),
+                    FString::Printf(TEXT("asset_paths[%d] contains leading or trailing whitespace."), InputIndex),
+                    InputIndex,
+                    RequestedPath);
+            }
+
+            FString PackageName;
+            FString ObjectPath;
+            if (FPackageName::IsValidLongPackageName(RequestedPath, /*bIncludeReadOnlyRoots=*/true))
+            {
+                PackageName = RequestedPath;
+                ObjectPath = FString::Printf(
+                    TEXT("%s.%s"),
+                    *PackageName,
+                    *FPackageName::GetShortName(PackageName));
+            }
+            else if (FPackageName::IsValidObjectPath(RequestedPath))
+            {
+                PackageName = FPackageName::ObjectPathToPackageName(RequestedPath);
+                ObjectPath = RequestedPath;
+            }
+            else
+            {
+                return MakeUISpecFingerprintError(
+                    TEXT("InvalidWidgetBlueprintPath"),
+                    FString::Printf(
+                        TEXT("asset_paths[%d] is neither a valid long package path nor an exact object path."),
+                        InputIndex),
+                    InputIndex,
+                    RequestedPath);
+            }
+
+            if (!FPackageName::IsValidLongPackageName(PackageName, /*bIncludeReadOnlyRoots=*/true))
+            {
+                return MakeUISpecFingerprintError(
+                    TEXT("InvalidWidgetBlueprintPackage"),
+                    FString::Printf(TEXT("asset_paths[%d] resolves to invalid package '%s'."), InputIndex, *PackageName),
+                    InputIndex,
+                    RequestedPath);
+            }
+
+            UWidgetBlueprint* const WidgetBlueprint = LoadObject<UWidgetBlueprint>(nullptr, *ObjectPath);
+            if (!IsValid(WidgetBlueprint))
+            {
+                return MakeUISpecFingerprintError(
+                    TEXT("WidgetBlueprintLoadFailed"),
+                    FString::Printf(TEXT("asset_paths[%d] did not load an exact UWidgetBlueprint at '%s'."), InputIndex, *ObjectPath),
+                    InputIndex,
+                    RequestedPath);
+            }
+            if (!WidgetBlueprint->GetPathName().Equals(ObjectPath, ESearchCase::CaseSensitive)
+                || !WidgetBlueprint->GetOutermost()
+                || !WidgetBlueprint->GetOutermost()->GetName().Equals(PackageName, ESearchCase::CaseSensitive))
+            {
+                return MakeUISpecFingerprintError(
+                    TEXT("WidgetBlueprintPathMismatch"),
+                    FString::Printf(
+                        TEXT("asset_paths[%d] loaded '%s' instead of exact object '%s' in package '%s'."),
+                        InputIndex,
+                        *WidgetBlueprint->GetPathName(),
+                        *ObjectPath,
+                        *PackageName),
+                    InputIndex,
+                    RequestedPath);
+            }
+
+            UWidgetBlueprintGeneratedClass* const GeneratedClass =
+                Cast<UWidgetBlueprintGeneratedClass>(WidgetBlueprint->GeneratedClass);
+            if (!IsValid(GeneratedClass)
+                || GeneratedClass->ClassGeneratedBy != WidgetBlueprint
+                || WidgetBlueprint->GeneratedClass != GeneratedClass)
+            {
+                return MakeUISpecFingerprintError(
+                    TEXT("GeneratedClassBackReferenceMismatch"),
+                    FString::Printf(
+                        TEXT("Widget Blueprint '%s' has no exact UWidgetBlueprintGeneratedClass back-reference."),
+                        *WidgetBlueprint->GetPathName()),
+                    InputIndex,
+                    RequestedPath);
+            }
+            ResidentGeneratedClasses.Add(GeneratedClass);
+        }
+
+        const FMonolithUIResidentUISpecFingerprintResult Fingerprint =
+            FMonolithUIResidentUISpecFingerprint::Compute(ResidentGeneratedClasses);
+        if (!Fingerprint.bSuccess)
+        {
+            const FString FailedPath = AssetPathValues->IsValidIndex(Fingerprint.FailedInputIndex)
+                ? (*AssetPathValues)[Fingerprint.FailedInputIndex]->AsString()
+                : FString();
+            return MakeUISpecFingerprintError(
+                Fingerprint.FailureCode,
+                Fingerprint.FailureReason,
+                Fingerprint.FailedInputIndex,
+                FailedPath,
+                -32603);
+        }
+
+        TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+        Out->SetBoolField(TEXT("bSuccess"), true);
+        Out->SetStringField(TEXT("schema_version"), Fingerprint.SchemaVersion);
+        Out->SetStringField(TEXT("aggregate_sha256"), Fingerprint.AggregateSha256);
+        Out->SetNumberField(TEXT("widget_count"), Fingerprint.Widgets.Num());
+
+        TArray<TSharedPtr<FJsonValue>> WidgetRows;
+        WidgetRows.Reserve(Fingerprint.Widgets.Num());
+        for (const FMonolithUIResidentUISpecDigest& Widget : Fingerprint.Widgets)
+        {
+            TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+            Row->SetStringField(TEXT("package_name"), Widget.PackageName);
+            Row->SetStringField(TEXT("widget_blueprint_path"), Widget.WidgetBlueprintPath);
+            Row->SetStringField(TEXT("generated_class_path"), Widget.GeneratedClassPath);
+            Row->SetStringField(TEXT("ui_spec_sha256"), Widget.UISpecSha256);
+            Row->SetNumberField(TEXT("nodes_visited"), Widget.NodesVisited);
+            Row->SetNumberField(TEXT("animations_captured"), Widget.AnimationsCaptured);
+            WidgetRows.Add(MakeShared<FJsonValueObject>(Row));
+        }
+        Out->SetArrayField(TEXT("widgets"), WidgetRows);
+        return FMonolithActionResult::Success(Out);
     }
 
     // ------------------------------------------------------------------
@@ -3680,21 +4105,8 @@ namespace MonolithUI::SpecActionsInternal
         return Visibility.Equals(TEXT("Visible"), ESearchCase::IgnoreCase);
     }
 
-    static FVector2D DesiredSizeForNode(const FUISpecNode& Node, const FLayoutMeasureRect& ParentRect)
+    static FVector2D ApplyDesiredSizeConstraints(const FUISpecNode& Node, FVector2D Size)
     {
-        FVector2D Size(
-            Node.Style.Width > 0.0f ? Node.Style.Width : Node.Slot.Size.X,
-            Node.Style.Height > 0.0f ? Node.Style.Height : Node.Slot.Size.Y);
-
-        if (Size.X <= 0.0)
-        {
-            Size.X = ParentRect.W > 0.0 ? ParentRect.W : 0.0;
-        }
-        if (Size.Y <= 0.0)
-        {
-            Size.Y = ParentRect.H > 0.0 ? ParentRect.H : 0.0;
-        }
-
         if (Node.Style.bOverrideMinDesiredWidth)
         {
             Size.X = FMath::Max(Size.X, static_cast<double>(Node.Style.MinDesiredWidth));
@@ -3712,6 +4124,29 @@ namespace MonolithUI::SpecActionsInternal
             Size.Y = FMath::Min(Size.Y, static_cast<double>(Node.Style.MaxDesiredHeight));
         }
         return Size;
+    }
+
+    static FVector2D AuthoredDesiredSizeForNode(const FUISpecNode& Node)
+    {
+        return ApplyDesiredSizeConstraints(
+            Node,
+            FVector2D(
+                Node.Style.Width > 0.0f ? Node.Style.Width : Node.Slot.Size.X,
+                Node.Style.Height > 0.0f ? Node.Style.Height : Node.Slot.Size.Y));
+    }
+
+    static FVector2D DesiredSizeForNode(const FUISpecNode& Node, const FLayoutMeasureRect& ParentRect)
+    {
+        FVector2D Size = AuthoredDesiredSizeForNode(Node);
+        if (Size.X <= 0.0)
+        {
+            Size.X = ParentRect.W > 0.0 ? ParentRect.W : 0.0;
+        }
+        if (Size.Y <= 0.0)
+        {
+            Size.Y = ParentRect.H > 0.0 ? ParentRect.H : 0.0;
+        }
+        return ApplyDesiredSizeConstraints(Node, Size);
     }
 
     static FLayoutMeasureRect InsetRect(const FLayoutMeasureRect& Rect, const FMargin& Padding)
@@ -3828,7 +4263,10 @@ namespace MonolithUI::SpecActionsInternal
 
         const FVector2D DesiredSize = DesiredSizeForNode(Node, ParentRect);
 
-        if (ParentType == FName(TEXT("VerticalBox")) || ParentType == FName(TEXT("ScrollBox")))
+        // ScrollBox orientation is not represented by the canonical UISpec v1
+        // contract. Preserve its existing single-axis model here instead of
+        // guessing an orientation from a widget type alone.
+        if (ParentType == FName(TEXT("ScrollBox")))
         {
             FLayoutMeasureRect Out = InsetRect(ParentRect, Node.Slot.Padding);
             const double Height = DesiredSize.Y > 0.0 && DesiredSize.Y < ParentRect.H
@@ -3839,18 +4277,129 @@ namespace MonolithUI::SpecActionsInternal
             return Out;
         }
 
-        if (ParentType == FName(TEXT("HorizontalBox")))
+        return AlignRectWithinParent(Node, ParentRect, DesiredSize);
+    }
+
+    static void ComputeBoxChildRects(
+        const FUISpecNode& ParentNode,
+        const FLayoutMeasureRect& ParentRect,
+        bool bVertical,
+        TArray<FLayoutMeasureRect>& OutChildRects)
+    {
+        OutChildRects.SetNum(ParentNode.Children.Num());
+        if (!ParentRect.bValid || ParentNode.Children.Num() == 0)
         {
-            FLayoutMeasureRect Out = InsetRect(ParentRect, Node.Slot.Padding);
-            const double Width = DesiredSize.X > 0.0 && DesiredSize.X < ParentRect.W
-                ? DesiredSize.X
-                : (ChildCount > 0 ? ParentRect.W / static_cast<double>(ChildCount) : ParentRect.W);
-            Out.X = ParentRect.X + Width * static_cast<double>(ChildIndex) + Node.Slot.Padding.Left;
-            Out.W = FMath::Max(0.0, Width - Node.Slot.Padding.Left - Node.Slot.Padding.Right);
-            return Out;
+            return;
         }
 
-        return AlignRectWithinParent(Node, ParentRect, DesiredSize);
+        TArray<double> AllocatedContentExtents;
+        AllocatedContentExtents.Init(0.0, ParentNode.Children.Num());
+        TArray<bool> KnownPrimaryExtents;
+        KnownPrimaryExtents.Init(true, ParentNode.Children.Num());
+        double FixedExtent = 0.0;
+        double TotalFillWeight = 0.0;
+        bool bAllAutomaticExtentsKnown = true;
+
+        for (int32 Index = 0; Index < ParentNode.Children.Num(); ++Index)
+        {
+            const TSharedPtr<FUISpecNode>& Child = ParentNode.Children[Index];
+            if (!Child.IsValid() || !VisibilityOccupiesLayout(VisibilityTokenForNode(*Child)))
+            {
+                continue;
+            }
+
+            const double LeadingPadding = bVertical ? Child->Slot.Padding.Top : Child->Slot.Padding.Left;
+            const double TrailingPadding = bVertical ? Child->Slot.Padding.Bottom : Child->Slot.Padding.Right;
+            FixedExtent += LeadingPadding + TrailingPadding;
+
+            if (Child->Slot.SizeRule.ToString().Equals(TEXT("Fill"), ESearchCase::IgnoreCase))
+            {
+                TotalFillWeight += FMath::Max(0.0, static_cast<double>(Child->Slot.FillWeight));
+                continue;
+            }
+
+            const FVector2D AuthoredDesiredSize = AuthoredDesiredSizeForNode(*Child);
+            const double DesiredPrimaryExtent = bVertical ? AuthoredDesiredSize.Y : AuthoredDesiredSize.X;
+            if (DesiredPrimaryExtent <= 0.0)
+            {
+                KnownPrimaryExtents[Index] = false;
+                bAllAutomaticExtentsKnown = false;
+                continue;
+            }
+
+            AllocatedContentExtents[Index] = DesiredPrimaryExtent;
+            FixedExtent += DesiredPrimaryExtent;
+        }
+
+        const double ParentPrimaryExtent = bVertical ? ParentRect.H : ParentRect.W;
+        const double RemainingContentExtent = FMath::Max(0.0, ParentPrimaryExtent - FixedExtent);
+        for (int32 Index = 0; Index < ParentNode.Children.Num(); ++Index)
+        {
+            const TSharedPtr<FUISpecNode>& Child = ParentNode.Children[Index];
+            if (!Child.IsValid()
+                || !VisibilityOccupiesLayout(VisibilityTokenForNode(*Child))
+                || !Child->Slot.SizeRule.ToString().Equals(TEXT("Fill"), ESearchCase::IgnoreCase))
+            {
+                continue;
+            }
+
+            KnownPrimaryExtents[Index] = bAllAutomaticExtentsKnown;
+            if (bAllAutomaticExtentsKnown && TotalFillWeight > 0.0)
+            {
+                const double FillWeight = FMath::Max(0.0, static_cast<double>(Child->Slot.FillWeight));
+                AllocatedContentExtents[Index] = RemainingContentExtent * FillWeight / TotalFillWeight;
+            }
+        }
+
+        double PrimaryCursor = bVertical ? ParentRect.Y : ParentRect.X;
+        bool bPrimaryCursorKnown = true;
+        for (int32 Index = 0; Index < ParentNode.Children.Num(); ++Index)
+        {
+            const TSharedPtr<FUISpecNode>& Child = ParentNode.Children[Index];
+            const bool bOccupiesLayout = Child.IsValid() && VisibilityOccupiesLayout(VisibilityTokenForNode(*Child));
+            const double LeadingPadding = bOccupiesLayout
+                ? (bVertical ? Child->Slot.Padding.Top : Child->Slot.Padding.Left)
+                : 0.0;
+            const double TrailingPadding = bOccupiesLayout
+                ? (bVertical ? Child->Slot.Padding.Bottom : Child->Slot.Padding.Right)
+                : 0.0;
+            const double SlotExtent = bOccupiesLayout
+                ? FMath::Max(0.0, AllocatedContentExtents[Index] + LeadingPadding + TrailingPadding)
+                : 0.0;
+            FLayoutMeasureRect SlotRect = ParentRect;
+            SlotRect.bValid = bPrimaryCursorKnown && KnownPrimaryExtents[Index];
+            if (bVertical)
+            {
+                SlotRect.Y = PrimaryCursor;
+                SlotRect.H = SlotExtent;
+            }
+            else
+            {
+                SlotRect.X = PrimaryCursor;
+                SlotRect.W = SlotExtent;
+            }
+
+            if (bOccupiesLayout)
+            {
+                OutChildRects[Index] = AlignRectWithinParent(
+                    *Child,
+                    SlotRect,
+                    DesiredSizeForNode(*Child, SlotRect));
+            }
+            else
+            {
+                // Invalid and Collapsed children consume exactly zero primary
+                // extent. Their zero rect remains deterministic for recursive
+                // visibility reporting without moving subsequent siblings.
+                OutChildRects[Index] = SlotRect;
+            }
+
+            if (!KnownPrimaryExtents[Index])
+            {
+                bPrimaryCursorKnown = false;
+            }
+            PrimaryCursor += SlotExtent;
+        }
     }
 
     static void MeasureWidgetNodeRecursive(
@@ -3878,6 +4427,14 @@ namespace MonolithUI::SpecActionsInternal
         Row.LayoutBounds.bValid = LayoutRect.bValid && !bCollapsed;
         OutWidgets.Add(MoveTemp(Row));
 
+        const bool bVerticalBox = Node.Type == FName(TEXT("VerticalBox"));
+        const bool bHorizontalBox = Node.Type == FName(TEXT("HorizontalBox"));
+        TArray<FLayoutMeasureRect> BoxChildRects;
+        if (bVerticalBox || bHorizontalBox)
+        {
+            ComputeBoxChildRects(Node, LayoutRect, bVerticalBox, BoxChildRects);
+        }
+
         for (int32 Index = 0; Index < Node.Children.Num(); ++Index)
         {
             const TSharedPtr<FUISpecNode>& Child = Node.Children[Index];
@@ -3889,7 +4446,9 @@ namespace MonolithUI::SpecActionsInternal
             const FString ChildPath = WidgetPath.IsEmpty()
                 ? Child->Id.ToString()
                 : FString::Printf(TEXT("%s/%s"), *WidgetPath, *Child->Id.ToString());
-            const FLayoutMeasureRect ChildRect = ComputeChildRect(*Child, Node.Type, LayoutRect, Index, Node.Children.Num());
+            const FLayoutMeasureRect ChildRect = (bVerticalBox || bHorizontalBox)
+                ? BoxChildRects[Index]
+                : ComputeChildRect(*Child, Node.Type, LayoutRect, Index, Node.Children.Num());
             MeasureWidgetNodeRecursive(*Child, ChildPath, WidgetPath, ChildRect, bCollapsed, Profile, OutWidgets);
         }
     }
@@ -4039,6 +4598,7 @@ namespace MonolithUI::SpecActionsInternal
         Out->SetBoolField(TEXT("occupies_layout"), Widget.bOccupiesLayout);
         Out->SetBoolField(TEXT("hit_test_visible"), Widget.bHitTestVisible);
         Out->SetBoolField(TEXT("included_by_visibility_filter"), Widget.bIncludedByVisibilityFilter);
+        Out->SetBoolField(TEXT("layout_bounds_available"), Widget.LayoutBounds.bValid);
         Out->SetObjectField(TEXT("layout_bounds"), RectToJson(Widget.LayoutBounds));
         Out->SetObjectField(TEXT("render_bounds"), RectToJson(Widget.LayoutBounds));
         Out->SetBoolField(TEXT("render_bounds_available"), false);
@@ -4231,6 +4791,7 @@ namespace MonolithUI::SpecActionsInternal
         TArray<TSharedPtr<FJsonValue>> ProfileRows;
         int32 TotalOverlapCount = 0;
         int32 TotalSafeZoneViolationCount = 0;
+        int32 TotalUnavailableLayoutBoundsCount = 0;
 
         for (const FLayoutMeasureProfile& Profile : Profiles)
         {
@@ -4253,9 +4814,14 @@ namespace MonolithUI::SpecActionsInternal
 
             TArray<TSharedPtr<FJsonValue>> WidgetRows;
             WidgetRows.Reserve(Widgets.Num());
+            int32 UnavailableLayoutBoundsCount = 0;
             for (const FLayoutMeasuredWidget& Widget : Widgets)
             {
                 WidgetRows.Add(MakeShared<FJsonValueObject>(MeasuredWidgetToJson(Widget)));
+                if (Widget.bOccupiesLayout && !Widget.LayoutBounds.bValid)
+                {
+                    ++UnavailableLayoutBoundsCount;
+                }
             }
 
             TArray<TSharedPtr<FJsonValue>> Overlaps;
@@ -4272,6 +4838,7 @@ namespace MonolithUI::SpecActionsInternal
 
             TotalOverlapCount += Overlaps.Num();
             TotalSafeZoneViolationCount += SafeZoneViolations.Num();
+            TotalUnavailableLayoutBoundsCount += UnavailableLayoutBoundsCount;
 
             TSharedPtr<FJsonObject> ProfileOut = MakeShared<FJsonObject>();
             ProfileOut->SetStringField(TEXT("name"), Profile.Name);
@@ -4282,11 +4849,16 @@ namespace MonolithUI::SpecActionsInternal
             ProfileOut->SetStringField(TEXT("render_bounds_unavailable_reason"), TEXT("v1 does not own a virtual-window render/prepass geometry walk; compose editor.capture_scene_preview + ui.verify_widget_visual_artifacts for visual proof."));
             ProfileOut->SetBoolField(TEXT("check_overlap"), bCheckOverlap);
             ProfileOut->SetBoolField(TEXT("check_safe_zone"), bCheckSafeZone);
+            ProfileOut->SetNumberField(TEXT("layout_bounds_unavailable_count"), UnavailableLayoutBoundsCount);
             ProfileOut->SetObjectField(TEXT("safe_zone"), Profile.bHasSafeZone ? MarginToJson(Profile.SafeZone) : MakeShared<FJsonObject>());
             ProfileOut->SetArrayField(TEXT("widgets"), WidgetRows);
             ProfileOut->SetArrayField(TEXT("overlaps"), Overlaps);
             ProfileOut->SetArrayField(TEXT("safe_zone_violations"), SafeZoneViolations);
-            ProfileOut->SetStringField(TEXT("status"), (Overlaps.Num() == 0 && SafeZoneViolations.Num() == 0) ? TEXT("pass") : TEXT("findings_failed"));
+            ProfileOut->SetStringField(
+                TEXT("status"),
+                UnavailableLayoutBoundsCount > 0
+                    ? TEXT("measurement_unavailable")
+                    : ((Overlaps.Num() == 0 && SafeZoneViolations.Num() == 0) ? TEXT("pass") : TEXT("findings_failed")));
             ProfileRows.Add(MakeShared<FJsonValueObject>(ProfileOut));
         }
 
@@ -4303,16 +4875,23 @@ namespace MonolithUI::SpecActionsInternal
         RenderCheck->SetStringField(TEXT("message"), TEXT("Render bounds and render-transform divergence require a future owned virtual-window measurement pass. No cached designer geometry is used."));
         Checks.Add(MakeShared<FJsonValueObject>(RenderCheck));
 
-        const bool bPassed = TotalOverlapCount == 0 && TotalSafeZoneViolationCount == 0;
+        const bool bPassed = TotalOverlapCount == 0
+            && TotalSafeZoneViolationCount == 0
+            && TotalUnavailableLayoutBoundsCount == 0;
         TSharedPtr<FJsonObject> Summary = MakeShared<FJsonObject>();
         Summary->SetNumberField(TEXT("profile_count"), Profiles.Num());
         Summary->SetNumberField(TEXT("widgets_measured_per_profile"), DumpResult.NodesVisited);
         Summary->SetNumberField(TEXT("overlap_count"), TotalOverlapCount);
         Summary->SetNumberField(TEXT("safe_zone_violation_count"), TotalSafeZoneViolationCount);
+        Summary->SetNumberField(TEXT("layout_bounds_unavailable_count"), TotalUnavailableLayoutBoundsCount);
 
         Out->SetBoolField(TEXT("bSuccess"), bPassed);
         Out->SetBoolField(TEXT("ok"), bPassed);
-        Out->SetStringField(TEXT("status"), bPassed ? TEXT("pass") : TEXT("findings_failed"));
+        Out->SetStringField(
+            TEXT("status"),
+            TotalUnavailableLayoutBoundsCount > 0
+                ? TEXT("measurement_unavailable")
+                : (bPassed ? TEXT("pass") : TEXT("findings_failed")));
         Out->SetObjectField(TEXT("summary"), Summary);
         Out->SetArrayField(TEXT("profiles"), ProfileRows);
         Out->SetArrayField(TEXT("checks"), Checks);
@@ -5054,6 +5633,15 @@ namespace MonolithUI::SpecActionsInternal
         return true;
     }
 
+    static bool DirectChildWidgetNameSetsEqual(const FUISpecNode& A, const FUISpecNode& B)
+    {
+        TArray<FString> AChildren = GetDirectChildWidgetNames(A);
+        TArray<FString> BChildren = GetDirectChildWidgetNames(B);
+        AChildren.Sort();
+        BChildren.Sort();
+        return AChildren == BChildren;
+    }
+
     static void SetStringArrayField(
         const TSharedPtr<FJsonObject>& Obj,
         const FString& FieldName,
@@ -5256,10 +5844,11 @@ namespace MonolithUI::SpecActionsInternal
         return Node.Type.ToString().Equals(TEXT("ProgressBar"), ESearchCase::IgnoreCase);
     }
 
-    static bool StylePaddingHasIntent(const FMargin& Padding)
+    static bool StylePaddingHasIntent(const FUISpecStyle& Style)
     {
-        return Padding.GetTotalSpaceAlong<EOrientation::Orient_Horizontal>() != 0
-            || Padding.GetTotalSpaceAlong<EOrientation::Orient_Vertical>() != 0;
+        return Style.bPaddingSpecified
+            || Style.Padding.GetTotalSpaceAlong<EOrientation::Orient_Horizontal>() != 0
+            || Style.Padding.GetTotalSpaceAlong<EOrientation::Orient_Vertical>() != 0;
     }
 
     static bool StyleColorHasIntent(const FLinearColor& Color)
@@ -5280,7 +5869,7 @@ namespace MonolithUI::SpecActionsInternal
     static bool StyleHasBorderAddPatchIntent(const FUISpecStyle& Style)
     {
         return StyleColorHasIntent(Style.Background)
-            || StylePaddingHasIntent(Style.Padding);
+            || StylePaddingHasIntent(Style);
     }
 
     static bool StyleHasProgressBarAddPatchIntent(const FUISpecStyle& Style)
@@ -5363,7 +5952,7 @@ namespace MonolithUI::SpecActionsInternal
             {
                 Out->SetStringField(TEXT("background"), ColorToHexString(Style.Background));
             }
-            if (StylePaddingHasIntent(Style.Padding))
+            if (StylePaddingHasIntent(Style))
             {
                 Out->SetObjectField(TEXT("padding"), MarginToPatchObject(Style.Padding));
             }
@@ -5390,7 +5979,16 @@ namespace MonolithUI::SpecActionsInternal
         Patch->SetObjectField(TEXT("slot"), SlotToJson(Node.Slot));
         if (!Node.Content.Text.IsEmpty()
             || Node.Content.FontSize > 0.0f
+            || !Node.Content.FontFamily.IsEmpty()
+            || !Node.Content.Typeface.IsNone()
+            || Node.Content.LetterSpacing != 0
             || Node.Content.FontColor != FLinearColor::White
+            || Node.Content.Justification != FName(TEXT("Left"))
+            || Node.Content.OutlineSize != 0
+            || !Node.Content.OutlineColor.Equals(FLinearColor::Black)
+            || !Node.Content.ShadowOffset.Equals(FVector2D(1.f, 1.f), 0.001f)
+            || !Node.Content.ShadowColor.Equals(FLinearColor::Transparent)
+            || !FMath::IsNearlyEqual(Node.Content.LineHeightPercentage, 1.f, 0.001f)
             || !Node.Content.BrushPath.IsEmpty())
         {
             Patch->SetObjectField(TEXT("content"), ContentToJson(Node.Content));
@@ -5464,6 +6062,7 @@ namespace MonolithUI::SpecActionsInternal
         OwnerActions.Add(MakeShared<FJsonValueString>(TEXT("ui.remove_widget")));
         OwnerActions.Add(MakeShared<FJsonValueString>(TEXT("ui.rename_widget")));
         OwnerActions.Add(MakeShared<FJsonValueString>(TEXT("ui.set_text")));
+        OwnerActions.Add(MakeShared<FJsonValueString>(TEXT("ui.set_font")));
         OwnerActions.Add(MakeShared<FJsonValueString>(TEXT("ui.set_image")));
         OwnerActions.Add(MakeShared<FJsonValueString>(TEXT("ui.set_widget_property")));
         OwnerActions.Add(MakeShared<FJsonValueString>(TEXT("ui.set_effect_surface_*")));
@@ -5473,10 +6072,16 @@ namespace MonolithUI::SpecActionsInternal
 
     static TSharedPtr<FJsonObject> MakeMoveWidgetPatchCandidate(
         const FName& WidgetId,
-        const FName& DesiredParent)
+        const FName& DesiredParent,
+        const int32 DesiredSiblingIndex,
+        const FString& Reason = TEXT("desired_spec parent or sibling index differs from live WBP"))
     {
-        TSharedPtr<FJsonObject> Patch = MakePatchCandidate(TEXT("move_widget"), WidgetId.ToString(), TEXT("desired_spec parent differs from live WBP"));
+        TSharedPtr<FJsonObject> Patch = MakePatchCandidate(TEXT("move_widget"), WidgetId.ToString(), Reason);
         Patch->SetStringField(TEXT("new_parent_name"), DesiredParent.ToString());
+        if (DesiredSiblingIndex != INDEX_NONE)
+        {
+            Patch->SetNumberField(TEXT("sibling_index"), DesiredSiblingIndex);
+        }
         return Patch;
     }
 
@@ -5517,6 +6122,72 @@ namespace MonolithUI::SpecActionsInternal
             && FMath::IsNearlyEqual(A.Bottom, B.Bottom, Tolerance);
     }
 
+    static bool SpecNameEqualsResolvedClassDefault(
+        const FName& Current,
+        const bool bCurrentUsesClassDefault,
+        const FName& Desired)
+    {
+        return Current == Desired || (bCurrentUsesClassDefault && Desired.IsNone());
+    }
+
+    static bool SlotsNearlyEqualForPatchDiff(const FUISpecSlot& Current, const FUISpecSlot& Desired)
+    {
+        const bool bDesiredUsesDefaultSizeRule = Desired.SizeRule.IsNone();
+        return Current.AnchorPreset == Desired.AnchorPreset
+            && Current.Position.Equals(Desired.Position, 0.001f)
+            && Current.Size.Equals(Desired.Size, 0.001f)
+            && Current.Alignment.Equals(Desired.Alignment, 0.001f)
+            && (MarginsNearlyEqual(Current.Padding, Desired.Padding)
+                || (Current.bPaddingUsesClassDefault
+                    && !Desired.bPaddingSpecified
+                    && MarginsNearlyEqual(Desired.Padding, FMargin(0.f))))
+            && Current.bAutoSize == Desired.bAutoSize
+            && Current.ZOrder == Desired.ZOrder
+            && SpecNameEqualsResolvedClassDefault(
+                Current.HAlign,
+                Current.bHAlignUsesClassDefault,
+                Desired.HAlign)
+            && SpecNameEqualsResolvedClassDefault(
+                Current.VAlign,
+                Current.bVAlignUsesClassDefault,
+                Desired.VAlign)
+            && SpecNameEqualsResolvedClassDefault(
+                Current.SizeRule,
+                Current.bSizeRuleUsesClassDefault,
+                Desired.SizeRule)
+            && ((Current.bSizeRuleUsesClassDefault && bDesiredUsesDefaultSizeRule)
+                || FMath::IsNearlyEqual(Current.FillWeight, Desired.FillWeight, 0.001f));
+    }
+
+    static bool StyleOpacityNearlyEqual(const FUISpecStyle& Current, const FUISpecStyle& Desired)
+    {
+        return FMath::IsNearlyEqual(Current.Opacity, Desired.Opacity, 0.001f)
+            || (Current.bOpacityUsesClassDefault && FMath::IsNearlyEqual(Desired.Opacity, 1.f, 0.001f));
+    }
+
+    static bool StyleVisibilityNearlyEqual(const FUISpecStyle& Current, const FUISpecStyle& Desired)
+    {
+        return NormalizeStyleVisibilityToken(Current).Equals(
+                NormalizeStyleVisibilityToken(Desired),
+                ESearchCase::CaseSensitive)
+            || (Current.bVisibilityUsesClassDefault && Desired.Visibility.IsNone());
+    }
+
+    static bool StylePaddingNearlyEqual(const FUISpecStyle& Current, const FUISpecStyle& Desired)
+    {
+        return MarginsNearlyEqual(Current.Padding, Desired.Padding)
+            || (Current.bPaddingUsesClassDefault
+                && !Desired.bPaddingSpecified
+                && MarginsNearlyEqual(Desired.Padding, FMargin(0.f)));
+    }
+
+    static bool StyleBackgroundNearlyEqual(const FUISpecStyle& Current, const FUISpecStyle& Desired)
+    {
+        return LinearColorsNearlyEqual(Current.Background, Desired.Background)
+            || (Current.bBackgroundUsesClassDefault
+                && LinearColorsNearlyEqual(Desired.Background, FLinearColor::Transparent));
+    }
+
     static bool IsSpecImageNode(const FUISpecNode& Node)
     {
         return Node.Type.ToString().Equals(TEXT("Image"), ESearchCase::IgnoreCase);
@@ -5532,6 +6203,46 @@ namespace MonolithUI::SpecActionsInternal
         const FString Type = Node.Type.ToString();
         return Type.Equals(TEXT("TextBlock"), ESearchCase::IgnoreCase)
             || Type.Equals(TEXT("RichTextBlock"), ESearchCase::IgnoreCase);
+    }
+
+    static bool IsSpecTextBlockNode(const FUISpecNode& Node)
+    {
+        return Node.Type.ToString().Equals(TEXT("TextBlock"), ESearchCase::IgnoreCase);
+    }
+
+    static FUISpecContent CanonicalizeContentForComparison(const FUISpecNode& Node)
+    {
+        FUISpecContent Canonical = Node.Content;
+        if (!IsSpecTextBlockNode(Node))
+        {
+            return Canonical;
+        }
+
+        const UTextBlock* DefaultTextBlock = GetDefault<UTextBlock>();
+        if (!DefaultTextBlock)
+        {
+            return Canonical;
+        }
+
+        const FSlateFontInfo& DefaultFont = DefaultTextBlock->GetFont();
+        if (Canonical.FontSize <= 0.f)
+        {
+            Canonical.FontSize = static_cast<float>(DefaultFont.Size);
+        }
+        if (Canonical.FontFamily.IsEmpty() && DefaultFont.FontObject)
+        {
+            Canonical.FontFamily = DefaultFont.FontObject->GetPathName();
+        }
+        if (Canonical.Typeface.IsNone())
+        {
+            Canonical.Typeface = DefaultFont.TypefaceFontName;
+        }
+        return Canonical;
+    }
+
+    static TSharedPtr<FJsonObject> ContentToComparableJson(const FUISpecNode& Node)
+    {
+        return ContentToJson(CanonicalizeContentForComparison(Node));
     }
 
     static FString GetSpecBrushPropertyNameForTypeToken(const FString& WidgetClass)
@@ -5606,33 +6317,122 @@ namespace MonolithUI::SpecActionsInternal
         return false;
     }
 
+    static bool IsPatchableTextJustification(const FName& Justification)
+    {
+        const FString Token = Justification.ToString();
+        return Token == TEXT("Left") || Token == TEXT("Center") || Token == TEXT("Right");
+    }
+
     static TSharedPtr<FJsonObject> MakeSetTextPatchCandidate(
         const FUISpecNodeRef& DesiredRef,
         const FUISpecNode* CurrentNode)
     {
+        const FUISpecContent Desired = CanonicalizeContentForComparison(*DesiredRef.Node);
+        const FUISpecContent Current = CurrentNode
+            ? CanonicalizeContentForComparison(*CurrentNode)
+            : FUISpecContent();
         TSharedPtr<FJsonObject> Patch = MakePatchCandidate(TEXT("set_text"), DesiredRef.Node->Id.ToString(), TEXT("desired_spec text/font content differs from live WBP"));
-        if (!CurrentNode || CurrentNode->Content.Text != DesiredRef.Node->Content.Text)
+        if (!CurrentNode || Current.Text != Desired.Text)
         {
-            Patch->SetStringField(TEXT("text"), DesiredRef.Node->Content.Text);
+            Patch->SetStringField(TEXT("text"), Desired.Text);
         }
-        if (DesiredRef.Node->Content.FontSize > 0.0f
-            && (!CurrentNode || !FMath::IsNearlyEqual(CurrentNode->Content.FontSize, DesiredRef.Node->Content.FontSize, 0.1f)))
+        if (Desired.FontSize > 0.0f
+            && (!CurrentNode || !FMath::IsNearlyEqual(Current.FontSize, Desired.FontSize, 0.1f)))
         {
-            Patch->SetNumberField(TEXT("font_size"), DesiredRef.Node->Content.FontSize);
+            Patch->SetNumberField(TEXT("font_size"), Desired.FontSize);
         }
-        if (!CurrentNode || !LinearColorsNearlyEqual(CurrentNode->Content.FontColor, DesiredRef.Node->Content.FontColor))
+        if (!CurrentNode || !LinearColorsNearlyEqual(Current.FontColor, Desired.FontColor))
         {
-            Patch->SetStringField(TEXT("text_color"), ColorToHexString(DesiredRef.Node->Content.FontColor));
+            Patch->SetStringField(TEXT("text_color"), ColorToHexString(Desired.FontColor));
+        }
+        if ((!CurrentNode || Current.Justification != Desired.Justification)
+            && IsPatchableTextJustification(Desired.Justification))
+        {
+            Patch->SetStringField(TEXT("justification"), Desired.Justification.ToString());
         }
         return Patch;
     }
 
     static bool ContentHasPatchableTextDelta(const FUISpecNode& Current, const FUISpecNode& Desired)
     {
+        const FUISpecContent CurrentContent = CanonicalizeContentForComparison(Current);
+        const FUISpecContent DesiredContent = CanonicalizeContentForComparison(Desired);
         return IsSpecTextNode(Desired)
-            && (Current.Content.Text != Desired.Content.Text
-            || !FMath::IsNearlyEqual(Current.Content.FontSize, Desired.Content.FontSize, 0.1f)
-            || !LinearColorsNearlyEqual(Current.Content.FontColor, Desired.Content.FontColor));
+            && (CurrentContent.Text != DesiredContent.Text
+            || !FMath::IsNearlyEqual(CurrentContent.FontSize, DesiredContent.FontSize, 0.1f)
+            || !LinearColorsNearlyEqual(CurrentContent.FontColor, DesiredContent.FontColor)
+            || (CurrentContent.Justification != DesiredContent.Justification
+                && IsPatchableTextJustification(DesiredContent.Justification)));
+    }
+
+    static bool ContentHasPatchableFontDelta(const FUISpecNode& Current, const FUISpecNode& Desired)
+    {
+        const FUISpecContent CurrentContent = CanonicalizeContentForComparison(Current);
+        const FUISpecContent DesiredContent = CanonicalizeContentForComparison(Desired);
+        return IsSpecTextBlockNode(Desired)
+            && ((!DesiredContent.FontFamily.IsEmpty() && CurrentContent.FontFamily != DesiredContent.FontFamily)
+                || (!DesiredContent.Typeface.IsNone() && CurrentContent.Typeface != DesiredContent.Typeface)
+                || CurrentContent.LetterSpacing != DesiredContent.LetterSpacing
+                || CurrentContent.OutlineSize != DesiredContent.OutlineSize
+                || !LinearColorsNearlyEqual(CurrentContent.OutlineColor, DesiredContent.OutlineColor));
+    }
+
+    static TSharedPtr<FJsonObject> MakeSetFontPatchCandidate(
+        const FUISpecNodeRef& DesiredRef,
+        const FUISpecNode& CurrentNode)
+    {
+        const FUISpecContent Current = CanonicalizeContentForComparison(CurrentNode);
+        const FUISpecContent Desired = CanonicalizeContentForComparison(*DesiredRef.Node);
+        TSharedPtr<FJsonObject> Patch = MakePatchCandidate(
+            TEXT("set_font"),
+            DesiredRef.Node->Id.ToString(),
+            TEXT("desired_spec TextBlock font family/typeface/tracking/outline differs from live WBP"));
+
+        if (!Desired.FontFamily.IsEmpty() && Current.FontFamily != Desired.FontFamily)
+        {
+            Patch->SetStringField(TEXT("font_family"), Desired.FontFamily);
+        }
+        if (!Desired.Typeface.IsNone() && Current.Typeface != Desired.Typeface)
+        {
+            Patch->SetStringField(TEXT("typeface"), Desired.Typeface.ToString());
+        }
+        if (Current.LetterSpacing != Desired.LetterSpacing)
+        {
+            Patch->SetNumberField(TEXT("letter_spacing"), Desired.LetterSpacing);
+        }
+        if (Current.OutlineSize != Desired.OutlineSize)
+        {
+            Patch->SetNumberField(TEXT("outline_size"), Desired.OutlineSize);
+        }
+        if (!LinearColorsNearlyEqual(Current.OutlineColor, Desired.OutlineColor))
+        {
+            Patch->SetStringField(TEXT("outline_color"), ColorToHexString(Desired.OutlineColor));
+        }
+        return Patch;
+    }
+
+    static bool ContentHasUnsupportedTextStyleDelta(const FUISpecNode& Current, const FUISpecNode& Desired)
+    {
+        if (!IsSpecTextBlockNode(Desired))
+        {
+            return false;
+        }
+
+        const FUISpecContent CurrentContent = CanonicalizeContentForComparison(Current);
+        const FUISpecContent DesiredContent = CanonicalizeContentForComparison(Desired);
+        const bool bClearsFontFamily = !CurrentContent.FontFamily.IsEmpty() && DesiredContent.FontFamily.IsEmpty();
+        const bool bClearsTypeface = !CurrentContent.Typeface.IsNone() && DesiredContent.Typeface.IsNone();
+        const bool bUnsupportedJustification = CurrentContent.Justification != DesiredContent.Justification
+            && !IsPatchableTextJustification(DesiredContent.Justification);
+        return bClearsFontFamily
+            || bClearsTypeface
+            || bUnsupportedJustification
+            || !Vector2DsNearlyEqual(CurrentContent.ShadowOffset, DesiredContent.ShadowOffset)
+            || !LinearColorsNearlyEqual(CurrentContent.ShadowColor, DesiredContent.ShadowColor)
+            || !FMath::IsNearlyEqual(
+                CurrentContent.LineHeightPercentage,
+                DesiredContent.LineHeightPercentage,
+                0.001f);
     }
 
     static bool ContentHasPatchableImageDelta(const FUISpecNode& Current, const FUISpecNode& Desired)
@@ -5649,8 +6449,8 @@ namespace MonolithUI::SpecActionsInternal
 
     static bool StyleHasCommonPatchableDelta(const FUISpecStyle& Current, const FUISpecStyle& Desired)
     {
-        return !FMath::IsNearlyEqual(Current.Opacity, Desired.Opacity, 0.001f)
-            || !NormalizeStyleVisibilityToken(Current).Equals(NormalizeStyleVisibilityToken(Desired), ESearchCase::CaseSensitive);
+        return !StyleOpacityNearlyEqual(Current, Desired)
+            || !StyleVisibilityNearlyEqual(Current, Desired);
     }
 
     static bool StyleHasSizeBoxPatchableDelta(const FUISpecStyle& Current, const FUISpecStyle& Desired)
@@ -5665,13 +6465,13 @@ namespace MonolithUI::SpecActionsInternal
 
     static bool StyleHasBorderPatchableDelta(const FUISpecStyle& Current, const FUISpecStyle& Desired)
     {
-        return !MarginsNearlyEqual(Current.Padding, Desired.Padding)
-            || !LinearColorsNearlyEqual(Current.Background, Desired.Background);
+        return !StylePaddingNearlyEqual(Current, Desired)
+            || !StyleBackgroundNearlyEqual(Current, Desired);
     }
 
     static bool StyleHasProgressBarPatchableDelta(const FUISpecStyle& Current, const FUISpecStyle& Desired)
     {
-        return !LinearColorsNearlyEqual(Current.Background, Desired.Background);
+        return !StyleBackgroundNearlyEqual(Current, Desired);
     }
 
     static bool StyleHasTypeSpecificPatchableDelta(const FUISpecNode& CurrentNode, const FUISpecNode& DesiredNode)
@@ -5716,8 +6516,8 @@ namespace MonolithUI::SpecActionsInternal
             || DiffersUnlessSizeBoxSets(Current.MinDesiredHeight, Desired.MinDesiredHeight, Desired.bOverrideMinDesiredHeight)
             || DiffersUnlessSizeBoxSets(Current.MaxDesiredWidth, Desired.MaxDesiredWidth, Desired.bOverrideMaxDesiredWidth)
             || DiffersUnlessSizeBoxSets(Current.MaxDesiredHeight, Desired.MaxDesiredHeight, Desired.bOverrideMaxDesiredHeight)
-            || (!MarginsNearlyEqual(Current.Padding, Desired.Padding) && !bBorder)
-            || (!LinearColorsNearlyEqual(Current.Background, Desired.Background) && !bBorder && !bProgressBar)
+            || (!StylePaddingNearlyEqual(Current, Desired) && !bBorder)
+            || (!StyleBackgroundNearlyEqual(Current, Desired) && !bBorder && !bProgressBar)
             || !LinearColorsNearlyEqual(Current.BorderColor, Desired.BorderColor)
             || !FMath::IsNearlyEqual(Current.BorderWidth, Desired.BorderWidth, 0.001f)
             || (Current.bUseCustomSize != Desired.bUseCustomSize && !(bSizeBox && (Desired.Width > 0.0f || Desired.Height > 0.0f)))
@@ -5751,14 +6551,13 @@ namespace MonolithUI::SpecActionsInternal
             TEXT("desired_spec UMG style differs from live WBP"));
         Patch->SetStringField(TEXT("widget_class"), DesiredNode.Type.ToString());
 
-        if (!FMath::IsNearlyEqual(CurrentNode.Style.Opacity, DesiredNode.Style.Opacity, 0.001f))
+        if (!StyleOpacityNearlyEqual(CurrentNode.Style, DesiredNode.Style))
         {
             Patch->SetNumberField(TEXT("opacity"), DesiredNode.Style.Opacity);
         }
 
-        const FString CurrentVisibility = NormalizeStyleVisibilityToken(CurrentNode.Style);
         const FString DesiredVisibility = NormalizeStyleVisibilityToken(DesiredNode.Style);
-        if (!CurrentVisibility.Equals(DesiredVisibility, ESearchCase::CaseSensitive))
+        if (!StyleVisibilityNearlyEqual(CurrentNode.Style, DesiredNode.Style))
         {
             Patch->SetStringField(TEXT("visibility"), DesiredVisibility);
         }
@@ -5768,17 +6567,17 @@ namespace MonolithUI::SpecActionsInternal
         }
         if (IsSpecBorderNode(DesiredNode))
         {
-            if (!LinearColorsNearlyEqual(CurrentNode.Style.Background, DesiredNode.Style.Background))
+            if (!StyleBackgroundNearlyEqual(CurrentNode.Style, DesiredNode.Style))
             {
                 Patch->SetStringField(TEXT("background"), ColorToHexString(DesiredNode.Style.Background));
             }
-            if (!MarginsNearlyEqual(CurrentNode.Style.Padding, DesiredNode.Style.Padding))
+            if (!StylePaddingNearlyEqual(CurrentNode.Style, DesiredNode.Style))
             {
                 Patch->SetObjectField(TEXT("padding"), MarginToPatchObject(DesiredNode.Style.Padding));
             }
         }
         if (IsSpecProgressBarNode(DesiredNode)
-            && !LinearColorsNearlyEqual(CurrentNode.Style.Background, DesiredNode.Style.Background))
+            && !StyleBackgroundNearlyEqual(CurrentNode.Style, DesiredNode.Style))
         {
             Patch->SetStringField(TEXT("background"), ColorToHexString(DesiredNode.Style.Background));
         }
@@ -6130,6 +6929,8 @@ namespace MonolithUI::SpecActionsInternal
 
         FString RequestId;
         Params->TryGetStringField(TEXT("request_id"), RequestId);
+        bool bRequired = false;
+        Params->TryGetBoolField(TEXT("required"), bRequired);
 
         FUISpecDocument DesiredDoc;
         FUISpecValidationResult DesiredParseValidation;
@@ -6149,6 +6950,7 @@ namespace MonolithUI::SpecActionsInternal
         Out->SetStringField(TEXT("schema_version"), TEXT("ui_spec_diff.v1"));
         Out->SetStringField(TEXT("asset_path"), AssetPath);
         Out->SetStringField(TEXT("compare_mode"), CompareMode);
+        Out->SetBoolField(TEXT("required"), bRequired);
         if (!RequestId.IsEmpty())
         {
             Out->SetStringField(TEXT("request_id"), RequestId);
@@ -6227,7 +7029,11 @@ namespace MonolithUI::SpecActionsInternal
 
             if (CurrentRef->ParentId != DesiredRef.ParentId)
             {
-                TSharedPtr<FJsonObject> Patch = MakeMoveWidgetPatchCandidate(WidgetId, DesiredRef.ParentId);
+                TSharedPtr<FJsonObject> Patch = MakeMoveWidgetPatchCandidate(
+                    WidgetId,
+                    DesiredRef.ParentId,
+                    DesiredRef.ChildIndex,
+                    TEXT("desired_spec parent differs from live WBP"));
                 Changes.Add(MakeShared<FJsonValueObject>(MakeDiffRow(
                     TEXT("move"), WidgetId, DesiredRef.Path, TEXT("parent"),
                     TEXT("Widget parent differs."), Patch)));
@@ -6235,9 +7041,41 @@ namespace MonolithUI::SpecActionsInternal
                 IncrementCount(Counts, TEXT("move"));
             }
 
+            if (DirectChildWidgetNameSetsEqual(*CurrentRef->Node, *DesiredRef.Node)
+                && !DirectChildWidgetNamesEqual(*CurrentRef->Node, *DesiredRef.Node))
+            {
+                const TArray<FString> CurrentOrder = GetDirectChildWidgetNames(*CurrentRef->Node);
+                const TArray<FString> DesiredOrder = GetDirectChildWidgetNames(*DesiredRef.Node);
+                TArray<TSharedPtr<FJsonValue>> OrderPatches;
+                OrderPatches.Reserve(DesiredOrder.Num());
+                for (int32 DesiredIndex = 0; DesiredIndex < DesiredOrder.Num(); ++DesiredIndex)
+                {
+                    TSharedPtr<FJsonObject> OrderPatch = MakeMoveWidgetPatchCandidate(
+                        FName(*DesiredOrder[DesiredIndex]),
+                        WidgetId,
+                        DesiredIndex,
+                        TEXT("desired_spec sibling order differs from live WBP"));
+                    OrderPatch->SetStringField(TEXT("expected_parent_name"), WidgetId.ToString());
+                    OrderPatches.Add(MakeShared<FJsonValueObject>(OrderPatch));
+                    PatchCandidates.Add(MakeShared<FJsonValueObject>(OrderPatch));
+                }
+                TSharedPtr<FJsonObject> Row = MakeDiffRow(
+                    TEXT("child_order"),
+                    WidgetId,
+                    DesiredRef.Path,
+                    TEXT("children"),
+                    TEXT("Sibling child order differs; exact same-parent reorder patches preserve each child's slot object."),
+                    OrderPatches.Num() > 0 ? OrderPatches[0]->AsObject() : nullptr);
+                SetStringArrayField(Row, TEXT("current_order"), CurrentOrder);
+                SetStringArrayField(Row, TEXT("desired_order"), DesiredOrder);
+                Row->SetArrayField(TEXT("patch_candidates"), OrderPatches);
+                Changes.Add(MakeShared<FJsonValueObject>(Row));
+                IncrementCount(Counts, TEXT("child_order"));
+            }
+
             if (CompareMode != TEXT("structural"))
             {
-                if (!JsonObjectsEqual(SlotToJson(CurrentRef->Node->Slot), SlotToJson(DesiredRef.Node->Slot)))
+                if (!SlotsNearlyEqualForPatchDiff(CurrentRef->Node->Slot, DesiredRef.Node->Slot))
                 {
                     TSharedPtr<FJsonObject> Patch = MakeSlotPatchCandidate(DesiredRef);
                     Changes.Add(MakeShared<FJsonValueObject>(MakeDiffRow(
@@ -6247,13 +7085,22 @@ namespace MonolithUI::SpecActionsInternal
                     IncrementCount(Counts, TEXT("slot"));
                 }
 
-                if (!JsonObjectsEqual(ContentToJson(CurrentRef->Node->Content), ContentToJson(DesiredRef.Node->Content)))
+                if (!JsonObjectsEqual(ContentToComparableJson(*CurrentRef->Node), ContentToComparableJson(*DesiredRef.Node)))
                 {
                     TSharedPtr<FJsonObject> Patch;
                     if (ContentHasPatchableTextDelta(*CurrentRef->Node, *DesiredRef.Node))
                     {
                         Patch = MakeSetTextPatchCandidate(DesiredRef, CurrentRef->Node);
                         PatchCandidates.Add(MakeShared<FJsonValueObject>(Patch));
+                    }
+                    if (ContentHasPatchableFontDelta(*CurrentRef->Node, *DesiredRef.Node))
+                    {
+                        TSharedPtr<FJsonObject> FontPatch = MakeSetFontPatchCandidate(DesiredRef, *CurrentRef->Node);
+                        if (!Patch.IsValid())
+                        {
+                            Patch = FontPatch;
+                        }
+                        PatchCandidates.Add(MakeShared<FJsonValueObject>(FontPatch));
                     }
                     if (ContentHasPatchableImageDelta(*CurrentRef->Node, *DesiredRef.Node))
                     {
@@ -6284,7 +7131,17 @@ namespace MonolithUI::SpecActionsInternal
                         TSharedPtr<FJsonObject> UnsupportedRow = MakeShared<FJsonObject>();
                         UnsupportedRow->SetStringField(TEXT("widget_name"), WidgetId.ToString());
                         UnsupportedRow->SetStringField(TEXT("field"), TEXT("content"));
-                        UnsupportedRow->SetStringField(TEXT("reason"), TEXT("Only TextBlock text/font/color content, Image brushPath, and Border brushPath currently have automatic patch candidates; use explicit owner actions for placeholder changes."));
+                        UnsupportedRow->SetStringField(TEXT("reason"), TEXT("Only TextBlock text/font/color/justification plus font family/typeface/tracking/outline, Image brushPath, and Border brushPath currently have automatic patch candidates; use explicit owner actions for placeholder changes."));
+                        Unsupported.Add(MakeShared<FJsonValueObject>(UnsupportedRow));
+                    }
+                    if (ContentHasUnsupportedTextStyleDelta(*CurrentRef->Node, *DesiredRef.Node))
+                    {
+                        TSharedPtr<FJsonObject> UnsupportedRow = MakeShared<FJsonObject>();
+                        UnsupportedRow->SetStringField(TEXT("widget_name"), WidgetId.ToString());
+                        UnsupportedRow->SetStringField(TEXT("field"), TEXT("content.textStyle"));
+                        UnsupportedRow->SetStringField(
+                            TEXT("reason"),
+                            TEXT("TextBlock shadow, lineHeightPercentage, invariant justification, and clearing font family/typeface are exported and diffed but do not yet have a safe UISpec patch owner-action route."));
                         Unsupported.Add(MakeShared<FJsonValueObject>(UnsupportedRow));
                     }
                     Changes.Add(MakeShared<FJsonValueObject>(MakeDiffRow(
@@ -6374,7 +7231,30 @@ namespace MonolithUI::SpecActionsInternal
         }
 
         const bool bChanged = Changes.Num() > 0;
-        Out->SetStringField(TEXT("status"), bChanged ? TEXT("different") : TEXT("identical"));
+        const bool bRequiredMismatch = bRequired && bChanged;
+        if (bRequiredMismatch)
+        {
+            for (const TSharedPtr<FJsonValue>& ChangeValue : Changes)
+            {
+                const TSharedPtr<FJsonObject> Change = ChangeValue.IsValid() ? ChangeValue->AsObject() : nullptr;
+                if (Change.IsValid())
+                {
+                    Change->SetBoolField(TEXT("required"), true);
+                    Change->SetStringField(TEXT("severity"), TEXT("high"));
+                }
+            }
+        }
+        Out->SetBoolField(TEXT("bSuccess"), !bRequiredMismatch);
+        Out->SetBoolField(TEXT("ok"), !bRequiredMismatch);
+        Out->SetStringField(
+            TEXT("status"),
+            bRequiredMismatch ? TEXT("failed") : (bChanged ? TEXT("different") : TEXT("identical")));
+        if (bRequiredMismatch)
+        {
+            Out->SetStringField(
+                TEXT("failure_reason"),
+                TEXT("required=true and the live Widget Blueprint does not match desired_spec."));
+        }
         Out->SetBoolField(TEXT("changed"), bChanged);
         Out->SetNumberField(TEXT("change_count"), Changes.Num());
         Out->SetNumberField(TEXT("patch_candidate_count"), PatchCandidates.Num());
@@ -7315,6 +8195,129 @@ namespace MonolithUI::SpecActionsInternal
         }
     }
 
+    static void PreflightMoveWidgetPatchStep(
+        UWidgetBlueprint* WBP,
+        const FUISpecPatchStep& Step,
+        TArray<TSharedPtr<FJsonValue>>& Unsupported)
+    {
+        if (!WBP || !WBP->WidgetTree || !Step.Params.IsValid())
+        {
+            return;
+        }
+
+        const FString WidgetName = GetFirstStringField(Step.Params, TEXT("widget_name"), TEXT("widget"), TEXT("name"));
+        const FString NewParentName = GetFirstStringField(Step.Params, TEXT("new_parent_name"), TEXT("new_parent"), TEXT("parent_name"));
+        if (WidgetName.IsEmpty() || NewParentName.IsEmpty())
+        {
+            AddUnsupportedPatchField(
+                Unsupported,
+                Step.SourceIndex,
+                Step.Type,
+                TEXT("move_widget patch step requires widget_name and new_parent_name."),
+                WidgetName.IsEmpty() ? TEXT("widget_name") : TEXT("new_parent_name"),
+                WidgetName);
+            return;
+        }
+
+        UWidget* Widget = WBP->WidgetTree->FindWidget(FName(*WidgetName));
+        if (!Widget)
+        {
+            AddUnsupportedPatchField(
+                Unsupported,
+                Step.SourceIndex,
+                Step.Type,
+                FString::Printf(TEXT("move_widget target '%s' does not exist in the current WBP."), *WidgetName),
+                TEXT("widget_name"),
+                WidgetName);
+            return;
+        }
+
+        UWidget* NewParentWidget = WBP->WidgetTree->FindWidget(FName(*NewParentName));
+        UPanelWidget* NewParent = Cast<UPanelWidget>(NewParentWidget);
+        if (!NewParent)
+        {
+            AddUnsupportedPatchField(
+                Unsupported,
+                Step.SourceIndex,
+                Step.Type,
+                FString::Printf(TEXT("move_widget parent '%s' does not exist or is not a UPanelWidget."), *NewParentName),
+                TEXT("new_parent_name"),
+                WidgetName,
+                NewParentWidget ? NewParentWidget->GetClass()->GetName() : TEXT("none"));
+            return;
+        }
+
+        int32 CurrentIndex = INDEX_NONE;
+        UPanelWidget* CurrentParent = UWidgetTree::FindWidgetParent(Widget, CurrentIndex);
+        if (!CurrentParent || !Widget->Slot)
+        {
+            AddUnsupportedPatchField(
+                Unsupported,
+                Step.SourceIndex,
+                Step.Type,
+                FString::Printf(TEXT("move_widget target '%s' has no direct panel parent slot."), *WidgetName),
+                TEXT("widget_name"),
+                WidgetName);
+            return;
+        }
+
+        const FString ExpectedParentName = GetFirstStringField(Step.Params, TEXT("expected_parent_name"));
+        if (!ExpectedParentName.IsEmpty() && CurrentParent->GetFName() != FName(*ExpectedParentName))
+        {
+            AddUnsupportedPatchField(
+                Unsupported,
+                Step.SourceIndex,
+                Step.Type,
+                FString::Printf(
+                    TEXT("move_widget target '%s' is under '%s', not asserted parent '%s'."),
+                    *WidgetName,
+                    *CurrentParent->GetName(),
+                    *ExpectedParentName),
+                TEXT("expected_parent_name"),
+                WidgetName,
+                CurrentParent->GetClass()->GetName());
+        }
+
+        if (CurrentParent != NewParent && !NewParent->CanAddMoreChildren())
+        {
+            AddUnsupportedPatchField(
+                Unsupported,
+                Step.SourceIndex,
+                Step.Type,
+                FString::Printf(TEXT("move_widget parent '%s' cannot accept another child."), *NewParentName),
+                TEXT("new_parent_name"),
+                WidgetName,
+                NewParent->GetClass()->GetName());
+        }
+
+        if (Step.Params->HasField(TEXT("sibling_index")))
+        {
+            double RawSiblingIndex = 0.0;
+            const int32 MaximumSiblingIndex = CurrentParent == NewParent
+                ? CurrentParent->GetChildrenCount() - 1
+                : NewParent->GetChildrenCount();
+            if (!Step.Params->TryGetNumberField(TEXT("sibling_index"), RawSiblingIndex)
+                || !FMath::IsFinite(RawSiblingIndex)
+                || RawSiblingIndex < 0.0
+                || RawSiblingIndex > static_cast<double>(MAX_int32)
+                || RawSiblingIndex != FMath::FloorToDouble(RawSiblingIndex)
+                || RawSiblingIndex > static_cast<double>(MaximumSiblingIndex))
+            {
+                AddUnsupportedPatchField(
+                    Unsupported,
+                    Step.SourceIndex,
+                    Step.Type,
+                    FString::Printf(
+                        TEXT("move_widget sibling_index must be an integer in [0, %d] for target panel '%s'."),
+                        MaximumSiblingIndex,
+                        *NewParentName),
+                    TEXT("sibling_index"),
+                    WidgetName,
+                    NewParent->GetClass()->GetName());
+            }
+        }
+    }
+
     static void PreflightMovePreservedChildStep(
         UWidgetBlueprint* WBP,
         const FUISpecPatchStep& Step,
@@ -7413,6 +8416,7 @@ namespace MonolithUI::SpecActionsInternal
     {
         bool bHasSlotSensitiveStep = false;
         bool bHasPreserveReplacementStep = false;
+        bool bHasMoveWidgetStep = false;
         for (const FUISpecPatchStep& Step : Steps)
         {
             if (Step.Namespace == TEXT("ui") &&
@@ -7427,9 +8431,13 @@ namespace MonolithUI::SpecActionsInternal
             {
                 bHasPreserveReplacementStep = true;
             }
+            if (Step.Namespace == TEXT("ui") && Step.Type == TEXT("move_widget"))
+            {
+                bHasMoveWidgetStep = true;
+            }
         }
 
-        if (!bHasSlotSensitiveStep && !bHasPreserveReplacementStep)
+        if (!bHasSlotSensitiveStep && !bHasPreserveReplacementStep && !bHasMoveWidgetStep)
         {
             return true;
         }
@@ -7451,7 +8459,11 @@ namespace MonolithUI::SpecActionsInternal
             {
                 PreflightSetSlotPatchStep(WBP, Step, Unsupported);
             }
-            if (Step.Namespace == TEXT("ui") && Step.Type == TEXT("add_replacement_widget"))
+            if (Step.Namespace == TEXT("ui") && Step.Type == TEXT("move_widget"))
+            {
+                PreflightMoveWidgetPatchStep(WBP, Step, Unsupported);
+            }
+            else if (Step.Namespace == TEXT("ui") && Step.Type == TEXT("add_replacement_widget"))
             {
                 PreflightAddReplacementWidgetStep(WBP, Step, Unsupported);
             }
@@ -7514,10 +8526,43 @@ namespace MonolithUI::SpecActionsInternal
             CopyPatchFieldAlias(*Content, TextParams, TEXT("text"), TEXT("text"));
             CopyPatchFieldAlias(*Content, TextParams, TEXT("font_size"), TEXT("font_size"), TEXT("fontSize"));
             CopyPatchFieldAlias(*Content, TextParams, TEXT("text_color"), TEXT("text_color"), TEXT("fontColor"));
+            CopyPatchFieldAlias(*Content, TextParams, TEXT("justification"), TEXT("justification"));
             SetBoolIfMissing(TextParams, TEXT("compile"), bCompileEachMutation);
-            if (TextParams->HasField(TEXT("text")) || TextParams->HasField(TEXT("font_size")) || TextParams->HasField(TEXT("text_color")))
+            if (TextParams->HasField(TEXT("text"))
+                || TextParams->HasField(TEXT("font_size"))
+                || TextParams->HasField(TEXT("text_color"))
+                || TextParams->HasField(TEXT("justification")))
             {
                 AddPatchStep(OutSteps, TEXT("set_text"), TEXT("ui"), TEXT("set_text"), Index, TextParams);
+            }
+
+            TSharedPtr<FJsonObject> FontParams = MakeShared<FJsonObject>();
+            FontParams->SetStringField(TEXT("asset_path"), AssetPath);
+            FontParams->SetStringField(TEXT("widget_name"), WidgetName);
+            CopyPatchFieldAlias(*Content, FontParams, TEXT("font_family"), TEXT("font_family"), TEXT("fontFamily"));
+            CopyPatchFieldAlias(*Content, FontParams, TEXT("typeface"), TEXT("typeface"));
+            CopyPatchFieldAlias(*Content, FontParams, TEXT("letter_spacing"), TEXT("letter_spacing"), TEXT("letterSpacing"));
+            CopyPatchFieldAlias(*Content, FontParams, TEXT("outline_size"), TEXT("outline_size"), TEXT("outlineSize"));
+            CopyPatchFieldAlias(*Content, FontParams, TEXT("outline_color"), TEXT("outline_color"), TEXT("outlineColor"));
+            SetBoolIfMissing(FontParams, TEXT("compile"), bCompileEachMutation);
+            if (FontParams->HasField(TEXT("font_family"))
+                || FontParams->HasField(TEXT("typeface"))
+                || FontParams->HasField(TEXT("letter_spacing"))
+                || FontParams->HasField(TEXT("outline_size"))
+                || FontParams->HasField(TEXT("outline_color")))
+            {
+                AddPatchStep(OutSteps, TEXT("set_font"), TEXT("ui"), TEXT("set_font"), Index, FontParams);
+            }
+
+            if ((*Content)->HasField(TEXT("shadowOffset"))
+                || (*Content)->HasField(TEXT("shadowColor"))
+                || (*Content)->HasField(TEXT("lineHeightPercentage")))
+            {
+                AddUnsupportedPatchField(
+                    OutUnsupported,
+                    Index,
+                    OpForDiagnostics + TEXT(".content.textStyle"),
+                    TEXT("TextBlock shadow and lineHeightPercentage are represented in UISpec but do not yet have a safe patch owner-action route."));
             }
 
             const FString BrushPath = GetFirstStringField(*Content, TEXT("brush_path"), TEXT("brushPath"));
@@ -7876,6 +8921,19 @@ namespace MonolithUI::SpecActionsInternal
                 CopyPatchFieldAlias(Entry, Params, TEXT("text_color"), TEXT("text_color"), TEXT("fontColor"));
                 SetBoolIfMissing(Params, TEXT("compile"), bCompileEachMutation);
                 AddPatchStep(OutSteps, TEXT("set_text"), TEXT("ui"), TEXT("set_text"), Index, Params);
+            }
+            else if (Op == TEXT("set_font"))
+            {
+                TSharedPtr<FJsonObject> Params = MakePatchStepParamsWithAsset(Entry, AssetPath);
+                SetStringIfMissing(Params, TEXT("widget_name"), GetFirstStringField(Entry, TEXT("widget_name"), TEXT("widget"), TEXT("name")));
+                CopyPatchFieldAlias(Entry, Params, TEXT("font_size"), TEXT("font_size"), TEXT("fontSize"));
+                CopyPatchFieldAlias(Entry, Params, TEXT("font_family"), TEXT("font_family"), TEXT("fontFamily"));
+                CopyPatchFieldAlias(Entry, Params, TEXT("typeface"), TEXT("typeface"));
+                CopyPatchFieldAlias(Entry, Params, TEXT("letter_spacing"), TEXT("letter_spacing"), TEXT("letterSpacing"));
+                CopyPatchFieldAlias(Entry, Params, TEXT("outline_size"), TEXT("outline_size"), TEXT("outlineSize"));
+                CopyPatchFieldAlias(Entry, Params, TEXT("outline_color"), TEXT("outline_color"), TEXT("outlineColor"));
+                SetBoolIfMissing(Params, TEXT("compile"), bCompileEachMutation);
+                AddPatchStep(OutSteps, TEXT("set_font"), TEXT("ui"), TEXT("set_font"), Index, Params);
             }
             else if (Op == TEXT("set_brush"))
             {
@@ -8829,6 +9887,14 @@ namespace MonolithUI::SpecActionsInternal
 } // namespace MonolithUI::SpecActionsInternal
 
 
+TSharedPtr<FJsonObject> FUISpecJsonSerializer::DocumentToJson(const FUISpecDocument& Document)
+{
+    // Keep one projection owner: this is the exact helper used by
+    // ui.dump_ui_spec, now exposed for native proof/fingerprint consumers.
+    return MonolithUI::SpecActionsInternal::DocumentToJson(Document);
+}
+
+
 // Action register entry-point — called once from FMonolithUIModule::StartupModule.
 // Declaration lives in Actions/MonolithUISpecActions.h.
 void MonolithUI::FSpecActions::Register(FMonolithToolRegistry& Registry)
@@ -8886,13 +9952,15 @@ void MonolithUI::FSpecActions::Register(FMonolithToolRegistry& Registry)
         TEXT("ui"), TEXT("diff_ui_spec"),
         TEXT("Read-only UISpec diff against a live Widget Blueprint. Dumps the current WBP through the canonical "
              "FUISpec serializer, validates desired_spec, compares structural/properties/full modes, and emits "
-             "stable-name patch candidates plus graph-binding preservation evidence for safe owner-action operations. "
+             "stable-name patch candidates, exact sibling-order move_widget candidates with sibling_index, and graph-binding preservation evidence for safe owner-action operations. "
+             "Set required=true to make any mismatch a semantic failure while preserving transport-success evidence. "
              "This replaces raw export/apply JSON round-trips with explicit, inspectable design-data deltas."),
         FMonolithActionHandler::CreateStatic(&HandleDiffUISpec),
         FParamSchemaBuilder()
             .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint long-package path to diff."))
             .Required(TEXT("desired_spec"), TEXT("object"), TEXT("Desired FUISpecDocument JSON, often from ui.convert_markup_to_ui_spec or a design-data converter."))
             .Optional(TEXT("compare_mode"), TEXT("string"), TEXT("structural, properties, or full. Default structural."), TEXT("structural"))
+            .Optional(TEXT("required"), TEXT("boolean"), TEXT("When true, any mismatch returns ok=false/status=failed and marks change rows required/high for workflow semantic gates. Default false preserves advisory diff behavior."), TEXT("false"))
             .Optional(TEXT("request_id"), TEXT("string"), TEXT("Caller-supplied UUID echoed back in the response."))
             .Build());
 
@@ -8900,13 +9968,13 @@ void MonolithUI::FSpecActions::Register(FMonolithToolRegistry& Registry)
         TEXT("ui"), TEXT("apply_ui_spec_patch"),
         TEXT("Confirm-gated UISpec patch workflow for existing Widget Blueprints. Accepts explicit stable-widget-name "
              "patch ops and routes them through existing Monolith owner actions such as ui.add_widget, ui.remove_widget, "
-             "ui.move_widget, confirm-gated replace_widget decomposition through ui.remove_widget + ui.add_widget or preserve_children temp-add + ui.move_widget + ui.remove_widget + ui.rename_widget, ui.set_slot_property, ui.set_widget_property, ui.set_text, ui.set_image, ui.set_brush for supported non-Image brush resources, common and typed style routing via ui.set_widget_property, ui.apply_style_to_widget, ui.set_effect_surface_* owner actions, "
+             "ui.move_widget (including fail-closed sibling_index reorders that preserve same-parent slot instances), confirm-gated replace_widget decomposition through ui.remove_widget + ui.add_widget or preserve_children temp-add + ui.move_widget + ui.remove_widget + ui.rename_widget, ui.set_slot_property, ui.set_widget_property, ui.set_text, ui.set_font, ui.set_image, ui.set_brush for supported non-Image brush resources, common and typed style routing via ui.set_widget_property, ui.apply_style_to_widget, ui.set_effect_surface_* owner actions, "
              "ui.compile_widget, and asset.save_asset. "
              "Dry-run is the default; mutating calls require confirm=true. Unsupported ops are reported, not converted to raw writes."),
         FMonolithActionHandler::CreateStatic(&HandleApplyUISpecPatch),
         FParamSchemaBuilder()
             .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint long-package path to patch."))
-            .Required(TEXT("patch"), TEXT("array"), TEXT("Array of patch op objects. Supported op values: add_widget, replace_widget, remove_widget, move_widget, set_slot_property, set_widget_property, set_text, set_image, set_brush, set_style, apply_style_to_widget, and existing set_effect_surface_* owner actions. replace_widget accepts confirm_replace=true and optional preserve_children=true with child_widget_names[]."))
+            .Required(TEXT("patch"), TEXT("array"), TEXT("Array of patch op objects. Supported op values: add_widget, replace_widget, remove_widget, move_widget, set_slot_property, set_widget_property, set_text, set_font, set_image, set_brush, set_style, apply_style_to_widget, and existing set_effect_surface_* owner actions. replace_widget accepts confirm_replace=true and optional preserve_children=true with child_widget_names[]."))
             .Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Plan patch steps without mutation. Default true."), TEXT("true"))
             .Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true when dry_run=false."), TEXT("false"))
             .Optional(TEXT("compile"), TEXT("boolean"), TEXT("Compile once after applying patch steps. Default true."), TEXT("true"))
@@ -8937,6 +10005,31 @@ void MonolithUI::FSpecActions::Register(FMonolithToolRegistry& Registry)
             .Optional(TEXT("emit_defaults"), TEXT("boolean"), TEXT("Include fields that match engine defaults. Default false."), TEXT("false"))
             .Optional(TEXT("request_id"), TEXT("string"), TEXT("Caller-supplied UUID echoed back in the response."))
             .Build());
+
+    Registry.RegisterAction(
+        TEXT("ui"), TEXT("compute_widget_uispec_fingerprint"),
+        TEXT("Read-only fail-closed UISpec identity for an exact Widget Blueprint set. Accepts 1..128 exact "
+             "Widget Blueprint package/object paths, strictly loads and validates every UWidgetBlueprint and its "
+             "UWidgetBlueprintGeneratedClass back-reference, then delegates canonical per-WBP and aggregate SHA-256 "
+             "calculation to FMonolithUIResidentUISpecFingerprint. Returns package-sorted widgets[] plus "
+             "aggregate_sha256. Any invalid path, load/type/back-reference mismatch, duplicate package, serializer, "
+             "canonicalization, or SHA-256 failure rejects the entire call; no partial rows, legacy hash, or fallback."),
+        FMonolithActionHandler::CreateStatic(&HandleComputeWidgetUISpecFingerprint),
+        FParamSchemaBuilder()
+            .Required(
+                TEXT("asset_paths"),
+                TEXT("array"),
+                TEXT("Required array of 1..128 exact UWidgetBlueprint long-package or object paths. Entries must be non-empty strings."))
+            .Build(),
+        TEXT("Spec Builder"),
+        MakeExplicitUISpecFingerprintReadOnlyPolicy());
+
+    Registry.SetActionSearchMetadata(
+        TEXT("ui"),
+        TEXT("compute_widget_uispec_fingerprint"),
+        { TEXT("UISpec fingerprint"), TEXT("Widget Blueprint identity"), TEXT("aggregate UISpec SHA-256"), TEXT("visual evidence UISpec pin"), TEXT("canonical WBP spec hash") },
+        { TEXT("compute_uispec_fingerprint"), TEXT("hash_widget_uispecs"), TEXT("get_widget_uispec_identity") },
+        { TEXT("compute one aggregate UISpec SHA-256 for seven production Widget Blueprints"), TEXT("pin visual evidence to exact Widget Blueprint UISpec identity") });
 
     Registry.RegisterAction(
         TEXT("ui"), TEXT("audit_widget_layout"),

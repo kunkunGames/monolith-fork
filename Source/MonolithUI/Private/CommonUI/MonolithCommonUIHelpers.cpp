@@ -11,6 +11,7 @@
 #include "UObject/SavePackage.h"
 #include "WidgetBlueprint.h"
 #include "Blueprint/WidgetTree.h"
+#include "CommonActionWidget.h"
 #include "Components/Widget.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
@@ -20,6 +21,80 @@
 
 namespace MonolithCommonUI
 {
+	FActionWidgetBindingEvidence ResolveActionWidgetBindingEvidence(
+		const bool bHasLegacyInputActions,
+		const bool bHasDesignerEnhancedInputAction,
+		const FString& BindingModeMetadata,
+		const bool bMetadataIsOnCompatibleBindWidgetProperty)
+	{
+		FActionWidgetBindingEvidence Evidence;
+		Evidence.bHasLegacyInputActions = bHasLegacyInputActions;
+		Evidence.bHasDesignerEnhancedInputAction = bHasDesignerEnhancedInputAction;
+		Evidence.BindingModeMetadata = BindingModeMetadata;
+		Evidence.bHasRuntimeEnhancedInputContract = bMetadataIsOnCompatibleBindWidgetProperty
+			&& BindingModeMetadata.Equals(RuntimeEnhancedInputBindingMode, ESearchCase::CaseSensitive);
+		Evidence.bHasInvalidBindingModeMetadata = !BindingModeMetadata.IsEmpty()
+			&& !Evidence.bHasRuntimeEnhancedInputContract;
+
+		if (Evidence.bHasLegacyInputActions)
+		{
+			Evidence.BindingSource = TEXT("legacy_input_actions");
+		}
+		else if (Evidence.bHasDesignerEnhancedInputAction)
+		{
+			Evidence.BindingSource = TEXT("designer_enhanced_input");
+		}
+		else if (Evidence.bHasRuntimeEnhancedInputContract)
+		{
+			Evidence.BindingSource = TEXT("runtime_enhanced_input_metadata");
+		}
+
+		Evidence.bBound = Evidence.bHasLegacyInputActions
+			|| Evidence.bHasDesignerEnhancedInputAction
+			|| Evidence.bHasRuntimeEnhancedInputContract;
+		return Evidence;
+	}
+
+	FActionWidgetBindingEvidence EvaluateActionWidgetBinding(
+		const UWidgetBlueprint* WidgetBlueprint,
+		UCommonActionWidget* ActionWidget)
+	{
+		if (!ActionWidget)
+		{
+			return FActionWidgetBindingEvidence();
+		}
+
+		bool bHasLegacyInputActions = false;
+		if (FArrayProperty* InputActionsProperty = FindFProperty<FArrayProperty>(
+			UCommonActionWidget::StaticClass(), TEXT("InputActions")))
+		{
+			FScriptArrayHelper InputActions(
+				InputActionsProperty,
+				InputActionsProperty->ContainerPtrToValuePtr<void>(ActionWidget));
+			bHasLegacyInputActions = InputActions.Num() > 0;
+		}
+
+		FString BindingModeMetadata;
+		bool bMetadataIsOnCompatibleBindWidgetProperty = false;
+		if (WidgetBlueprint && WidgetBlueprint->GeneratedClass)
+		{
+			if (const FObjectPropertyBase* BindWidgetProperty = CastField<FObjectPropertyBase>(
+				WidgetBlueprint->GeneratedClass->FindPropertyByName(ActionWidget->GetFName())))
+			{
+				BindingModeMetadata = BindWidgetProperty->GetMetaData(TEXT("CommonActionBindingMode"));
+				bMetadataIsOnCompatibleBindWidgetProperty = BindWidgetProperty->HasMetaData(TEXT("BindWidget"))
+					&& BindWidgetProperty->PropertyClass
+					&& BindWidgetProperty->PropertyClass->IsChildOf(UCommonActionWidget::StaticClass());
+			}
+		}
+
+		return ResolveActionWidgetBindingEvidence(
+			bHasLegacyInputActions,
+			ActionWidget->GetEnhancedInputAction() != nullptr,
+			BindingModeMetadata,
+			bMetadataIsOnCompatibleBindWidgetProperty);
+	}
+
 	FMonolithActionResult CreateAsset(
 		UClass* AssetClass,
 		const FString& PackagePath,

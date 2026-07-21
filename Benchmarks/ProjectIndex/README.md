@@ -127,8 +127,8 @@ The generator produces 314 tasks from the checked-in schema-v2 fixtures: 176
 
 The scoring branches, strict fixture loading, mutable-root rejection,
 disk/source-control gates, provider-unavailable no-overwrite behavior,
-deterministic prefix-balanced selection, status preflight, strict MCP response
-shape, transport gates, and success/failure artifact lifecycle have 22 offline
+deterministic prefix-balanced selection, status/fixture-provenance preflight,
+strict MCP response shape, transport gates, and success/failure artifact lifecycle have 23 offline
 tests that need no live editor or network:
 
 ```powershell
@@ -161,6 +161,13 @@ Before scoring, the runner removes stale known outputs and requires a valid
 object at the top level; parse failures, top-level lists/scalars, protocol errors,
 and runner exceptions invalidate the run immediately instead of becoming index
 quality scores.
+
+For a canonical comparable run, the checked-in `live_fixtures` schema version,
+project name, and catalog version must exactly match the live status identity.
+A stale catalog version aborts at `fixture_provenance_preflight` before the first
+task and writes only failure/partial diagnostics. Refresh against a healthy live
+endpoint and regenerate; do not rewrite the provenance field by hand when the
+endpoint is unavailable.
 
 Transport failures use the shared benchmark policy:
 

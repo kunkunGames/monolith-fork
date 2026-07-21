@@ -1,11 +1,15 @@
-#include "MonolithAudioMetaSoundActions.h"
+﻿#include "MonolithAudioMetaSoundActions.h"
 #include "MonolithAudioActionUtils.h"
 
 #if WITH_METASOUND
 
+#include "MonolithAudioMetaSoundAssetResolver.h"
+#include "MonolithAudioMetaSoundMutationContract.h"
+#include "MonolithAudioOneShotBuilderContract.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 #include "MonolithJsonUtils.h"
+#include "Misc/ScopeExit.h"
 
 // MetaSound Engine
 #include "MetasoundBuilderSubsystem.h"
@@ -31,6 +35,7 @@
 #include "AssetRegistry/IAssetRegistry.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Sound/SoundWave.h"
+#include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "Editor.h"
 
@@ -183,14 +188,9 @@ bool FMonolithAudioMetaSoundActions::ParseNodeClassName(
 
 UMetaSoundBuilderBase* FMonolithAudioMetaSoundActions::GetBuilderForAsset(const FString& AssetPath, FString& OutError)
 {
-	// Load the MetaSound asset
-	IAssetRegistry& AssetRegistry = IAssetRegistry::GetChecked();
-	FAssetData AssetData = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(AssetPath));
-	UObject* Loaded = AssetData.IsValid() ? AssetData.GetAsset() : StaticLoadObject(UObject::StaticClass(), nullptr, *AssetPath);
-
+	UObject* Loaded = MonolithAudio::MetaSoundAssetResolver::LoadMetaSoundAsset(AssetPath, OutError);
 	if (!Loaded)
 	{
-		OutError = FString::Printf(TEXT("MetaSound asset not found at '%s'"), *AssetPath);
 		return nullptr;
 	}
 
@@ -325,14 +325,14 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("connect_metasound_nodes"),
-		TEXT("Connect two nodes in a MetaSound graph by name"),
+		TEXT("Connect two nodes in a MetaSound graph by exact pin name, verify the edge, and persist the asset package"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::ConnectMetaSoundNodes),
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Required(TEXT("from_node"), TEXT("string"), TEXT("Source node GUID or graph input/output name"))
-			.Required(TEXT("from_output"), TEXT("string"), TEXT("Output pin name on source node"))
+			.Required(TEXT("from_output"), TEXT("string"), TEXT("Exact live output pin name on source node (for example, UE 5.8 mono Wave Player uses 'Out Mono')"))
 			.Required(TEXT("to_node"), TEXT("string"), TEXT("Destination node GUID or graph input/output name"))
-			.Required(TEXT("to_input"), TEXT("string"), TEXT("Input pin name on destination node"))
+			.Required(TEXT("to_input"), TEXT("string"), TEXT("Exact live input pin name on destination node"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("disconnect_metasound_nodes"),
@@ -577,7 +577,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::CreateMetaSoundSource(cons
 	TArray<FMetaSoundBuilderNodeInputHandle> AudioOutInputs;
 	EMetaSoundBuilderResult BuildResult;
 
-	FName BuilderName = FName(*FString::Printf(TEXT("Monolith_%s"), *AssetName));
+	const FName BuilderName(*FString::Printf(
+		TEXT("Monolith_%s_%s"),
+		*AssetName,
+		*FGuid::NewGuid().ToString(EGuidFormats::Digits)));
 
 	UMetaSoundSourceBuilder* Builder = Sub.CreateSourceBuilder(
 		BuilderName, OnPlayOutput, OnFinishedInput, AudioOutInputs,
@@ -587,6 +590,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::CreateMetaSoundSource(cons
 	{
 		return FMonolithActionResult::Error(TEXT("Failed to create MetaSound source builder"));
 	}
+	ON_SCOPE_EXIT
+	{
+		Sub.UnregisterSourceBuilder(BuilderName);
+	};
 
 	// Auto-layout nodes before persisting
 	Builder->InitNodeLocations();
@@ -633,13 +640,20 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::CreateMetaSoundPatch(const
 	UMetaSoundBuilderSubsystem& Sub = UMetaSoundBuilderSubsystem::GetChecked();
 	EMetaSoundBuilderResult BuildResult;
 
-	FName BuilderName = FName(*FString::Printf(TEXT("Monolith_%s"), *AssetName));
+	const FName BuilderName(*FString::Printf(
+		TEXT("Monolith_%s_%s"),
+		*AssetName,
+		*FGuid::NewGuid().ToString(EGuidFormats::Digits)));
 	UMetaSoundPatchBuilder* Builder = Sub.CreatePatchBuilder(BuilderName, BuildResult);
 
 	if (!Builder || BuildResult != EMetaSoundBuilderResult::Succeeded)
 	{
 		return FMonolithActionResult::Error(TEXT("Failed to create MetaSound patch builder"));
 	}
+	ON_SCOPE_EXIT
+	{
+		Sub.UnregisterPatchBuilder(BuilderName);
+	};
 
 	Builder->InitNodeLocations();
 
@@ -838,18 +852,60 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::ConnectMetaSoundNodes(cons
 		return FMonolithActionResult::Error(FString::Printf(TEXT("to_node: %s"), *Error));
 	}
 
-	// Use name-based ConnectNodes for ergonomics
-	EMetaSoundBuilderResult Result;
-	Builder->ConnectNodes(SourceHandle, FName(*FromOutput), DestHandle, FName(*ToInput), Result);
+	UObject& AttachedAsset = Builder->GetBuilder().CastDocumentObjectChecked<UObject>();
+	UPackage* const AttachedPackage = AttachedAsset.GetOutermost();
+	const bool bPackageWasDirty = AttachedPackage && AttachedPackage->IsDirty();
 
-	if (Result != EMetaSoundBuilderResult::Succeeded)
+	MonolithAudio::MetaSoundMutationContract::FNamedConnection Connection;
+	if (!MonolithAudio::MetaSoundMutationContract::ConnectNamedPinsAndVerify(
+		*Builder,
+		SourceHandle,
+		FName(*FromOutput),
+		DestHandle,
+		FName(*ToInput),
+		Connection,
+		Error))
 	{
-		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("Failed to connect %s.%s -> %s.%s"), *FromNode, *FromOutput, *ToNode, *ToInput));
+		return FMonolithActionResult::Error(Error);
+	}
+
+	MonolithAudio::MetaSoundMutationContract::FPersistedAsset PersistedAsset;
+	if (!MonolithAudio::MetaSoundMutationContract::PersistAttachedAsset(*Builder, PersistedAsset, Error))
+	{
+		// The disk package was not changed. Restore the in-memory builder to its
+		// pre-call topology so a failed action cannot leave a hidden unsaved edge.
+		if (!Connection.bAlreadyConnected)
+		{
+			EMetaSoundBuilderResult RollbackResult = EMetaSoundBuilderResult::Failed;
+			Builder->DisconnectNodes(Connection.Output, Connection.Input, RollbackResult);
+			if (RollbackResult != EMetaSoundBuilderResult::Succeeded)
+			{
+				Error += TEXT(" In-memory rollback also failed; reload the asset before retrying.");
+			}
+			else
+			{
+				FString SynchronizeError;
+				if (!MonolithAudio::MetaSoundMutationContract::SynchronizeAttachedAsset(*Builder, SynchronizeError))
+				{
+					Error += FString::Printf(TEXT(" Rollback synchronization failed: %s"), *SynchronizeError);
+				}
+			}
+		}
+		if (AttachedPackage && !bPackageWasDirty)
+		{
+			AttachedPackage->SetDirtyFlag(false);
+		}
+		return FMonolithActionResult::Error(Error);
 	}
 
 	auto ResultJson = MakeShared<FJsonObject>();
 	ResultJson->SetBoolField(TEXT("success"), true);
+	ResultJson->SetBoolField(TEXT("edge_verified"), true);
+	ResultJson->SetBoolField(TEXT("already_connected"), Connection.bAlreadyConnected);
+	ResultJson->SetBoolField(TEXT("saved"), true);
+	ResultJson->SetStringField(TEXT("asset_path"), PersistedAsset.AssetPath);
+	ResultJson->SetStringField(TEXT("package_name"), PersistedAsset.PackageName);
+	ResultJson->SetStringField(TEXT("saved_file"), PersistedAsset.Filename);
 	return FMonolithActionResult::Success(ResultJson);
 }
 
@@ -1135,13 +1191,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::GetMetaSoundGraph(const TS
 		return FMonolithActionResult::Error(Err);
 	}
 
-	// Load asset and access document via IMetaSoundDocumentInterface
-	IAssetRegistry& AssetRegistry = IAssetRegistry::GetChecked();
-	FAssetData AssetData = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(AssetPath));
-	UObject* Loaded = AssetData.IsValid() ? AssetData.GetAsset() : StaticLoadObject(UObject::StaticClass(), nullptr, *AssetPath);
+	UObject* Loaded = MonolithAudio::MetaSoundAssetResolver::LoadMetaSoundAsset(AssetPath, Err);
 	if (!Loaded)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("MetaSound asset not found at '%s'"), *AssetPath));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	IMetaSoundDocumentInterface* DocInterface = Cast<IMetaSoundDocumentInterface>(Loaded);
@@ -1265,12 +1318,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::ListMetaSoundConnections(c
 		return FMonolithActionResult::Error(Err);
 	}
 
-	IAssetRegistry& AssetRegistry = IAssetRegistry::GetChecked();
-	FAssetData AssetData = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(AssetPath));
-	UObject* Loaded = AssetData.IsValid() ? AssetData.GetAsset() : StaticLoadObject(UObject::StaticClass(), nullptr, *AssetPath);
+	UObject* Loaded = MonolithAudio::MetaSoundAssetResolver::LoadMetaSoundAsset(AssetPath, Err);
 	if (!Loaded)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("MetaSound asset not found at '%s'"), *AssetPath));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	IMetaSoundDocumentInterface* DocInterface = Cast<IMetaSoundDocumentInterface>(Loaded);
@@ -1674,12 +1725,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::GetMetaSoundInputNames(con
 		return FMonolithActionResult::Error(Err);
 	}
 
-	IAssetRegistry& AssetRegistry = IAssetRegistry::GetChecked();
-	FAssetData AssetData = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(AssetPath));
-	UObject* Loaded = AssetData.IsValid() ? AssetData.GetAsset() : StaticLoadObject(UObject::StaticClass(), nullptr, *AssetPath);
+	UObject* Loaded = MonolithAudio::MetaSoundAssetResolver::LoadMetaSoundAsset(AssetPath, Err);
 	if (!Loaded)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("MetaSound asset not found at '%s'"), *AssetPath));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	IMetaSoundDocumentInterface* DocInterface = Cast<IMetaSoundDocumentInterface>(Loaded);
@@ -2516,7 +2565,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::CreateOneShotSfx(const TSh
 
 	UMetaSoundBuilderSubsystem& Sub = UMetaSoundBuilderSubsystem::GetChecked();
 	EMetaSoundBuilderResult BuildResult;
-	FName BuilderName = FName(*FString::Printf(TEXT("Monolith_%s"), *AssetName));
+	const FName BuilderName(*FString::Printf(
+		TEXT("Monolith_%s_%s"),
+		*AssetName,
+		*FGuid::NewGuid().ToString(EGuidFormats::Digits)));
 
 	FMetaSoundBuilderNodeOutputHandle OnPlayOutput;
 	FMetaSoundBuilderNodeInputHandle OnFinishedInput;
@@ -2530,46 +2582,25 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::CreateOneShotSfx(const TSh
 	{
 		return FMonolithActionResult::Error(TEXT("Failed to create source builder"));
 	}
-
-	// Add Wave Player node
-	EMetaSoundBuilderResult NodeResult;
-	FMetaSoundNodeHandle WavePlayer = Builder->AddNodeByClassName(
-		FMetasoundFrontendClassName(FName("UE"), FName("Wave Player"), FName("Mono")),
-		NodeResult, 1);
-
-	if (NodeResult != EMetaSoundBuilderResult::Succeeded)
+	ON_SCOPE_EXIT
 	{
-		return FMonolithActionResult::Error(TEXT("Failed to add Wave Player node"));
-	}
+		Sub.UnregisterSourceBuilder(BuilderName);
+	};
 
-	// Set Wave Asset input
-	FMetaSoundBuilderNodeInputHandle WaveInput = Builder->FindNodeInputByName(
-		WavePlayer, FName("Wave Asset"), NodeResult);
-	if (NodeResult == EMetaSoundBuilderResult::Succeeded)
+	MonolithAudio::OneShotBuilderContract::FMonoWavePlayerGraph Graph;
+	FString GraphBuildError;
+	if (!MonolithAudio::OneShotBuilderContract::BuildMonoWavePlayerGraph(
+		*Builder,
+		*Wave,
+		OnPlayOutput,
+		OnFinishedInput,
+		AudioOutInputs,
+		Graph,
+		GraphBuildError))
 	{
-		FMetasoundFrontendLiteral WaveLiteral = Sub.CreateObjectMetaSoundLiteral(Wave);
-		Builder->SetNodeInputDefault(WaveInput, WaveLiteral, NodeResult);
-	}
-
-	// Connect OnPlay -> Wave Player Play (handle-based — OnPlayOutput is an output handle)
-	FMetaSoundBuilderNodeInputHandle PlayInput = Builder->FindNodeInputByName(WavePlayer, FName("Play"), NodeResult);
-	if (NodeResult == EMetaSoundBuilderResult::Succeeded)
-	{
-		Builder->ConnectNodes(OnPlayOutput, PlayInput, NodeResult);
-	}
-
-	// Connect Wave Player Audio -> Audio Output
-	FMetaSoundBuilderNodeOutputHandle AudioOutput = Builder->FindNodeOutputByName(WavePlayer, FName("Audio"), NodeResult);
-	if (NodeResult == EMetaSoundBuilderResult::Succeeded && AudioOutInputs.Num() > 0)
-	{
-		Builder->ConnectNodes(AudioOutput, AudioOutInputs[0], NodeResult);
-	}
-
-	// Connect Wave Player OnFinished -> OnFinished
-	FMetaSoundBuilderNodeOutputHandle PlayerFinished = Builder->FindNodeOutputByName(WavePlayer, FName("On Finished"), NodeResult);
-	if (NodeResult == EMetaSoundBuilderResult::Succeeded)
-	{
-		Builder->ConnectNodes(PlayerFinished, OnFinishedInput, NodeResult);
+		// The builder and SoundWave are transient. Do not call BuildToAsset when
+		// the graph contract fails, so no incomplete package can be persisted.
+		return FMonolithActionResult::Error(GraphBuildError);
 	}
 
 	Builder->InitNodeLocations();

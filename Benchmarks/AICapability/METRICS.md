@@ -23,6 +23,11 @@ Weights sum to 1.0 (asserted at import). Each `*_rate` is the fraction of that c
 (`build_static_tasks`) and a run-time warning (`aggregate`), so a dropped category can never silently
 cap the composite while the sum-to-1.0 assert still passes.
 
+`catalog_schema_rate` is a separate unweighted diagnostic over every schema-discovery row
+(`read_schema` + `edit_schema` + `catalog_schema`). Its denominator is the complete 182-action live
+catalog. Keeping it outside `WEIGHTS` preserves the historical seven-dimension score formula and the
+curated read/edit denominators while making full-catalog schema regressions directly visible.
+
 ## Task inventory (generated)
 
 | Category | Tasks | Weight |
@@ -34,7 +39,14 @@ cap the composite while the sum-to-1.0 assert still passes.
 | `edit_schema` | 28 | 0.10 |
 | `discovery` | 6 | 0.10 |
 | `read_schema` | 16 | 0.08 |
-| **Total** | **74** | **1.00** |
+| `catalog_schema` | 138 | unweighted diagnostic |
+| **Total** | **212** | **1.00 weighted** |
+
+The first 74 rows are the unchanged curated corpus (`AIB-001` through `AIB-074`).
+Generation appends only the 138 live actions not already represented by the 44 curated schema rows,
+in stable action-name order as `AIB-075` through `AIB-212`. The manifest records 182 live actions,
+182 schema-covered actions, zero uncovered actions, the catalog version, and the normalized action-set
+SHA-256.
 
 The tenth `edit_execute` task is the composite-scaffold guard added 2026-07-11:
 `create_bt_from_template(patrol)` against `BT_BenchTemplateScratch` with delete-first resets of both
@@ -47,16 +59,16 @@ derived Blackboard are deleted and independently read back as explicit `not foun
 
 > **StateTree surface — compiled out (`WITH_STATETREE=0`).** The `ai` namespace registers the
 > StateTree actions `create_st_from_template`, `lint_state_tree`, `runtime_get_st_active_states`,
-> `runtime_send_st_event`, `get_crowd_lane_state`, `set_crowd_lane_state` in the catalog (verified
-> against `Saved/Monolith/LogAnalysis/_ai_catalog.txt`, 182 ai actions), but on **this build
+> `runtime_send_st_event`, `get_crowd_lane_state`, `set_crowd_lane_state` in the live 182-action
+> catalog recorded by the manifest's version and normalized action-set hash, but on **this build
 > StateTree is compiled out (`WITH_STATETREE=0`)**, so `create_st_from_template` and
 > `lint_state_tree` are **runtime stubs** that return `isError` "StateTree module not available
 > (WITH_STATETREE=0)". No StateTree EXECUTE or lint task can pass on this build. There is also no
 > granular StateTree authoring action (`create_state_tree` / `add_st_state` / `compile_state_tree` /
 > `add_st_task` / `add_st_transition` / `*_st_state` / `get_state_tree` / `list_state_trees` /
 > `validate_state_tree`). StateTree is therefore covered **only** by schema-presence tasks — one
-> `edit_schema` (`create_st_from_template`) and one `read_schema` (`lint_state_tree`), which assert
-> the action is registered in the catalog (true even when stubbed). It drives **no** `edit_execute`,
+> curated `edit_schema` (`create_st_from_template`), one curated `read_schema` (`lint_state_tree`),
+> and read-only `catalog_schema` rows for the live runtime/crowd actions. It drives **no** `edit_execute`,
 > `error_path`, or `compile_gate` task; the falsifiable gate and the BT error_path use Behavior Tree
 > validate actions, which DO execute.
 
@@ -161,14 +173,16 @@ There is no `create_state_tree` duplicate row: the `ai` namespace has no `create
 (StateTree creation goes through `create_st_from_template`, which does not surface the
 `EnsureAssetPathFree` duplicate wording), so StateTree is intentionally omitted from this category.
 
-### `edit_schema` (strict) / `read_schema` (lenient) — weights 0.10 / 0.08
+### `edit_schema` (strict) / `read_schema` (lenient) / `catalog_schema` — weights 0.10 / 0.08 / unweighted
 
-Both call `monolith_discover({action, mode:"schema", namespace:"ai"})`. Pass = the schema carries
-`planning_signals` (non-empty list) and `skill` metadata. `edit_schema` additionally **fails on
-`isError`** (e.g. an unknown/renamed action), making it a coverage tripwire: all 28 edit names and
-16 read names must still resolve — and because every one of them is verified to exist in
-`_ai_catalog.txt`, an `isError` here means a real regression, never an invented action. These are the
-only non-executed categories and carry the least weight.
+All three call `monolith_discover({action, mode:"schema", namespace:"ai"})`. Pass = the schema
+carries `planning_signals` (non-empty list) and `skill` metadata. `edit_schema` and
+`catalog_schema` also **fail on `isError`** (e.g. an unknown/renamed action); `read_schema` retains
+its historical lenient behavior. Together, all 28 curated edit names, 16 curated read names, and
+138 generated catalog names must resolve. Generation obtains those names only from a stable,
+paginated live catalog and refuses to write when a curated action disappears, the summary count
+differs, an action is duplicated, or `catalog_version` changes. These are the only non-executed
+categories; the generated coverage is diagnostic rather than weighted.
 
 ### `discovery` — weight 0.10
 
@@ -211,14 +225,17 @@ failures, and runner exceptions produce `run_failure.json` without `summary.json
   issue) + a real clean-BT valid verdict — none satisfiable by a schema-only or reject-everything
   server.
 - **No silent category drop:** an empty weighted category is a build-time error and run-time warning.
+- **No silent catalog shrink:** canonical generation requires exact live-action/schema-task set
+  equality and writes no files on missing curated actions, count mismatch, duplicates, or catalog drift.
 - **Idempotent:** edits are delete-first or self-cleaning; the validate gate uses isolated scratch
   Behavior Trees created with already-exists tolerance, so re-runs stay bounded.
 
-## Offline validation
+## Generation and offline validation
 
 ```powershell
-python Scripts/ai_capability_benchmark.py generate          # rebuilds tasks.jsonl + manifest.json
-python Scripts/test_ai_capability_benchmark.py              # 30 scorer + run-integrity asserts, no editor
+python Scripts/test_ai_capability_benchmark.py              # 45 offline contract tests, no editor
+python Scripts/ai_capability_benchmark.py generate `
+  --mcp-url http://localhost:9316/mcp                    # live catalog-bound canonical regeneration
 ```
 
 The self-test fabricates MCP envelopes
@@ -226,4 +243,7 @@ The self-test fabricates MCP envelopes
 failure mode scores LOW while a healthy response scores high (stub-always-valid empty-BT gate → fail,
 empty-BT `valid==false` with no error issue → fail, isError validate → fail, stub-always-invalid
 validate → fail, silent-no-op edit → fail, generic reject-all error → fail, silent second create →
-fail; and the healthy counterparts, including the empty-BT `valid==false` + error issue → pass).
+fail; and the healthy counterparts, including the empty-BT `valid==false` + error issue → pass). It
+also fabricates stable and drifting 182-action catalogs to prove the 74-row prefix is unchanged,
+138 sorted discovery-only rows close 182/182 coverage, StateTree additions cannot become executable,
+and any invalid generation leaves existing canonical files untouched.

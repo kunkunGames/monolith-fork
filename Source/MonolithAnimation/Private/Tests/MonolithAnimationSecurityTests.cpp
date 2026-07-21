@@ -1,7 +1,6 @@
 #include "CoreMinimal.h"
 #include "Misc/AutomationTest.h"
 #include "MonolithAnimationActions.h"
-#include "MonolithLocomotionAuthoringActions.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithToolRegistry.h"
 #include "Animation/AnimMontage.h"
@@ -40,13 +39,78 @@ namespace
 		}
 		return Montage;
 	}
+
+	TArray<TSharedPtr<FJsonValue>> MakePoseNumberArray(const TArray<double>& Values)
+	{
+		TArray<TSharedPtr<FJsonValue>> Result;
+		Result.Reserve(Values.Num());
+		for (const double Value : Values)
+		{
+			Result.Add(MakeShared<FJsonValueNumber>(Value));
+		}
+		return Result;
+	}
+
+	TSharedPtr<FJsonObject> MakeCompletePoseBone(const FString& BoneName, double LocationX = 0.0)
+	{
+		TSharedPtr<FJsonObject> Bone = MakeShared<FJsonObject>();
+		Bone->SetStringField(TEXT("name"), BoneName);
+		Bone->SetArrayField(TEXT("location"), MakePoseNumberArray({ LocationX, 0.0, 0.0 }));
+		Bone->SetArrayField(TEXT("rotation"), MakePoseNumberArray({ 0.0, 0.0, 0.0, 1.0 }));
+		Bone->SetArrayField(TEXT("scale"), MakePoseNumberArray({ 1.0, 1.0, 1.0 }));
+		return Bone;
+	}
+
+	TSharedPtr<FJsonObject> MakePoseFrame(const TArray<TSharedPtr<FJsonObject>>& Bones)
+	{
+		TArray<TSharedPtr<FJsonValue>> BoneValues;
+		BoneValues.Reserve(Bones.Num());
+		for (const TSharedPtr<FJsonObject>& Bone : Bones)
+		{
+			BoneValues.Add(MakeShared<FJsonValueObject>(Bone));
+		}
+		TSharedPtr<FJsonObject> Frame = MakeShared<FJsonObject>();
+		Frame->SetArrayField(TEXT("bones"), BoneValues);
+		return Frame;
+	}
+
+	TSharedPtr<FJsonObject> MakeBuildSequenceParams(const TArray<TSharedPtr<FJsonObject>>& Frames)
+	{
+		TArray<TSharedPtr<FJsonValue>> FrameValues;
+		FrameValues.Reserve(Frames.Num());
+		for (const TSharedPtr<FJsonObject>& Frame : Frames)
+		{
+			FrameValues.Add(MakeShared<FJsonValueObject>(Frame));
+		}
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Tests/Monolith/AnimWeaver_BuildSequence"));
+		Params->SetStringField(TEXT("skeleton_path"), TEXT("/Game/Anims/MySkeleton"));
+		Params->SetArrayField(TEXT("frames"), FrameValues);
+		return Params;
+	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAnimationSecurityPathTest, "Monolith.Security.Animation.ValidatePackagePath", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithAnimationSecurityPathTest::RunTest(const FString& Parameters)
 {
-	FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry::Get());
+	const TArray<FString> RequiredActions = {
+		TEXT("create_blend_space"),
+		TEXT("create_pose_search_schema"),
+		TEXT("create_pose_search_database"),
+		TEXT("create_normalization_set"),
+		TEXT("create_ik_rig"),
+		TEXT("create_ik_retargeter")
+	};
+	for (const FString& ActionName : RequiredActions)
+	{
+		if (!TestTrue(
+			*FString::Printf(TEXT("animation.%s is registered by module startup"), *ActionName),
+			FMonolithToolRegistry::Get().HasAction(TEXT("animation"), ActionName)))
+		{
+			return false;
+		}
+	}
 
 	TArray<FString> MalformedPaths = {
 		TEXT(""), // Empty path
@@ -117,7 +181,12 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAnimationParamGuardSetSequenceProperti
 
 bool FMonolithAnimationParamGuardSetSequencePropertiesTest::RunTest(const FString& Parameters)
 {
-	FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry::Get());
+	if (!TestTrue(
+		TEXT("animation.set_sequence_properties is registered by module startup"),
+		FMonolithToolRegistry::Get().HasAction(TEXT("animation"), TEXT("set_sequence_properties"))))
+	{
+		return false;
+	}
 
 	const FString AssetPath = FString::Printf(
 		TEXT("/Game/Tests/Monolith/Animation/AS_ParamGuard_%s"),
@@ -283,28 +352,111 @@ bool FMonolithAnimMontageCreateFromSectionsParamGuardTest::RunTest(const FString
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithBuildSequenceFromPosesParamGuardTest, "Monolith.ParamGuard.Animation.BuildSequenceFromPoses", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithBuildSequenceFromPosesParamGuardTest::RunTest(const FString& Parameters)
 {
-	const FString AssetPath = TEXT("/Game/Tests/Monolith/AnimWeaver_BuildSequence");
+	TArray<TPair<FString, TSharedPtr<FJsonValue>>> InvalidBoneNames;
+	InvalidBoneNames.Emplace(TEXT("number"), MakeShared<FJsonValueNumber>(123.0));
+	InvalidBoneNames.Emplace(TEXT("boolean"), MakeShared<FJsonValueBoolean>(true));
+	InvalidBoneNames.Emplace(TEXT("null"), MakeShared<FJsonValueNull>());
+	InvalidBoneNames.Emplace(
+		TEXT("object"),
+		MakeShared<FJsonValueObject>(MakeShared<FJsonObject>()));
+	InvalidBoneNames.Emplace(
+		TEXT("array"),
+		MakeShared<FJsonValueArray>(TArray<TSharedPtr<FJsonValue>>()));
+	InvalidBoneNames.Emplace(TEXT("missing"), TSharedPtr<FJsonValue>());
 
-	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
-	Params->SetStringField(TEXT("asset_path"), AssetPath);
-	Params->SetStringField(TEXT("skeleton_path"), TEXT("/Game/Anims/MySkeleton"));
+	const FString ExpectedNameError =
+		TEXT("Parameter 'name' in bone must be a string (frames[0].bones[0])");
+	for (const TPair<FString, TSharedPtr<FJsonValue>>& InvalidCase : InvalidBoneNames)
+	{
+		TSharedPtr<FJsonObject> Bone = MakeCompletePoseBone(TEXT("root"));
+		if (InvalidCase.Value.IsValid())
+		{
+			Bone->SetField(TEXT("name"), InvalidCase.Value);
+		}
+		else
+		{
+			Bone->RemoveField(TEXT("name"));
+		}
 
-	TArray<TSharedPtr<FJsonValue>> FramesArr;
-	TSharedPtr<FJsonObject> FrameObj = MakeShared<FJsonObject>();
+		const FMonolithActionResult Result =
+			FMonolithAnimationActions::HandleBuildSequenceFromPoses(
+				MakeBuildSequenceParams({ MakePoseFrame({ Bone }) }));
+		TestFalse(
+			*FString::Printf(TEXT("%s bone name must be rejected"), *InvalidCase.Key),
+			Result.bSuccess);
+		TestEqual(
+			*FString::Printf(TEXT("%s bone name uses InvalidParams"), *InvalidCase.Key),
+			Result.ErrorCode,
+			FMonolithJsonUtils::ErrInvalidParams);
+		TestEqual(
+			*FString::Printf(TEXT("%s bone name reports the exact nested field"), *InvalidCase.Key),
+			Result.ErrorMessage,
+			ExpectedNameError);
+	}
 
-	TArray<TSharedPtr<FJsonValue>> BonesArr;
-	TSharedPtr<FJsonObject> BoneObj = MakeShared<FJsonObject>();
-	BoneObj->SetNumberField(TEXT("name"), 123); // Invalid type, should be string
-	BonesArr.Add(MakeShared<FJsonValueObject>(BoneObj));
+	{
+		TSharedPtr<FJsonObject> ValidParams =
+			MakeBuildSequenceParams({ MakePoseFrame({ MakeCompletePoseBone(TEXT("root")) }) });
+		const FString MissingSkeletonPath =
+			TEXT("/Game/Tests/Monolith/MissingSkeleton_StrictBoneNameControl");
+		ValidParams->SetStringField(TEXT("skeleton_path"), MissingSkeletonPath);
+		const FMonolithActionResult ValidNameResult =
+			FMonolithAnimationActions::HandleBuildSequenceFromPoses(ValidParams);
+		TestFalse(TEXT("Valid nested bone name advances beyond pose parsing"), ValidNameResult.bSuccess);
+		TestEqual(
+			TEXT("Valid nested bone name reaches the missing-skeleton boundary"),
+			ValidNameResult.ErrorMessage,
+			FString::Printf(TEXT("Skeleton not found: %s"), *MissingSkeletonPath));
+	}
 
-	FrameObj->SetArrayField(TEXT("bones"), BonesArr);
-	FramesArr.Add(MakeShared<FJsonValueObject>(FrameObj));
+	{
+		TSharedPtr<FJsonObject> MissingTransformBone = MakeCompletePoseBone(TEXT("root"));
+		MissingTransformBone->RemoveField(TEXT("location"));
+		const FMonolithActionResult MissingTransformResult =
+			FMonolithAnimationActions::HandleBuildSequenceFromPoses(
+				MakeBuildSequenceParams({ MakePoseFrame({ MissingTransformBone }) }));
+		TestFalse(TEXT("Missing transform fields must not fall back to identity"), MissingTransformResult.bSuccess);
+		TestTrue(
+			TEXT("Missing location should identify the exact nested field"),
+			MissingTransformResult.ErrorMessage.Contains(TEXT("bones[0].location")));
+	}
 
-	Params->SetArrayField(TEXT("frames"), FramesArr);
+	{
+		TSharedPtr<FJsonObject> InvalidRotationBone = MakeCompletePoseBone(TEXT("root"));
+		InvalidRotationBone->SetArrayField(TEXT("rotation"), MakePoseNumberArray({ 0.0, 0.0, 0.0, 2.0 }));
+		const FMonolithActionResult InvalidRotationResult =
+			FMonolithAnimationActions::HandleBuildSequenceFromPoses(
+				MakeBuildSequenceParams({ MakePoseFrame({ InvalidRotationBone }) }));
+		TestFalse(TEXT("Non-normalized quaternions must be rejected"), InvalidRotationResult.bSuccess);
+		TestTrue(
+			TEXT("Quaternion rejection should explain normalization"),
+			InvalidRotationResult.ErrorMessage.Contains(TEXT("normalized quaternion")));
+	}
 
-	FMonolithActionResult Result = FMonolithAnimationActions::HandleBuildSequenceFromPoses(Params);
-	TestFalse(TEXT("HandleBuildSequenceFromPoses with malformed bone name should return Error"), Result.bSuccess);
-	TestTrue(TEXT("Error message should complain about the bone name type"), Result.ErrorMessage.Contains(TEXT("name' in bone must be a string")));
+	{
+		const FMonolithActionResult MissingBoneResult =
+			FMonolithAnimationActions::HandleBuildSequenceFromPoses(
+				MakeBuildSequenceParams({
+					MakePoseFrame({ MakeCompletePoseBone(TEXT("root")), MakeCompletePoseBone(TEXT("pelvis")) }),
+					MakePoseFrame({ MakeCompletePoseBone(TEXT("root"), 1.0) })
+				}));
+		TestFalse(TEXT("Every frame must contain the same bone set"), MissingBoneResult.bSuccess);
+		TestTrue(
+			TEXT("Missing per-frame bone should be explicit"),
+			MissingBoneResult.ErrorMessage.Contains(TEXT("missing bone 'pelvis'")));
+	}
+
+	{
+		const FMonolithActionResult DuplicateBoneResult =
+			FMonolithAnimationActions::HandleBuildSequenceFromPoses(
+				MakeBuildSequenceParams({
+					MakePoseFrame({ MakeCompletePoseBone(TEXT("root")), MakeCompletePoseBone(TEXT("root")) })
+				}));
+		TestFalse(TEXT("Duplicate bones in one frame must be rejected"), DuplicateBoneResult.bSuccess);
+		TestTrue(
+			TEXT("Duplicate bone rejection should identify the bone"),
+			DuplicateBoneResult.ErrorMessage.Contains(TEXT("duplicate or invalid bone name 'root'")));
+	}
 
 	return true;
 }
@@ -313,7 +465,12 @@ bool FMonolithBuildSequenceFromPosesParamGuardTest::RunTest(const FString& Param
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLocomotionAuthoringParamGuardTest, "Monolith.ParamGuard.Animation.LocomotionAuthoring", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithLocomotionAuthoringParamGuardTest::RunTest(const FString& Parameters)
 {
-	FMonolithLocomotionAuthoringActions::RegisterActions(FMonolithToolRegistry::Get());
+	if (!TestTrue(
+		TEXT("animation.bake_distance_curve is registered by module startup"),
+		FMonolithToolRegistry::Get().HasAction(TEXT("animation"), TEXT("bake_distance_curve"))))
+	{
+		return false;
+	}
 	const FString AssetPath = TEXT("/Game/Tests/Monolith/AnimWeaver_Montage");
 
 	// Test bake_distance_curve sample_rate validation
@@ -323,7 +480,10 @@ bool FMonolithLocomotionAuthoringParamGuardTest::RunTest(const FString& Paramete
 		Params->SetStringField(TEXT("sample_rate"), TEXT("not_a_number"));
 		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("animation"), TEXT("bake_distance_curve"), Params);
 		TestFalse(TEXT("bake_distance_curve with malformed sample_rate should return Error"), Result.bSuccess);
-		TestTrue(TEXT("Error message should mention 'sample_rate' and 'number'"), Result.ErrorMessage.Contains(TEXT("Parameter 'sample_rate' must be a number")));
+		TestTrue(
+			TEXT("Error message should identify sample_rate as an integer"),
+			Result.ErrorMessage.Contains(TEXT("sample_rate"))
+				&& Result.ErrorMessage.Contains(TEXT("expected integer")));
 	}
 
 	// Test bake_distance_curve stop_speed_threshold validation
@@ -333,7 +493,10 @@ bool FMonolithLocomotionAuthoringParamGuardTest::RunTest(const FString& Paramete
 		Params->SetStringField(TEXT("stop_speed_threshold"), TEXT("not_a_number"));
 		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("animation"), TEXT("bake_distance_curve"), Params);
 		TestFalse(TEXT("bake_distance_curve with malformed stop_speed_threshold should return Error"), Result.bSuccess);
-		TestTrue(TEXT("Error message should mention 'stop_speed_threshold' and 'number'"), Result.ErrorMessage.Contains(TEXT("Parameter 'stop_speed_threshold' must be a number")));
+		TestTrue(
+			TEXT("Error message should identify stop_speed_threshold as a number"),
+			Result.ErrorMessage.Contains(TEXT("stop_speed_threshold"))
+				&& Result.ErrorMessage.Contains(TEXT("expected number")));
 	}
 
 	return true;
@@ -400,7 +563,12 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAnimationAddEvaluateChooserNodeParamGu
 
 bool FMonolithAnimationAddEvaluateChooserNodeParamGuardTest::RunTest(const FString& Parameters)
 {
-	FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry::Get());
+	if (!TestTrue(
+		TEXT("animation.add_evaluate_chooser_node is registered by module startup"),
+		FMonolithToolRegistry::Get().HasAction(TEXT("animation"), TEXT("add_evaluate_chooser_node"))))
+	{
+		return false;
+	}
 
 	TSharedPtr<FJsonObject> ActionParams = MakeShared<FJsonObject>();
 	ActionParams->SetStringField(TEXT("abp_path"), TEXT("/Game/Tests/Monolith/TestABP"));
@@ -410,6 +578,8 @@ bool FMonolithAnimationAddEvaluateChooserNodeParamGuardTest::RunTest(const FStri
 	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("animation"), TEXT("add_evaluate_chooser_node"), ActionParams);
 
 	TestFalse(TEXT("Malformed position_x should reject action"), Result.bSuccess);
+	TestEqual(TEXT("Malformed position_x uses InvalidParams"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+	TestTrue(TEXT("Malformed position_x error identifies the field"), Result.ErrorMessage.Contains(TEXT("position_x")));
 
 	return true;
 }

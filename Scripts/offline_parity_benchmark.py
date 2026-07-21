@@ -92,6 +92,19 @@ def write_jsonl(path: pathlib.Path, rows: Iterable[Dict[str, Any]]) -> None:
             handle.write("\n")
 
 
+def clear_run_outputs(output_dir: pathlib.Path) -> None:
+    """Remove only terminal/intermediate files owned by the run subcommand."""
+    for name in (
+        "summary.json",
+        "partial_summary.json",
+        "run_failure.json",
+        "per_action.jsonl",
+    ):
+        path = output_dir / name
+        if path.exists():
+            path.unlink()
+
+
 # ------------------------------------------------------------------ invocation helpers
 # (inlined from verify_offline_parity.py; do not import that module directly)
 
@@ -171,6 +184,7 @@ TIME_DERIVED_CURSOR_ACTIONS = {"risk.get_release_window_hotspots"}
 # environments where the manifest is unavailable, and is asserted against the
 # loaded table so drift between the data file and this constant is loud.
 EXPECTED_ACTION_COUNT = 317
+OFFLINE_PARITY_DATABASES = ("Saved/EngineSource.db",)
 
 # Placeholder tokens substituted from chain-discovery at load time. Keeping them
 # as explicit constants makes the actions.jsonl contract self-documenting.
@@ -745,6 +759,30 @@ def environment_blocked_action(label: str, reason: str) -> Dict[str, Any]:
     return result
 
 
+def build_offline_parity_inputs(
+    exe_path: pathlib.Path,
+    py_path: pathlib.Path,
+    mono_root: pathlib.Path = MONO_ROOT,
+) -> Dict[str, Any]:
+    """Fingerprint only databases read by the declared parity namespaces.
+
+    cppreflect, network, decision, risk, and the selected source actions all
+    read EngineSource.db. The corpus contains no project, bridge, or source CRG
+    graph action, so ProjectIndex.db and graph.db are deliberately excluded.
+    """
+    return build_benchmark_inputs(
+        "OfflineParity",
+        tasks_path=DEFAULT_ACTIONS,
+        extra_files={
+            "runner": pathlib.Path(__file__).resolve(),
+            "offline_exe": exe_path,
+            "offline_python": py_path,
+        },
+        database_paths=OFFLINE_PARITY_DATABASES,
+        plugin_root=mono_root,
+    )
+
+
 # ------------------------------------------------------------------ version parity
 # (inlined from verify_offline_parity.py)
 
@@ -985,6 +1023,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     ignore_cursor_bytes = args.ignore_cursor_bytes
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    clear_run_outputs(output_dir)
 
     exe_missing = not exe_path.exists()
     py_missing = not py_path.exists()
@@ -1034,11 +1073,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         chain = discover_chain_inputs(exe_path, MONO_ROOT)
     else:
         chain = {"uclass": None, "decision_id": None, "risk_path": "Docs/SPEC_CORE.md"}
-    benchmark_inputs = build_benchmark_inputs(
-        "OfflineParity",
-        extra_files={"offline_exe": exe_path, "offline_python": py_path},
-        plugin_root=MONO_ROOT,
-    )
+    benchmark_inputs = build_offline_parity_inputs(exe_path, py_path, MONO_ROOT)
     print(
         f"Chain inputs: uclass={chain.get('uclass')!r} "
         f"decision_id={chain.get('decision_id')!r} "
@@ -1048,8 +1083,6 @@ def cmd_run(args: argparse.Namespace) -> int:
     actions = build_actions(chain)
     results: List[Dict[str, Any]] = []
     per_action_jsonl_path = output_dir / "per_action.jsonl"
-    if per_action_jsonl_path.exists():
-        per_action_jsonl_path.unlink()
 
     PARTIAL_INTERVAL = 5
 
@@ -1102,6 +1135,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         ignore_cursor_bytes, run_environment
     )
     attach_benchmark_inputs(summary, benchmark_inputs)
+    partial_summary_path = output_dir / "partial_summary.json"
+    if partial_summary_path.exists():
+        partial_summary_path.unlink()
     write_json(output_dir / "summary.json", summary)
 
     m = summary["metrics"]

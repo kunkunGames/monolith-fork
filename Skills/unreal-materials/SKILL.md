@@ -52,7 +52,7 @@ Material actions live in the **material** namespace; the asset-ingest/lifecycle 
 | `[w] export_material_graph` | `asset_path*` `include_properties=true` `include_positions=true` | Serialize to JSON. `include_properties:false` reduces ~70% |
 | `[w] export_function_graph` | `asset_path*` `include_properties=true` `include_positions=true` | Serialize MaterialFunction to JSON |
 | `get_thumbnail` | `asset_path*` `resolution=256` `save_to_file?` | Use `save_to_file:<path>` (base64 wastes context) |
-| `validate_material` | `asset_path*` `fix_issues=false` | Broken connections, unused nodes |
+| `validate_material` | `asset_path*` `fix_issues=false` | Validate a base graph or an MIC's explicit parent chain + resolved base graph. Missing/cyclic parents fail; `fix_issues=true` is base-material-only |
 | `[w] render_preview` | `asset_path*` `resolution=256` `uv_tiling=1.0` `preview_mesh=sphere` | Compile + preview. `preview_mesh`: plane/sphere/cube; tiling check at `uv_tiling` 3 or 5 |
 
 ### Instance (5)
@@ -194,6 +194,8 @@ See `monolith_guide(section="recipes")` entries "Visual introspection — going 
 
 - Graph editing only works on base Materials, not MICs
 - Always `validate_material` after graph changes
+- For MIC proof, call `validate_material` on the MIC itself and inspect `validated_graph_asset_path` plus `instance_parent_chain`; never replace a missing parent with a default material
+- `fix_issues=true` is intentionally rejected for MICs because the instance does not own its resolved graph; target the returned base-material path explicitly if mutation is intended
 - `build_material_graph` is fastest for complex graphs (single JSON)
 - Use `render_preview` or `get_thumbnail` with `save_to_file: true` (no base64)
 - `get_compilation_stats` catches runaway instruction counts after changes

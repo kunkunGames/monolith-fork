@@ -1,15 +1,15 @@
 {
-  "generated_at": "2026-07-11T11:48:15.965704+00:00",
+  "generated_at": "2026-07-19T12:32:12.762443+00:00",
   "mcp_url": "http://localhost:9316/mcp",
-  "task_count": 289,
-  "min_tasks_requested": 120,
+  "task_count": 569,
+  "min_tasks_requested": 454,
   "catalog_namespace_count": 61,
-  "catalog_action_count": 1840,
-  "catalog_version": "sha256:4af1375172e8818a",
+  "catalog_action_count": 1863,
+  "catalog_version": "sha256:72abda9f0901c33d",
   "namespace_coverage": [
     {
       "namespace": "asset",
-      "action_count": 18
+      "action_count": 20
     },
     {
       "namespace": "blueprint",
@@ -25,7 +25,7 @@
     },
     {
       "namespace": "animation",
-      "action_count": 210
+      "action_count": 212
     },
     {
       "namespace": "cloth",
@@ -45,11 +45,11 @@
     },
     {
       "namespace": "editor",
-      "action_count": 80
+      "action_count": 82
     },
     {
       "namespace": "scene",
-      "action_count": 56
+      "action_count": 57
     },
     {
       "namespace": "build",
@@ -93,7 +93,7 @@
     },
     {
       "namespace": "ui",
-      "action_count": 164
+      "action_count": 165
     },
     {
       "namespace": "slate",
@@ -101,7 +101,7 @@
     },
     {
       "namespace": "mesh",
-      "action_count": 70
+      "action_count": 71
     },
     {
       "namespace": "level_instance",
@@ -177,7 +177,7 @@
     },
     {
       "namespace": "pcg",
-      "action_count": 14
+      "action_count": 28
     },
     {
       "namespace": "water",
@@ -253,18 +253,18 @@
     }
   ],
   "category_counts": {
-    "discovery_planning": 87,
-    "invalid_param_type": 38,
-    "missing_required_param": 52,
+    "discovery_planning": 160,
+    "invalid_param_type": 168,
+    "missing_required_param": 120,
     "needed_action_routing": 18,
-    "unknown_action_recovery": 94
+    "unknown_action_recovery": 103
   },
   "task_file": "Benchmarks/ActionGuidance/tasks.jsonl",
   "demand_weighting": {
     "source": "Saved/Monolith/LogAnalysis/20260618-205624/summary.md",
     "formula": "weight = 1.0 + log10(1 + count * error_rate) for documented high-volume/high-error actions; else 1.0",
     "weighted_action_count": 38,
-    "weighted_task_count": 38
+    "weighted_task_count": 59
   },
   "scoring": {
     "effectiveness_score": "0.30*task_success_rate + 0.20*first_recovery_success_rate + 0.15*action_selection_accuracy + 0.15*param_correction_accuracy + 0.10*(1-normalized_tool_calls) + 0.10*(1-hallucinated_workflow_rate)",

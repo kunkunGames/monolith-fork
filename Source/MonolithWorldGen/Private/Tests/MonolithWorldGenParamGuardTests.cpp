@@ -10,6 +10,7 @@
 #include "MonolithMeshBuildingActions.h"
 #include "MonolithMeshContextPropActions.h"
 #include "MonolithMeshFacadeActions.h"
+#include "MonolithMeshCityBlockActions.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardWorldGenSampleTerrainGridMalformedParamsTest, "Monolith.ParamGuard.MonolithWorldGen.SampleTerrainGridRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 

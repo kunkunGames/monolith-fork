@@ -660,6 +660,46 @@ bool FMonolithActionExecutionPolicyAuditTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithActionExecutionPolicyHandlerOwnedSourceControlTest,
+	"Monolith.Core.ActionExecutionPolicy.HandlerOwnedSourceControl",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithActionExecutionPolicyHandlerOwnedSourceControlTest::RunTest(const FString& Parameters)
+{
+	RegisterPolicySliceTestNamespace();
+	FMonolithActionExecutionGuard& Guard = FMonolithActionExecutionGuard::Get();
+	Guard.ResetForTests();
+	Guard.RegisterHandlerOwnedSourceControlActions(TEXT("policytest"), {TEXT("explicit_action")});
+
+	FMonolithActionExecutionGuard::FExecutionScope Scope = Guard.BeginAction(
+		TEXT("policytest"),
+		TEXT("explicit_action"));
+	TestTrue(TEXT("Dirty package tracking stays enabled"), Scope.bDirtyPackageTrackingActive);
+	TestTrue(TEXT("Handler-owned source control is selected"), Scope.bHandlerOwnedSourceControlPrepare);
+	TestFalse(TEXT("Coarse automatic prepare is suppressed"), Scope.bSourceControlPrepareActive);
+	TestEqual(
+		TEXT("Handler prepare starts pending"),
+		Scope.SourceControlPrepareStatus,
+		TEXT("handler_owned_pending"));
+
+	TSharedPtr<FJsonObject> NoChangeResult = MakeShared<FJsonObject>();
+	NoChangeResult->SetBoolField(TEXT("changed"), false);
+	NoChangeResult->SetBoolField(TEXT("saved"), false);
+	Guard.SetActionOutcome(Scope, true, 0, NoChangeResult, FString());
+	TestEqual(
+		TEXT("Explicit no-op does not invent a checkout"),
+		Scope.SourceControlPrepareStatus,
+		TEXT("handler_owned_no_change"));
+	TestFalse(
+		TEXT("No-op result has no synthetic source-control payload"),
+		NoChangeResult->HasField(TEXT("source_control_prepare")));
+	Guard.EndAction(Scope);
+
+	Guard.UnregisterHandlerOwnedSourceControlActions(TEXT("policytest"));
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("policytest"));
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithActionExecutionPolicyOverrideTest,
 	"Monolith.Core.ActionExecutionPolicy.RuntimeOverride",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

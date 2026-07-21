@@ -61,6 +61,21 @@ public class MonolithEditor : ModuleRules
 			"MaterialEditor"
 		});
 
+		// AutomationController and AutomationTest are shipped by this engine as
+		// runtime-loaded editor modules (their DLLs are present, but their static
+		// import libraries are not). Consume only public interfaces and let the
+		// engine-owned AutomationController/Worker path own module loading/ticking.
+		PrivateIncludePathModuleNames.AddRange(new string[]
+		{
+			"AutomationController",
+			"AutomationTest"
+		});
+		DynamicallyLoadedModuleNames.AddRange(new string[]
+		{
+			"AutomationController",
+			"AutomationTest"
+		});
+
 		if (Target.Platform == UnrealTargetPlatform.Win64)
 		{
 			PrivateDependencyModuleNames.Add("LiveCoding");

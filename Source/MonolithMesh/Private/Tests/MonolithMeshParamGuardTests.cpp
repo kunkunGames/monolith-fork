@@ -3,6 +3,7 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithMeshInspectionActions.h"
 #include "MonolithMeshTechArtActions.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"

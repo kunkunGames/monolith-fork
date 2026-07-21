@@ -275,13 +275,14 @@
       "task_count": 3,
       "edit_domain_count": 3,
       "operation_counts": {
-        "creation_or_import": 3,
-        "edit": 3,
-        "save": 3,
+        "creation_or_import": 2,
+        "edit": 2,
+        "save": 2,
         "readback_verify": 3
       },
       "lifecycle_counts": {
-        "create_save": 3
+        "create_save": 2,
+        "not_applicable": 1
       },
       "directory": "Benchmarks/AssetEditing/level_instance",
       "index_file": "Benchmarks/AssetEditing/level_instance/index.json",

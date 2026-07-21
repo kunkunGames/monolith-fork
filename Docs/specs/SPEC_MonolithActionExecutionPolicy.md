@@ -36,7 +36,7 @@ Monolith already routes every action through a central registry and audit guard,
 |-------|------|---------|
 | `policy_id` | string | Policy name. The first default is `read_only`. |
 | `defaulted` | bool | `true` when the action did not explicitly declare a policy. |
-| `dirty_package_tracking` | bool | Whether the central guard should snapshot `/Game` dirty packages before and after handler execution. |
+| `dirty_package_tracking` | bool | Whether the central guard should snapshot project-owned mounted packages before and after handler execution. This includes `/Game` and project/GameFeature plugin mounts such as `/SpeedCore` and `/SpeedBox`, while excluding `/Engine` and external mounts. |
 | `transaction_wrapping` | bool | Whether the central dispatch scope should wrap the handler in a UE editor transaction. |
 | `post_edit_validation` | bool | Whether the central dispatch scope should run a post-handler validator before returning success. |
 | `enforced` | bool | `true` only for policies that the central guard actively applies. |
@@ -65,6 +65,7 @@ Supported policy ids:
 | `read_only` | No | No | Fast path; no package scans or transaction. |
 | `track_dirty_packages` | Yes | No | Audit rows report package deltas. |
 | `transaction_optional` | Yes | Yes | Dispatch opens a UE transaction boundary and records transaction status. |
+| Handler-owned transaction exception | Yes | No | `bulk_fill.apply` registers `track_dirty_packages` because each namespace adapter owns one target-specific transaction. This prevents nested transactions while preserving central dirty-package auditing. |
 | `transaction_required` | Yes | Yes | Same central transaction behavior; domain handlers still own domain-specific validation. |
 | `post_edit_validate` | Yes | Yes | Dispatch opens a transaction, runs a post-handler validator, and converts validator failure into a structured action error. |
 
@@ -101,7 +102,7 @@ Legacy boolean aliases such as `policy.post_edit_validate` are rejected instead 
 |-------|---------|
 | `dirty_package_tracking_status` | `skipped_by_policy` or `tracked_by_policy`. |
 | `transaction_status` | `not_requested`, `wrapped_by_policy`, or an error-oriented status if transaction setup cannot run. |
-| `source_control_prepare_status` | `skipped_by_policy`, `no_targets`, `skipped_provider_unavailable`, `prepared_checkout_N_add_N`, or `prepare_failed_checkout_N_add_N`. |
+| `source_control_prepare_status` | Central statuses (`skipped_by_policy`, `no_targets`, `no_change`, `skipped_provider_unavailable`, `prepared_checkout_N_add_N`, `prepare_failed_checkout_N_add_N`) or an explicit `handler_owned_*` status. |
 | `post_edit_validation_status` | `not_requested`, `requested_by_policy`, `passed_by_validator`, `failed_by_validator`, `skipped_handler_error`, or a target/validator failure status. |
 | `rollback_status` | Still explicit unavailable metadata; no automatic rollback is claimed. |
 
@@ -109,7 +110,9 @@ Unknown or rejected actions use the same default metadata and keep their existin
 
 When validation succeeds, successful handler result objects receive a `post_edit_validation` object. When validation fails, the action returns a normal Monolith error with structured `error.data.post_edit_validation`; raw params and raw result payloads are not copied into audit rows.
 
-When an asset-mutation action succeeds, successful handler result objects may receive a `source_control_prepare` object. `before_action` reports pre-handler checkout/add decisions for target-like params such as `asset_path`, `blueprint_path`, `widget_blueprint`, `wbp_path`, `save_path`, `new_path`, `dest_path`, and `new_asset_path`. `after_action` reports decisions for result asset paths and newly dirtied `/Game` packages. Automatic target collection only accepts `.uasset`/`.umap` files that resolve under the project directory, so `/Script`, engine package paths, and external files are ignored. Provider disabled/unavailable states are non-fatal for automatic prepare and are reported as skipped. `source_control`, `project`, `source`, `context`, `collection`, `asset`, and `monolith` namespaces are excluded from this automatic prepare path to avoid recursive or read-only index/source calls.
+When an asset-mutation action succeeds, successful handler result objects may receive a `source_control_prepare` object. `before_action` reports pre-handler checkout/add decisions for target-like params such as `asset_path`, `blueprint_path`, `widget_blueprint`, `wbp_path`, `save_path`, `new_path`, `dest_path`, and `new_asset_path`. `after_action` reports decisions for result asset paths and newly dirtied project-owned packages, including project/GameFeature content mounts. Automatic target collection only accepts `.uasset`/`.umap` files that resolve under the project directory, so `/Script`, engine package paths, and external files are ignored. Provider disabled/unavailable states are non-fatal for automatic prepare and are reported as skipped. `source_control`, `project`, `source`, `context`, `collection`, `asset`, and `monolith` namespaces are excluded from this automatic prepare path to avoid recursive or read-only index/source calls.
+
+Actions whose exact package cannot be known from a coarse request path may register through `FMonolithActionExecutionGuard::RegisterHandlerOwnedSourceControlActions`. This keeps policy-driven dirty-package tracking and audit enabled while suppressing the central param/result scan for those action IDs. The owning handler must resolve the live object, derive its exact outermost project package (including external-actor packages), run checkout before its first mutation or requested save, and attach a structured `source_control_prepare` result. Explicit `changed=false, saved=false` calls must not prepare source control. Modules unregister the action set during shutdown so the ownership contract is removable with the module.
 
 Built-in validation covers Blueprint-derived assets returned or addressed by common fields (`asset_path`, `blueprint_path`, `widget_blueprint`, `wbp_path`, `save_path`, `new_path`). Blueprint and widget targets are compiled once with UE's editor compiler and fail validation when the post-compile status is not `BS_UpToDate` or `BS_UpToDateWithWarnings`. Domain modules can also register explicit validators for specific `namespace.action` pairs.
 
@@ -137,5 +140,6 @@ Built-in validation covers Blueprint-derived assets returned or addressed by com
 | Runtime override | `monolith.set_action_execution_policy` updates a known action and accepts compatible `post_edit_validate` requests. |
 | Transaction metadata | Transaction policies record `transaction_status` without claiming rollback. |
 | Source-control prepare | Mutating asset actions report checkout/add decisions in `source_control_prepare` and audit `source_control_prepare_status`; unavailable providers are non-fatal skips. |
+| Handler-owned exact target | Registered handler-owned actions prepare the resolved outermost package before mutation, do not run the central coarse scan, and leave explicit unsaved no-ops unopened. |
 | Validator hook | `post_edit_validate` actions run a post-handler validator and report `post_edit_validation_status`. |
 | Validation failure | Validator failure converts the action result to a structured error without raw payload logging or rollback claims. |

@@ -1671,6 +1671,100 @@ def attach_run_context(
     return payload
 
 
+def validate_live_fixture_runtime_provenance(
+    corpus: TaskCorpus,
+    status: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Validate canonical fixture provenance against the live MCP identity.
+
+    A global catalog-version change may include contract changes in ``project``
+    schemas even when the action-name count happens to stay constant. Comparable
+    canonical runs therefore require fixtures refreshed from the exact current
+    catalog. Explicit diagnostic subsets remain non-comparable and are not bound
+    to the canonical fixture manifest.
+    """
+    if not corpus.canonical:
+        return {"ok": True, "checked": False, "reason": "explicit_subset"}
+
+    fixture_metadata = corpus.manifest.get("live_fixtures")
+    if not isinstance(fixture_metadata, dict):
+        return {
+            "ok": False,
+            "checked": True,
+            "failure_kind": "invalid_fixture_provenance",
+            "message": "ProjectIndex canonical manifest has no live_fixtures object",
+        }
+
+    expected_catalog_version = str(fixture_metadata.get("catalog_version", "")).strip()
+    observed_catalog_version = str(status.get("catalog_version", "")).strip()
+    expected_project_name = str(fixture_metadata.get("project_name", "")).strip()
+    observed_project_name = str(status.get("project_name", "")).strip()
+    expected_schema_version = fixture_metadata.get("schema_version")
+
+    if expected_schema_version != LIVE_FIXTURE_SCHEMA_VERSION:
+        return {
+            "ok": False,
+            "checked": True,
+            "failure_kind": "invalid_fixture_provenance",
+            "message": (
+                "ProjectIndex canonical fixture schema_version mismatch: "
+                f"expected {LIVE_FIXTURE_SCHEMA_VERSION}, got {expected_schema_version!r}"
+            ),
+            "expected_fixture_schema_version": LIVE_FIXTURE_SCHEMA_VERSION,
+            "observed_fixture_schema_version": expected_schema_version,
+        }
+    if not expected_catalog_version or not observed_catalog_version:
+        return {
+            "ok": False,
+            "checked": True,
+            "failure_kind": "invalid_fixture_provenance",
+            "message": "ProjectIndex fixture/runtime catalog_version must both be non-empty",
+            "expected_catalog_version": expected_catalog_version,
+            "observed_catalog_version": observed_catalog_version,
+        }
+    if expected_catalog_version != observed_catalog_version:
+        return {
+            "ok": False,
+            "checked": True,
+            "failure_kind": "catalog_version_mismatch",
+            "message": (
+                "ProjectIndex live fixtures are stale for the current MCP catalog "
+                f"({expected_catalog_version} -> {observed_catalog_version}); run "
+                "refresh_live_fixtures against a healthy endpoint, then regenerate the corpus"
+            ),
+            "expected_catalog_version": expected_catalog_version,
+            "observed_catalog_version": observed_catalog_version,
+        }
+    if not expected_project_name or not observed_project_name:
+        return {
+            "ok": False,
+            "checked": True,
+            "failure_kind": "invalid_fixture_provenance",
+            "message": "ProjectIndex fixture/runtime project_name must both be non-empty",
+            "expected_project_name": expected_project_name,
+            "observed_project_name": observed_project_name,
+        }
+    if expected_project_name != observed_project_name:
+        return {
+            "ok": False,
+            "checked": True,
+            "failure_kind": "project_identity_mismatch",
+            "message": (
+                "ProjectIndex live fixtures belong to a different project "
+                f"({expected_project_name} -> {observed_project_name})"
+            ),
+            "expected_project_name": expected_project_name,
+            "observed_project_name": observed_project_name,
+        }
+    return {
+        "ok": True,
+        "checked": True,
+        "catalog_version": observed_catalog_version,
+        "project_name": observed_project_name,
+        "fixture_schema_version": expected_schema_version,
+    }
+
+
 def build_attempt_failure(
     label: str,
     status: Dict[str, Any],
@@ -1809,7 +1903,10 @@ def run_benchmark(
 
     try:
         benchmark_inputs = build_benchmark_inputs(
-            "ProjectIndex", tasks_path=tasks_path, mcp_status=status
+            "ProjectIndex",
+            tasks_path=tasks_path,
+            mcp_status=status,
+            extra_files={"runner": pathlib.Path(__file__)},
         )
     except Exception as exc:  # noqa: BLE001 - provenance defects invalidate the run.
         failure = {
@@ -1824,6 +1921,27 @@ def run_benchmark(
             "exception": f"{type(exc).__name__}: {exc}",
         }
         failure.update(transport_tracker.snapshot())
+        write_invalid_run_artifacts(output_dir, failure)
+        return failure
+
+    fixture_provenance = validate_live_fixture_runtime_provenance(corpus, status)
+    if not fixture_provenance.get("ok"):
+        failure = {
+            "label": label,
+            "created_at": utc_now(),
+            "metrics_scope": "not_started",
+            "completion_status": "aborted_fixture_provenance",
+            "failure_stage": "fixture_provenance_preflight",
+            "failure_kind": str(
+                fixture_provenance.get("failure_kind", "invalid_fixture_provenance")
+            ),
+            "completed_task_count": 0,
+            "total_task_count": len(tasks),
+            "fixture_provenance": fixture_provenance,
+        }
+        failure.update(transport_tracker.snapshot())
+        attach_benchmark_inputs(failure, benchmark_inputs)
+        attach_run_context(failure, corpus, start_identity)
         write_invalid_run_artifacts(output_dir, failure)
         return failure
 

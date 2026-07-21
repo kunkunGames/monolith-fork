@@ -14,9 +14,10 @@ Skills/monolith-mcp) as one deterministic entry point:
      non-HTTP/non-200, malformed, multi-owner, or unreadable listener is an
      untrusted occupied endpoint and blocks recovery. A transport timeout from
      one exclusive listener PID is classified as trusted-busy only when that
-     live PID is an eligible Unreal Editor for this exact project; recovery then
-     waits without launching or mutating. In -ProbeOnly mode, report the health
-     failure reason plus local listener/editor candidates.
+     live PID is a durable Unreal Editor for this exact project. An exact
+     planned-exit automation editor is classified separately and is allowed to
+     finish without build/launch/stop mutation before recovery continues. In
+     -ProbeOnly mode, report the health failure reason plus local candidates.
   3. Resolve the host checkout root (walk up from this script until a
      *.uproject is found, or use -ProjectRoot) and require
      Build/BatchFiles/RunHeadlessEditor.bat there. No substitute editor launch
@@ -56,8 +57,8 @@ Line-oriented status ending in one RESULT= token.
 
 Exit codes:
   0  MCP endpoint is up (already up, or came up after the launch step)
-  2  endpoint down, or an exact project-owned editor is transiently busy, and
-     -ProbeOnly was requested
+  2  endpoint down, exact durable editor is transiently busy, or exact-project
+     planned-exit automation is active, and -ProbeOnly was requested
   3  blocked: no host checkout / RunHeadlessEditor.bat not found, or the MCP
      port is occupied/unreadable without a fully trusted health identity
   4  blocked: wrapper exited non-zero
@@ -78,6 +79,13 @@ param(
 
 $ErrorActionPreference = 'Continue'
 $healthUrl = $McpUrl -replace '/mcp/?$', '/health'
+
+$hostRoleHelperPath = Join-Path $PSScriptRoot 'mcp_host_role.ps1'
+if (-not (Test-Path -LiteralPath $hostRoleHelperPath -PathType Leaf)) {
+    Write-Output ("RESULT=BLOCKED reason=mcp_host_role_helper_missing path={0}" -f $hostRoleHelperPath)
+    exit 3
+}
+. $hostRoleHelperPath
 
 function Get-MonolithHealth {
     $probe = Get-MonolithHealthProbe
@@ -118,6 +126,7 @@ function Get-MonolithHealthProbe {
                     ErrorClass = 'health_identity'
                     ErrorMessage = $identity.ErrorCode
                     StatusCode = [int]$resp.StatusCode
+                    CandidatePid = [int]$health.pid
                 }
             }
 
@@ -290,19 +299,7 @@ function Test-MonolithHealthContract {
 
 function Test-MonolithEditorCommandLineForProject {
     param([string]$CommandLine, [string]$ProjectFile)
-
-    if ([string]::IsNullOrWhiteSpace($CommandLine) -or [string]::IsNullOrWhiteSpace($ProjectFile)) {
-        return $false
-    }
-    if ($CommandLine -match '(?i)(^|\s)-(game|server)(\s|$)' -or
-        $CommandLine -match '(?i)(^|\s)-run(?:=|\s)' -or
-        $CommandLine -match '(?i)bMcpServerEnabled\s*[:=]\s*False') {
-        return $false
-    }
-
-    $normalizedCommandLine = $CommandLine.Replace('/', '\')
-    $normalizedProjectFile = ([System.IO.Path]::GetFullPath($ProjectFile)).Replace('/', '\')
-    return $normalizedCommandLine.IndexOf($normalizedProjectFile, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+    return Test-MonolithDurableMcpHostCommandLine -CommandLine $CommandLine -ProjectFile $ProjectFile
 }
 
 function Test-MonolithHealthProcessIdentity {
@@ -326,7 +323,12 @@ function Test-MonolithHealthProcessIdentity {
     if ($processName -notin @('UnrealEditor.exe', 'UnrealEditor-Cmd.exe')) {
         return [PSCustomObject]@{ Valid = $false; ErrorCode = 'health_pid_not_unreal_editor' }
     }
-    if (-not (Test-MonolithEditorCommandLineForProject -CommandLine ([string]$process.CommandLine) -ProjectFile $projectFile.FullName)) {
+    $commandLine = [string]$process.CommandLine
+    if ((Test-MonolithCommandLineTargetsProject -CommandLine $commandLine -ProjectFile $projectFile.FullName) -and
+        (Test-MonolithEphemeralAutomationCommandLine -CommandLine $commandLine)) {
+        return [PSCustomObject]@{ Valid = $false; ErrorCode = 'health_pid_ephemeral_automation' }
+    }
+    if (-not (Test-MonolithEditorCommandLineForProject -CommandLine $commandLine -ProjectFile $projectFile.FullName)) {
         return [PSCustomObject]@{ Valid = $false; ErrorCode = 'health_pid_wrong_project_or_mode' }
     }
     return [PSCustomObject]@{ Valid = $true; ErrorCode = $null }
@@ -437,11 +439,24 @@ function Test-MonolithTrustedBusyListener {
 function Get-MonolithUnavailableEndpointState {
     param(
         [string]$HealthErrorClass,
+        [string]$HealthErrorCode,
         $HealthStatusCode,
+        $HealthPid,
         [string]$Root,
         $PortGate,
         $ProcessRecord
     )
+
+    $ephemeralHttpOwner = $HealthStatusCode -eq 200 -and
+        $HealthErrorClass -eq 'health_identity' -and
+        $HealthErrorCode -eq 'health_pid_ephemeral_automation'
+    if ($ephemeralHttpOwner) {
+        $listenerPids = @($PortGate.Pids | ForEach-Object { [int]$_ } | Sort-Object -Unique)
+        if ($listenerPids.Count -eq 1 -and $null -ne $HealthPid -and $listenerPids[0] -eq [int]$HealthPid) {
+            return [PSCustomObject]@{ State = 'ephemeral_automation'; Pid = [int]$HealthPid; ErrorCode = $null }
+        }
+        return [PSCustomObject]@{ State = 'blocked'; Pid = $null; ErrorCode = 'ephemeral_health_listener_mismatch' }
+    }
 
     $invalidHttpIdentity = $HealthStatusCode -eq 200 -and
         $HealthErrorClass -in @('invalid_json', 'health_contract', 'health_identity')
@@ -470,21 +485,24 @@ function Get-MonolithUnavailableEndpointState {
 function Get-EditorServerCandidates {
     param([string]$Root = $script:hostRoot)
 
-    $procs = @(Get-Process -Name 'UnrealEditor', 'UnrealEditor-Cmd' -ErrorAction SilentlyContinue)
-    if ($procs.Count -eq 0) { return @() }
     $projectFile = Get-ProjectFile -Root $Root
     if (-not $projectFile) { return @() }
-    $cims = @{}
-    Get-CimInstance Win32_Process -Filter "Name = 'UnrealEditor.exe' OR Name = 'UnrealEditor-Cmd.exe'" -ErrorAction SilentlyContinue |
-        ForEach-Object { $cims[[int]$_.ProcessId] = $_.CommandLine }
-    return @($procs | Where-Object {
-            $cmd = $cims[$_.Id]
-            # An unreadable command line remains a conservative boot candidate;
-            # readable processes must identify this exact project and an editor
-            # mode capable of hosting MCP. Other projects, game/server clients,
-            # and commandlets never block this checkout's recovery.
-            (-not $cmd) -or (Test-MonolithEditorCommandLineForProject -CommandLine $cmd -ProjectFile $projectFile.FullName)
-        })
+    # An unreadable command line remains a conservative boot candidate;
+    # readable processes must identify this exact project and a durable role.
+    return @(Get-MonolithEditorProcessCandidates `
+            -ProjectFile $projectFile.FullName `
+            -Role durable `
+            -AllowUnreadableDurable)
+}
+
+function Get-EphemeralAutomationCandidates {
+    param([string]$Root = $script:hostRoot)
+
+    $projectFile = Get-ProjectFile -Root $Root
+    if (-not $projectFile) { return @() }
+    return @(Get-MonolithEditorProcessCandidates `
+            -ProjectFile $projectFile.FullName `
+            -Role ephemeral_automation)
 }
 
 function Get-NewestEditorLog {
@@ -764,6 +782,53 @@ function Initialize-HeadlessEditorConfigState {
     }
 }
 
+function Start-MonolithHeadlessEditorWrapper {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Wrapper,
+
+        [Parameter(Mandatory = $true)]
+        [string]$WorkingDirectory,
+
+        [Parameter(Mandatory = $true)]
+        [string[]]$EditorArguments
+    )
+
+    # RunHeadlessEditor.bat explicitly owns editor-argument transport through
+    # UE_EDITOR_EXTRA_ARGS. Passing the same values through Start-Process
+    # -ArgumentList adds a second cmd.exe parsing boundary and can split quoted
+    # INI paths or reinterpret ':'/'[' tokens before the wrapper sees them.
+    $previousExtraArgs = [Environment]::GetEnvironmentVariable('UE_EDITOR_EXTRA_ARGS', 'Process')
+    $combinedArgs = New-Object System.Collections.Generic.List[string]
+    if (-not [string]::IsNullOrWhiteSpace($previousExtraArgs)) {
+        $combinedArgs.Add($previousExtraArgs.Trim())
+    }
+    foreach ($argument in $EditorArguments) {
+        if (-not [string]::IsNullOrWhiteSpace($argument)) {
+            $combinedArgs.Add($argument.Trim())
+        }
+    }
+
+    try {
+        [Environment]::SetEnvironmentVariable(
+            'UE_EDITOR_EXTRA_ARGS',
+            ($combinedArgs -join ' '),
+            'Process')
+        return Start-Process `
+            -FilePath $Wrapper `
+            -WorkingDirectory $WorkingDirectory `
+            -WindowStyle Hidden `
+            -PassThru
+    }
+    finally {
+        [Environment]::SetEnvironmentVariable(
+            'UE_EDITOR_EXTRA_ARGS',
+            $previousExtraArgs,
+            'Process')
+    }
+}
+
 $hostRoot = Resolve-HostRoot
 if (-not $hostRoot) {
     Write-Output 'RESULT=BLOCKED reason=host_root_not_found detail=no *.uproject found upward from the script and no -ProjectRoot given'
@@ -781,7 +846,9 @@ $port = Get-McpHealthPort
 $portGate = Get-MonolithRecoveryPortGate -Port $port
 $endpointState = Get-MonolithUnavailableEndpointState `
     -HealthErrorClass $healthProbe.ErrorClass `
+    -HealthErrorCode $healthProbe.ErrorMessage `
     -HealthStatusCode $healthProbe.StatusCode `
+    -HealthPid $healthProbe.CandidatePid `
     -Root $hostRoot `
     -PortGate $portGate
 if ($endpointState.State -eq 'trusted_busy') {
@@ -794,12 +861,70 @@ if ($endpointState.State -eq 'trusted_busy') {
     Write-Output ("INFO trusted_editor_busy pid={0} health_error={1} skipping_launch=true action=wait_for_valid_health" -f `
             $endpointState.Pid, (Format-RecoverResultValue $healthProbe.ErrorClass))
 }
+elseif ($endpointState.State -eq 'ephemeral_automation') {
+    Write-Output ("INFO ephemeral_automation_owner pid={0} skipping_launch=true action=wait_for_planned_exit" -f $endpointState.Pid)
+}
 elseif ($endpointState.State -eq 'blocked') {
     Write-Output ("RESULT=BLOCKED reason=foreign_or_untrusted_mcp_endpoint health_error={0} detail={1} url={2} listener_port={3} listener_count={4} listener_pids={5} listener_gate={6}" -f `
             (Format-RecoverResultValue $healthProbe.ErrorClass), (Format-RecoverResultValue $healthProbe.ErrorMessage), `
             (Format-RecoverResultValue $healthUrl), $port, $portGate.Count, (Join-RecoverIds $portGate.Pids), `
             (Format-RecoverResultValue $endpointState.ErrorCode))
     exit 3
+}
+
+$ephemeralAutomationProcs = @(Get-EphemeralAutomationCandidates -Root $hostRoot)
+if ($endpointState.State -eq 'ephemeral_automation' -or $ephemeralAutomationProcs.Count -gt 0) {
+    $ephemeralPids = @($ephemeralAutomationProcs.Id)
+    if ($endpointState.Pid -and $endpointState.Pid -notin $ephemeralPids) {
+        $ephemeralPids += $endpointState.Pid
+    }
+    if ($ProbeOnly) {
+        Write-Output ("RESULT=MCP_EPHEMERAL_AUTOMATION reason=planned_exit_editor_active pids={0} mutation=none next_action=wait_for_exit_then_recover" -f `
+                (Join-RecoverIds $ephemeralPids))
+        exit 2
+    }
+
+    Write-Output ("INFO waiting_for_ephemeral_automation_exit pids={0} mutation=none" -f (Join-RecoverIds $ephemeralPids))
+    $automationWait = [System.Diagnostics.Stopwatch]::StartNew()
+    $automationExited = $false
+    while ($automationWait.Elapsed.TotalSeconds -lt $TimeoutSec) {
+        Start-Sleep -Seconds $PollIntervalSec
+
+        $waitProbe = Get-MonolithHealthProbe
+        if ($waitProbe.Health) {
+            Write-UpResult -Health $waitProbe.Health -ElapsedSec ([int]$automationWait.Elapsed.TotalSeconds)
+            exit 0
+        }
+
+        $waitPortGate = Get-MonolithRecoveryPortGate -Port $port
+        $remainingAutomation = @(Get-EphemeralAutomationCandidates -Root $hostRoot)
+        if ($remainingAutomation.Count -eq 0 -and $waitPortGate.Valid) {
+            Write-Output ("INFO ephemeral_automation_exited elapsed_seconds={0} action=launch_durable_headless" -f `
+                    [int]$automationWait.Elapsed.TotalSeconds)
+            $automationExited = $true
+            break
+        }
+
+        $waitState = Get-MonolithUnavailableEndpointState `
+            -HealthErrorClass $waitProbe.ErrorClass `
+            -HealthErrorCode $waitProbe.ErrorMessage `
+            -HealthStatusCode $waitProbe.StatusCode `
+            -HealthPid $waitProbe.CandidatePid `
+            -Root $hostRoot `
+            -PortGate $waitPortGate
+        if ($waitState.State -eq 'blocked') {
+            Write-Output ("RESULT=BLOCKED reason=foreign_or_untrusted_mcp_endpoint phase=automation_handoff health_error={0} detail={1} listener_port={2} listener_pids={3} listener_gate={4}" -f `
+                    (Format-RecoverResultValue $waitProbe.ErrorClass), (Format-RecoverResultValue $waitProbe.ErrorMessage), `
+                    $port, (Join-RecoverIds $waitPortGate.Pids), (Format-RecoverResultValue $waitState.ErrorCode))
+            exit 3
+        }
+    }
+    if (-not $automationExited) {
+        $remainingAutomation = @(Get-EphemeralAutomationCandidates -Root $hostRoot)
+        Write-Output ("RESULT=MCP_TIMEOUT reason=ephemeral_automation_did_not_exit waited_seconds={0} pids={1}" -f `
+                $TimeoutSec, (Join-RecoverIds $remainingAutomation.Id))
+        exit 5
+    }
 }
 
 if ($ProbeOnly) {
@@ -836,8 +961,8 @@ else {
     Set-HeadlessAssetEditorRestoreState -Root $hostRoot
     $headlessConfig = Initialize-HeadlessEditorConfigState -Root $hostRoot
     $headlessArgs = @(
-        ("-EditorLayoutINI={0}" -f $headlessConfig.LayoutIni),
-        ("-EditorPerProjectUserSettingsINI={0}" -f $headlessConfig.PerProjectIni),
+        ('-EditorLayoutINI="{0}"' -f $headlessConfig.LayoutIni),
+        ('-EditorPerProjectUserSettingsINI="{0}"' -f $headlessConfig.PerProjectIni),
         '-ini:EditorPerProjectUserSettings:/Script/UnrealEd.EditorStyleSettings:AssetEditorOpenLocation=NewWindow',
         '-ini:EditorPerProjectUserSettings:AssetEditorSubsystem:CleanShutdown=True',
         '-ini:EditorPerProjectUserSettings:[/Script/UnrealEd.EditorLoadingSavingSettings]:RestoreOpenAssetTabsOnRestart=NeverRestore'
@@ -850,7 +975,10 @@ else {
     # Start-Process -Wait) is used because Windows PowerShell 5.1's -Wait waits on the
     # whole descendant tree — including the backgrounded editor — while .NET
     # WaitForExit only waits on the wrapper process itself.
-    $wrapperProc = Start-Process -FilePath $wrapper -ArgumentList $headlessArgs -WorkingDirectory $hostRoot -WindowStyle Hidden -PassThru
+    $wrapperProc = Start-MonolithHeadlessEditorWrapper `
+        -Wrapper $wrapper `
+        -WorkingDirectory $hostRoot `
+        -EditorArguments $headlessArgs
     if (-not $wrapperProc.WaitForExit(60000)) {
         Write-Output 'RESULT=WRAPPER_FAILED exit_code=timeout detail=RunHeadlessEditor.bat did not exit within 60s'
         exit 4

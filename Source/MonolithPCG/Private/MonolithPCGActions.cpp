@@ -2,6 +2,7 @@
 
 #include "MonolithPCGGraphEditScope.h"
 
+#include "MonolithAssetUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithJsonUtils.h"
 
@@ -483,24 +484,6 @@ namespace MonolithPCG
 			}
 		}
 		return HasProspectivePropertyCollision(MapProperty->KeyProp, Keys, Remaps);
-	}
-
-	bool IsProjectOwnedPackage(const FString& PackageName)
-	{
-		FString PackageFilename;
-		if (!FPackageName::TryConvertLongPackageNameToFilename(
-			PackageName,
-			PackageFilename,
-			FPackageName::GetAssetPackageExtension()))
-		{
-			return false;
-		}
-
-		PackageFilename = FPaths::ConvertRelativePathToFull(PackageFilename);
-		FPaths::NormalizeFilename(PackageFilename);
-		FString ProjectDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
-		FPaths::NormalizeDirectoryName(ProjectDirectory);
-		return FPaths::IsUnderDirectory(PackageFilename, ProjectDirectory);
 	}
 
 	TSharedPtr<FJsonObject> MakeReferenceRow(
@@ -1591,7 +1574,7 @@ namespace MonolithPCG
 			PackageName = PackageName.Left(DotIndex);
 		}
 		return FPackageName::IsValidLongPackageName(PackageName)
-			&& IsProjectOwnedPackage(PackageName);
+			&& FMonolithAssetUtils::IsProjectOwnedPackage(PackageName);
 	}
 
 	bool IsPcgGraphLikeAsset(const FAssetData& Asset)
@@ -1833,7 +1816,7 @@ FMonolithActionResult FMonolithPCGActions::GetStatus(const TSharedPtr<FJsonObjec
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("namespace"), TEXT("pcg"));
-	Result->SetStringField(TEXT("status"), TEXT("graph_asset_authoring_available"));
+	Result->SetStringField(TEXT("status"), TEXT("component_lifecycle_available"));
 	Result->SetStringField(TEXT("sample_utc"), FDateTime::UtcNow().ToIso8601());
 	Result->SetBoolField(TEXT("pcg_namespace_registered"), FMonolithToolRegistry::Get().HasNamespace(TEXT("pcg")));
 
@@ -1885,17 +1868,17 @@ FMonolithActionResult FMonolithPCGActions::GetStatus(const TSharedPtr<FJsonObjec
 	Result->SetNumberField(TEXT("action_count"), RegisteredActions.Num());
 
 	TArray<TSharedPtr<FJsonValue>> FutureActions;
-	FutureActions.Reserve(3);
-	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("pcg.edit_user_parameters")));
-	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("pcg.assign_component_graph")));
-	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("pcg.execute_pcg")));
+	FutureActions.Reserve(2);
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("pcg.edit_graph_user_parameter_schema")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("pcg.execute_standalone_graph")));
 	Result->SetArrayField(TEXT("future_actions"), FutureActions);
 
 	TArray<TSharedPtr<FJsonValue>> Notes;
-	Notes.Reserve(3);
+	Notes.Reserve(4);
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("Graph discovery, topology reads, and graph authoring use typed PCG APIs.")));
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("remap_graph_references is a guarded migration action for reflected and dynamic property-bag soft references.")));
-	Notes.Add(MakeShared<FJsonValueString>(TEXT("Component graph assignment, generation lifecycle, and graph user-parameter schema editing remain separate future surfaces.")));
+	Notes.Add(MakeShared<FJsonValueString>(TEXT("Exact-path PCG component creation, graph assignment, settings, generation, refresh, cancellation, cleanup, bounded output inspection, and scalar graph-instance overrides are available.")));
+	Notes.Add(MakeShared<FJsonValueString>(TEXT("Graph user-parameter schema editing remains separate from component graph-instance override editing.")));
 	Result->SetArrayField(TEXT("notes"), Notes);
 
 	return FMonolithActionResult::Success(Result);
@@ -2069,7 +2052,7 @@ FMonolithActionResult FMonolithPCGActions::RemapGraphReferences(const TSharedPtr
 		return FMonolithActionResult::Error(Error, FMonolithJsonUtils::ErrInvalidParams);
 	}
 	const FString PackageName = AssetData.PackageName.ToString();
-	if (!MonolithPCG::IsProjectOwnedPackage(PackageName))
+	if (!FMonolithAssetUtils::IsProjectOwnedPackage(PackageName))
 	{
 		return FMonolithActionResult::Error(
 			FString::Printf(TEXT("PCG graph package is outside the current project checkout: %s"), *PackageName),

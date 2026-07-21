@@ -15,9 +15,14 @@
 #include "Components/Button.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/Image.h"
+#include "Components/PanelWidget.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "EdGraph/EdGraph.h"
@@ -347,6 +352,113 @@ namespace
         }
         return Count;
     }
+
+	struct FTestLayoutBounds
+	{
+		double X = 0.0;
+		double Y = 0.0;
+		double W = 0.0;
+		double H = 0.0;
+		bool bValid = false;
+	};
+
+	bool TryGetMeasuredBounds(
+		const TSharedPtr<FJsonObject>& Result,
+		const FString& WidgetName,
+		FTestLayoutBounds& OutBounds)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Profiles = nullptr;
+		if (!Result.IsValid() || !Result->TryGetArrayField(TEXT("profiles"), Profiles) || !Profiles || Profiles->Num() != 1)
+		{
+			return false;
+		}
+
+		const TSharedPtr<FJsonObject> Profile = (*Profiles)[0].IsValid() ? (*Profiles)[0]->AsObject() : nullptr;
+		const TArray<TSharedPtr<FJsonValue>>* Widgets = nullptr;
+		if (!Profile.IsValid() || !Profile->TryGetArrayField(TEXT("widgets"), Widgets) || !Widgets)
+		{
+			return false;
+		}
+
+		for (const TSharedPtr<FJsonValue>& WidgetValue : *Widgets)
+		{
+			const TSharedPtr<FJsonObject> Widget = WidgetValue.IsValid() ? WidgetValue->AsObject() : nullptr;
+			FString FoundName;
+			if (!Widget.IsValid() || !Widget->TryGetStringField(TEXT("widget_name"), FoundName) || FoundName != WidgetName)
+			{
+				continue;
+			}
+
+			const TSharedPtr<FJsonObject>* Bounds = nullptr;
+			if (!Widget->TryGetObjectField(TEXT("layout_bounds"), Bounds) || !Bounds || !Bounds->IsValid())
+			{
+				return false;
+			}
+
+			return (*Bounds)->TryGetNumberField(TEXT("x"), OutBounds.X)
+				&& (*Bounds)->TryGetNumberField(TEXT("y"), OutBounds.Y)
+				&& (*Bounds)->TryGetNumberField(TEXT("w"), OutBounds.W)
+				&& (*Bounds)->TryGetNumberField(TEXT("h"), OutBounds.H)
+				&& (*Bounds)->TryGetBoolField(TEXT("valid"), OutBounds.bValid);
+		}
+
+		return false;
+	}
+
+	UWidgetBlueprint* ResetMeasureFixtureToBox(
+		const FString& AssetPath,
+		UClass* BoxClass,
+		FString& OutError,
+		UPanelWidget*& OutRoot)
+	{
+		OutRoot = nullptr;
+		if (!MonolithUI::TestUtils::CreateOrReuseTestWidgetBlueprint(
+			AssetPath,
+			NAME_None,
+			nullptr,
+			OutError))
+		{
+			return nullptr;
+		}
+
+		UWidgetBlueprint* WidgetBlueprint = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+		if (!WidgetBlueprint || !WidgetBlueprint->WidgetTree || !BoxClass || !BoxClass->IsChildOf(UPanelWidget::StaticClass()))
+		{
+			OutError = TEXT("Failed to load the measure fixture or resolve its requested box panel class.");
+			return nullptr;
+		}
+
+		MonolithUI::TestUtils::CleanupWidgetTree(WidgetBlueprint);
+		OutRoot = WidgetBlueprint->WidgetTree->ConstructWidget<UPanelWidget>(BoxClass, TEXT("RootBox"));
+		if (!OutRoot)
+		{
+			OutError = TEXT("Failed to construct the requested box panel root.");
+			return nullptr;
+		}
+		WidgetBlueprint->WidgetTree->RootWidget = OutRoot;
+		return WidgetBlueprint;
+	}
+
+	USizeBox* AddMeasureSizeBox(
+		UWidgetBlueprint* WidgetBlueprint,
+		UPanelWidget* Parent,
+		const FName WidgetName)
+	{
+		if (!WidgetBlueprint || !WidgetBlueprint->WidgetTree || !Parent)
+		{
+			return nullptr;
+		}
+
+		USizeBox* Child = WidgetBlueprint->WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), WidgetName);
+		return Child && Parent->AddChild(Child) ? Child : nullptr;
+	}
+
+	void CompileMeasureFixture(UWidgetBlueprint* WidgetBlueprint)
+	{
+		MonolithUI::ReconcileWidgetVariableGuids(WidgetBlueprint);
+		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBlueprint);
+		FKismetEditorUtilities::CompileBlueprint(WidgetBlueprint);
+	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -1036,6 +1148,296 @@ bool FMonolithUIMeasureWidgetLayoutCanvasOverlapTest::RunTest(const FString& /*P
     TestEqual(TEXT("schema version"), Out->GetStringField(TEXT("schema_version")), TEXT("ui_layout_measure.v1"));
     TestFalse(TEXT("does not claim render geometry proof"), Out->GetBoolField(TEXT("render_geometry_proof")));
     return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithUIMeasureWidgetLayoutVerticalBoxExactFitTest,
+	"Monolith.UI.MeasureWidgetLayout.VerticalBoxExactFit",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIMeasureWidgetLayoutVerticalBoxExactFitTest::RunTest(const FString& /*Parameters*/)
+{
+	const FString AssetPath = TEXT("/Game/Tests/Monolith/UI/WBP_MeasureLayoutVerticalBoxExactFit");
+	FString Error;
+	UPanelWidget* Root = nullptr;
+	UWidgetBlueprint* WidgetBlueprint = ResetMeasureFixtureToBox(AssetPath, UVerticalBox::StaticClass(), Error, Root);
+	if (!WidgetBlueprint)
+	{
+		AddError(Error);
+		return false;
+	}
+
+	USizeBox* First = AddMeasureSizeBox(WidgetBlueprint, Root, TEXT("First"));
+	USizeBox* Second = AddMeasureSizeBox(WidgetBlueprint, Root, TEXT("Second"));
+	USizeBox* Third = AddMeasureSizeBox(WidgetBlueprint, Root, TEXT("Third"));
+	if (!TestNotNull(TEXT("first vertical child"), First)
+		|| !TestNotNull(TEXT("second vertical child"), Second)
+		|| !TestNotNull(TEXT("third vertical child"), Third))
+	{
+		return false;
+	}
+
+	First->SetHeightOverride(40.f);
+	Second->SetHeightOverride(30.f);
+	Third->SetHeightOverride(115.f);
+	UVerticalBoxSlot* FirstSlot = Cast<UVerticalBoxSlot>(First->Slot);
+	UVerticalBoxSlot* SecondSlot = Cast<UVerticalBoxSlot>(Second->Slot);
+	UVerticalBoxSlot* ThirdSlot = Cast<UVerticalBoxSlot>(Third->Slot);
+	if (!TestNotNull(TEXT("first vertical slot"), FirstSlot)
+		|| !TestNotNull(TEXT("second vertical slot"), SecondSlot)
+		|| !TestNotNull(TEXT("third vertical slot"), ThirdSlot))
+	{
+		return false;
+	}
+
+	const FSlateChildSize Automatic(ESlateSizeRule::Automatic);
+	FirstSlot->SetSize(Automatic);
+	FirstSlot->SetPadding(FMargin(0.f, 2.f, 0.f, 3.f));
+	SecondSlot->SetSize(Automatic);
+	SecondSlot->SetPadding(FMargin(0.f, 5.f, 0.f, 5.f));
+	ThirdSlot->SetSize(Automatic);
+	CompileMeasureFixture(WidgetBlueprint);
+
+	const TSharedPtr<FJsonObject> Out = ExecuteLayoutMeasure(AssetPath, FVector2D(320.f, 200.f));
+	if (!TestTrue(TEXT("vertical exact-fit measure returns JSON"), Out.IsValid()))
+	{
+		return false;
+	}
+	TestTrue(TEXT("vertical exact-fit has no findings"), Out->GetBoolField(TEXT("bSuccess")));
+	TestEqual(TEXT("vertical exact-fit has no overlaps"), CountNestedFindings(Out, TEXT("overlaps"), TEXT("WidgetOverlap")), 0);
+
+	FTestLayoutBounds FirstBounds;
+	FTestLayoutBounds SecondBounds;
+	FTestLayoutBounds ThirdBounds;
+	TestTrue(TEXT("first bounds available"), TryGetMeasuredBounds(Out, TEXT("First"), FirstBounds));
+	TestTrue(TEXT("second bounds available"), TryGetMeasuredBounds(Out, TEXT("Second"), SecondBounds));
+	TestTrue(TEXT("third bounds available"), TryGetMeasuredBounds(Out, TEXT("Third"), ThirdBounds));
+	TestTrue(TEXT("first vertical bounds exact"), FirstBounds.bValid
+		&& FMath::IsNearlyEqual(FirstBounds.Y, 2.0) && FMath::IsNearlyEqual(FirstBounds.H, 40.0));
+	TestTrue(TEXT("second vertical bounds use cumulative prior extent"), SecondBounds.bValid
+		&& FMath::IsNearlyEqual(SecondBounds.Y, 50.0) && FMath::IsNearlyEqual(SecondBounds.H, 30.0));
+	TestTrue(TEXT("third vertical bounds use unequal cumulative extents"), ThirdBounds.bValid
+		&& FMath::IsNearlyEqual(ThirdBounds.Y, 85.0) && FMath::IsNearlyEqual(ThirdBounds.H, 115.0));
+	WidgetBlueprint->GetOutermost()->ClearDirtyFlag();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithUIMeasureWidgetLayoutHorizontalBoxExactFitTest,
+	"Monolith.UI.MeasureWidgetLayout.HorizontalBoxExactFit",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIMeasureWidgetLayoutHorizontalBoxExactFitTest::RunTest(const FString& /*Parameters*/)
+{
+	const FString AssetPath = TEXT("/Game/Tests/Monolith/UI/WBP_MeasureLayoutHorizontalBoxExactFit");
+	FString Error;
+	UPanelWidget* Root = nullptr;
+	UWidgetBlueprint* WidgetBlueprint = ResetMeasureFixtureToBox(AssetPath, UHorizontalBox::StaticClass(), Error, Root);
+	if (!WidgetBlueprint)
+	{
+		AddError(Error);
+		return false;
+	}
+
+	USizeBox* First = AddMeasureSizeBox(WidgetBlueprint, Root, TEXT("First"));
+	USizeBox* Second = AddMeasureSizeBox(WidgetBlueprint, Root, TEXT("Second"));
+	USizeBox* Third = AddMeasureSizeBox(WidgetBlueprint, Root, TEXT("Third"));
+	if (!TestNotNull(TEXT("first horizontal child"), First)
+		|| !TestNotNull(TEXT("second horizontal child"), Second)
+		|| !TestNotNull(TEXT("third horizontal child"), Third))
+	{
+		return false;
+	}
+
+	First->SetWidthOverride(50.f);
+	Second->SetWidthOverride(80.f);
+	Third->SetWidthOverride(150.f);
+	UHorizontalBoxSlot* FirstSlot = Cast<UHorizontalBoxSlot>(First->Slot);
+	UHorizontalBoxSlot* SecondSlot = Cast<UHorizontalBoxSlot>(Second->Slot);
+	UHorizontalBoxSlot* ThirdSlot = Cast<UHorizontalBoxSlot>(Third->Slot);
+	if (!TestNotNull(TEXT("first horizontal slot"), FirstSlot)
+		|| !TestNotNull(TEXT("second horizontal slot"), SecondSlot)
+		|| !TestNotNull(TEXT("third horizontal slot"), ThirdSlot))
+	{
+		return false;
+	}
+
+	const FSlateChildSize Automatic(ESlateSizeRule::Automatic);
+	FirstSlot->SetSize(Automatic);
+	FirstSlot->SetPadding(FMargin(4.f, 0.f, 6.f, 0.f));
+	SecondSlot->SetSize(Automatic);
+	SecondSlot->SetPadding(FMargin(10.f, 0.f, 0.f, 0.f));
+	ThirdSlot->SetSize(Automatic);
+	CompileMeasureFixture(WidgetBlueprint);
+
+	const TSharedPtr<FJsonObject> Out = ExecuteLayoutMeasure(AssetPath, FVector2D(300.f, 120.f));
+	if (!TestTrue(TEXT("horizontal exact-fit measure returns JSON"), Out.IsValid()))
+	{
+		return false;
+	}
+	TestTrue(TEXT("horizontal exact-fit has no findings"), Out->GetBoolField(TEXT("bSuccess")));
+	TestEqual(TEXT("horizontal exact-fit has no overlaps"), CountNestedFindings(Out, TEXT("overlaps"), TEXT("WidgetOverlap")), 0);
+
+	FTestLayoutBounds FirstBounds;
+	FTestLayoutBounds SecondBounds;
+	FTestLayoutBounds ThirdBounds;
+	TestTrue(TEXT("first bounds available"), TryGetMeasuredBounds(Out, TEXT("First"), FirstBounds));
+	TestTrue(TEXT("second bounds available"), TryGetMeasuredBounds(Out, TEXT("Second"), SecondBounds));
+	TestTrue(TEXT("third bounds available"), TryGetMeasuredBounds(Out, TEXT("Third"), ThirdBounds));
+	TestTrue(TEXT("first horizontal bounds exact"), FirstBounds.bValid
+		&& FMath::IsNearlyEqual(FirstBounds.X, 4.0) && FMath::IsNearlyEqual(FirstBounds.W, 50.0));
+	TestTrue(TEXT("second horizontal bounds use cumulative prior extent"), SecondBounds.bValid
+		&& FMath::IsNearlyEqual(SecondBounds.X, 70.0) && FMath::IsNearlyEqual(SecondBounds.W, 80.0));
+	TestTrue(TEXT("third horizontal bounds use unequal cumulative extents"), ThirdBounds.bValid
+		&& FMath::IsNearlyEqual(ThirdBounds.X, 150.0) && FMath::IsNearlyEqual(ThirdBounds.W, 150.0));
+	WidgetBlueprint->GetOutermost()->ClearDirtyFlag();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithUIMeasureWidgetLayoutBoxMixedAllocationTest,
+	"Monolith.UI.MeasureWidgetLayout.BoxMixedAutoFillCollapsed",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIMeasureWidgetLayoutBoxMixedAllocationTest::RunTest(const FString& /*Parameters*/)
+{
+	const FString AssetPath = TEXT("/Game/Tests/Monolith/UI/WBP_MeasureLayoutBoxMixedAllocation");
+	FString Error;
+	UPanelWidget* Root = nullptr;
+	UWidgetBlueprint* WidgetBlueprint = ResetMeasureFixtureToBox(AssetPath, UVerticalBox::StaticClass(), Error, Root);
+	if (!WidgetBlueprint)
+	{
+		AddError(Error);
+		return false;
+	}
+
+	USizeBox* AutomaticChild = AddMeasureSizeBox(WidgetBlueprint, Root, TEXT("Automatic"));
+	USizeBox* CollapsedChild = AddMeasureSizeBox(WidgetBlueprint, Root, TEXT("Collapsed"));
+	USizeBox* FillOneChild = AddMeasureSizeBox(WidgetBlueprint, Root, TEXT("FillOne"));
+	USizeBox* FillThreeChild = AddMeasureSizeBox(WidgetBlueprint, Root, TEXT("FillThree"));
+	if (!TestNotNull(TEXT("automatic child"), AutomaticChild)
+		|| !TestNotNull(TEXT("collapsed child"), CollapsedChild)
+		|| !TestNotNull(TEXT("fill-one child"), FillOneChild)
+		|| !TestNotNull(TEXT("fill-three child"), FillThreeChild))
+	{
+		return false;
+	}
+
+	AutomaticChild->SetHeightOverride(40.f);
+	CollapsedChild->SetHeightOverride(100.f);
+	CollapsedChild->SetVisibility(ESlateVisibility::Collapsed);
+	UVerticalBoxSlot* AutomaticSlot = Cast<UVerticalBoxSlot>(AutomaticChild->Slot);
+	UVerticalBoxSlot* CollapsedSlot = Cast<UVerticalBoxSlot>(CollapsedChild->Slot);
+	UVerticalBoxSlot* FillOneSlot = Cast<UVerticalBoxSlot>(FillOneChild->Slot);
+	UVerticalBoxSlot* FillThreeSlot = Cast<UVerticalBoxSlot>(FillThreeChild->Slot);
+	if (!TestNotNull(TEXT("automatic slot"), AutomaticSlot)
+		|| !TestNotNull(TEXT("collapsed slot"), CollapsedSlot)
+		|| !TestNotNull(TEXT("fill-one slot"), FillOneSlot)
+		|| !TestNotNull(TEXT("fill-three slot"), FillThreeSlot))
+	{
+		return false;
+	}
+
+	const FSlateChildSize Automatic(ESlateSizeRule::Automatic);
+	FSlateChildSize FillOne(ESlateSizeRule::Fill);
+	FillOne.Value = 1.f;
+	FSlateChildSize FillThree(ESlateSizeRule::Fill);
+	FillThree.Value = 3.f;
+	AutomaticSlot->SetSize(Automatic);
+	AutomaticSlot->SetPadding(FMargin(0.f, 5.f, 0.f, 5.f));
+	CollapsedSlot->SetSize(Automatic);
+	CollapsedSlot->SetPadding(FMargin(0.f, 20.f, 0.f, 20.f));
+	FillOneSlot->SetSize(FillOne);
+	FillOneSlot->SetPadding(FMargin(0.f, 2.f, 0.f, 3.f));
+	FillThreeSlot->SetSize(FillThree);
+	FillThreeSlot->SetPadding(FMargin(0.f, 5.f, 0.f, 5.f));
+	CompileMeasureFixture(WidgetBlueprint);
+
+	const TSharedPtr<FJsonObject> Out = ExecuteLayoutMeasure(AssetPath, FVector2D(200.f, 300.f));
+	if (!TestTrue(TEXT("mixed allocation measure returns JSON"), Out.IsValid()))
+	{
+		return false;
+	}
+	TestTrue(TEXT("mixed allocation has no findings"), Out->GetBoolField(TEXT("bSuccess")));
+	TestEqual(TEXT("mixed allocation has no overlaps"), CountNestedFindings(Out, TEXT("overlaps"), TEXT("WidgetOverlap")), 0);
+
+	FTestLayoutBounds AutomaticBounds;
+	FTestLayoutBounds CollapsedBounds;
+	FTestLayoutBounds FillOneBounds;
+	FTestLayoutBounds FillThreeBounds;
+	TestTrue(TEXT("automatic bounds available"), TryGetMeasuredBounds(Out, TEXT("Automatic"), AutomaticBounds));
+	TestTrue(TEXT("collapsed bounds available"), TryGetMeasuredBounds(Out, TEXT("Collapsed"), CollapsedBounds));
+	TestTrue(TEXT("fill-one bounds available"), TryGetMeasuredBounds(Out, TEXT("FillOne"), FillOneBounds));
+	TestTrue(TEXT("fill-three bounds available"), TryGetMeasuredBounds(Out, TEXT("FillThree"), FillThreeBounds));
+	TestTrue(TEXT("automatic child reserves desired size plus padding"), AutomaticBounds.bValid
+		&& FMath::IsNearlyEqual(AutomaticBounds.Y, 5.0) && FMath::IsNearlyEqual(AutomaticBounds.H, 40.0));
+	TestFalse(TEXT("collapsed child does not expose valid layout bounds"), CollapsedBounds.bValid);
+	TestTrue(TEXT("fill-one receives one quarter of remaining content after all visible padding"), FillOneBounds.bValid
+		&& FMath::IsNearlyEqual(FillOneBounds.Y, 52.0) && FMath::IsNearlyEqual(FillOneBounds.H, 58.75));
+	TestTrue(TEXT("fill-three receives three quarters of remaining content after all visible padding"), FillThreeBounds.bValid
+		&& FMath::IsNearlyEqual(FillThreeBounds.Y, 118.75) && FMath::IsNearlyEqual(FillThreeBounds.H, 176.25));
+	WidgetBlueprint->GetOutermost()->ClearDirtyFlag();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithUIMeasureWidgetLayoutBoxUnknownAutomaticExtentTest,
+	"Monolith.UI.MeasureWidgetLayout.BoxUnknownAutomaticExtentFailsClosed",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIMeasureWidgetLayoutBoxUnknownAutomaticExtentTest::RunTest(const FString& /*Parameters*/)
+{
+	const FString AssetPath = TEXT("/Game/Tests/Monolith/UI/WBP_MeasureLayoutBoxUnknownAutomaticExtent");
+	FString Error;
+	UPanelWidget* Root = nullptr;
+	UWidgetBlueprint* WidgetBlueprint = ResetMeasureFixtureToBox(AssetPath, UVerticalBox::StaticClass(), Error, Root);
+	if (!WidgetBlueprint)
+	{
+		AddError(Error);
+		return false;
+	}
+
+	USizeBox* KnownChild = AddMeasureSizeBox(WidgetBlueprint, Root, TEXT("Known"));
+	USizeBox* UnknownDesiredChild = AddMeasureSizeBox(WidgetBlueprint, Root, TEXT("UnknownDesired"));
+	if (!TestNotNull(TEXT("known child"), KnownChild)
+		|| !TestNotNull(TEXT("unknown desired child"), UnknownDesiredChild))
+	{
+		return false;
+	}
+
+	KnownChild->SetHeightOverride(40.f);
+	UVerticalBoxSlot* KnownSlot = Cast<UVerticalBoxSlot>(KnownChild->Slot);
+	UVerticalBoxSlot* UnknownDesiredSlot = Cast<UVerticalBoxSlot>(UnknownDesiredChild->Slot);
+	if (!TestNotNull(TEXT("known slot"), KnownSlot)
+		|| !TestNotNull(TEXT("unknown desired slot"), UnknownDesiredSlot))
+	{
+		return false;
+	}
+
+	const FSlateChildSize Automatic(ESlateSizeRule::Automatic);
+	KnownSlot->SetSize(Automatic);
+	KnownSlot->SetPadding(FMargin(0.f, 5.f, 0.f, 5.f));
+	UnknownDesiredSlot->SetSize(Automatic);
+	CompileMeasureFixture(WidgetBlueprint);
+
+	const TSharedPtr<FJsonObject> Out = ExecuteLayoutMeasure(AssetPath, FVector2D(200.f, 100.f));
+	if (!TestTrue(TEXT("unknown automatic measure returns JSON"), Out.IsValid()))
+	{
+		return false;
+	}
+	TestFalse(TEXT("unknown automatic extent fails closed"), Out->GetBoolField(TEXT("bSuccess")));
+	TestEqual(TEXT("unknown automatic status"), Out->GetStringField(TEXT("status")), TEXT("measurement_unavailable"));
+	TestEqual(TEXT("unknown automatic produces no fabricated overlap"), CountNestedFindings(Out, TEXT("overlaps"), TEXT("WidgetOverlap")), 0);
+
+	FTestLayoutBounds KnownBounds;
+	FTestLayoutBounds UnknownBounds;
+	TestTrue(TEXT("known bounds available"), TryGetMeasuredBounds(Out, TEXT("Known"), KnownBounds));
+	TestTrue(TEXT("unknown row available"), TryGetMeasuredBounds(Out, TEXT("UnknownDesired"), UnknownBounds));
+	TestTrue(TEXT("known child remains measured"), KnownBounds.bValid
+		&& FMath::IsNearlyEqual(KnownBounds.Y, 5.0) && FMath::IsNearlyEqual(KnownBounds.H, 40.0));
+	TestFalse(TEXT("unknown desired size is not reported as valid geometry"), UnknownBounds.bValid);
+	WidgetBlueprint->GetOutermost()->ClearDirtyFlag();
+	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(

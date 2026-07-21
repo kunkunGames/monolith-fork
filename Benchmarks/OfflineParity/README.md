@@ -41,6 +41,15 @@ Current coverage:
   The Python reader is not opened in this state. A journal refusal that appears
   after a successful preflight is a real per-action `ERROR`, never a `SKIP`, so
   a one-sided failure cannot shrink the denominator or inflate the score.
+- Input fingerprinting follows the executed dependency boundary. All declared
+  `cppreflect`, `network`, `decision`, `risk`, and non-CRG `source` rows read
+  `Saved/EngineSource.db`, so that is the only database in the run identity.
+  `ProjectIndex.db`, `graph.db`, and legacy analysis DBs are excluded because no
+  OfflineParity row reads them; unrelated live index updates must not stale an
+  otherwise comparable parity result.
+  The same identity includes `actions.jsonl`, `manifest.json`, the benchmark
+  runner, the native Query executable, and the Python fallback, so changes to
+  either the corpus or scoring logic cannot reuse an older baseline.
 
 ### Scope: what this benchmark cannot see
 
@@ -64,8 +73,31 @@ benchmark as a trend gate: healthy runs should stay at or above `0.95`, with
 | `RESULTS.md` | Latest checked-in benchmark result summary and evidence paths. |
 | `manifest.json` | Static seed manifest: `action_count`, `action_file`, category/bucket counts, scoring summary. CI validates `action_count` against the `actions.jsonl` line count. |
 | `actions.jsonl` | The externalized parity action table (one action per line). Reviewable as data; CI line-count-validated like the other benchmarks. |
+| `accepted/<snapshot>/` | Tracked minimum accepted-evidence bundle: aggregate summary, raw per-action rows, and a pinned bundle manifest. The multi-gigabyte database is attested, not copied here. |
 | `Scripts/offline_parity_benchmark.py` | Standalone benchmark runner (run / compare / report). Loads the table from `actions.jsonl`. |
 | `Scripts/test_offline_parity_benchmark.py` | Offline unit tests for the loader, `offline_unsupported` scoring, run-level active-writer blocking, and one-sided journal failures (no live editor). |
+
+## Accepted completion evidence
+
+An OfflineParity run receives completion credit only after its minimum complete
+bundle is promoted to `Benchmarks/OfflineParity/accepted/<snapshot>/`:
+
+- `summary.json` retains aggregate metrics, run validity, exact benchmark input
+  signatures, and the input fingerprint.
+- `per_action.jsonl` retains every raw result row so the inventory can rederive
+  namespace pass/fail/expected-skip counts instead of trusting the aggregate.
+- `bundle_manifest.json` is SHA-pinned by `inventory_status.json` and in turn
+  pins both evidence files, raw row count, input fingerprint, and the complete
+  `Saved/EngineSource.db` attestation.
+
+The database itself is deliberately not copied into the source-controlled
+bundle. `benchmark_inventory.py --portable-check` accepts the recorded database
+attestation only when `Saved/EngineSource.db` is absent, as in a clean hosted-CI
+checkout. When the database is present, portable mode still verifies its exact
+size, mtime, and content SHA-256 and rejects drift. The full local
+`benchmark_inventory.py --check` always requires the database and every pending
+`Saved/...` diagnostic to exist. Neither mode grants completion credit from a
+missing pending diagnostic.
 
 ## Run
 

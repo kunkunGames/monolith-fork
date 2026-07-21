@@ -51,6 +51,7 @@ class MONOLITHEDITOR_API FMonolithEditorActions
 public:
 	static void RegisterActions(FMonolithLogCapture* LogCapture);
 	static void InitLiveCodingDelegate();
+	static void ShutdownAutomationSessions();
 	static FMonolithLogCapture* GetLogCapture();
 
 	static FMonolithActionResult HandleTriggerBuild(const TSharedPtr<FJsonObject>& Params);
@@ -111,6 +112,8 @@ public:
 
 	// --- Automation tests ---
 	static FMonolithActionResult HandleRunAutomationTests(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleStartAutomationTests(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandlePollAutomationTests(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleListAutomationTests(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleFindAutomationTests(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetAutomationSummary(const TSharedPtr<FJsonObject>& Params);
@@ -194,6 +197,7 @@ private:
 	static TSharedPtr<FJsonObject> CurrentAutomationRun;
 	static TArray<TSharedPtr<FJsonObject>> AutomationRunHistory;
 	static bool bAutomationRunActive;
+	static void RecordFinishedAutomationRun(const TSharedPtr<FJsonObject>& Run);
 
 	// Capture helpers
 	static bool CaptureNiagaraFrame(

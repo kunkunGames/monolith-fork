@@ -20,7 +20,7 @@ bool FMonolithParamGuardModelGenImportGeneratedModelTest::RunTest(const FString&
 		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("modelgen"), TEXT("import_generated_model"), EmptyParams);
 		TestFalse(TEXT("ImportGeneratedModel with empty params should fail"), Result.bSuccess);
 		TestEqual(TEXT("Error code should be invalid params"), Result.ErrorCode, -32602);
-		TestTrue(TEXT("Error message should mention job_id or file_path"), Result.Error.Contains(TEXT("Either job_id or file_path is required")));
+		TestTrue(TEXT("Error message should mention job_id or file_path"), Result.ErrorMessage.Contains(TEXT("Either job_id or file_path is required")));
 	}
 
 	// Test 2: Missing destination defaults to /Game/GeneratedModels
@@ -31,7 +31,7 @@ bool FMonolithParamGuardModelGenImportGeneratedModelTest::RunTest(const FString&
 		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("modelgen"), TEXT("import_generated_model"), MissingDestParams);
 		TestFalse(TEXT("ImportGeneratedModel with missing dest and non-existent file should fail"), Result.bSuccess);
 		TestEqual(TEXT("Error code should be invalid params"), Result.ErrorCode, -32602);
-		TestTrue(TEXT("Error message should mention model file not found"), Result.Error.Contains(TEXT("Model file not found")));
+		TestTrue(TEXT("Error message should mention model file not found"), Result.ErrorMessage.Contains(TEXT("Model file not found")));
 	}
 
 	// Test 3: Invalid destination folder (malformed path)
@@ -53,7 +53,7 @@ bool FMonolithParamGuardModelGenImportGeneratedModelTest::RunTest(const FString&
 		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("modelgen"), TEXT("import_generated_model"), EmptyStringsParams);
 		TestFalse(TEXT("ImportGeneratedModel with empty string for job_id and file_path should fail"), Result.bSuccess);
 		TestEqual(TEXT("Error code should be invalid params"), Result.ErrorCode, -32602);
-		TestTrue(TEXT("Error message should mention job_id or file_path"), Result.Error.Contains(TEXT("Either job_id or file_path is required")));
+		TestTrue(TEXT("Error message should mention job_id or file_path"), Result.ErrorMessage.Contains(TEXT("Either job_id or file_path is required")));
 	}
 
 	// Test 5: Wrong type for job_id (number instead of string)

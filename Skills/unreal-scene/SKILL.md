@@ -35,8 +35,8 @@ Use a different skill for:
 | Action | Signature | Purpose |
 |--------|-----------|---------|
 | `[w] align_actors` | `actor_names* axis*(X/Y/Z) mode*(min/max/center/distribute)` | Align multiple actors along an axis. Modes: min/max (snap to extremes), center (average), distribute (spread evenly between min/max). |
-| `[w] batch_execute` | `actions*` | Execute multiple scene actions in a single undo transaction. Max 200 actions. No nested batch_execute allowed. |
-| `[w] delete_actors` | `actor_names*` | Delete one or more actors from the editor world. Validates ALL exist before deleting ANY. Does NOT delete asset files. |
+| `[w] batch_execute` | `actions*` | Execute up to 200 actions in one undo transaction; no nesting. Stops at first failure, ends the transaction for Undo, and does not claim automatic rollback. |
+| `[w] delete_actors` | `actor_names*` | Exactly delete 1–1000 distinct actors in the active current map. Accepts exact object paths or unique internal names/labels; preflights the complete set and verifies exact identity/path absence afterward. Does NOT delete asset files. |
 | `[w] duplicate_actor` | `actor_name* new_name? offset=[0,0,0]` | Duplicate an actor in the editor world with an optional position offset |
 | `get_actor_info` | `actor_name*` | Get comprehensive info for an actor in the editor world (class, transform, mesh, materials, tags, components, bounds) |
 | `[w] group_actors` | `actor_names* group_name*` | Move actors into an outliner folder (creates folder hierarchy automatically) |
@@ -121,6 +121,7 @@ Use a different skill for:
 | Action | Signature | Purpose |
 |--------|-----------|---------|
 | `get_actor_component_properties` | `actor_name* component_name? properties? component_class?` | Read arbitrary component properties via FProperty reflection. Returns typed values for any UPROPERTY. |
+| `[w] set_actor_component_properties` | `actor_name* properties*(object {name:value}) component_name? component_class? save=false` | Write arbitrary component properties on a live level actor via FProperty reflection (ImportText). Values string/number/bool. Reports applied/skipped; optional save persists the owning level. Write counterpart to get_actor_component_properties. |
 | `[w] place_light` | `type*(point/spot/rect/directional) location* rotation=[0,0,0] intensity=5000 color=[1,1,1] attenuation_radius=1000 cast_shadows=true temperature=6500 use_temperature=false source_radius=0 source_width=64 source_height=64 inner_cone_angle=25 outer_cone_angle=44 name? folder? mobility=Stationary(Static/Stationary/Movable)` | Spawn a light actor with full property configuration. |
 | `[w] set_actor_material` | `actor_name* material* slot=0 slot_name? component_name?` | Assign a material to an actor's mesh component by slot index or slot name. SetMaterial creates override array — setting slot 2 without 0-1 fills them with defaults. |
 | `[w] set_light_properties` | `actor_name* intensity? color? attenuation_radius? cast_shadows? temperature? use_temperature? source_radius? source_width? source_height? inner_cone_angle? outer_cone_angle? mobility?` | Modify properties on an existing light actor (intensity, color, shadows, temperature, cone angles, etc.) |
@@ -190,6 +191,7 @@ Use a different skill for:
 
 - **Scene overview:** `get_scene_statistics` → `query_radial_sweep` → `get_spatial_relationships`
 - **Place & arrange:** `spawn_actor` → `move_actor` / `align_actors` → `group_actors` → `select_actors`
+- **Exact destructive edit:** resolve current-map actor object paths → `delete_actors` → require `exact_deletion_verified=true` and `survivor_count=0` before saving
 - **Visibility / cover:** `query_line_of_sight` → `query_raycast` / `query_overlap` / `query_nearest`
 - **Lighting audit:** `get_light_coverage` → `find_dark_corners` → `analyze_light_transitions` → `suggest_light_placement`
 - **Spatial registry (town):** `register_building` / `register_room` → `query_room_at` / `path_between_rooms` → `auto_volumes_for_building`
@@ -197,12 +199,15 @@ Use a different skill for:
 ## Gotchas
 
 - `query_*` run live physics traces; `get_*` read stored data. All spatial queries work in-editor **without** a PIE session.
-- `batch_execute` runs many actions in one undo transaction — caps at 200, no nesting.
+- For destructive batches, pass exact actor object paths to `delete_actors`. Every actor must belong to the active `World->GetCurrentLevel()` map package; streamed/sublevel actors must be handled only after making that level current.
+- `delete_actors` rejects duplicate aliases that resolve to one actor and runs both per-actor `CanDeleteActor` and whole-set `ShouldAbortActorDeletion` checks before mutation. Success requires exact identity and path readback, not just UE's `DeleteActors` Boolean.
+- On `delete_actors` partial failure, inspect `actor_results`, `survivors`, `requires_manual_recovery`, and `undo_available`; completed deletions remain applied and are explicitly Undo-able only when `undo_available=true`. `rollback_performed=false` is intentional.
+- `batch_execute` caps at 200 and forbids nesting. It stops at first failure and closes the transaction for Undo; earlier successful actions and a partially-mutated failing action are retained, not automatically rolled back. Inspect nested `results[].error_data`.
 - `spawn_actor` cannot create `ABlockingVolume` — use `spawn_volume`. Set mobility `Movable` before enabling physics in `set_actor_properties`.
 - `query_radial_sweep`: `ray_count * vertical_angles <= 512`.
 - `register_building` / `register_room` must run before spatial-registry queries return results.
 - Editor actor edits are not autosaved: after spawn/move/delete/property changes, save the open level explicitly (the scene namespace has no save action — use the editor/asset save path or save in-editor before relying on persistence).
-- Actor object paths are `/Game/Maps/Map.Map:PersistentLevel.ActorName`; the short `actor_name` these actions take is the outliner label, not the full object path.
+- Actor object paths are `/Game/Maps/Map.Map:PersistentLevel.ActorName`. Most singular `actor_name` params take an outliner label/internal name; `delete_actors.actor_names` additionally accepts and prefers exact object paths for destructive work.
 
 ## Notes
 

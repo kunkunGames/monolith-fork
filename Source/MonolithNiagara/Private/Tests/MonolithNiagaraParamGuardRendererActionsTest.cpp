@@ -1,10 +1,11 @@
 #include "Misc/AutomationTest.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithNiagaraActions.h"
 #include "Serialization/JsonSerializer.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithNiagaraParamGuardRendererActionsTest, "Monolith.Niagara.ParamGuard.RendererActions", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithNiagaraParamGuardRendererActionsTest, "Monolith.Niagara.ParamGuard.RendererActions", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithNiagaraParamGuardRendererActionsTest::RunTest(const FString& Parameters)
 {

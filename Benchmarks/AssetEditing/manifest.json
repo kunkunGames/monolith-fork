@@ -3,7 +3,7 @@
   "description": "Measures Unreal asset editing capability: Blueprint graph/class/component fixture edits plus high-ROI cross-domain asset creation, edit, save/read-back workflows, schema discovery, graceful input-specific error handling, duplicate-name rejection, negative compile reporting, and explicit fixture lifecycle preflight",
   "primary_score": "asset_editing_score",
   "expected_namespace": "blueprint-plus-asset-authoring",
-  "generated_at": "2026-07-12T02:14:13.527689+00:00",
+  "generated_at": "2026-07-17T10:24:40.937223+00:00",
   "task_count": 579,
   "category_counts": {
     "asset_authoring": 269,
@@ -108,7 +108,7 @@
   "testset_module_storage": "split_shards",
   "testset_module_shard_dir": "Benchmarks/AssetEditing/testsets/module_shards",
   "testset_module_shard_count": 39,
-  "testset_module_count": 1826,
+  "testset_module_count": 1824,
   "testset_routing_axes": [
     "category",
     "domain",
@@ -391,13 +391,14 @@
       "task_count": 3,
       "edit_domain_count": 3,
       "operation_counts": {
-        "creation_or_import": 3,
-        "edit": 3,
-        "save": 3,
+        "creation_or_import": 2,
+        "edit": 2,
+        "save": 2,
         "readback_verify": 3
       },
       "lifecycle_counts": {
-        "create_save": 3
+        "create_save": 2,
+        "not_applicable": 1
       },
       "directory": "Benchmarks/AssetEditing/level_instance",
       "index_file": "Benchmarks/AssetEditing/level_instance/index.json",

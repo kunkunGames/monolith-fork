@@ -63,12 +63,20 @@ public:
 		bool bResultTruncated = false;
 		bool bDirtyPackageTrackingActive = false;
 		bool bSourceControlPrepareActive = false;
+		bool bHandlerOwnedSourceControlPrepare = false;
 		bool bActive = false;
 	};
 
 	static FMonolithActionExecutionGuard& Get();
 
 	FExecutionScope BeginAction(const FString& Namespace, const FString& Action, const TSharedPtr<FJsonObject>& Params = nullptr);
+	/**
+	 * Declare actions whose handlers prepare their exact packages after no-op
+	 * detection and before the first mutation. The central guard keeps dirty
+	 * tracking/audit enabled but suppresses its coarse param/result path scan.
+	 */
+	void RegisterHandlerOwnedSourceControlActions(const FString& Namespace, const TArray<FString>& Actions);
+	void UnregisterHandlerOwnedSourceControlActions(const FString& Namespace);
 	bool RegisterPostEditValidator(const FString& Namespace, const FString& Action, const FMonolithPostEditValidator& Validator, FString& OutError);
 	FMonolithPostEditValidationResult RunPostEditValidation(FExecutionScope& Scope, const TSharedPtr<FJsonObject>& Params, const TSharedPtr<FJsonObject>& ResultObject);
 	void SetActionOutcome(FExecutionScope& Scope, bool bSuccess, int32 ErrorCode, const TSharedPtr<FJsonObject>& ResultObject, const FString& ErrorMessage);
@@ -126,6 +134,7 @@ private:
 	static FMonolithPostEditValidationResult RunDefaultPostEditValidation(const FMonolithPostEditValidationContext& Context);
 	static bool IsAutomaticSourceControlPrepareNamespace(const FString& Namespace);
 	static bool IsAutomaticSourceControlPrepareAction(const FString& Action);
+	bool IsHandlerOwnedSourceControlAction(const FString& Namespace, const FString& Action) const;
 	static TSet<FString> SnapshotDirtyPackages();
 	static TArray<FString> CollectChangedDirtyPackages(const FExecutionScope& Scope);
 	static TArray<FString> CollectSourceControlTargetPaths(const TSharedPtr<FJsonObject>& Object);
@@ -142,6 +151,7 @@ private:
 	mutable FCriticalSection GuardLock;
 	TArray<FAuditRow> AuditRows;
 	TMap<FString, FMonolithPostEditValidator> PostEditValidators;
+	TSet<FString> HandlerOwnedSourceControlActions;
 	TSharedPtr<FJsonObject> LastRollback;
 	static constexpr int32 AuditCapacity = 100;
 };

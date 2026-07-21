@@ -16,7 +16,9 @@ params (enum / numeric range) actually document their allowed values.
 Subcommands
 -----------
 scan    Connect to a live MCP endpoint, discover every action, score schema
-        quality for each, and write result files to --output-dir.
+        quality for each, and write result files to --output-dir. Full scans
+        checkpoint every valid result and may continue with --resume after an
+        MCP/editor restart when the input and catalog identity are unchanged.
 probe   Load a probe_set.jsonl file, fetch the schema for each listed
         namespace.action, score it, and check expected_dimensions pass/fail.
         Writes summary.json, per_action.jsonl, partial_summary.json, and the
@@ -29,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import hashlib
 import json
 import math
 import pathlib
@@ -48,6 +51,8 @@ from benchmark_common import (
     TransportFailureTracker,
     attach_benchmark_inputs,
     build_benchmark_inputs,
+    local_project_name,
+    refresh_benchmark_input_fingerprint,
     resolve_plugin_path,
 )
 
@@ -122,6 +127,13 @@ def write_json(path: pathlib.Path, payload: Any) -> None:
         handle.write("\n")
 
 
+def write_json_atomic(path: pathlib.Path, payload: Any) -> None:
+    """Replace a JSON artifact atomically so interruption cannot truncate it."""
+    temporary = path.with_name(f"{path.name}.tmp")
+    write_json(temporary, payload)
+    temporary.replace(path)
+
+
 def append_jsonl_row(path: pathlib.Path, row: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8", newline="\n") as handle:
@@ -135,6 +147,13 @@ def write_jsonl(path: pathlib.Path, rows: Iterable[Dict[str, Any]]) -> None:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
             handle.write("\n")
+
+
+def write_jsonl_atomic(path: pathlib.Path, rows: Iterable[Dict[str, Any]]) -> None:
+    """Replace a JSONL artifact atomically after validating rows in memory."""
+    temporary = path.with_name(f"{path.name}.tmp")
+    write_jsonl(temporary, rows)
+    temporary.replace(path)
 
 
 def _strict_json_object(pairs: List[Tuple[str, Any]]) -> Dict[str, Any]:
@@ -157,10 +176,37 @@ RUN_OUTPUT_FILENAMES = (
     "partial_summary.json",
     "namespace_breakdown.json",
     "per_action.jsonl",
+    "scan_checkpoint.json",
     "probe_results.jsonl",
     "probe_preflight.json",
     "run_failure.json",
 )
+
+SCAN_CHECKPOINT_FILENAME = "scan_checkpoint.json"
+SCAN_CHECKPOINT_SCHEMA_VERSION = 2
+SCAN_CONTRACT_VERSION = "schema-completeness-full-catalog-v2"
+CATALOG_ACTION_IDS_HASH_KIND = "sorted_json_namespace_dot_action_v1"
+RAW_SCHEMA_HASH_KIND = "sha256_utf8_canonical_json_sorted_keys_compact_ascii_type_exact_v1"
+CHECKPOINT_DIMENSION_FIELDS = (
+    "param_types_declared",
+    "required_params_marked",
+    "value_domain",
+    "planning_signals_present",
+    "skill_routing_present",
+    "output_contract_declared",
+)
+
+
+def schema_quality_pass(row: Dict[str, Any]) -> bool:
+    """True only when every applicable schema dimension explicitly passes."""
+    if any(field not in row for field in CHECKPOINT_DIMENSION_FIELDS):
+        return False
+    applicable = [
+        row[field]
+        for field in CHECKPOINT_DIMENSION_FIELDS
+        if field in row and row[field] is not None
+    ]
+    return bool(applicable) and all(value is True for value in applicable)
 
 
 def clear_run_outputs(output_dir: pathlib.Path) -> None:
@@ -177,6 +223,474 @@ def write_run_failure(output_dir: pathlib.Path, payload: Dict[str, Any]) -> None
     failure.setdefault("created_at", utc_now())
     failure["run_valid"] = False
     write_json(output_dir / "run_failure.json", failure)
+
+
+def _validate_canonical_json_value(payload: Any, *, path: str = "$") -> None:
+    """Reject values whose Python type cannot be preserved by canonical JSON."""
+    if payload is None or type(payload) in {bool, int, str}:
+        return
+    if type(payload) is float:
+        if not math.isfinite(payload):
+            raise ValueError(f"canonical JSON contains a non-finite number at {path}")
+        return
+    if type(payload) is list:
+        for index, value in enumerate(payload):
+            _validate_canonical_json_value(value, path=f"{path}[{index}]")
+        return
+    if type(payload) is dict:
+        for key, value in payload.items():
+            if type(key) is not str:
+                raise ValueError(
+                    f"canonical JSON object key at {path} must be a string, "
+                    f"got {type(key).__name__}"
+                )
+            _validate_canonical_json_value(value, path=f"{path}.{key}")
+        return
+    raise ValueError(
+        f"canonical JSON contains unsupported type at {path}: {type(payload).__name__}"
+    )
+
+
+def _canonical_json_bytes(payload: Any) -> bytes:
+    """Serialize JSON with one type-preserving, byte-exact hashing contract."""
+    _validate_canonical_json_value(payload)
+    return json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    ).encode("utf-8")
+
+
+def _sha256_json(payload: Any) -> str:
+    return hashlib.sha256(_canonical_json_bytes(payload)).hexdigest()
+
+
+def canonical_raw_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
+    """Detach a live schema as canonical JSON while preserving JSON scalar types."""
+    if type(schema) is not dict:
+        raise ValueError("raw schema must be a JSON object")
+    canonical = strict_json_loads(_canonical_json_bytes(schema).decode("utf-8"))
+    if type(canonical) is not dict:  # Defensive: the input check guarantees this.
+        raise ValueError("canonical raw schema must be a JSON object")
+    return canonical
+
+
+def _exact_json_equal(left: Any, right: Any) -> bool:
+    """Recursively compare JSON values without bool/number coercion."""
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return set(left) == set(right) and all(
+            _exact_json_equal(left[key], right[key]) for key in left
+        )
+    if isinstance(left, list):
+        return len(left) == len(right) and all(
+            _exact_json_equal(a, b) for a, b in zip(left, right)
+        )
+    return left == right
+
+
+def catalog_action_ids(pairs: Iterable[Tuple[str, str]]) -> List[str]:
+    """Return the canonical sorted action-id set used by resume identity checks."""
+    action_ids = sorted(f"{namespace}.{action}" for namespace, action in pairs)
+    if len(action_ids) != len(set(action_ids)):
+        raise ValueError("catalog action identity contains duplicate namespace.action ids")
+    return action_ids
+
+
+def catalog_action_ids_sha256(pairs: Iterable[Tuple[str, str]]) -> str:
+    return _sha256_json(catalog_action_ids(pairs))
+
+
+def build_schema_registry_inputs(
+    *,
+    status: Dict[str, Any],
+    namespaces: List[Dict[str, Any]],
+    catalog_pairs: Iterable[Tuple[str, str]],
+    probe_set_path: Optional[pathlib.Path] = None,
+) -> Dict[str, Any]:
+    """Build DB-independent identity for live schema scans and probes.
+
+    SchemaCompleteness reads only the live registry. Project/source database mtimes
+    are unrelated to a schema score and commonly change while an editor restarts,
+    so they are excluded before the shared builder enumerates them. The checked-in
+    manifest, this runner, an optional probe set, and stable MCP/catalog metadata
+    remain hashed.
+    """
+    inputs = build_benchmark_inputs(
+        "SchemaCompleteness",
+        probe_set_path=probe_set_path,
+        mcp_status=status,
+        catalog={"namespaces": namespaces},
+        extra_files={"runner": pathlib.Path(__file__)},
+        database_paths=(),
+    )
+    action_ids = catalog_action_ids(catalog_pairs)
+    inputs["database_files_scope"] = "not_applicable_to_live_schema_registry_scan"
+    inputs["schema_registry"] = {
+        "catalog_action_count": len(action_ids),
+        "catalog_action_ids_hash_kind": CATALOG_ACTION_IDS_HASH_KIND,
+        "catalog_action_ids_sha256": _sha256_json(action_ids),
+    }
+    return refresh_benchmark_input_fingerprint(inputs)
+
+
+def scan_resume_identity(
+    *,
+    args: argparse.Namespace,
+    catalog_version: str,
+    pairs: List[Tuple[str, str]],
+    benchmark_inputs: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Return every immutable input required to accept a checkpoint resume."""
+    if not catalog_version:
+        raise ValueError(
+            "full-scan checkpointing requires a non-empty live catalog_version"
+        )
+    identity = {
+        "contract_version": SCAN_CONTRACT_VERSION,
+        "label": str(args.label),
+        "mcp_url": str(args.mcp_url),
+        "catalog_version": catalog_version,
+        "catalog_action_count": len(pairs),
+        "catalog_action_ids_hash_kind": CATALOG_ACTION_IDS_HASH_KIND,
+        "catalog_action_ids_sha256": catalog_action_ids_sha256(pairs),
+        "benchmark_input_fingerprint": str(
+            benchmark_inputs.get("fingerprint_sha256", "")
+        ),
+        "request_timeout_s": float(args.request_timeout_s),
+        "max_failed_fraction": float(args.max_failed_fraction),
+        "max_transport_failed_fraction": float(
+            args.max_transport_failed_fraction
+        ),
+        "max_consecutive_transport_failures": int(
+            args.max_consecutive_transport_failures
+        ),
+        "min_transport_fraction_sample": int(
+            args.min_transport_fraction_sample
+        ),
+    }
+    identity["fingerprint_sha256"] = _sha256_json(identity)
+    return identity
+
+
+def _checkpoint_action_id(row: Dict[str, Any]) -> str:
+    namespace = str(row.get("namespace", "")).strip()
+    action = str(row.get("action", "")).strip()
+    return f"{namespace}.{action}" if namespace and action else ""
+
+
+def validate_checkpoint_result_row(
+    row: Dict[str, Any],
+    *,
+    expected_action_ids: Set[str],
+) -> str:
+    """Validate one reusable result and return its unique action id.
+
+    Only successful schema fetches are reusable. Transport/protocol/runner failures
+    remain attempt provenance in the checkpoint and must be retried after restart.
+    """
+    action_id = _checkpoint_action_id(row)
+    if action_id not in expected_action_ids:
+        raise ValueError(
+            f"checkpoint result action is not in the current catalog: {action_id or '<missing>'}"
+        )
+    if row.get("failure_kind") != "ok":
+        raise ValueError(
+            f"checkpoint result {action_id} is not reusable: failure_kind={row.get('failure_kind')!r}"
+        )
+    if row.get("error") not in (None, ""):
+        raise ValueError(f"checkpoint result {action_id} carries an error")
+    if row.get("transport_error") is not False:
+        raise ValueError(f"checkpoint result {action_id} carries a transport failure")
+    if row.get("transport_status") is not None or row.get("transport_error_raw") not in (
+        None,
+        "",
+    ):
+        raise ValueError(
+            f"checkpoint result {action_id} carries stale transport diagnostics"
+        )
+    diagnostics = row.get("value_domain_diagnostics")
+    if not isinstance(diagnostics, list):
+        raise ValueError(
+            f"checkpoint result {action_id} has invalid value_domain_diagnostics"
+        )
+    for field in CHECKPOINT_DIMENSION_FIELDS:
+        if field not in row:
+            raise ValueError(
+                f"checkpoint result {action_id} is missing dimension {field}"
+            )
+        value = row.get(field)
+        valid_value = isinstance(value, bool) or (
+            field in PARAM_GATED_DIMENSIONS and value is None
+        )
+        if not valid_value:
+            raise ValueError(
+                f"checkpoint result {action_id} has invalid {field}={value!r}"
+            )
+    diagnostic_params: Set[str] = set()
+    for index, diagnostic in enumerate(diagnostics, start=1):
+        if not isinstance(diagnostic, dict):
+            raise ValueError(
+                f"checkpoint result {action_id} has non-object value-domain diagnostic {index}"
+            )
+        param = diagnostic.get("param")
+        if not isinstance(param, str) or not param:
+            raise ValueError(
+                f"checkpoint result {action_id} has unnamed value-domain diagnostic {index}"
+            )
+        if param in diagnostic_params:
+            raise ValueError(
+                f"checkpoint result {action_id} has duplicate value-domain diagnostic {param}"
+            )
+        diagnostic_params.add(param)
+        if type(diagnostic.get("ok")) is not bool or not _is_nonempty_string(
+            diagnostic.get("reason")
+        ):
+            raise ValueError(
+                f"checkpoint result {action_id} has malformed value-domain diagnostic {param}"
+            )
+    value_domain = row["value_domain"]
+    if value_domain is None and diagnostics:
+        raise ValueError(
+            f"checkpoint result {action_id} has diagnostics for an N/A value_domain"
+        )
+    if value_domain is not None and (
+        not diagnostics
+        or value_domain is not all(diagnostic["ok"] for diagnostic in diagnostics)
+    ):
+        raise ValueError(
+            f"checkpoint result {action_id} value_domain is not derived from diagnostics"
+        )
+    score = row.get("schema_score")
+    if (
+        type(score) is not float
+        or not math.isfinite(float(score))
+        or not 0.0 <= float(score) <= 1.0
+    ):
+        raise ValueError(
+            f"checkpoint result {action_id} has invalid schema_score={score!r}"
+        )
+    if row.get("raw_schema_hash_kind") != RAW_SCHEMA_HASH_KIND:
+        raise ValueError(
+            f"checkpoint result {action_id} raw_schema_hash_kind is invalid"
+        )
+    if "raw_schema" not in row or type(row.get("raw_schema")) is not dict:
+        raise ValueError(
+            f"checkpoint result {action_id} is missing canonical raw_schema"
+        )
+    raw_schema = canonical_raw_schema(row["raw_schema"])
+    raw_schema_sha256 = row.get("raw_schema_sha256")
+    if (
+        type(raw_schema_sha256) is not str
+        or re.fullmatch(r"[0-9a-f]{64}", raw_schema_sha256) is None
+    ):
+        raise ValueError(
+            f"checkpoint result {action_id} raw_schema_sha256 is invalid"
+        )
+    expected_raw_schema_sha256 = _sha256_json(raw_schema)
+    if raw_schema_sha256 != expected_raw_schema_sha256:
+        raise ValueError(
+            f"checkpoint result {action_id} raw_schema_sha256 does not match raw_schema"
+        )
+
+    rescored = score_schema_quality(raw_schema)
+    for field in CHECKPOINT_DIMENSION_FIELDS:
+        if not _exact_json_equal(row[field], rescored[field]):
+            raise ValueError(
+                f"checkpoint result {action_id} {field} is not derived from raw_schema: "
+                f"observed={row[field]!r} expected={rescored[field]!r}"
+            )
+    if not _exact_json_equal(score, rescored["schema_score"]):
+        raise ValueError(
+            f"checkpoint result {action_id} schema_score is not derived from raw_schema: "
+            f"observed={score!r} expected={rescored['schema_score']!r}"
+        )
+    if not _exact_json_equal(diagnostics, rescored["value_domain_diagnostics"]):
+        raise ValueError(
+            f"checkpoint result {action_id} value_domain_diagnostics are not derived "
+            "from raw_schema"
+        )
+    return action_id
+
+
+def validate_schema_result_row(
+    row: Dict[str, Any],
+    *,
+    expected_action_ids: Set[str],
+) -> str:
+    """Validate the shared scan/probe row contract, including failed fetches."""
+    if row.get("failure_kind") == "ok":
+        return validate_checkpoint_result_row(
+            row,
+            expected_action_ids=expected_action_ids,
+        )
+
+    action_id = _checkpoint_action_id(row)
+    if action_id not in expected_action_ids:
+        raise ValueError(
+            f"schema result action is not in the expected set: {action_id or '<missing>'}"
+        )
+    failure_kind = row.get("failure_kind")
+    if type(failure_kind) is not str or not failure_kind.strip():
+        raise ValueError(f"schema result {action_id} has invalid failure_kind")
+    if type(row.get("error")) is not str or not row["error"]:
+        raise ValueError(f"schema result {action_id} fetch failure lacks an error")
+    if type(row.get("transport_error")) is not bool:
+        raise ValueError(f"schema result {action_id} has invalid transport_error")
+    if row.get("raw_schema_hash_kind") != RAW_SCHEMA_HASH_KIND:
+        raise ValueError(f"schema result {action_id} raw_schema_hash_kind is invalid")
+    if "raw_schema" not in row or row["raw_schema"] is not None:
+        raise ValueError(f"schema result {action_id} failed fetch must have raw_schema=null")
+    if "raw_schema_sha256" not in row or row["raw_schema_sha256"] is not None:
+        raise ValueError(
+            f"schema result {action_id} failed fetch must have raw_schema_sha256=null"
+        )
+    expected_quality = failed_schema_quality()
+    for field in (*CHECKPOINT_DIMENSION_FIELDS, "schema_score", "value_domain_diagnostics"):
+        if field not in row or not _exact_json_equal(row[field], expected_quality[field]):
+            raise ValueError(
+                f"schema result {action_id} {field} is not the canonical failed-fetch value"
+            )
+    return action_id
+
+
+def load_checkpoint_results(
+    path: pathlib.Path,
+    *,
+    expected_action_ids: Set[str],
+) -> Dict[str, Dict[str, Any]]:
+    """Strictly load reusable rows, rejecting duplicate keys and action ids."""
+    if not path.is_file():
+        raise ValueError(f"checkpoint results file is missing: {path}")
+    rows: Dict[str, Dict[str, Any]] = {}
+    with path.open("r", encoding="utf-8") as handle:
+        for line_no, line in enumerate(handle, 1):
+            text = line.strip()
+            if not text:
+                raise ValueError(
+                    f"checkpoint results contain a blank JSONL row at line {line_no}"
+                )
+            try:
+                value = strict_json_loads(text)
+            except (json.JSONDecodeError, ValueError) as exc:
+                raise ValueError(
+                    f"checkpoint results line {line_no} is invalid JSON: {exc}"
+                ) from exc
+            if not isinstance(value, dict):
+                raise ValueError(
+                    f"checkpoint results line {line_no} must be a JSON object"
+                )
+            action_id = validate_checkpoint_result_row(
+                value,
+                expected_action_ids=expected_action_ids,
+            )
+            if action_id in rows:
+                raise ValueError(
+                    f"checkpoint results contain duplicate action id: {action_id}"
+                )
+            rows[action_id] = value
+    return rows
+
+
+def new_scan_checkpoint(
+    *,
+    resume_identity: Dict[str, Any],
+    benchmark_inputs: Dict[str, Any],
+) -> Dict[str, Any]:
+    now = utc_now()
+    return {
+        "schema_version": SCAN_CHECKPOINT_SCHEMA_VERSION,
+        "benchmark": "SchemaCompleteness",
+        "scan_scope": "full_catalog",
+        "state": "in_progress",
+        "created_at": now,
+        "updated_at": now,
+        "resume_identity": resume_identity,
+        "benchmark_inputs": benchmark_inputs,
+        "results_file": "per_action.jsonl",
+        "completed_valid_action_count": 0,
+        "segments": [],
+        "outages": [],
+        "invalid_attempts": [],
+        "recovery_events": [],
+    }
+
+
+def load_scan_checkpoint(path: pathlib.Path) -> Dict[str, Any]:
+    if not path.is_file():
+        raise ValueError(f"scan checkpoint is missing: {path}")
+    try:
+        checkpoint = strict_json_loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        raise ValueError(f"scan checkpoint is invalid JSON: {path}: {exc}") from exc
+    if not isinstance(checkpoint, dict):
+        raise ValueError("scan checkpoint must be a JSON object")
+    if checkpoint.get("schema_version") != SCAN_CHECKPOINT_SCHEMA_VERSION:
+        raise ValueError(
+            "scan checkpoint schema_version mismatch: "
+            f"{checkpoint.get('schema_version')!r} != {SCAN_CHECKPOINT_SCHEMA_VERSION}"
+        )
+    if checkpoint.get("benchmark") != "SchemaCompleteness":
+        raise ValueError("scan checkpoint benchmark identity mismatch")
+    if checkpoint.get("scan_scope") != "full_catalog":
+        raise ValueError("scan checkpoint is not a full_catalog checkpoint")
+    if checkpoint.get("state") not in {
+        "in_progress",
+        "interrupted",
+        "publishing",
+        "completed",
+    }:
+        raise ValueError(f"scan checkpoint state is invalid: {checkpoint.get('state')!r}")
+    for field in ("segments", "outages", "invalid_attempts", "recovery_events"):
+        if not isinstance(checkpoint.get(field), list):
+            raise ValueError(f"scan checkpoint {field} must be an array")
+    if not isinstance(checkpoint.get("resume_identity"), dict):
+        raise ValueError("scan checkpoint resume_identity must be an object")
+    return checkpoint
+
+
+def validate_checkpoint_identity(
+    checkpoint: Dict[str, Any],
+    current_identity: Dict[str, Any],
+) -> None:
+    previous_identity = checkpoint["resume_identity"]
+    identity_without_fingerprint = dict(previous_identity)
+    recorded_identity_fingerprint = identity_without_fingerprint.pop(
+        "fingerprint_sha256",
+        None,
+    )
+    if recorded_identity_fingerprint != _sha256_json(identity_without_fingerprint):
+        raise ValueError("scan checkpoint resume_identity fingerprint is invalid")
+    stored_inputs = checkpoint.get("benchmark_inputs")
+    if not isinstance(stored_inputs, dict):
+        raise ValueError("scan checkpoint benchmark_inputs must be an object")
+    if stored_inputs.get("fingerprint_sha256") != previous_identity.get(
+        "benchmark_input_fingerprint"
+    ):
+        raise ValueError("scan checkpoint benchmark input fingerprint is inconsistent")
+    if previous_identity != current_identity:
+        changed = sorted(
+            key
+            for key in set(previous_identity) | set(current_identity)
+            if previous_identity.get(key) != current_identity.get(key)
+        )
+        raise ValueError(
+            "scan checkpoint input/catalog identity mismatch: "
+            + ", ".join(changed)
+        )
+
+
+def persist_scan_checkpoint(
+    output_dir: pathlib.Path,
+    checkpoint: Dict[str, Any],
+    completed_valid_action_count: int,
+) -> None:
+    checkpoint["completed_valid_action_count"] = completed_valid_action_count
+    checkpoint["updated_at"] = utc_now()
+    write_json_atomic(output_dir / SCAN_CHECKPOINT_FILENAME, checkpoint)
 
 
 # ---------------------------------------------------------------------------
@@ -355,6 +869,21 @@ def fetch_status_preflight(url: str, timeout_s: float) -> StatusPreflightOutcome
             raw=raw,
             error="status payload did not declare server_running=true",
         )
+    expected_project = local_project_name()
+    observed_project = str(
+        status.get("project_name") or status.get("project") or ""
+    ).strip()
+    if observed_project != expected_project:
+        error = (
+            f"status project identity mismatch: observed={observed_project or '<missing>'} "
+            f"expected={expected_project}"
+        )
+        return StatusPreflightOutcome(
+            None,
+            "invalid_status_identity",
+            raw=str(status)[:500],
+            error=error,
+        )
     return StatusPreflightOutcome(status, "ok")
 
 
@@ -383,6 +912,10 @@ MAX_ACTION_PAGES_PER_NAMESPACE = 64
 # Server-side maximum page size for mode=actions listings (MonolithCoreTools
 # DefaultLimit=50 / MaxLimit=1000). One page per namespace in practice.
 ACTION_PAGE_LIMIT = 1000
+
+
+class CatalogTransportError(RuntimeError):
+    """Live catalog enumeration could not continue because MCP transport failed."""
 
 
 def discover_catalog_summary(
@@ -503,7 +1036,7 @@ def discover_namespace_actions(url: str, namespace: str, timeout_s: float) -> Li
                 f"response top-level JSON was not an object: {type(response).__name__}"
             )
         if response.get("transport_error"):
-            raise RuntimeError(
+            raise CatalogTransportError(
                 f"monolith_discover(namespace={namespace}, mode=actions, offset={offset}) "
                 f"transport error: {str(response.get('raw', ''))[:200]}"
             )
@@ -581,6 +1114,13 @@ def enumerate_catalog_actions(
                 continue
             try:
                 names = discover_namespace_actions(url, ns, timeout_s)
+            except CatalogTransportError as exc:
+                # A complete catalog is mandatory, so no later namespace can make
+                # this run valid. Abort enumeration immediately instead of paying
+                # one request timeout for every remaining namespace while the
+                # endpoint is unavailable or the editor dispatch queue is blocked.
+                errors.append(str(exc))
+                return pairs, errors
             except RuntimeError as exc:
                 errors.append(str(exc))
                 continue
@@ -750,9 +1290,13 @@ def fetch_and_score_schema_target(
     """Create the common per-action row consumed by scan and probe."""
     try:
         outcome = fetch_schema_for_action(url, namespace, action, timeout_s)
-        quality = score_schema_quality(
-            outcome.schema if outcome.failure_kind == "ok" else None
+        raw_schema = (
+            canonical_raw_schema(outcome.schema)
+            if outcome.failure_kind == "ok" and outcome.schema is not None
+            else None
         )
+        raw_schema_sha256 = _sha256_json(raw_schema) if raw_schema is not None else None
+        quality = score_schema_quality(raw_schema)
     except Exception as exc:  # noqa: BLE001 - preserve one triggering row and abort upstream.
         error = f"{type(exc).__name__}: {exc}"
         outcome = SchemaFetchOutcome(
@@ -761,6 +1305,8 @@ def fetch_and_score_schema_target(
             raw=error,
             error=error,
         )
+        raw_schema = None
+        raw_schema_sha256 = None
         quality = failed_schema_quality()
     error_msg = "" if outcome.failure_kind == "ok" else (
         f"{outcome.failure_kind}: {outcome.error or outcome.raw}"
@@ -776,6 +1322,9 @@ def fetch_and_score_schema_target(
         "output_contract_declared": quality["output_contract_declared"],
         "schema_score": quality["schema_score"],
         "value_domain_diagnostics": quality["value_domain_diagnostics"],
+        "raw_schema_hash_kind": RAW_SCHEMA_HASH_KIND,
+        "raw_schema": raw_schema,
+        "raw_schema_sha256": raw_schema_sha256,
         "error": error_msg,
         "failure_kind": outcome.failure_kind,
         "transport_error": outcome.transport_error,
@@ -789,24 +1338,27 @@ def fetch_and_score_schema_target(
 # Schema quality scoring
 # ---------------------------------------------------------------------------
 
-def extract_user_params(schema: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-    """
-    Return the user-facing param entries from a discover schema.
+_MISSING_PARAMS = object()
 
-    Each Monolith action schema nests its params under a "params" object whose
-    keys are param names and whose values are
-    {type, description, required, enum?, minimum?, maximum?, aliases?, kind?}.
-    Keys starting with "_" (e.g. "_validate_types") are internal control flags
-    and are excluded. Returns an empty dict for param-less actions.
+
+def _raw_user_param_entries(schema: Dict[str, Any]) -> Tuple[bool, Dict[str, Any]]:
+    """Return whether a param contract is applicable and every declared entry.
+
+    Only an absent ``params`` key or an object with no user-facing entries is
+    genuinely param-less. A non-object container and non-object entry values are
+    malformed parameter contracts, not an excuse to score the dimensions N/A.
     """
-    params = schema.get("params")
+    params = schema.get("params", _MISSING_PARAMS)
+    if params is _MISSING_PARAMS:
+        return False, {}
     if not isinstance(params, dict):
-        return {}
-    return {
-        k: v
-        for k, v in params.items()
-        if not k.startswith("_") and isinstance(v, dict)
+        return True, {"<params>": params}
+    entries = {
+        str(name): value
+        for name, value in params.items()
+        if not str(name).startswith("_")
     }
+    return bool(entries), entries
 
 
 def _type_atoms(type_text: str) -> Set[str]:
@@ -1035,10 +1587,27 @@ def _param_value_domain_diagnostic(param: str, meta: Dict[str, Any]) -> Dict[str
 
 def param_value_domain_diagnostics(schema: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Return stable diagnostics for every user-facing param in declaration order."""
-    return [
-        _param_value_domain_diagnostic(param, meta)
-        for param, meta in extract_user_params(schema).items()
-    ]
+    has_contract, entries = _raw_user_param_entries(schema)
+    if not has_contract:
+        return []
+    diagnostics: List[Dict[str, Any]] = []
+    for param, meta in entries.items():
+        if isinstance(meta, dict):
+            diagnostics.append(_param_value_domain_diagnostic(param, meta))
+        else:
+            diagnostics.append({
+                "param": param,
+                "ok": False,
+                "reason": (
+                    "params_must_be_object"
+                    if param == "<params>"
+                    else "param_schema_must_be_object"
+                ),
+                "type_variants": [],
+                "derived_domain_kind": None,
+                "declared_domain_kind": None,
+            })
+    return diagnostics
 
 
 def _param_value_domain_ok(meta: Dict[str, Any]) -> bool:
@@ -1066,23 +1635,25 @@ def score_schema_quality(schema: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if schema is None:
         return failed_schema_quality()
 
-    user_params = extract_user_params(schema)
-    has_params = bool(user_params)
+    has_params, user_param_entries = _raw_user_param_entries(schema)
 
     value_domain_diagnostics = param_value_domain_diagnostics(schema)
 
     if has_params:
         # 1. param_types_declared: EVERY declared param carries a "type".
         param_types_declared: Optional[bool] = all(
-            isinstance(meta.get("type"), str) and bool(str(meta.get("type")).strip())
-            for meta in user_params.values()
+            isinstance(meta, dict)
+            and isinstance(meta.get("type"), str)
+            and bool(str(meta.get("type")).strip())
+            for meta in user_param_entries.values()
         )
 
         # 2. required_params_marked: EVERY declared param carries a boolean
         #    "required" flag (so the required set is fully, correctly specified —
         #    not merely "at least one is required").
         required_params_marked: Optional[bool] = all(
-            isinstance(meta.get("required"), bool) for meta in user_params.values()
+            isinstance(meta, dict) and isinstance(meta.get("required"), bool)
+            for meta in user_param_entries.values()
         )
 
         # 3. value_domain: every param is typed + described with a correct
@@ -1231,6 +1802,8 @@ def aggregate_metrics(label: str, rows: List[Dict[str, Any]], total_expected: in
             "skill_routing_present_rate": 0.0,
             "output_contract_declared_rate": 0.0,
             "mean_schema_score": 0.0,
+            "quality_pass_action_count": 0,
+            "quality_fail_action_count": 0,
             "failed_action_count": 0,
             "scanned_action_count": 0,
             "param_bearing_action_count": 0,
@@ -1269,6 +1842,7 @@ def aggregate_metrics(label: str, rows: List[Dict[str, Any]], total_expected: in
     )
 
     mean_schema_score = avg([float(r.get("schema_score", 0.0)) for r in rows])
+    quality_pass_action_count = sum(1 for row in rows if schema_quality_pass(row))
     namespaces = {r.get("namespace") for r in rows if r.get("namespace")}
     # An action is param-bearing when value_domain is applicable (not None).
     param_bearing = sum(1 for r in rows if r.get("value_domain") is not None)
@@ -1290,6 +1864,8 @@ def aggregate_metrics(label: str, rows: List[Dict[str, Any]], total_expected: in
             "skill_routing_present_rate": round(srp, 6),
             "output_contract_declared_rate": round(ocd, 6),
             "mean_schema_score": round(mean_schema_score, 6),
+            "quality_pass_action_count": quality_pass_action_count,
+            "quality_fail_action_count": len(rows) - quality_pass_action_count,
             "failed_action_count": len(failed),
             "scanned_action_count": len(rows),
             "param_bearing_action_count": param_bearing,
@@ -1353,6 +1929,7 @@ def build_namespace_breakdown(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         srp = round(dimension_rate(ns_rows, "skill_routing_present"), 6)
         ocd = round(dimension_rate(ns_rows, "output_contract_declared"), 6)
         ns_score = round(_renormalized_score(ns_rows), 6)
+        quality_pass_action_count = sum(1 for row in ns_rows if schema_quality_pass(row))
         param_bearing_count = sum(1 for r in ns_rows if r.get("value_domain") is not None)
         param_domain_total, param_domain_pass, param_domain_coverage = param_domain_aggregate(ns_rows)
         breakdown[ns] = {
@@ -1367,6 +1944,8 @@ def build_namespace_breakdown(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
             "param_domain_pass": param_domain_pass,
             "param_domain_coverage": round(param_domain_coverage, 6),
             "schema_completeness_score": ns_score,
+            "quality_pass_action_count": quality_pass_action_count,
+            "quality_fail_action_count": len(ns_rows) - quality_pass_action_count,
             "param_types_declared_rate": ptd,
             "required_params_marked_rate": rpm,
             "value_domain_rate": vd,
@@ -1387,11 +1966,27 @@ def cmd_scan(args: argparse.Namespace) -> int:
     label: str = args.label
     timeout_s: float = args.request_timeout_s
     max_actions: Optional[int] = args.max_actions
+    resume_requested = bool(getattr(args, "resume", False))
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    clear_run_outputs(output_dir)
+    if resume_requested and max_actions is not None:
+        write_run_failure(output_dir, {
+            "label": label,
+            "completion_status": "aborted_invalid_resume_configuration",
+            "failure_stage": "configuration",
+            "error": "--resume cannot be combined with --max-actions; only a full-catalog scan is resumable",
+            "metrics_valid": False,
+            "metrics_scope": "not_started",
+        })
+        return 1
+    if not resume_requested:
+        clear_run_outputs(output_dir)
 
-    print(f"[schema_completeness] scan started  label={label}  url={url}", flush=True)
+    print(
+        f"[schema_completeness] scan started  label={label}  url={url}"
+        f"  resume={str(resume_requested).lower()}",
+        flush=True,
+    )
 
     # Step 1: discover all namespaces, then enumerate their actions through the
     # compact discover contract (summary rows carry only action_count; action
@@ -1413,13 +2008,22 @@ def cmd_scan(args: argparse.Namespace) -> int:
         })
         return 1
 
-    total = len(all_pairs)
+    full_catalog_total = len(all_pairs)
     if max_actions is not None and max_actions > 0:
         all_pairs = all_pairs[:max_actions]
-        print(f"[schema_completeness] --max-actions={max_actions}: scanning {len(all_pairs)}/{total} actions", flush=True)
-        total = len(all_pairs)
+        print(
+            f"[schema_completeness] --max-actions={max_actions}: "
+            f"scanning {len(all_pairs)}/{full_catalog_total} actions",
+            flush=True,
+        )
     else:
-        print(f"[schema_completeness] discovered {total} actions across {len(namespaces)} namespaces", flush=True)
+        print(
+            f"[schema_completeness] discovered {full_catalog_total} actions "
+            f"across {len(namespaces)} namespaces",
+            flush=True,
+        )
+    total = len(all_pairs)
+    is_full_catalog = total == full_catalog_total
     status_outcome = fetch_status_preflight(url, timeout_s)
     status = status_outcome.status_data
     if status is None:
@@ -1459,16 +2063,16 @@ def cmd_scan(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
-    benchmark_inputs = build_benchmark_inputs(
-        "SchemaCompleteness",
-        mcp_status=status,
-        catalog={"namespaces": namespaces},
+    benchmark_inputs = build_schema_registry_inputs(
+        status=status,
+        namespaces=namespaces,
+        catalog_pairs=all_pairs,
     )
 
-    # Step 2: scan each action
+    # Step 2: initialize or strictly load the full-scan checkpoint. A resumed
+    # segment may reuse only successful rows from the exact same catalog/input
+    # identity. Failed attempts remain provenance and are retried.
     per_action_path = output_dir / "per_action.jsonl"
-
-    rows: List[Dict[str, Any]] = []
     try:
         transport_tracker = TransportFailureTracker(
             max_failed_fraction=args.max_transport_failed_fraction,
@@ -1487,134 +2091,507 @@ def cmd_scan(args: argparse.Namespace) -> int:
             "metrics_scope": "not_started",
         })
         return 1
-    for index, (ns, act) in enumerate(all_pairs, 1):
-        print(f"[{ns}.{act} {index}/{total}]", flush=True)
+
+    checkpoint: Optional[Dict[str, Any]] = None
+    resume_identity: Optional[Dict[str, Any]] = None
+    rows_by_id: Dict[str, Dict[str, Any]] = {}
+    expected_action_ids = set(catalog_action_ids(all_pairs))
+
+    if is_full_catalog:
+        try:
+            resume_identity = scan_resume_identity(
+                args=args,
+                catalog_version=catalog_version,
+                pairs=all_pairs,
+                benchmark_inputs=benchmark_inputs,
+            )
+            if resume_requested:
+                checkpoint = load_scan_checkpoint(
+                    output_dir / SCAN_CHECKPOINT_FILENAME
+                )
+                if checkpoint.get("state") == "completed":
+                    if (output_dir / "summary.json").is_file():
+                        print(
+                            "[schema_completeness] completed scan already has summary.json; "
+                            "nothing to resume",
+                            file=sys.stderr,
+                        )
+                        return 1
+                    raise ValueError(
+                        "completed scan checkpoint is missing summary.json"
+                    )
+                validate_checkpoint_identity(checkpoint, resume_identity)
+                if (output_dir / "summary.json").exists():
+                    if checkpoint.get("state") != "publishing":
+                        raise ValueError(
+                            "summary.json exists for a checkpoint that is not in publishing state"
+                        )
+                    # A process may stop after atomically publishing the summary
+                    # but before the final checkpoint-state flip. Re-run the
+                    # verified publication after resume instead of treating that
+                    # crash window as a completed or mixed baseline.
+                    (output_dir / "summary.json").unlink()
+                    namespace_path = output_dir / "namespace_breakdown.json"
+                    if namespace_path.exists():
+                        namespace_path.unlink()
+                if checkpoint.get("results_file") != "per_action.jsonl":
+                    raise ValueError(
+                        "scan checkpoint results_file must be exactly per_action.jsonl"
+                    )
+                rows_by_id = load_checkpoint_results(
+                    per_action_path,
+                    expected_action_ids=expected_action_ids,
+                )
+                recorded_count = checkpoint.get("completed_valid_action_count")
+                if (
+                    isinstance(recorded_count, bool)
+                    or not isinstance(recorded_count, int)
+                    or recorded_count < 0
+                ):
+                    raise ValueError(
+                        "scan checkpoint completed_valid_action_count must be a non-negative integer"
+                    )
+                if recorded_count > len(rows_by_id):
+                    raise ValueError(
+                        "scan checkpoint claims more completed results than per_action.jsonl contains"
+                    )
+                if recorded_count < len(rows_by_id):
+                    checkpoint["recovery_events"].append({
+                        "detected_at": utc_now(),
+                        "kind": "result_appended_before_checkpoint_flush",
+                        "recorded_count": recorded_count,
+                        "validated_result_count": len(rows_by_id),
+                    })
+            else:
+                checkpoint = new_scan_checkpoint(
+                    resume_identity=resume_identity,
+                    benchmark_inputs=benchmark_inputs,
+                )
+                write_jsonl_atomic(per_action_path, [])
+            persist_scan_checkpoint(output_dir, checkpoint, len(rows_by_id))
+        except (OSError, ValueError) as exc:
+            failure = {
+                "label": label,
+                "completion_status": "aborted_checkpoint_mismatch",
+                "failure_stage": "checkpoint_preflight",
+                "error": str(exc),
+                "run_valid": False,
+                "metrics_valid": False,
+                "metrics_scope": "not_started",
+                "completed_action_count": 0,
+                "total_action_count": total,
+            }
+            attach_benchmark_inputs(failure, benchmark_inputs)
+            write_run_failure(output_dir, failure)
+            print(
+                f"[schema_completeness] CHECKPOINT ERROR: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+    elif resume_requested:
+        # Defensive; --resume + --max-actions was rejected before enumeration.
+        raise AssertionError("diagnostic subset unexpectedly entered resume path")
+
+    segment: Optional[Dict[str, Any]] = None
+    if checkpoint is not None:
+        segment_index = len(checkpoint["segments"]) + 1
+        segment = {
+            "segment_id": f"segment-{segment_index:04d}",
+            "started_at": utc_now(),
+            "resume_requested": resume_requested,
+            "starting_valid_action_count": len(rows_by_id),
+            "attempted_action_count": 0,
+            "valid_result_count": 0,
+            "invalid_result_count": 0,
+            "transport_failure_count": 0,
+            "server_identity": {
+                key: status[key]
+                for key in (
+                    "server_name",
+                    "plugin_version",
+                    "catalog_version",
+                    "project_name",
+                    "engine_version",
+                    "editor_pid",
+                )
+                if key in status
+            },
+        }
+        checkpoint["segments"].append(segment)
+        checkpoint["state"] = "in_progress"
+        persist_scan_checkpoint(output_dir, checkpoint, len(rows_by_id))
+
+    def ordered_valid_rows() -> List[Dict[str, Any]]:
+        return [
+            rows_by_id[f"{namespace}.{action}"]
+            for namespace, action in all_pairs
+            if f"{namespace}.{action}" in rows_by_id
+        ]
+
+    def update_segment_running(last_action_id: str = "") -> None:
+        if checkpoint is None or segment is None:
+            return
+        segment["attempted_action_count"] = transport_tracker.attempted_count
+        segment["valid_result_count"] = (
+            len(rows_by_id) - int(segment["starting_valid_action_count"])
+        )
+        segment["invalid_result_count"] = sum(
+            1
+            for event in checkpoint["invalid_attempts"]
+            if event.get("segment_id") == segment["segment_id"]
+        )
+        segment["transport_failure_count"] = transport_tracker.failure_count
+        if last_action_id:
+            segment["last_action_id"] = last_action_id
+        persist_scan_checkpoint(output_dir, checkpoint, len(rows_by_id))
+
+    def emit_partial(completion_status: str = "in_progress") -> Dict[str, Any]:
+        rows = ordered_valid_rows()
+        ns_breakdown = build_namespace_breakdown(rows)
+        partial = aggregate_metrics(label, rows, total, ns_breakdown)
+        partial.update({
+            "completed_action_count": len(rows),
+            "completed_valid_action_count": len(rows),
+            "segment_attempted_action_count": transport_tracker.attempted_count,
+            "remaining_action_count": total - len(rows),
+            "total_action_count": total,
+            "full_catalog_action_count": full_catalog_total,
+            "run_valid": None,
+            "completion_status": completion_status,
+            "metrics_valid": False,
+            "metrics_scope": (
+                "checkpoint_valid_subset" if checkpoint is not None else "diagnostic_subset"
+            ),
+            "comparable": False,
+        })
+        partial.update(transport_tracker.snapshot())
+        if checkpoint is not None:
+            partial["attempted_invalid_action_count"] = len(
+                checkpoint["invalid_attempts"]
+            )
+            partial["checkpoint_provenance"] = {
+                "checkpoint_file": SCAN_CHECKPOINT_FILENAME,
+                "result_file": "per_action.jsonl",
+                "segment_count": len(checkpoint["segments"]),
+                "outage_count": len(checkpoint["outages"]),
+                "invalid_attempt_count": len(checkpoint["invalid_attempts"]),
+            }
+        attach_benchmark_inputs(partial, benchmark_inputs)
+        write_json(output_dir / "partial_summary.json", partial)
+        return partial
+
+    def abort_segment(
+        *,
+        completion_status: str,
+        failure_stage: str,
+        last_action_id: str = "",
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> int:
+        if checkpoint is not None and segment is not None:
+            update_segment_running(last_action_id)
+            segment["ended_at"] = utc_now()
+            segment["completion_status"] = completion_status
+            checkpoint["state"] = "interrupted"
+            persist_scan_checkpoint(output_dir, checkpoint, len(rows_by_id))
+        failure = emit_partial(completion_status)
+        failure.update({
+            "run_valid": False,
+            "failure_stage": failure_stage,
+            "metrics_valid": False,
+        })
+        if last_action_id:
+            failure["last_action_id"] = last_action_id
+        if extra:
+            failure.update(extra)
+        write_run_failure(output_dir, failure)
+        write_jsonl_atomic(per_action_path, ordered_valid_rows())
+        return 1
+
+    pending_pairs = [
+        (namespace, action)
+        for namespace, action in all_pairs
+        if f"{namespace}.{action}" not in rows_by_id
+    ]
+    starting_valid_count = len(rows_by_id)
+    print(
+        f"[schema_completeness] checkpoint valid={starting_valid_count}/{total} "
+        f"pending={len(pending_pairs)}",
+        flush=True,
+    )
+
+    for segment_index, (ns, act) in enumerate(pending_pairs, 1):
+        action_id = f"{ns}.{act}"
+        progress = len(rows_by_id) + 1
+        print(
+            f"[{action_id} pending={segment_index}/{len(pending_pairs)} "
+            f"valid_target={progress}/{total}]",
+            flush=True,
+        )
 
         outcome, row = fetch_and_score_schema_target(url, ns, act, timeout_s)
-        rows.append(row)
-        append_jsonl_row(per_action_path, row)
-
         transport_decision = transport_tracker.observe(
             transport_error=outcome.transport_error,
-            item_id=f"{ns}.{act}",
+            item_id=action_id,
             status=outcome.status,
             raw=outcome.raw,
         )
 
+        try:
+            validate_schema_result_row(
+                row,
+                expected_action_ids=expected_action_ids,
+            )
+        except ValueError as exc:
+            if checkpoint is not None and segment is not None:
+                checkpoint["invalid_attempts"].append({
+                    "detected_at": utc_now(),
+                    "segment_id": segment["segment_id"],
+                    "action_id": action_id,
+                    "failure_kind": "invalid_result_contract",
+                    "error": str(exc),
+                    "transport_error": False,
+                    "transport_status": None,
+                    "transport_error_raw": "",
+                })
+            update_segment_running(action_id)
+            return abort_segment(
+                completion_status="aborted_invalid_result_contract",
+                failure_stage="schema_scoring",
+                last_action_id=action_id,
+                extra={"error": str(exc)},
+            )
+
+        if outcome.failure_kind == "ok":
+            if action_id in rows_by_id:
+                if checkpoint is not None and segment is not None:
+                    checkpoint["invalid_attempts"].append({
+                        "detected_at": utc_now(),
+                        "segment_id": segment["segment_id"],
+                        "action_id": action_id,
+                        "failure_kind": "duplicate_action_result",
+                        "error": f"duplicate action result produced: {action_id}",
+                        "transport_error": False,
+                        "transport_status": None,
+                        "transport_error_raw": "",
+                    })
+                update_segment_running(action_id)
+                return abort_segment(
+                    completion_status="aborted_duplicate_action_result",
+                    failure_stage="schema_fetch",
+                    last_action_id=action_id,
+                    extra={"error": f"duplicate action result produced: {action_id}"},
+                )
+            rows_by_id[action_id] = row
+            append_jsonl_row(per_action_path, row)
+        elif checkpoint is not None and segment is not None:
+            event = {
+                "detected_at": utc_now(),
+                "segment_id": segment["segment_id"],
+                "action_id": action_id,
+                "failure_kind": outcome.failure_kind,
+                "error": outcome.error,
+                "transport_error": outcome.transport_error,
+                "transport_status": outcome.status,
+                "transport_error_raw": outcome.raw if outcome.transport_error else "",
+            }
+            checkpoint["invalid_attempts"].append(event)
+            if outcome.transport_error:
+                checkpoint["outages"].append({
+                    "detected_at": event["detected_at"],
+                    "segment_id": segment["segment_id"],
+                    "action_id": action_id,
+                    "transport_status": outcome.status,
+                    "transport_error_raw": outcome.raw,
+                })
+
+        update_segment_running(action_id)
+
         if outcome.failure_kind == "runner_exception":
-            ns_breakdown = build_namespace_breakdown(rows)
-            failure = aggregate_metrics(label, rows, total, ns_breakdown)
-            failure.update({
-                "run_valid": False,
-                "completion_status": "aborted_runner_exception",
-                "failure_stage": "schema_fetch",
-                "completed_action_count": index,
-                "total_action_count": total,
-                "last_action_id": f"{ns}.{act}",
-                "exception": outcome.error,
-                "metrics_valid": False,
-                "metrics_scope": "attempted_prefix_runner_exception",
-            })
-            failure.update(transport_tracker.snapshot())
-            attach_benchmark_inputs(failure, benchmark_inputs)
-            write_run_failure(output_dir, failure)
-            write_json(output_dir / "partial_summary.json", failure)
-            write_jsonl(per_action_path, rows)
             print(
                 "[schema_completeness] ERROR: runner exception while fetching "
-                f"{ns}.{act}: {outcome.error}",
+                f"{action_id}: {outcome.error}",
                 file=sys.stderr,
             )
-            return 1
+            return abort_segment(
+                completion_status="aborted_runner_exception",
+                failure_stage="schema_fetch",
+                last_action_id=action_id,
+                extra={"exception": outcome.error},
+            )
 
         if transport_decision:
-            ns_breakdown = build_namespace_breakdown(rows)
-            failure = aggregate_metrics(label, rows, total, ns_breakdown)
-            failure.update({
-                "run_valid": False,
-                "completion_status": "aborted_transport_failure_budget",
-                "failure_stage": "schema_fetch",
-                "transport_gate_reason": transport_decision.reason,
-                "completed_action_count": index,
-                "total_action_count": total,
-                "last_action_id": transport_decision.item_id,
-                "metrics_valid": False,
-                "metrics_scope": "attempted_prefix_including_transport_failures",
-            })
-            failure.update(transport_tracker.snapshot())
-            attach_benchmark_inputs(failure, benchmark_inputs)
-            write_run_failure(output_dir, failure)
-            write_json(output_dir / "partial_summary.json", failure)
-            write_jsonl(per_action_path, rows)
+            if checkpoint is not None and checkpoint["outages"]:
+                checkpoint["outages"][-1]["gate_reason"] = transport_decision.reason
+                persist_scan_checkpoint(output_dir, checkpoint, len(rows_by_id))
             print(
-                "[schema_completeness] ERROR: aborting scan after "
-                f"{index}/{total} actions ({transport_decision.reason}; transport failures "
+                "[schema_completeness] ERROR: aborting scan segment after "
+                f"{transport_tracker.attempted_count} attempts "
+                f"({transport_decision.reason}; transport failures "
                 f"{transport_tracker.failure_count}, consecutive "
                 f"{transport_tracker.consecutive_failures}).",
                 file=sys.stderr,
             )
-            return 1
+            return abort_segment(
+                completion_status="aborted_transport_failure_budget",
+                failure_stage="schema_fetch",
+                last_action_id=transport_decision.item_id,
+                extra={"transport_gate_reason": transport_decision.reason},
+            )
 
-        # Flush partial summary every PARTIAL_FLUSH_EVERY actions
-        if index % PARTIAL_FLUSH_EVERY == 0 or index == total:
-            ns_breakdown = build_namespace_breakdown(rows)
-            partial = aggregate_metrics(label, rows, total, ns_breakdown)
-            partial["completed_action_count"] = index
-            partial["total_action_count"] = total
-            partial["run_valid"] = None
-            partial["completion_status"] = "in_progress"
-            partial["metrics_valid"] = False
-            partial["metrics_scope"] = "attempted_prefix"
-            partial.update(transport_tracker.snapshot())
-            attach_benchmark_inputs(partial, benchmark_inputs)
-            write_json(output_dir / "partial_summary.json", partial)
+        if (
+            transport_tracker.attempted_count % PARTIAL_FLUSH_EVERY == 0
+            or segment_index == len(pending_pairs)
+        ):
+            emit_partial()
 
-    # Step 3: write final output files
+    final_transport_decision = transport_tracker.finalize()
+    if final_transport_decision:
+        return abort_segment(
+            completion_status="completed_transport_failure_budget_exceeded",
+            failure_stage="schema_fetch",
+            last_action_id=final_transport_decision.item_id,
+            extra={"transport_gate_reason": final_transport_decision.reason},
+        )
+
+    rows = ordered_valid_rows()
+    missing_action_ids = sorted(expected_action_ids - set(rows_by_id))
+    if missing_action_ids:
+        return abort_segment(
+            completion_status="incomplete_valid_results",
+            failure_stage="schema_fetch",
+            last_action_id=missing_action_ids[0],
+            extra={
+                "error": (
+                    f"{len(missing_action_ids)} catalog actions do not have a valid schema result"
+                ),
+                "missing_valid_action_count": len(missing_action_ids),
+                "missing_valid_action_ids": missing_action_ids,
+            },
+        )
+    if len(rows) != total or len(rows_by_id) != total:
+        return abort_segment(
+            completion_status="aborted_result_set_mismatch",
+            failure_stage="completion_contract",
+            extra={
+                "error": "valid result set does not exactly match the enumerated catalog",
+            },
+        )
+
+    # Step 3: re-check the live identity after the final schema. A segment that
+    # completed just as the editor disappeared retains all valid rows but does
+    # not publish a summary until a later --resume can verify the same catalog.
+    try:
+        verify_catalog_version(url, catalog_version, timeout_s=max(timeout_s, 20.0))
+        final_status_outcome = fetch_status_preflight(url, timeout_s)
+        final_status = final_status_outcome.status_data
+        if final_status is None:
+            raise RuntimeError(
+                f"completion status preflight failed: {final_status_outcome.failure_kind}: "
+                f"{final_status_outcome.error or final_status_outcome.raw}"
+            )
+        final_catalog_error = validate_status_catalog_version(
+            final_status,
+            catalog_version,
+        )
+        if final_catalog_error:
+            raise RuntimeError(final_catalog_error)
+        final_inputs = build_schema_registry_inputs(
+            status=final_status,
+            namespaces=namespaces,
+            catalog_pairs=all_pairs,
+        )
+        if is_full_catalog:
+            final_identity = scan_resume_identity(
+                args=args,
+                catalog_version=catalog_version,
+                pairs=all_pairs,
+                benchmark_inputs=final_inputs,
+            )
+            if final_identity != resume_identity:
+                raise RuntimeError(
+                    "benchmark inputs changed between segment preflight and completion"
+                )
+        benchmark_inputs = final_inputs
+    except Exception as exc:  # noqa: BLE001 - completion identity is a hard gate.
+        completion_error = str(exc)
+        if (
+            checkpoint is not None
+            and segment is not None
+            and any(
+                marker in completion_error.lower()
+                for marker in ("transport", "timeout", "connection")
+            )
+        ):
+            checkpoint["outages"].append({
+                "detected_at": utc_now(),
+                "segment_id": segment["segment_id"],
+                "action_id": "<completion_identity_recheck>",
+                "transport_status": None,
+                "transport_error_raw": completion_error[:500],
+                "gate_reason": "completion_identity_recheck",
+            })
+            persist_scan_checkpoint(output_dir, checkpoint, len(rows_by_id))
+        return abort_segment(
+            completion_status="aborted_completion_identity_recheck",
+            failure_stage="completion_identity_recheck",
+            extra={"error": completion_error},
+        )
+
     ns_breakdown = build_namespace_breakdown(rows)
     summary = aggregate_metrics(label, rows, total, ns_breakdown)
-    final_transport_decision = transport_tracker.finalize()
     summary.update({
         "run_valid": True,
         "completion_status": "completed",
         "metrics_valid": True,
-        "metrics_scope": "complete_run",
+        "metrics_scope": "complete_run" if is_full_catalog else "diagnostic_subset",
+        "comparable": is_full_catalog,
+        "completed_action_count": total,
+        "completed_valid_action_count": total,
+        "remaining_action_count": 0,
+        "total_action_count": total,
+        "full_catalog_action_count": full_catalog_total,
     })
     summary.update(transport_tracker.snapshot())
     attach_benchmark_inputs(summary, benchmark_inputs)
-    write_jsonl(per_action_path, rows)
 
-    if final_transport_decision:
-        summary["run_valid"] = False
-        summary["metrics_valid"] = False
-        summary["completion_status"] = "completed_transport_failure_budget_exceeded"
-        summary["transport_gate_reason"] = final_transport_decision.reason
-        summary["last_action_id"] = final_transport_decision.item_id
-        write_run_failure(output_dir, summary)
-        write_json(output_dir / "partial_summary.json", summary)
-        return 1
+    if checkpoint is not None and segment is not None:
+        update_segment_running()
+        segment["ended_at"] = utc_now()
+        segment["completion_status"] = "publishing"
+        checkpoint["state"] = "publishing"
+        persist_scan_checkpoint(output_dir, checkpoint, len(rows_by_id))
+        summary["checkpoint_provenance"] = {
+            "checkpoint_file": SCAN_CHECKPOINT_FILENAME,
+            "result_file": "per_action.jsonl",
+            "segment_count": len(checkpoint["segments"]),
+            "resumed": len(checkpoint["segments"]) > 1,
+            "outage_count": len(checkpoint["outages"]),
+            "invalid_attempt_count": len(checkpoint["invalid_attempts"]),
+            "recovery_event_count": len(checkpoint["recovery_events"]),
+            "catalog_version": catalog_version,
+            "catalog_action_ids_hash_kind": CATALOG_ACTION_IDS_HASH_KIND,
+            "catalog_action_ids_sha256": resume_identity[
+                "catalog_action_ids_sha256"
+            ],
+        }
 
-    fetch_budget_rc = check_fetch_failure_budget(
-        summary["failed_action_count"], len(rows), args.max_failed_fraction, "scanned actions"
-    )
-    if fetch_budget_rc:
-        summary["run_valid"] = False
-        summary["metrics_valid"] = False
-        summary["metrics_scope"] = "complete_run_invalid"
-        summary["completion_status"] = "completed_fetch_failure_budget_exceeded"
-        summary["max_failed_fraction"] = args.max_failed_fraction
-        write_run_failure(output_dir, summary)
-        write_json(output_dir / "partial_summary.json", summary)
-        return fetch_budget_rc
-
-    write_json(output_dir / "summary.json", summary)
-    write_json(output_dir / "namespace_breakdown.json", ns_breakdown)
-    partial_path = output_dir / "partial_summary.json"
-    if partial_path.exists():
-        partial_path.unlink()
+    write_jsonl_atomic(per_action_path, rows)
+    write_json_atomic(output_dir / "summary.json", summary)
+    write_json_atomic(output_dir / "namespace_breakdown.json", ns_breakdown)
+    if checkpoint is not None and segment is not None:
+        segment["completion_status"] = "completed"
+        checkpoint["state"] = "completed"
+        checkpoint["completed_at"] = segment["ended_at"]
+        persist_scan_checkpoint(output_dir, checkpoint, len(rows_by_id))
+    for stale_name in ("partial_summary.json", "run_failure.json"):
+        stale_path = output_dir / stale_name
+        if stale_path.exists():
+            stale_path.unlink()
 
     score = summary["metrics"]["schema_completeness_score"]
     print(
-        f"[schema_completeness] scan complete  actions={len(rows)}  failed={summary['failed_action_count']}"
+        f"[schema_completeness] scan complete  actions={len(rows)}  failed=0"
+        f"  comparable={str(is_full_catalog).lower()}"
         f"  schema_completeness_score={score:.4f}",
         flush=True,
     )
@@ -1626,14 +2603,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
 # Probe subcommand
 # ---------------------------------------------------------------------------
 
-ALL_DIMENSIONS = [
-    "param_types_declared",
-    "required_params_marked",
-    "value_domain",
-    "planning_signals_present",
-    "skill_routing_present",
-    "output_contract_declared",
-]
+ALL_DIMENSIONS = list(CHECKPOINT_DIMENSION_FIELDS)
 
 
 def load_probe_set(
@@ -1923,6 +2893,9 @@ def cmd_probe(args: argparse.Namespace) -> int:
         "declared_probe_count": declared_total,
         "catalog_namespace_count": len(namespaces),
         "catalog_action_count": len(catalog_pairs),
+        "catalog_action_ids_hash_kind": CATALOG_ACTION_IDS_HASH_KIND,
+        "catalog_action_ids_sha256": catalog_action_ids_sha256(catalog_pairs),
+        "catalog_version": catalog_version,
         "runnable_probe_count": len(runnable),
         "skipped_probe_count": len(skipped_results),
         "stale_probe_count": len(stale_results),
@@ -2024,11 +2997,11 @@ def cmd_probe(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
-    benchmark_inputs = build_benchmark_inputs(
-        "SchemaCompleteness",
+    benchmark_inputs = build_schema_registry_inputs(
+        status=status,
+        namespaces=namespaces,
+        catalog_pairs=catalog_pairs,
         probe_set_path=probe_set_path,
-        mcp_status=status,
-        catalog={"namespaces": namespaces},
     )
 
     rows: List[Dict[str, Any]] = []          # same schema as scan rows
@@ -2104,6 +3077,35 @@ def cmd_probe(args: argparse.Namespace) -> int:
         print(f"[{ns}.{act} {completed_index}/{runnable_total}]", flush=True)
 
         outcome, row = fetch_and_score_schema_target(url, ns, act, timeout_s)
+        try:
+            validate_schema_result_row(
+                row,
+                expected_action_ids={f"{ns}.{act}"},
+            )
+        except ValueError as exc:
+            failure = build_probe_progress(completed_index - 1)
+            failure.update({
+                "run_valid": False,
+                "completion_status": "aborted_invalid_result_contract",
+                "failure_stage": "schema_scoring",
+                "last_action_id": f"{ns}.{act}",
+                "error": str(exc),
+                "metrics_valid": False,
+                "metrics_scope": "attempted_prefix_invalid_result_contract",
+            })
+            write_run_failure(output_dir, failure)
+            write_json(output_dir / "partial_summary.json", failure)
+            write_jsonl(per_action_path, rows)
+            write_jsonl(
+                probe_results_path,
+                [probe_results_by_index[index] for index in sorted(probe_results_by_index)],
+            )
+            print(
+                "[schema_completeness] ERROR: invalid schema evidence row for "
+                f"{ns}.{act}: {exc}",
+                file=sys.stderr,
+            )
+            return 1
         rows.append(row)
         append_jsonl_row(per_action_path, row)
 
@@ -2231,14 +3233,26 @@ def cmd_probe(args: argparse.Namespace) -> int:
     probe_pass_rate, passed_checks, total_checks = _probe_pass_rates(probe_results)
     critical_probe_pass_rate, _, _ = _probe_pass_rates(probe_results, priority_filter="critical")
     high_probe_pass_rate, _, _ = _probe_pass_rates(probe_results, priority_filter="high")
-    failed_probe_count = sum(1 for r in probe_results if r.get("expected_failed"))
+    scored_probe_count = sum(
+        1 for row in probe_results if row.get("result_status") == "scored"
+    )
+    fetch_failed_probe_count = sum(
+        1 for row in probe_results if row.get("result_status") == "fetch_failed"
+    )
+    failed_probe_count = sum(
+        1
+        for row in probe_results
+        if row.get("result_status") in {"scored", "fetch_failed"}
+        and row.get("probe_pass") is not True
+    )
 
     summary["probe_metrics"] = {
         "probe_set_file": str(probe_set_path),
         "probe_count": declared_total,
         "declared_probe_count": declared_total,
         "catalog_present_probe_count": runnable_total,
-        "scored_probe_count": runnable_total,
+        "scored_probe_count": scored_probe_count,
+        "fetch_failed_probe_count": fetch_failed_probe_count,
         "skipped_probe_count": len(skipped_results),
         "skipped_optional_count": sum(
             1 for row in skipped_results if row["availability"]["mode"] == "optional"
@@ -2468,11 +3482,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     scan_cmd.add_argument("--request-timeout-s", type=float, default=8.0, help="Per-request timeout in seconds")
     scan_cmd.add_argument("--max-actions", type=int, default=None, help="Limit scan to first N actions (testing)")
     scan_cmd.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume a full-catalog scan from --output-dir. Rejects changed inputs, "
+             "catalog identity, duplicate result ids, and --max-actions.",
+    )
+    scan_cmd.add_argument(
         "--max-failed-fraction",
         type=float,
         default=DEFAULT_MAX_FAILED_FRACTION,
-        help="Maximum fraction of failed schema fetches before the run exits non-zero "
-             f"(default: {DEFAULT_MAX_FAILED_FRACTION})",
+        help="Legacy fetch-failure diagnostic threshold (default: "
+             f"{DEFAULT_MAX_FAILED_FRACTION}). Full scans are stricter and require "
+             "one valid result for every catalog action regardless of this value.",
     )
     scan_cmd.add_argument(
         "--max-transport-failed-fraction",

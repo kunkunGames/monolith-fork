@@ -1,14 +1,16 @@
 # AICapability Benchmark
 
 Measures the Monolith MCP server's capability to support engine-native **AI authoring** over the
-`ai` namespace — the largest uncovered surface in the suite (182 actions). It targets the
-highest-value `ai` subsystems and, critically, ships **adversarial categories from day one** so it
-cannot become a green-on-broken grader.
+`ai` namespace. The canonical corpus is bound to the complete live 182-action catalog: 44 curated
+read/edit schema probes plus 138 generated discovery-only probes give **182/182 schema coverage**.
+The weighted score still targets the highest-value subsystems and retains its adversarial categories
+so complete schema coverage cannot turn the benchmark into a green-on-broken grader.
 
 - **Runner:** `Scripts/ai_capability_benchmark.py`
 - **Offline self-test:** `Scripts/test_ai_capability_benchmark.py`
 - **MCP tool:** `ai_query` (all `ai.*` actions dispatch through this single tool)
-- **Primary score:** `ai_capability_score` (weighted sum of the seven category rates below; weights sum to 1.0)
+- **Primary score:** `ai_capability_score` (weighted sum of the seven established category rates below; weights sum to 1.0)
+- **Catalog diagnostic:** `catalog_schema_rate` (unweighted success rate over all 182 live action schemas)
 - **Subsystems tested:** Behavior Tree, Blackboard, EQS (granular edits); StateTree (schema only — see note)
 
 ## Why this benchmark exists (and why it leads with adversarial categories)
@@ -32,10 +34,15 @@ happy-path reads to a minimum:
 | `edit_schema` | 0.10 | `monolith_discover` resolves the schema for 28 edit actions (strict: `isError` fails) | tripwire |
 | `discovery` | 0.10 | `list_*` / `search_ai_assets` find the **seeded fixtures** (require ≥1 result) | tripwire |
 | `read_schema` | 0.08 | `monolith_discover` resolves the schema for 16 read actions (lenient) | tripwire |
+| `catalog_schema` | unweighted | `monolith_discover` resolves the remaining 138 live action schemas; combined with `read_schema` and `edit_schema`, this proves 182/182 catalog coverage | diagnostic |
 
 The four adversarial categories carry **0.72** of the score. A server that schema-resolves every
 `ai` action but cannot actually edit an asset, name a bad identifier, reject a duplicate, or
 validate a tree correctly scores **at most 0.28**.
+
+`catalog_schema` is intentionally excluded from `WEIGHTS`: adding full-catalog discovery must not
+change the established `read_schema_rate` / `edit_schema_rate` denominators or invalidate historical
+weighted comparisons. Its failures are still visible per task and in `catalog_schema_rate`.
 
 Every create-based row owns a dedicated scratch lifecycle. The template scaffold, duplicate, and
 compile-gate rows reset only benchmark-owned paths, reject every reset failure except an explicit
@@ -46,9 +53,10 @@ another changelist are never reused.
 > **StateTree coverage note — compiled out (`WITH_STATETREE=0`).** On this build StateTree is
 > compiled out, so `create_st_from_template` and `lint_state_tree` are **runtime stubs** that return
 > `isError` "StateTree module not available (WITH_STATETREE=0)". No StateTree EXECUTE or lint task can
-> pass here, so StateTree is covered **only by schema-presence tasks** (one `edit_schema`
-> `create_st_from_template`, one `read_schema` `lint_state_tree`) that assert the action is
-> registered in the catalog (true even when stubbed). The `ai` namespace also exposes no granular
+> pass here, so StateTree is covered **only by schema-presence tasks**. The curated prefix retains
+> one `edit_schema` (`create_st_from_template`) and one `read_schema` (`lint_state_tree`); runtime/
+> crowd StateTree-related actions from the live catalog are generated only as read-only
+> `catalog_schema` rows. The `ai` namespace also exposes no granular
 > StateTree authoring (`create_state_tree` / `add_st_state` / `compile_state_tree` / `*_st_state`
 > etc. do **not** exist). The falsifiable gate and the formerly-StateTree error_path are built from
 > Behavior Tree `validate_behavior_tree` instead, which DOES execute. Behavior Tree / Blackboard /
@@ -58,8 +66,8 @@ another changelist are never reused.
 
 | File | Purpose |
 | --- | --- |
-| `manifest.json` | Generated: task counts, weights, score formula, fixture paths, verified catalog version, run-integrity gates |
-| `tasks.jsonl` | Generated: one JSON object per task (74 tasks) |
+| `manifest.json` | Generated: task counts, weights, score formula, fixture paths, live catalog version/action-set hash, 182/182 coverage proof, run-integrity gates |
+| `tasks.jsonl` | Generated: 74 stable curated tasks followed by 138 sorted `catalog_schema` rows (212 total) |
 | `README.md` | This file |
 | `METRICS.md` | Per-category scoring rules + the verified `ai` action/param/error evidence (file:line) |
 | `RESULTS.md` | Run history + the exact live run commands (run requires the shared editor) |
@@ -68,11 +76,11 @@ another changelist are never reused.
 ## Usage
 
 ```powershell
-# 1. (offline) regenerate tasks + manifest after editing the runner
-python Scripts/ai_capability_benchmark.py generate
-
-# 2. (offline) self-test the scoring branches with fabricated MCP responses — no editor
+# 1. (offline) self-test scoring and live-catalog generation contracts
 python Scripts/test_ai_capability_benchmark.py
+
+# 2. (live editor) regenerate tasks + manifest against one stable live catalog
+python Scripts/ai_capability_benchmark.py generate --mcp-url http://localhost:9316/mcp
 
 # 3. (live editor) seed only the three standing AI fixtures at /Game/Benchmarks/AI/
 python Scripts/ai_capability_benchmark.py setup_fixtures --mcp-url http://localhost:9316/mcp
@@ -87,8 +95,11 @@ python Scripts/ai_capability_benchmark.py compare `
     --baseline <a>/summary.json --current <b>/summary.json --output-dir <out>
 ```
 
-`generate`, `setup_fixtures`, `preflight`, `run`, and `compare` retain the established benchmark
-command surface. **`run` requires the single shared editor** (`ai` is an
+`generate` now requires the live editor just like `run`: it validates `monolith_status`, the summary
+AI count, every paginated action name, and a second status under one `catalog_version` before writing
+either canonical file. Missing curated actions, duplicate names, page/count mismatch, or catalog
+drift leaves the existing files untouched. `setup_fixtures`, `preflight`, `run`, and `compare` retain
+the established command surface. **`run` requires the single shared editor** (`ai` is an
 editor-only namespace; there is no offline `monolith_query.exe` equivalent), so a scored run is left
 to a coordinated session — see `RESULTS.md`.
 
@@ -98,6 +109,12 @@ to a coordinated session — see `RESULTS.md`.
 fixture-readiness probes; it can never bypass status validation. Invalid JSON, a non-object JSON
 envelope, a top-level JSON-RPC error, a missing MCP result, `isError` status, or a status payload that
 does not declare `server_running=true` aborts before the first scored task.
+
+A canonical run also requires the non-empty `manifest.json` `catalog_version` to exactly match the
+live status `catalog_version`. A missing or stale manifest identity aborts before fixture probes or
+scored task calls and writes only invalid-run artifacts; regenerate the canonical corpus against the
+stable live catalog instead of editing the version by hand. Explicit subsets remain non-comparable
+diagnostics and do not claim this canonical identity binding.
 
 Every MCP call made by a task is attributed to its row, including setup, edit, duplicate first/second
 calls, readback, compile/validate, cleanup, and cleanup-readback calls. The shared transport gate aborts after three
@@ -120,11 +137,15 @@ response for the negative and duplicate-rejection tasks; it is not a transport/p
 
 ## Action-name provenance
 
-Every `ai` action and parameter used by the runner is verified against the live action catalog
-`Saved/Monolith/LogAnalysis/_ai_catalog.txt` (182 `ai` actions) and
-`Source/MonolithAI/Private/*.cpp` (`RegisterAction(TEXT("ai"), TEXT("<name>"), ...)`). No action name
-is invented — in particular the runner references **no** granular StateTree authoring action, because
-the `ai` namespace exposes none (only `create_st_from_template` + `lint_state_tree` for authoring/
-quality, plus runtime/crowd actions), and both of those are stubbed on this `WITH_STATETREE=0` build
-so they appear only in schema-presence tasks. The verified handler return/error shapes that the
-scorers rely on are anchored with file:line evidence in `METRICS.md`.
+Every canonical generation enumerates the live `ai` namespace through paginated
+`monolith_discover(mode="actions")`, cross-checks the 182-row result against the summary count, and
+records both `catalog_version` and a normalized action-set SHA-256 in `manifest.json`. Existing
+curated schema actions must all remain live; every otherwise-uncovered live action receives exactly
+one sorted, read-only `catalog_schema` task. No action name is inferred from the source-scanned
+offline catalog, which can contain compile-gated actions absent from the current editor profile.
+
+The fixed execute/error/duplicate/compile categories still reference no granular StateTree authoring
+action. `create_st_from_template` and `lint_state_tree` remain schema-only on this
+`WITH_STATETREE=0` build, while generated catalog coverage is always `monolith_discover` and can
+never promote a newly visible action into execution. Verified handler return/error shapes used by
+the adversarial scorers remain anchored with file:line evidence in `METRICS.md`.

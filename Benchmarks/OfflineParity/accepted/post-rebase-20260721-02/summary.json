@@ -1,0 +1,218 @@
+{
+  "label": "post-rebase-20260721-02",
+  "created_at": "2026-07-21T12:28:44.496189+00:00",
+  "ignore_cursor_bytes": false,
+  "run_environment": {
+    "status": "valid",
+    "valid": true,
+    "reason": null,
+    "probe": {
+      "label": "cppreflect.list_class_specifiers",
+      "args": [],
+      "exe": {
+        "exit_code": 0,
+        "stdout": "{\n  \"success\": true,\n  \"specifiers\": [\n    {\n      \"token\": \"DisplayName\",\n      \"count\": 2\n    }\n  ],\n  \"distinct_count\": 1\n}",
+        "stderr": ""
+      },
+      "py": {
+        "exit_code": 0,
+        "stdout": "{\n  \"success\": true,\n  \"specifiers\": [\n    {\n      \"token\": \"DisplayName\",\n      \"count\": 2\n    }\n  ],\n  \"distinct_count\": 1\n}",
+        "stderr": ""
+      }
+    }
+  },
+  "version": {
+    "exe_parity_spec_rev": "2026-05-29.1",
+    "py_parity_spec_rev": "2026-05-29.1",
+    "version_parity_ok": true
+  },
+  "chain_inputs": {
+    "decision_id": null,
+    "risk_path": "Docs/SPEC_CORE.md",
+    "uclass": "ALeviathanCharacterBase"
+  },
+  "counts": {
+    "match": 311,
+    "diff": 0,
+    "error": 0,
+    "skip": 6,
+    "total": 317
+  },
+  "metrics": {
+    "offline_parity_score": 1.0,
+    "match_rate": 1.0,
+    "diff_rate": 0.0,
+    "error_rate": 0.0,
+    "skip_rate": 0.018927,
+    "expected_error_rate": 0.016077,
+    "real_error_rate": 0.0,
+    "version_parity_score": 1.0,
+    "total_actions": 317,
+    "comparable_actions": 311,
+    "action_count": 311,
+    "expected_error_count": 5,
+    "expected_error_problem_count": 0,
+    "real_error_count": 0,
+    "environment_blocked_count": 0,
+    "mean_diffs_per_diff_action": 0.0,
+    "category_breakdown": {
+      "cppreflect": {
+        "match": 96,
+        "diff": 0,
+        "error": 0,
+        "skip": 0,
+        "action_count": 96,
+        "expected_error": 0,
+        "expected_error_problem": 0,
+        "real_error": 0,
+        "environment_blocked": 0
+      },
+      "decision": {
+        "match": 44,
+        "diff": 0,
+        "error": 0,
+        "skip": 6,
+        "action_count": 44,
+        "expected_error": 0,
+        "expected_error_problem": 0,
+        "real_error": 0,
+        "environment_blocked": 0
+      },
+      "network": {
+        "match": 46,
+        "diff": 0,
+        "error": 0,
+        "skip": 0,
+        "action_count": 46,
+        "expected_error": 0,
+        "expected_error_problem": 0,
+        "real_error": 0,
+        "environment_blocked": 0
+      },
+      "risk": {
+        "match": 62,
+        "diff": 0,
+        "error": 0,
+        "skip": 0,
+        "action_count": 62,
+        "expected_error": 0,
+        "expected_error_problem": 0,
+        "real_error": 0,
+        "environment_blocked": 0
+      },
+      "source": {
+        "match": 63,
+        "diff": 0,
+        "error": 0,
+        "skip": 0,
+        "action_count": 63,
+        "expected_error": 5,
+        "expected_error_problem": 0,
+        "real_error": 0,
+        "environment_blocked": 0
+      }
+    }
+  },
+  "diagnostics": {
+    "expected_error": {
+      "match_count": 5,
+      "problem_count": 0,
+      "labels": [
+        "source.get_signature/missing_symbol(expected-error)",
+        "source.get_include_path/missing_symbol(expected-error)",
+        "source.generate_class_stub/missing_parent(expected-error)",
+        "source.lint_header/missing_file(expected-error)",
+        "source.read_file/missing_file(expected-error)"
+      ],
+      "problem_labels": []
+    },
+    "real_error": {
+      "count": 0,
+      "labels": []
+    },
+    "environment_blocked": {
+      "count": 0,
+      "labels": []
+    }
+  },
+  "benchmark_inputs": {
+    "schema_version": 1,
+    "benchmark": "OfflineParity",
+    "files": {
+      "benchmark_common": {
+        "kind": "benchmark_common",
+        "path": "Scripts/benchmark_common.py",
+        "exists": true,
+        "size_bytes": 36193,
+        "mtime_ns": 1784633997833369200,
+        "signature": "36193:1784633997833369200",
+        "sha256": "19e8abec8e278cc078643f7f320b4f5aeb27dd19cfd25b5e3b91f5c51f66cd7d"
+      },
+      "tasks": {
+        "kind": "tasks",
+        "path": "Benchmarks/OfflineParity/actions.jsonl",
+        "exists": true,
+        "size_bytes": 47722,
+        "mtime_ns": 1782003948422950800,
+        "signature": "47722:1782003948422950800",
+        "sha256": "ecc1ce92b611b303e54dd4e0211b9b22146e93f3b28d7cb40371f0399af5dcd5",
+        "line_count": 317,
+        "non_empty_line_count": 317
+      },
+      "manifest": {
+        "kind": "manifest",
+        "path": "Benchmarks/OfflineParity/manifest.json",
+        "exists": true,
+        "size_bytes": 3439,
+        "mtime_ns": 1783848569108181100,
+        "signature": "3439:1783848569108181100",
+        "sha256": "0d239503caad3904c05139e7d59ab81b32266e9823a1d1ed2e8bf184ef75615f"
+      },
+      "runner": {
+        "kind": "runner",
+        "path": "Scripts/offline_parity_benchmark.py",
+        "exists": true,
+        "size_bytes": 51776,
+        "mtime_ns": 1784633997836369100,
+        "signature": "51776:1784633997836369100",
+        "sha256": "25262349dd69962c5fe8d9a52e752b557496458e0e12013f3a034a4941dbfd9b"
+      },
+      "offline_exe": {
+        "kind": "offline_exe",
+        "path": "Binaries/monolith_query.exe",
+        "exists": true,
+        "size_bytes": 3908608,
+        "mtime_ns": 1784465115209159700,
+        "signature": "3908608:1784465115209159700",
+        "sha256": "5ca7a8bcad81d82d7192fc597a8ff795c6d9e2b167e9bafa99ffad37e35f8269"
+      },
+      "offline_python": {
+        "kind": "offline_python",
+        "path": "Scripts/monolith_offline.py",
+        "exists": true,
+        "size_bytes": 114422,
+        "mtime_ns": 1782558636720251600,
+        "signature": "114422:1782558636720251600",
+        "sha256": "e088ecdc348ff33bb1885d989677417c8236b524b53cd9ac51b3b99bdeb7c509"
+      }
+    },
+    "database_files": [
+      {
+        "kind": "database",
+        "path": "Saved/EngineSource.db",
+        "exists": true,
+        "size_bytes": 4455755776,
+        "mtime_ns": 1784636710929434100,
+        "signature": "4455755776:1784636710929434100",
+        "sha256": "c4b03cc433d4e528746f124f10515650e87358846d7771b297299ceed92398f8"
+      }
+    ],
+    "mcp_catalog": {
+      "manifest": {
+        "generated_at": "2026-06-18T00:00:00+00:00"
+      }
+    },
+    "fingerprint_sha256": "04cf86599ccfd4e8bfa24621bef592fbe0cb0260d0d0eff3aeb10bf210b6b7ff"
+  },
+  "input_fingerprint": "04cf86599ccfd4e8bfa24621bef592fbe0cb0260d0d0eff3aeb10bf210b6b7ff"
+}

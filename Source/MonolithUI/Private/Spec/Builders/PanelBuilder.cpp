@@ -75,7 +75,7 @@ namespace MonolithUI::PanelBuilderInternal
         {
             Slot->SetVerticalAlignment(MonolithUI::ParseVAlign(S.VAlign.ToString()));
         }
-        if (HasAnyPadding(S.Padding))
+        if (S.bPaddingSpecified || HasAnyPadding(S.Padding))
         {
             Slot->SetPadding(S.Padding);
         }
@@ -386,7 +386,7 @@ namespace MonolithUI::PanelBuilderInternal
             {
                 Border->SetBrushColor(S.Background);
             }
-            if (HasAnyPadding(S.Padding))
+            if (S.bPaddingSpecified || HasAnyPadding(S.Padding))
             {
                 Border->SetPadding(S.Padding);
             }

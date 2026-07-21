@@ -12,6 +12,9 @@ envelopes and assert that:
     action_count == 0 optional namespaces, and reports count mismatches,
   * cmd_scan exits non-zero on a zero-action enumeration instead of writing a
     0.0 baseline, and exits non-zero when every schema fetch fails mid-scan,
+  * full-scan checkpoints resume only successful rows under an identical input
+    and catalog identity, preserving segment/outage provenance,
+  * duplicate result ids and catalog/input drift are rejected before scoring,
   * the happy path still scans and writes summary.json with exit 0.
 
 Run:
@@ -32,6 +35,7 @@ SCRIPTS_DIR = pathlib.Path(__file__).resolve().parent.parent
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
+import benchmark_common as benchmark_common  # noqa: E402
 import schema_completeness_benchmark as scb  # noqa: E402
 
 
@@ -63,11 +67,18 @@ class FakeCompactDiscoverServer:
     only; action names come from paginated mode="actions"; schemas come from
     mode="schema"."""
 
-    def __init__(self, catalog: dict, page_size: int = 2, schema=HEALTHY_SCHEMA):
+    def __init__(
+        self,
+        catalog: dict,
+        page_size: int = 2,
+        schema=HEALTHY_SCHEMA,
+        catalog_version: str = "sha256:fake",
+    ):
         # catalog: {namespace: [action, ...]}
         self.catalog = catalog
         self.page_size = page_size
         self.schema = schema
+        self.catalog_version = catalog_version
         self.calls = []
 
     def __call__(self, url, tool, arguments, timeout_s=8.0):
@@ -75,8 +86,8 @@ class FakeCompactDiscoverServer:
         if tool == "monolith_status":
             return mcp_envelope({
                 "server_running": True,
-                "project_name": "UnitTest",
-                "catalog_version": "sha256:fake",
+                "project_name": "Speed",
+                "catalog_version": self.catalog_version,
             })
         namespace = arguments.get("namespace")
         mode = arguments.get("mode")
@@ -85,7 +96,11 @@ class FakeCompactDiscoverServer:
                 {"namespace": ns, "action_count": len(actions), "projection": "summary"}
                 for ns, actions in self.catalog.items()
             ]
-            return mcp_envelope({"mode": "summary", "namespaces": rows})
+            return mcp_envelope({
+                "mode": "summary",
+                "catalog_version": self.catalog_version,
+                "namespaces": rows,
+            })
         if mode == "actions":
             actions = self.catalog.get(namespace, [])
             offset = int(arguments.get("offset", 0))
@@ -210,6 +225,31 @@ class EnumerateCatalogTests(unittest.TestCase):
         pairs, errors = scb.enumerate_catalog_actions("http://x", namespaces, 1.0)
         self.assertEqual(pairs, [])
         self.assertEqual(len(errors), 1)
+
+    def test_transport_failure_aborts_remaining_namespace_requests(self):
+        requested_namespaces = []
+
+        def fake(url, tool, arguments, timeout_s=8.0):
+            namespace = arguments.get("namespace")
+            requested_namespaces.append(namespace)
+            if namespace == "first":
+                return {
+                    "transport_error": True,
+                    "status": None,
+                    "raw": "timed out behind a blocked editor dispatch",
+                }
+            raise AssertionError("transport failure must stop catalog enumeration")
+
+        self._with_fake(fake)
+        namespaces = [
+            {"namespace": "first", "action_count": 1, "projection": "summary"},
+            {"namespace": "second", "action_count": 1, "projection": "summary"},
+        ]
+        pairs, errors = scb.enumerate_catalog_actions("http://x", namespaces, 1.0)
+        self.assertEqual(pairs, [])
+        self.assertEqual(len(errors), 1)
+        self.assertIn("transport error", errors[0])
+        self.assertEqual(requested_namespaces, ["first"])
 
     def test_catalog_version_change_during_enumeration_is_rejected(self):
         def fake(url, tool, arguments, timeout_s=8.0):
@@ -375,8 +415,27 @@ class ProbeSetContractTests(unittest.TestCase):
                 "min_transport_fraction_sample": scb.MIN_TRANSPORT_FRACTION_SAMPLE,
                 "invalid_status_response_aborts_before_schema_fetch": True,
                 "status_catalog_version_mismatch_aborts_before_schema_fetch": True,
+                "catalog_transport_failure_aborts_remaining_namespaces": True,
                 "invalid_run_writes_summary": False,
+                "full_scan_requires_all_valid_results": True,
+                "full_scan_resume_checkpoint": True,
+                "successful_rows_require_canonical_raw_schema": True,
+                "successful_rows_require_exact_raw_rescoring": True,
+                "resume_requires_identical_input_catalog_identity": True,
+                "normal_summary_requires_exact_catalog_result_set": True,
             },
+        )
+        self.assertEqual(
+            manifest["full_scan_resume"]["contract_version"],
+            scb.SCAN_CONTRACT_VERSION,
+        )
+        self.assertEqual(
+            manifest["full_scan_resume"]["checkpoint_schema_version"],
+            scb.SCAN_CHECKPOINT_SCHEMA_VERSION,
+        )
+        self.assertEqual(
+            manifest["full_scan_resume"]["raw_schema_hash_kind"],
+            scb.RAW_SCHEMA_HASH_KIND,
         )
 
     def test_duplicate_probe_pair_is_rejected(self):
@@ -449,6 +508,125 @@ class ProbeSetContractTests(unittest.TestCase):
             self.assertEqual(probes[0]["availability"], {"mode": "required"})
 
 
+class SchemaBenchmarkInputTests(unittest.TestCase):
+    @staticmethod
+    def _build_inputs(
+        probe_path: pathlib.Path,
+        runner_path: pathlib.Path,
+        *,
+        catalog_version: str = "sha256:v1",
+    ) -> dict:
+        with mock.patch.object(scb, "__file__", str(runner_path)):
+            return scb.build_schema_registry_inputs(
+                status={
+                    "catalog_version": catalog_version,
+                    "project": "UnitTest",
+                },
+                namespaces=[
+                    {
+                        "namespace": "blueprint",
+                        "actions": [{"action": "a1"}],
+                    }
+                ],
+                catalog_pairs=[("blueprint", "a1")],
+                probe_set_path=probe_path,
+            )
+
+    def test_probe_inputs_hash_contract_runner_and_exclude_databases(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            probe_path = ProbeSetContractTests._write_contract(
+                root,
+                [ProbeSetContractTests._row()],
+            )
+            runner_path = root / "schema_runner.py"
+            runner_path.write_text("# synthetic runner\n", encoding="utf-8")
+
+            inputs = self._build_inputs(probe_path, runner_path)
+
+            self.assertEqual(
+                set(inputs["files"]),
+                {"benchmark_common", "manifest", "probe_set", "runner"},
+            )
+            self.assertEqual(inputs["database_files"], [])
+            self.assertEqual(
+                inputs["database_files_scope"],
+                "not_applicable_to_live_schema_registry_scan",
+            )
+            self.assertEqual(inputs["schema_registry"]["catalog_action_count"], 1)
+            self.assertEqual(
+                inputs["schema_registry"]["catalog_action_ids_sha256"],
+                scb._sha256_json(["blueprint.a1"]),
+            )
+            payload = dict(inputs)
+            fingerprint = payload.pop("fingerprint_sha256")
+            self.assertEqual(fingerprint, scb._sha256_json(payload))
+            self.assertEqual(
+                fingerprint,
+                benchmark_common.benchmark_input_fingerprint(inputs),
+            )
+
+    def test_probe_fingerprint_tracks_contract_runner_and_catalog_not_databases(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            probe_path = ProbeSetContractTests._write_contract(
+                root,
+                [ProbeSetContractTests._row()],
+            )
+            runner_path = root / "schema_runner.py"
+            runner_path.write_text("# runner v1\n", encoding="utf-8")
+            unrelated_db = root / "Unrelated.db"
+            unrelated_db.write_bytes(b"database-v1")
+
+            with mock.patch.object(
+                benchmark_common,
+                "_DB_CANDIDATES",
+                (unrelated_db,),
+            ):
+                baseline = self._build_inputs(probe_path, runner_path)
+
+                probe_path.write_text(
+                    json.dumps(ProbeSetContractTests._row(action="a2")) + "\n",
+                    encoding="utf-8",
+                )
+                probe_changed = self._build_inputs(probe_path, runner_path)
+                self.assertNotEqual(
+                    baseline["fingerprint_sha256"],
+                    probe_changed["fingerprint_sha256"],
+                )
+
+                runner_path.write_text("# runner v2\n", encoding="utf-8")
+                runner_changed = self._build_inputs(probe_path, runner_path)
+                self.assertNotEqual(
+                    probe_changed["fingerprint_sha256"],
+                    runner_changed["fingerprint_sha256"],
+                )
+
+                catalog_changed = self._build_inputs(
+                    probe_path,
+                    runner_path,
+                    catalog_version="sha256:v2",
+                )
+                self.assertNotEqual(
+                    runner_changed["fingerprint_sha256"],
+                    catalog_changed["fingerprint_sha256"],
+                )
+
+                unrelated_db.write_bytes(b"database-v2-with-different-size")
+                after_db_change = self._build_inputs(
+                    probe_path,
+                    runner_path,
+                    catalog_version="sha256:v2",
+                )
+
+            self.assertEqual(catalog_changed["database_files"], [])
+            self.assertEqual(after_db_change["database_files"], [])
+            self.assertEqual(
+                catalog_changed["fingerprint_sha256"],
+                after_db_change["fingerprint_sha256"],
+            )
+
+
 class ProbeCatalogPreflightTests(unittest.TestCase):
     def _with_fake(self, fake):
         original = scb.mcp_call
@@ -467,6 +645,7 @@ class ProbeCatalogPreflightTests(unittest.TestCase):
             max_transport_failed_fraction=scb.DEFAULT_MAX_TRANSPORT_FAILED_FRACTION,
             max_consecutive_transport_failures=scb.DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
             min_transport_fraction_sample=scb.MIN_TRANSPORT_FRACTION_SAMPLE,
+            resume=False,
         )
 
     def test_required_absence_aborts_before_schema_fetch(self):
@@ -673,6 +852,7 @@ class ScanFailFastTests(unittest.TestCase):
                     self.calls.append(arguments)
                     return mcp_envelope({
                         "server_running": True,
+                        "project_name": "Speed",
                         "catalog_version": "sha256:v2",
                     })
                 if not arguments.get("namespace"):
@@ -755,7 +935,8 @@ class ScanFailFastTests(unittest.TestCase):
             self.assertEqual(rc, 1)
             self.assertFalse((out / "summary.json").exists())
             failure = json.loads((out / "run_failure.json").read_text(encoding="utf-8"))
-            self.assertEqual(failure["failed_action_count"], 2)
+            self.assertEqual(failure["attempted_invalid_action_count"], 2)
+            self.assertEqual(failure["completed_valid_action_count"], 0)
             self.assertFalse(failure["run_valid"])
 
     def test_partial_failure_over_budget_exits_nonzero(self):
@@ -775,9 +956,10 @@ class ScanFailFastTests(unittest.TestCase):
             self.assertEqual(rc, 1)
             self.assertFalse((out / "summary.json").exists())
             failure = json.loads((out / "run_failure.json").read_text(encoding="utf-8"))
-            self.assertEqual(failure["failed_action_count"], 2)
+            self.assertEqual(failure["attempted_invalid_action_count"], 2)
+            self.assertEqual(failure["completed_valid_action_count"], 2)
 
-    def test_partial_failure_within_budget_exits_zero(self):
+    def test_partial_failure_within_budget_still_requires_exact_valid_set(self):
         class BlueprintSchemaMissingServer(FakeCompactDiscoverServer):
             def __call__(self, url, tool, arguments, timeout_s=8.0):
                 if arguments.get("mode") == "schema" and arguments.get("namespace") == "blueprint":
@@ -792,7 +974,11 @@ class ScanFailFastTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = pathlib.Path(tmp) / "run"
             rc = scb.cmd_scan(self._scan_args(out, max_failed_fraction=0.5))
-            self.assertEqual(rc, 0)
+            self.assertEqual(rc, 1)
+            self.assertFalse((out / "summary.json").exists())
+            failure = json.loads((out / "run_failure.json").read_text(encoding="utf-8"))
+            self.assertEqual(failure["completion_status"], "incomplete_valid_results")
+            self.assertEqual(failure["missing_valid_action_count"], 2)
 
     def test_three_consecutive_transport_failures_abort_early(self):
         class SchemaDeadServer(FakeCompactDiscoverServer):
@@ -816,7 +1002,8 @@ class ScanFailFastTests(unittest.TestCase):
             self.assertFalse((out / "summary.json").exists())
             failure = json.loads((out / "run_failure.json").read_text(encoding="utf-8"))
             self.assertEqual(failure["transport_gate_reason"], "consecutive_transport_failures")
-            self.assertEqual(failure["completed_action_count"], 3)
+            self.assertEqual(failure["completed_valid_action_count"], 0)
+            self.assertEqual(failure["segment_attempted_action_count"], 3)
 
     def test_transport_fraction_gate_aborts_at_minimum_sample(self):
         class IntermittentServer(FakeCompactDiscoverServer):
@@ -836,7 +1023,8 @@ class ScanFailFastTests(unittest.TestCase):
             self.assertEqual(rc, 1)
             failure = json.loads((out / "run_failure.json").read_text(encoding="utf-8"))
             self.assertEqual(failure["transport_gate_reason"], "transport_failed_fraction")
-            self.assertEqual(failure["completed_action_count"], 20)
+            self.assertEqual(failure["completed_valid_action_count"], 16)
+            self.assertEqual(failure["segment_attempted_action_count"], 20)
             self.assertEqual(failure["transport_failure_count"], 4)
 
     def test_unexpected_runner_exception_aborts_instead_of_scoring_zero(self):
@@ -856,7 +1044,8 @@ class ScanFailFastTests(unittest.TestCase):
             self.assertFalse((out / "summary.json").exists())
             failure = json.loads((out / "run_failure.json").read_text(encoding="utf-8"))
             self.assertEqual(failure["completion_status"], "aborted_runner_exception")
-            self.assertEqual(failure["completed_action_count"], 1)
+            self.assertEqual(failure["completed_valid_action_count"], 0)
+            self.assertEqual(failure["segment_attempted_action_count"], 1)
             self.assertIn("ValueError", failure["exception"])
             self.assertFalse(failure["metrics_valid"])
             partial = json.loads((out / "partial_summary.json").read_text(encoding="utf-8"))
@@ -881,10 +1070,65 @@ class ScanFailFastTests(unittest.TestCase):
             ]
             self.assertEqual(failure["completion_status"], "aborted_runner_exception")
             self.assertFalse(failure["metrics_valid"])
-            self.assertEqual(len(rows), 1)
-            self.assertEqual(rows[0]["failure_kind"], "runner_exception")
-            self.assertIn("score exploded", rows[0]["error"])
+            self.assertEqual(rows, [])
+            checkpoint = json.loads(
+                (out / "scan_checkpoint.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(len(checkpoint["invalid_attempts"]), 1)
+            self.assertEqual(
+                checkpoint["invalid_attempts"][0]["failure_kind"],
+                "runner_exception",
+            )
+            self.assertIn(
+                "score exploded",
+                checkpoint["invalid_attempts"][0]["error"],
+            )
             self.assertFalse((out / "summary.json").exists())
+
+    def test_malformed_success_row_aborts_checkpoint_contract(self):
+        fake = FakeCompactDiscoverServer({"blueprint": ["a1"]})
+        self._with_fake(fake)
+        malformed_row = {
+            "namespace": "blueprint",
+            "action": "a1",
+            # JSON numbers must not pass as booleans in reusable score rows.
+            "param_types_declared": 1,
+            "required_params_marked": True,
+            "value_domain": True,
+            "planning_signals_present": True,
+            "skill_routing_present": True,
+            "output_contract_declared": True,
+            "schema_score": 1.0,
+            "value_domain_diagnostics": [],
+            "error": "",
+            "failure_kind": "ok",
+            "transport_error": False,
+            "transport_status": None,
+            "transport_error_raw": "",
+        }
+        outcome = scb.SchemaFetchOutcome(HEALTHY_SCHEMA, "ok")
+        with tempfile.TemporaryDirectory() as tmp:
+            out = pathlib.Path(tmp) / "run"
+            with mock.patch.object(
+                scb,
+                "fetch_and_score_schema_target",
+                return_value=(outcome, malformed_row),
+            ):
+                rc = scb.cmd_scan(self._scan_args(out))
+            self.assertEqual(rc, 1)
+            self.assertFalse((out / "summary.json").exists())
+            failure = json.loads((out / "run_failure.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                failure["completion_status"],
+                "aborted_invalid_result_contract",
+            )
+            checkpoint = json.loads(
+                (out / "scan_checkpoint.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                checkpoint["invalid_attempts"][0]["failure_kind"],
+                "invalid_result_contract",
+            )
 
     def test_short_population_transport_fraction_is_rejected_at_finalize(self):
         class OneTransportServer(FakeCompactDiscoverServer):
@@ -912,6 +1156,307 @@ class ScanFailFastTests(unittest.TestCase):
             self.assertEqual(failure["last_action_id"], "blueprint.a1")
             self.assertFalse((out / "summary.json").exists())
 
+    def test_transport_abort_resumes_only_missing_actions_and_completes(self):
+        class FirstSegmentServer(FakeCompactDiscoverServer):
+            def __call__(self, url, tool, arguments, timeout_s=8.0):
+                if (
+                    arguments.get("mode") == "schema"
+                    and arguments.get("action") in {"a3", "a4", "a5"}
+                ):
+                    self.calls.append(arguments)
+                    return {
+                        "transport_error": True,
+                        "status": 503,
+                        "raw": "editor stopped",
+                    }
+                return super().__call__(url, tool, arguments, timeout_s=timeout_s)
+
+        catalog = {"blueprint": ["a1", "a2", "a3", "a4", "a5"]}
+        first = FirstSegmentServer(catalog)
+        second = FakeCompactDiscoverServer(catalog)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = pathlib.Path(tmp) / "run"
+            with mock.patch.object(scb, "mcp_call", first):
+                rc = scb.cmd_scan(self._scan_args(out))
+            self.assertEqual(rc, 1)
+            self.assertFalse((out / "summary.json").exists())
+
+            checkpoint = json.loads(
+                (out / "scan_checkpoint.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(checkpoint["completed_valid_action_count"], 2)
+            self.assertEqual(len(checkpoint["segments"]), 1)
+            self.assertEqual(len(checkpoint["outages"]), 3)
+
+            resume_args = self._scan_args(out)
+            resume_args.resume = True
+            with mock.patch.object(scb, "mcp_call", second):
+                rc = scb.cmd_scan(resume_args)
+            self.assertEqual(rc, 0)
+
+            resumed_schema_actions = [
+                call.get("action")
+                for call in second.calls
+                if call.get("mode") == "schema"
+            ]
+            self.assertEqual(resumed_schema_actions, ["a3", "a4", "a5"])
+            rows = [
+                json.loads(line)
+                for line in (out / "per_action.jsonl").read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(
+                [f"{row['namespace']}.{row['action']}" for row in rows],
+                [f"blueprint.a{index}" for index in range(1, 6)],
+            )
+            summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
+            self.assertTrue(summary["run_valid"])
+            self.assertTrue(summary["comparable"])
+            self.assertEqual(summary["completed_valid_action_count"], 5)
+            self.assertEqual(summary["checkpoint_provenance"]["segment_count"], 2)
+            self.assertEqual(summary["checkpoint_provenance"]["outage_count"], 3)
+            self.assertFalse((out / "run_failure.json").exists())
+
+    def test_resume_rejects_catalog_identity_change_before_schema_fetch(self):
+        class FirstSegmentServer(FakeCompactDiscoverServer):
+            def __call__(self, url, tool, arguments, timeout_s=8.0):
+                if arguments.get("mode") == "schema":
+                    self.calls.append(arguments)
+                    return {
+                        "transport_error": True,
+                        "status": None,
+                        "raw": "editor stopped",
+                    }
+                return super().__call__(url, tool, arguments, timeout_s=timeout_s)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = pathlib.Path(tmp) / "run"
+            first = FirstSegmentServer({"blueprint": ["a1", "a2", "a3"]})
+            with mock.patch.object(scb, "mcp_call", first):
+                self.assertEqual(scb.cmd_scan(self._scan_args(out)), 1)
+
+            changed = FakeCompactDiscoverServer(
+                {"blueprint": ["a1", "a2", "a3", "a4"]},
+                catalog_version="sha256:changed",
+            )
+            resume_args = self._scan_args(out)
+            resume_args.resume = True
+            with mock.patch.object(scb, "mcp_call", changed):
+                rc = scb.cmd_scan(resume_args)
+            self.assertEqual(rc, 1)
+            self.assertFalse(
+                any(call.get("mode") == "schema" for call in changed.calls)
+            )
+            failure = json.loads((out / "run_failure.json").read_text(encoding="utf-8"))
+            self.assertEqual(failure["failure_stage"], "checkpoint_preflight")
+            self.assertIn("identity mismatch", failure["error"])
+            self.assertFalse((out / "summary.json").exists())
+
+    def test_resume_rejects_duplicate_checkpoint_action_ids(self):
+        class LastActionsDownServer(FakeCompactDiscoverServer):
+            def __call__(self, url, tool, arguments, timeout_s=8.0):
+                if (
+                    arguments.get("mode") == "schema"
+                    and arguments.get("action") != "a1"
+                ):
+                    self.calls.append(arguments)
+                    return {
+                        "transport_error": True,
+                        "status": None,
+                        "raw": "editor stopped",
+                    }
+                return super().__call__(url, tool, arguments, timeout_s=timeout_s)
+
+        catalog = {"blueprint": ["a1", "a2", "a3", "a4"]}
+        with tempfile.TemporaryDirectory() as tmp:
+            out = pathlib.Path(tmp) / "run"
+            with mock.patch.object(scb, "mcp_call", LastActionsDownServer(catalog)):
+                self.assertEqual(scb.cmd_scan(self._scan_args(out)), 1)
+
+            results_path = out / "per_action.jsonl"
+            first_row = results_path.read_text(encoding="utf-8").splitlines()[0]
+            with results_path.open("a", encoding="utf-8", newline="\n") as handle:
+                handle.write(first_row + "\n")
+
+            healthy = FakeCompactDiscoverServer(catalog)
+            resume_args = self._scan_args(out)
+            resume_args.resume = True
+            with mock.patch.object(scb, "mcp_call", healthy):
+                rc = scb.cmd_scan(resume_args)
+            self.assertEqual(rc, 1)
+            self.assertFalse(
+                any(call.get("mode") == "schema" for call in healthy.calls)
+            )
+            failure = json.loads((out / "run_failure.json").read_text(encoding="utf-8"))
+            self.assertIn("duplicate action id", failure["error"])
+
+    def test_resume_rejects_runner_configuration_change(self):
+        class FirstSegmentServer(FakeCompactDiscoverServer):
+            def __call__(self, url, tool, arguments, timeout_s=8.0):
+                if arguments.get("mode") == "schema":
+                    self.calls.append(arguments)
+                    return {
+                        "transport_error": True,
+                        "status": None,
+                        "raw": "editor stopped",
+                    }
+                return super().__call__(url, tool, arguments, timeout_s=timeout_s)
+
+        catalog = {"blueprint": ["a1", "a2", "a3"]}
+        with tempfile.TemporaryDirectory() as tmp:
+            out = pathlib.Path(tmp) / "run"
+            with mock.patch.object(scb, "mcp_call", FirstSegmentServer(catalog)):
+                self.assertEqual(scb.cmd_scan(self._scan_args(out)), 1)
+
+            healthy = FakeCompactDiscoverServer(catalog)
+            resume_args = self._scan_args(out)
+            resume_args.resume = True
+            resume_args.request_timeout_s = 2.0
+            with mock.patch.object(scb, "mcp_call", healthy):
+                rc = scb.cmd_scan(resume_args)
+            self.assertEqual(rc, 1)
+            self.assertFalse(
+                any(call.get("mode") == "schema" for call in healthy.calls)
+            )
+            failure = json.loads((out / "run_failure.json").read_text(encoding="utf-8"))
+            self.assertIn("request_timeout_s", failure["error"])
+
+    def test_resume_records_result_append_that_preceded_checkpoint_count_flush(self):
+        class LastActionsDownServer(FakeCompactDiscoverServer):
+            def __call__(self, url, tool, arguments, timeout_s=8.0):
+                if (
+                    arguments.get("mode") == "schema"
+                    and arguments.get("action") != "a1"
+                ):
+                    self.calls.append(arguments)
+                    return {
+                        "transport_error": True,
+                        "status": None,
+                        "raw": "editor stopped",
+                    }
+                return super().__call__(url, tool, arguments, timeout_s=timeout_s)
+
+        catalog = {"blueprint": ["a1", "a2", "a3", "a4"]}
+        with tempfile.TemporaryDirectory() as tmp:
+            out = pathlib.Path(tmp) / "run"
+            with mock.patch.object(scb, "mcp_call", LastActionsDownServer(catalog)):
+                self.assertEqual(scb.cmd_scan(self._scan_args(out)), 1)
+
+            checkpoint_path = out / "scan_checkpoint.json"
+            checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+            self.assertEqual(checkpoint["completed_valid_action_count"], 1)
+            checkpoint["completed_valid_action_count"] = 0
+            checkpoint_path.write_text(
+                json.dumps(checkpoint, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            healthy = FakeCompactDiscoverServer(catalog)
+            resume_args = self._scan_args(out)
+            resume_args.resume = True
+            with mock.patch.object(scb, "mcp_call", healthy):
+                rc = scb.cmd_scan(resume_args)
+            self.assertEqual(rc, 0)
+            self.assertNotIn(
+                "a1",
+                [
+                    call.get("action")
+                    for call in healthy.calls
+                    if call.get("mode") == "schema"
+                ],
+            )
+            summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                summary["checkpoint_provenance"]["recovery_event_count"],
+                1,
+            )
+
+    def test_completion_identity_outage_resumes_without_refetching_valid_rows(self):
+        class CompletionRecheckDownServer(FakeCompactDiscoverServer):
+            def __init__(self, catalog):
+                super().__init__(catalog)
+                self.version_recheck_count = 0
+
+            def __call__(self, url, tool, arguments, timeout_s=8.0):
+                if not arguments.get("namespace") and arguments.get("if_version"):
+                    self.version_recheck_count += 1
+                    if self.version_recheck_count == 2:
+                        self.calls.append(arguments)
+                        return {
+                            "transport_error": True,
+                            "status": None,
+                            "raw": "editor stopped after final schema",
+                        }
+                return super().__call__(url, tool, arguments, timeout_s=timeout_s)
+
+        catalog = {"blueprint": ["a1", "a2"]}
+        with tempfile.TemporaryDirectory() as tmp:
+            out = pathlib.Path(tmp) / "run"
+            first = CompletionRecheckDownServer(catalog)
+            with mock.patch.object(scb, "mcp_call", first):
+                rc = scb.cmd_scan(self._scan_args(out))
+            self.assertEqual(rc, 1)
+            self.assertFalse((out / "summary.json").exists())
+            failure = json.loads((out / "run_failure.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                failure["completion_status"],
+                "aborted_completion_identity_recheck",
+            )
+            self.assertEqual(failure["completed_valid_action_count"], 2)
+
+            second = FakeCompactDiscoverServer(catalog)
+            resume_args = self._scan_args(out)
+            resume_args.resume = True
+            with mock.patch.object(scb, "mcp_call", second):
+                rc = scb.cmd_scan(resume_args)
+            self.assertEqual(rc, 0)
+            self.assertFalse(
+                any(call.get("mode") == "schema" for call in second.calls)
+            )
+            summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary["checkpoint_provenance"]["segment_count"], 2)
+            self.assertEqual(summary["checkpoint_provenance"]["outage_count"], 1)
+
+    def test_publication_crash_window_is_republished_on_resume(self):
+        catalog = {"blueprint": ["a1", "a2"]}
+        with tempfile.TemporaryDirectory() as tmp:
+            out = pathlib.Path(tmp) / "run"
+            first = FakeCompactDiscoverServer(catalog)
+            real_persist = scb.persist_scan_checkpoint
+
+            def fail_final_state(output_dir, checkpoint, completed_count):
+                if checkpoint.get("state") == "completed":
+                    raise OSError("simulated crash before final checkpoint flip")
+                return real_persist(output_dir, checkpoint, completed_count)
+
+            with mock.patch.object(scb, "mcp_call", first), mock.patch.object(
+                scb,
+                "persist_scan_checkpoint",
+                side_effect=fail_final_state,
+            ):
+                with self.assertRaisesRegex(OSError, "simulated crash"):
+                    scb.cmd_scan(self._scan_args(out))
+
+            checkpoint = json.loads(
+                (out / "scan_checkpoint.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(checkpoint["state"], "publishing")
+            self.assertTrue((out / "summary.json").is_file())
+
+            second = FakeCompactDiscoverServer(catalog)
+            resume_args = self._scan_args(out)
+            resume_args.resume = True
+            with mock.patch.object(scb, "mcp_call", second):
+                rc = scb.cmd_scan(resume_args)
+            self.assertEqual(rc, 0)
+            self.assertFalse(
+                any(call.get("mode") == "schema" for call in second.calls)
+            )
+            checkpoint = json.loads(
+                (out / "scan_checkpoint.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(checkpoint["state"], "completed")
+            self.assertTrue((out / "summary.json").is_file())
+
     def test_happy_path_scans_compact_catalog_with_exit_zero(self):
         fake = FakeCompactDiscoverServer({"blueprint": ["a1", "a2", "a3"]}, page_size=2)
         self._with_fake(fake)
@@ -923,6 +1468,194 @@ class ScanFailFastTests(unittest.TestCase):
             self.assertEqual(summary["scanned_action_count"], 3)
             self.assertEqual(summary["failed_action_count"], 0)
             self.assertGreater(summary["metrics"]["schema_completeness_score"], 0.9)
+
+            completed_resume = FakeCompactDiscoverServer(
+                {"blueprint": ["a1", "a2", "a3"]},
+                page_size=2,
+            )
+            resume_args = self._scan_args(out)
+            resume_args.resume = True
+            with mock.patch.object(scb, "mcp_call", completed_resume):
+                self.assertEqual(scb.cmd_scan(resume_args), 1)
+            self.assertTrue((out / "summary.json").is_file())
+            self.assertFalse((out / "run_failure.json").exists())
+            self.assertFalse(
+                any(
+                    call.get("mode") == "schema"
+                    for call in completed_resume.calls
+                )
+            )
+
+
+class CheckpointQualityDerivationTests(unittest.TestCase):
+    @staticmethod
+    def _row() -> dict:
+        raw_schema = scb.canonical_raw_schema({"params": {"Broken": {}}})
+        return {
+            "namespace": "blueprint",
+            "action": "create_blueprint",
+            "failure_kind": "ok",
+            "error": "",
+            "transport_error": False,
+            "transport_status": None,
+            "transport_error_raw": "",
+            "raw_schema_hash_kind": scb.RAW_SCHEMA_HASH_KIND,
+            "raw_schema": raw_schema,
+            "raw_schema_sha256": scb._sha256_json(raw_schema),
+            **scb.score_schema_quality(raw_schema),
+        }
+
+    def test_schema_score_must_be_derived_from_dimension_results(self) -> None:
+        row = self._row()
+        row["schema_score"] = 1.0
+        with self.assertRaisesRegex(ValueError, "schema_score is not derived"):
+            scb.validate_checkpoint_result_row(
+                row,
+                expected_action_ids={"blueprint.create_blueprint"},
+            )
+
+    def test_every_dimension_key_must_be_explicit_even_when_na_is_allowed(self) -> None:
+        row = self._row()
+        del row["param_types_declared"]
+        with self.assertRaisesRegex(ValueError, "missing dimension param_types_declared"):
+            scb.validate_checkpoint_result_row(
+                row,
+                expected_action_ids={"blueprint.create_blueprint"},
+            )
+
+    def test_consistent_quality_failure_row_is_reusable_but_not_a_quality_pass(self) -> None:
+        row = self._row()
+        action_id = scb.validate_checkpoint_result_row(
+            row,
+            expected_action_ids={"blueprint.create_blueprint"},
+        )
+        self.assertEqual(action_id, "blueprint.create_blueprint")
+        self.assertFalse(scb.schema_quality_pass(row))
+
+    def test_missing_raw_schema_is_not_reusable(self) -> None:
+        row = self._row()
+        del row["raw_schema"]
+        with self.assertRaisesRegex(ValueError, "missing canonical raw_schema"):
+            scb.validate_checkpoint_result_row(
+                row,
+                expected_action_ids={"blueprint.create_blueprint"},
+            )
+
+    def test_raw_schema_tamper_with_stale_sha_is_rejected(self) -> None:
+        row = self._row()
+        row["raw_schema"]["planning_signals"] = ["forged"]
+        with self.assertRaisesRegex(ValueError, "does not match raw_schema"):
+            scb.validate_checkpoint_result_row(
+                row,
+                expected_action_ids={"blueprint.create_blueprint"},
+            )
+
+    def test_rehashed_raw_schema_requires_exact_rescoring(self) -> None:
+        row = self._row()
+        row["raw_schema"]["planning_signals"] = ["now_present"]
+        row["raw_schema_sha256"] = scb._sha256_json(row["raw_schema"])
+        with self.assertRaisesRegex(
+            ValueError,
+            "planning_signals_present is not derived from raw_schema",
+        ):
+            scb.validate_checkpoint_result_row(
+                row,
+                expected_action_ids={"blueprint.create_blueprint"},
+            )
+
+    def test_forged_all_green_dimensions_cannot_override_broken_raw_schema(self) -> None:
+        row = self._row()
+        for field in scb.CHECKPOINT_DIMENSION_FIELDS:
+            row[field] = True
+        row["schema_score"] = 1.0
+        row["value_domain_diagnostics"] = [{
+            "param": "Broken",
+            "ok": True,
+            "reason": "forged_ok",
+        }]
+        with self.assertRaisesRegex(
+            ValueError,
+            "param_types_declared is not derived from raw_schema",
+        ):
+            scb.validate_checkpoint_result_row(
+                row,
+                expected_action_ids={"blueprint.create_blueprint"},
+            )
+
+    def test_canonical_schema_hash_preserves_json_scalar_types(self) -> None:
+        bool_hash = scb._sha256_json({"value": True})
+        int_hash = scb._sha256_json({"value": 1})
+        float_hash = scb._sha256_json({"value": 1.0})
+        self.assertEqual(len({bool_hash, int_hash, float_hash}), 3)
+
+    def test_canonical_schema_hash_rejects_nonfinite_numbers(self) -> None:
+        with self.assertRaisesRegex(ValueError, "non-finite"):
+            scb._sha256_json({"value": float("nan")})
+
+
+class InvalidParameterContractScoringTests(unittest.TestCase):
+    @staticmethod
+    def _schema(params) -> dict:
+        return {
+            "params": params,
+            "planning_signals": ["call directly"],
+            "skill": "unreal-blueprints",
+            "output_contract_status": "declared",
+        }
+
+    def test_non_object_params_container_is_a_hard_quality_failure(self) -> None:
+        quality = scb.score_schema_quality(self._schema(["bad"]))
+        self.assertEqual(
+            [
+                quality["param_types_declared"],
+                quality["required_params_marked"],
+                quality["value_domain"],
+            ],
+            [False, False, False],
+        )
+        self.assertEqual(
+            quality["value_domain_diagnostics"][0]["reason"],
+            "params_must_be_object",
+        )
+        self.assertFalse(scb.schema_quality_pass(quality))
+
+    def test_non_object_param_entry_is_not_filtered_into_na(self) -> None:
+        quality = scb.score_schema_quality(self._schema({"Broken": "not-an-object"}))
+        self.assertEqual(
+            [
+                quality["param_types_declared"],
+                quality["required_params_marked"],
+                quality["value_domain"],
+            ],
+            [False, False, False],
+        )
+        self.assertEqual(
+            quality["value_domain_diagnostics"][0]["reason"],
+            "param_schema_must_be_object",
+        )
+
+    def test_absent_or_empty_params_are_the_only_paramless_na_forms(self) -> None:
+        absent = self._schema({})
+        absent.pop("params")
+        for schema in (absent, self._schema({})):
+            quality = scb.score_schema_quality(schema)
+            self.assertIsNone(quality["param_types_declared"])
+            self.assertIsNone(quality["required_params_marked"])
+            self.assertIsNone(quality["value_domain"])
+            self.assertTrue(scb.schema_quality_pass(quality))
+
+    def test_valid_param_object_remains_a_quality_pass(self) -> None:
+        quality = scb.score_schema_quality(self._schema({
+            "Name": {
+                "type": "string",
+                "description": "Stable asset name.",
+                "required": True,
+            },
+        }))
+        self.assertTrue(quality["param_types_declared"])
+        self.assertTrue(quality["required_params_marked"])
+        self.assertTrue(quality["value_domain"])
+        self.assertTrue(scb.schema_quality_pass(quality))
 
 
 if __name__ == "__main__":

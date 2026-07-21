@@ -159,6 +159,62 @@ namespace MonolithUI::SpecSerializerInternal
         }
     }
 
+    /**
+     * UISpec uses NAME_None/zero as a semantic "use the owning UMG class
+     * default" sentinel. A live slot always exposes the resolved value (for
+     * example Fill/Fill on a BorderSlot), so retain that lossless value while
+     * recording whether it came from the exact slot-class CDO. Semantic diff
+     * can then equate omitted defaults without erasing explicit dump evidence.
+     */
+    template <typename TSlot>
+    static const TSlot* GetSlotClassDefault(const TSlot* Slot)
+    {
+        return Slot ? Cast<TSlot>(Slot->GetClass()->GetDefaultObject()) : nullptr;
+    }
+
+    template <typename TSlot>
+    static bool HAlignUsesClassDefault(const TSlot* Slot)
+    {
+        const TSlot* DefaultSlot = GetSlotClassDefault(Slot);
+        return DefaultSlot && Slot->GetHorizontalAlignment() == DefaultSlot->GetHorizontalAlignment();
+    }
+
+    template <typename TSlot>
+    static bool VAlignUsesClassDefault(const TSlot* Slot)
+    {
+        const TSlot* DefaultSlot = GetSlotClassDefault(Slot);
+        return DefaultSlot && Slot->GetVerticalAlignment() == DefaultSlot->GetVerticalAlignment();
+    }
+
+    static bool MarginsNearlyEqual(const FMargin& A, const FMargin& B)
+    {
+        return FMath::IsNearlyEqual(A.Left, B.Left, 0.001f)
+            && FMath::IsNearlyEqual(A.Top, B.Top, 0.001f)
+            && FMath::IsNearlyEqual(A.Right, B.Right, 0.001f)
+            && FMath::IsNearlyEqual(A.Bottom, B.Bottom, 0.001f);
+    }
+
+    template <typename TSlot>
+    static bool PaddingUsesClassDefault(const TSlot* Slot)
+    {
+        const TSlot* DefaultSlot = GetSlotClassDefault(Slot);
+        return DefaultSlot && MarginsNearlyEqual(Slot->GetPadding(), DefaultSlot->GetPadding());
+    }
+
+    /** Convert the reflected UTextLayoutWidget Justification byte to a stable UISpec token. */
+    static FName TextJustificationToToken(uint8 Value)
+    {
+        switch (static_cast<ETextJustify::Type>(Value))
+        {
+        case ETextJustify::Left:   return FName(TEXT("Left"));
+        case ETextJustify::Center: return FName(TEXT("Center"));
+        case ETextJustify::Right:  return FName(TEXT("Right"));
+        case ETextJustify::InvariantLeft:  return FName(TEXT("InvariantLeft"));
+        case ETextJustify::InvariantRight: return FName(TEXT("InvariantRight"));
+        default:                   return FName(TEXT("Left"));
+        }
+    }
+
     /** Convert ESlateVisibility to the spec-side token. */
     static FName VisibilityToToken(ESlateVisibility V)
     {
@@ -251,9 +307,22 @@ namespace MonolithUI::SpecSerializerInternal
             OutSlot.HAlign  = HAlignToToken(VS->GetHorizontalAlignment());
             OutSlot.VAlign  = VAlignToToken(VS->GetVerticalAlignment());
             OutSlot.Padding = VS->GetPadding();
+            OutSlot.bHAlignUsesClassDefault = HAlignUsesClassDefault(VS);
+            OutSlot.bVAlignUsesClassDefault = VAlignUsesClassDefault(VS);
+            OutSlot.bPaddingUsesClassDefault = PaddingUsesClassDefault(VS);
+            OutSlot.bPaddingSpecified = !OutSlot.bPaddingUsesClassDefault;
             const FSlateChildSize Size = VS->GetSize();
+            const UVerticalBoxSlot* DefaultSlot = GetSlotClassDefault(VS);
+            bool bUsesClassDefaultSize = false;
+            if (DefaultSlot)
+            {
+                const FSlateChildSize DefaultSize = DefaultSlot->GetSize();
+                bUsesClassDefaultSize = Size.SizeRule == DefaultSize.SizeRule
+                    && FMath::IsNearlyEqual(Size.Value, DefaultSize.Value, 0.001f);
+            }
             OutSlot.SizeRule = Size.SizeRule == ESlateSizeRule::Fill ? FName(TEXT("Fill")) : FName(TEXT("Automatic"));
             OutSlot.FillWeight = Size.Value;
+            OutSlot.bSizeRuleUsesClassDefault = bUsesClassDefaultSize;
             return;
         }
         if (UHorizontalBoxSlot* HS = Cast<UHorizontalBoxSlot>(Slot))
@@ -261,9 +330,22 @@ namespace MonolithUI::SpecSerializerInternal
             OutSlot.HAlign  = HAlignToToken(HS->GetHorizontalAlignment());
             OutSlot.VAlign  = VAlignToToken(HS->GetVerticalAlignment());
             OutSlot.Padding = HS->GetPadding();
+            OutSlot.bHAlignUsesClassDefault = HAlignUsesClassDefault(HS);
+            OutSlot.bVAlignUsesClassDefault = VAlignUsesClassDefault(HS);
+            OutSlot.bPaddingUsesClassDefault = PaddingUsesClassDefault(HS);
+            OutSlot.bPaddingSpecified = !OutSlot.bPaddingUsesClassDefault;
             const FSlateChildSize Size = HS->GetSize();
+            const UHorizontalBoxSlot* DefaultSlot = GetSlotClassDefault(HS);
+            bool bUsesClassDefaultSize = false;
+            if (DefaultSlot)
+            {
+                const FSlateChildSize DefaultSize = DefaultSlot->GetSize();
+                bUsesClassDefaultSize = Size.SizeRule == DefaultSize.SizeRule
+                    && FMath::IsNearlyEqual(Size.Value, DefaultSize.Value, 0.001f);
+            }
             OutSlot.SizeRule = Size.SizeRule == ESlateSizeRule::Fill ? FName(TEXT("Fill")) : FName(TEXT("Automatic"));
             OutSlot.FillWeight = Size.Value;
+            OutSlot.bSizeRuleUsesClassDefault = bUsesClassDefaultSize;
             return;
         }
         if (UOverlaySlot* OS = Cast<UOverlaySlot>(Slot))
@@ -271,6 +353,10 @@ namespace MonolithUI::SpecSerializerInternal
             OutSlot.HAlign  = HAlignToToken(OS->GetHorizontalAlignment());
             OutSlot.VAlign  = VAlignToToken(OS->GetVerticalAlignment());
             OutSlot.Padding = OS->GetPadding();
+            OutSlot.bHAlignUsesClassDefault = HAlignUsesClassDefault(OS);
+            OutSlot.bVAlignUsesClassDefault = VAlignUsesClassDefault(OS);
+            OutSlot.bPaddingUsesClassDefault = PaddingUsesClassDefault(OS);
+            OutSlot.bPaddingSpecified = !OutSlot.bPaddingUsesClassDefault;
             return;
         }
         if (UScrollBoxSlot* SBS = Cast<UScrollBoxSlot>(Slot))
@@ -278,6 +364,10 @@ namespace MonolithUI::SpecSerializerInternal
             OutSlot.HAlign  = HAlignToToken(SBS->GetHorizontalAlignment());
             OutSlot.VAlign  = VAlignToToken(SBS->GetVerticalAlignment());
             OutSlot.Padding = SBS->GetPadding();
+            OutSlot.bHAlignUsesClassDefault = HAlignUsesClassDefault(SBS);
+            OutSlot.bVAlignUsesClassDefault = VAlignUsesClassDefault(SBS);
+            OutSlot.bPaddingUsesClassDefault = PaddingUsesClassDefault(SBS);
+            OutSlot.bPaddingSpecified = !OutSlot.bPaddingUsesClassDefault;
             return;
         }
         if (UGridSlot* GS = Cast<UGridSlot>(Slot))
@@ -285,6 +375,10 @@ namespace MonolithUI::SpecSerializerInternal
             OutSlot.HAlign  = HAlignToToken(GS->GetHorizontalAlignment());
             OutSlot.VAlign  = VAlignToToken(GS->GetVerticalAlignment());
             OutSlot.Padding = GS->GetPadding();
+            OutSlot.bHAlignUsesClassDefault = HAlignUsesClassDefault(GS);
+            OutSlot.bVAlignUsesClassDefault = VAlignUsesClassDefault(GS);
+            OutSlot.bPaddingUsesClassDefault = PaddingUsesClassDefault(GS);
+            OutSlot.bPaddingSpecified = !OutSlot.bPaddingUsesClassDefault;
             // Grid coordinates fold into Position (row, col) and Size (rowSpan, colSpan).
             OutSlot.Position = FVector2D((double)GS->GetColumn(), (double)GS->GetRow());
             OutSlot.Size     = FVector2D((double)GS->GetColumnSpan(), (double)GS->GetRowSpan());
@@ -295,6 +389,8 @@ namespace MonolithUI::SpecSerializerInternal
         {
             OutSlot.HAlign   = HAlignToToken(UGS->GetHorizontalAlignment());
             OutSlot.VAlign   = VAlignToToken(UGS->GetVerticalAlignment());
+            OutSlot.bHAlignUsesClassDefault = HAlignUsesClassDefault(UGS);
+            OutSlot.bVAlignUsesClassDefault = VAlignUsesClassDefault(UGS);
             OutSlot.Position = FVector2D((double)UGS->GetColumn(), (double)UGS->GetRow());
             return;
         }
@@ -303,12 +399,18 @@ namespace MonolithUI::SpecSerializerInternal
             OutSlot.HAlign  = HAlignToToken(SZS->GetHorizontalAlignment());
             OutSlot.VAlign  = VAlignToToken(SZS->GetVerticalAlignment());
             OutSlot.Padding = SZS->GetPadding();
+            OutSlot.bHAlignUsesClassDefault = HAlignUsesClassDefault(SZS);
+            OutSlot.bVAlignUsesClassDefault = VAlignUsesClassDefault(SZS);
+            OutSlot.bPaddingUsesClassDefault = PaddingUsesClassDefault(SZS);
+            OutSlot.bPaddingSpecified = !OutSlot.bPaddingUsesClassDefault;
             return;
         }
         if (UScaleBoxSlot* SCS = Cast<UScaleBoxSlot>(Slot))
         {
             OutSlot.HAlign = HAlignToToken(SCS->GetHorizontalAlignment());
             OutSlot.VAlign = VAlignToToken(SCS->GetVerticalAlignment());
+            OutSlot.bHAlignUsesClassDefault = HAlignUsesClassDefault(SCS);
+            OutSlot.bVAlignUsesClassDefault = VAlignUsesClassDefault(SCS);
             // ScaleBoxSlot has no public Padding accessor (5.1+ deprecation).
             return;
         }
@@ -317,6 +419,10 @@ namespace MonolithUI::SpecSerializerInternal
             OutSlot.HAlign  = HAlignToToken(WBS->GetHorizontalAlignment());
             OutSlot.VAlign  = VAlignToToken(WBS->GetVerticalAlignment());
             OutSlot.Padding = WBS->GetPadding();
+            OutSlot.bHAlignUsesClassDefault = HAlignUsesClassDefault(WBS);
+            OutSlot.bVAlignUsesClassDefault = VAlignUsesClassDefault(WBS);
+            OutSlot.bPaddingUsesClassDefault = PaddingUsesClassDefault(WBS);
+            OutSlot.bPaddingSpecified = !OutSlot.bPaddingUsesClassDefault;
             return;
         }
         if (UWidgetSwitcherSlot* WSS = Cast<UWidgetSwitcherSlot>(Slot))
@@ -324,6 +430,10 @@ namespace MonolithUI::SpecSerializerInternal
             OutSlot.HAlign  = HAlignToToken(WSS->GetHorizontalAlignment());
             OutSlot.VAlign  = VAlignToToken(WSS->GetVerticalAlignment());
             OutSlot.Padding = WSS->GetPadding();
+            OutSlot.bHAlignUsesClassDefault = HAlignUsesClassDefault(WSS);
+            OutSlot.bVAlignUsesClassDefault = VAlignUsesClassDefault(WSS);
+            OutSlot.bPaddingUsesClassDefault = PaddingUsesClassDefault(WSS);
+            OutSlot.bPaddingSpecified = !OutSlot.bPaddingUsesClassDefault;
             return;
         }
         if (UBorderSlot* BS = Cast<UBorderSlot>(Slot))
@@ -331,6 +441,10 @@ namespace MonolithUI::SpecSerializerInternal
             OutSlot.HAlign  = HAlignToToken(BS->GetHorizontalAlignment());
             OutSlot.VAlign  = VAlignToToken(BS->GetVerticalAlignment());
             OutSlot.Padding = BS->GetPadding();
+            OutSlot.bHAlignUsesClassDefault = HAlignUsesClassDefault(BS);
+            OutSlot.bVAlignUsesClassDefault = VAlignUsesClassDefault(BS);
+            OutSlot.bPaddingUsesClassDefault = PaddingUsesClassDefault(BS);
+            OutSlot.bPaddingSpecified = !OutSlot.bPaddingUsesClassDefault;
             return;
         }
 
@@ -352,9 +466,42 @@ namespace MonolithUI::SpecSerializerInternal
 
         if (UTextBlock* T = Cast<UTextBlock>(Widget))
         {
+            const FSlateFontInfo& Font = T->GetFont();
+            const UTextBlock* DefaultTextBlock = Cast<UTextBlock>(T->GetClass()->GetDefaultObject());
+            const FSlateFontInfo* DefaultFont = DefaultTextBlock ? &DefaultTextBlock->GetFont() : nullptr;
+            const bool bUsesDefaultFontObject = DefaultFont && Font.FontObject == DefaultFont->FontObject;
             OutContent.Text     = T->GetText().ToString();
-            OutContent.FontSize = (float)T->GetFont().Size;
+            OutContent.FontSize = DefaultFont && FMath::IsNearlyEqual(Font.Size, DefaultFont->Size, 0.01f)
+                ? 0.f
+                : Font.Size;
+            OutContent.FontFamily = bUsesDefaultFontObject
+                ? FString()
+                : (Font.FontObject ? Font.FontObject->GetPathName() : FString());
+            OutContent.Typeface = DefaultFont && Font.TypefaceFontName == DefaultFont->TypefaceFontName
+                ? NAME_None
+                : Font.TypefaceFontName;
+            OutContent.LetterSpacing = Font.LetterSpacing;
             OutContent.FontColor = T->GetColorAndOpacity().GetSpecifiedColor();
+            OutContent.OutlineSize = Font.OutlineSettings.OutlineSize;
+            OutContent.OutlineColor = Font.OutlineSettings.OutlineColor;
+            OutContent.ShadowOffset = T->GetShadowOffset();
+            OutContent.ShadowColor = T->GetShadowColorAndOpacity();
+
+            // UE 5.8 exposes setters but no public getters for these inherited
+            // UTextLayoutWidget fields. They are stable reflected UPROPERTYs,
+            // so read them by exact property name and type instead of touching
+            // the protected members or silently guessing defaults.
+            if (const FByteProperty* JustificationProp = CastField<FByteProperty>(
+                    T->GetClass()->FindPropertyByName(TEXT("Justification"))))
+            {
+                OutContent.Justification = TextJustificationToToken(
+                    JustificationProp->GetPropertyValue_InContainer(T));
+            }
+            if (const FFloatProperty* LineHeightProp = CastField<FFloatProperty>(
+                    T->GetClass()->FindPropertyByName(TEXT("LineHeightPercentage"))))
+            {
+                OutContent.LineHeightPercentage = LineHeightProp->GetPropertyValue_InContainer(T);
+            }
             // WrapMode -- UE 5.7 made the AutoWrapText bitfield protected; use the
             // public getter `GetAutoWrapText()` instead of direct field access.
             OutContent.WrapMode = T->GetAutoWrapText() ? FName(TEXT("Wrap")) : FName(TEXT("None"));
@@ -427,9 +574,16 @@ namespace MonolithUI::SpecSerializerInternal
     {
         if (!Widget) return;
 
-        // Widget-level fields visible on every UWidget.
-        OutStyle.Opacity    = Widget->GetRenderOpacity();
+        // Widget-level fields visible on every UWidget. Preserve resolved
+        // values and record exact CDO provenance so semantic diff can equate
+        // an omitted default without losing dump fidelity.
+        const UWidget* DefaultWidget = Cast<UWidget>(Widget->GetClass()->GetDefaultObject());
+        OutStyle.Opacity = Widget->GetRenderOpacity();
         OutStyle.Visibility = VisibilityToToken(Widget->GetVisibility());
+        OutStyle.bOpacityUsesClassDefault = DefaultWidget
+            && FMath::IsNearlyEqual(Widget->GetRenderOpacity(), DefaultWidget->GetRenderOpacity(), 0.001f);
+        OutStyle.bVisibilityUsesClassDefault = DefaultWidget
+            && Widget->GetVisibility() == DefaultWidget->GetVisibility();
 
         // SizeBox-style width / height (when present). We call the public
         // getters unconditionally; an unset override returns 0 (or the engine
@@ -456,14 +610,23 @@ namespace MonolithUI::SpecSerializerInternal
         // over the deprecated direct `Background` UPROPERTY access).
         if (UBorder* Br = Cast<UBorder>(Widget))
         {
+            const UBorder* DefaultBorder = Cast<UBorder>(Br->GetClass()->GetDefaultObject());
             OutStyle.Background = Br->GetBrushColor();
-            OutStyle.Padding    = Br->GetPadding();
+            OutStyle.Padding = Br->GetPadding();
+            OutStyle.bBackgroundUsesClassDefault = DefaultBorder
+                && Br->GetBrushColor().Equals(DefaultBorder->GetBrushColor());
+            OutStyle.bPaddingUsesClassDefault = DefaultBorder
+                && MarginsNearlyEqual(Br->GetPadding(), DefaultBorder->GetPadding());
+            OutStyle.bPaddingSpecified = !OutStyle.bPaddingUsesClassDefault;
         }
 
         // ProgressBar / Slider expose a fill colour we treat as Background.
         if (UProgressBar* PB = Cast<UProgressBar>(Widget))
         {
+            const UProgressBar* DefaultProgressBar = Cast<UProgressBar>(PB->GetClass()->GetDefaultObject());
             OutStyle.Background = PB->GetFillColorAndOpacity();
+            OutStyle.bBackgroundUsesClassDefault = DefaultProgressBar
+                && PB->GetFillColorAndOpacity().Equals(DefaultProgressBar->GetFillColorAndOpacity());
         }
     }
 

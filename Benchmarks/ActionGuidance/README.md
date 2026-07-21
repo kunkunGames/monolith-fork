@@ -18,13 +18,24 @@ machine-readable evidence an agent needs to recover or plan.
 | `RESULTS.md` | Latest checked-in benchmark result summary and evidence paths. |
 | `Plugins/Monolith/Scripts/action_guidance_benchmark.py` | Generator, runner, and comparison tool. |
 
-Checked-in corpus size: **289 tasks** over the 2026-07-11 live catalog snapshot
-(61 namespaces / 1840 actions). The generator parses compact
+Checked-in corpus size: **454 tasks** over the 2026-07-17 verified generation
+snapshot (`sha256:32d46c1de26877a1`, 61 namespaces / 1857 actions). The generator parses compact
 `structuredContent`, enumerates every namespace through paginated
-`mode=actions`, and rejects namespace or total action-count mismatches before
-writing the corpus. It then appends a
+`mode=actions` with `detail=true`, and rejects namespace or total action-count
+mismatches before writing the corpus. Each detailed namespace page also fills
+the schema cache used to select safe missing/invalid-param probes; the generator
+does not repeat a focused schema request for every representative action. It
+then appends a
 deduplicated Unreal practical supplement after catalog-derived tasks so the
 domain cases survive regeneration without keeping repeated task fingerprints.
+
+Curated action assumptions are validated against the live action and parameter
+schemas before either canonical file is written. The 2026-07-17 legacy-action
+migration table is also joined across the C++ registry seed, source snapshot,
+Python generator, and canonical task corpus by the offline contract test. A
+renamed target, reintroduced retired endpoint, duplicate alias, or missing
+migration probe therefore blocks static CI instead of silently weakening the
+benchmark.
 
 ## Task Categories
 
@@ -74,7 +85,7 @@ The offline unit test for both additions is
 ```powershell
 python Plugins\Monolith\Scripts\action_guidance_benchmark.py generate `
   --mcp-url http://localhost:9316/mcp `
-  --min-tasks 120 `
+  --min-tasks 454 `
   --tasks Plugins\Monolith\Benchmarks\ActionGuidance\tasks.jsonl `
   --manifest Plugins\Monolith\Benchmarks\ActionGuidance\manifest.json
 ```
@@ -83,7 +94,10 @@ Generation fingerprints `monolith_status` and the compact discovery summary at
 both the start and end. Their `catalog_version`, action count, and namespace
 count must agree throughout the run; otherwise generation fails before
 overwriting either `tasks.jsonl` or `manifest.json`. A successful manifest
-records the verified `catalog_version` used to build the corpus.
+records the verified `catalog_version` used to build the corpus. Bulk schema
+projection remains paginated at the server's bounded 50-row detail limit, so
+large namespaces such as `ai` and `animation` retain complete coverage without
+the former hundreds of redundant request/response round trips.
 
 ## Run
 

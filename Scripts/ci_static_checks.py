@@ -1162,6 +1162,71 @@ def check_benchmark_contract_tests(ctx: CheckContext) -> None:
             )
 
 
+def check_offline_catalog_snapshot(ctx: CheckContext) -> None:
+    """Block when the tracked source snapshot drifts from action registrations."""
+    config = ctx.config.get("offline_catalog_snapshot", {})
+    if not config.get("enabled", False):
+        return
+
+    generator_cfg = config.get(
+        "generator", "Tools/MonolithQuery/generate_monolith_catalog_snapshot.py"
+    )
+    snapshot_cfg = config.get(
+        "snapshot", "Tools/MonolithQuery/Generated/monolith_catalog_snapshot.json"
+    )
+    generator = ctx.path(str(generator_cfg))
+    snapshot = ctx.path(str(snapshot_cfg))
+    if not generator.is_file():
+        ctx.block("offline-catalog-snapshot", "Offline catalog generator is missing", generator)
+        return
+    if not snapshot.is_file():
+        ctx.block("offline-catalog-snapshot", "Tracked offline catalog snapshot is missing", snapshot)
+        return
+
+    timeout = float(config.get("timeout_seconds", 60))
+    args = [
+        sys.executable,
+        str(generator),
+        "--check",
+        "--root",
+        str(ctx.root),
+        "--out",
+        str(snapshot),
+    ]
+    try:
+        proc = subprocess.run(
+            args,
+            cwd=ctx.root,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        ctx.block(
+            "offline-catalog-snapshot",
+            f"Offline catalog snapshot check timed out after {timeout:g}s: "
+            f"{_subprocess_tail(exc.stdout, exc.stderr)}",
+            generator,
+        )
+        return
+    except OSError as exc:
+        ctx.block(
+            "offline-catalog-snapshot",
+            f"Could not run offline catalog snapshot check: {exc}",
+            generator,
+        )
+        return
+
+    if proc.returncode != 0:
+        ctx.block(
+            "offline-catalog-snapshot",
+            f"Tracked source snapshot drifted from action registrations (exit {proc.returncode}): "
+            f"{_subprocess_tail(proc.stdout, proc.stderr)}. Regenerate with "
+            "python Tools/MonolithQuery/generate_monolith_catalog_snapshot.py",
+            snapshot,
+        )
+
+
 def check_offline_exe_freshness(ctx: CheckContext) -> None:
     """Block when the shipped offline CLI is stale relative to its tracked source.
 
@@ -1553,6 +1618,7 @@ def run_checks(ctx: CheckContext) -> list[Finding]:
     check_skill_catalog_drift(ctx)
     check_benchmark_definitions(ctx)
     check_benchmark_contract_tests(ctx)
+    check_offline_catalog_snapshot(ctx)
     check_offline_exe_freshness(ctx)
     check_offline_parity_smoke(ctx)
     check_analyzer_smoke(ctx)
@@ -1661,6 +1727,12 @@ def write_selftest_fixture(root: Path) -> tuple[dict[str, Any], Path]:
                 },
             ],
         },
+        "offline_catalog_snapshot": {
+            "enabled": True,
+            "generator": "Scripts/check_catalog_fixture.py",
+            "snapshot": "Tools/MonolithQuery/Generated/catalog.json",
+            "timeout_seconds": 5,
+        },
     }
     config_path = root / ".github/monolith-static-ci.json"
     config_path.write_text(json.dumps(config), encoding="utf-8")
@@ -1719,6 +1791,26 @@ def write_selftest_fixture(root: Path) -> tuple[dict[str, Any], Path]:
     )
     (root / "Scripts/foo_contract_test.py").write_text(
         "raise SystemExit(0)\n",
+        encoding="utf-8",
+    )
+    (root / "Tools/MonolithQuery/Generated").mkdir(parents=True)
+    (root / "Tools/MonolithQuery/Generated/catalog.json").write_text(
+        "current\n",
+        encoding="utf-8",
+    )
+    (root / "Scripts/check_catalog_fixture.py").write_text(
+        "import argparse\n"
+        "from pathlib import Path\n"
+        "parser = argparse.ArgumentParser()\n"
+        "parser.add_argument('--check', action='store_true')\n"
+        "parser.add_argument('--root', type=Path, required=True)\n"
+        "parser.add_argument('--out', type=Path, required=True)\n"
+        "args = parser.parse_args()\n"
+        "current = args.check and args.root.joinpath('Source').is_dir() "
+        "and args.out.read_text(encoding='utf-8') == 'current\\n'\n"
+        "if not current:\n"
+        "    print('catalog snapshot drift')\n"
+        "raise SystemExit(0 if current else 1)\n",
         encoding="utf-8",
     )
     return config, config_path
@@ -1879,6 +1971,14 @@ def run_selftest() -> int:
             "benchmark-contract-tests",
             lambda root: (root / "Scripts/foo_contract_test.py").write_text(
                 "print('contract failed')\nraise SystemExit(7)\n",
+                encoding="utf-8",
+            ),
+        ),
+        (
+            "offline catalog snapshot drift",
+            "offline-catalog-snapshot",
+            lambda root: (root / "Tools/MonolithQuery/Generated/catalog.json").write_text(
+                "stale\n",
                 encoding="utf-8",
             ),
         ),

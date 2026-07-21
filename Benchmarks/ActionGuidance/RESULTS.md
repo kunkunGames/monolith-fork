@@ -1,5 +1,38 @@
 # Action Guidance Benchmark Results
 
+## 2026-07-17 diagnostic-legacy-migrations-02 — 16/16 current-action recovery
+
+Targeted live rerun after the ToolRegistry began scoring registered action
+aliases and applying the centralized 2026-07-17 retired-action compatibility
+seed. The run used a newly built and fully restarted Speed editor at catalog
+`sha256:4b204fd93f9d1792` (1,857 actions / 61 namespaces); it was not a Live
+Coding backfill. All requests intentionally called absent retired names and
+required the first structured candidate to name the current registered action.
+
+| Result | Value |
+| --- | ---: |
+| Diagnostic tasks | 16 / 16 passed |
+| Direct first-response recovery | 16 / 16 |
+| Action selection accuracy | 1.0000 |
+| First recovery success rate | 1.0000 |
+| Mean tool calls to success | 1.0000 |
+| Transport failures | 0 |
+| Invalid retries / hallucinated workflow | 0 / 0 |
+
+Output:
+`Saved\Monolith\Benchmarks\ActionGuidance\diagnostic-legacy-migrations\run-02`.
+The run is deliberately marked `complete_subset_run` and non-comparable to a
+full 454-task baseline. It is feature-regression evidence for the 15 seeded
+legacy mappings plus the existing `source.read_flie` typo probe. The preceding
+`run-01` scored 9/16 and missed seven semantic renames; those seven all pass in
+`run-02`.
+
+An earlier canonical regeneration against the same 1,857-action catalog was
+interrupted when the externally managed RenderOffScreen editor exited during
+`chooser` enumeration and failed before writing canonical files. A later stable
+generation completed: the checked-in 454-task corpus records catalog identity
+`sha256:32d46c1de26877a1` (1,857 actions / 61 namespaces).
+
 ## 2026-07-11 baseline-20260711 — first run on the 281-task corpus
 
 First live baseline of the expanded, demand-weighted 281-task corpus (the

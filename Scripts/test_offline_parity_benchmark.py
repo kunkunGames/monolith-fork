@@ -153,6 +153,40 @@ def test_build_actions_substitutes_tokens_and_skips_missing_chain() -> None:
     check("offline_unsupported flag carried from jsonl", len(ou) >= 1, f"n={len(ou)}")
 
 
+def test_input_fingerprint_tracks_only_declared_database_dependencies() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = pathlib.Path(temp_dir)
+        (root / "Saved").mkdir()
+        (root / "Saved" / "EngineSource.db").write_bytes(b"source")
+        (root / "Saved" / "graph.db").write_bytes(b"graph")
+        (root / "Saved" / "ProjectIndex.db").write_bytes(b"project")
+        exe = root / "query.exe"
+        py = root / "offline.py"
+        exe.write_bytes(b"query")
+        py.write_text("# offline\n", encoding="utf-8")
+
+        inputs = opb.build_offline_parity_inputs(exe, py, root)
+
+    database_paths = [row["path"] for row in inputs["database_files"]]
+    check(
+        "OfflineParity fingerprint includes only EngineSource.db",
+        database_paths == ["Saved/EngineSource.db"],
+        f"database_paths={database_paths}",
+    )
+    check(
+        "OfflineParity fingerprint includes corpus and runner SHA inputs",
+        set(inputs["files"]) == {
+            "benchmark_common",
+            "tasks",
+            "manifest",
+            "runner",
+            "offline_exe",
+            "offline_python",
+        },
+        f"file_inputs={sorted(inputs['files'])}",
+    )
+
+
 # ---------------------------------------------------------------------------
 # ITEM 2 -- offline_unsupported bucket scoring
 # ---------------------------------------------------------------------------
@@ -291,6 +325,10 @@ def test_cmd_run_blocked_preflight_writes_zero_score_summary() -> None:
         exe.write_bytes(b"test")
         py.write_text("# test\n", encoding="utf-8")
         output = root / "result"
+        output.mkdir(parents=True)
+        (output / "summary.json").write_text('{"stale": true}', encoding="utf-8")
+        (output / "partial_summary.json").write_text('{"stale": true}', encoding="utf-8")
+        (output / "run_failure.json").write_text('{"stale": true}', encoding="utf-8")
         args = SimpleNamespace(
             exe_path=str(exe),
             py_path=str(py),
@@ -321,6 +359,10 @@ def test_cmd_run_blocked_preflight_writes_zero_score_summary() -> None:
               summary["metrics"]["comparable_actions"] == 0
               and summary["metrics"]["offline_parity_score"] == 0.0,
               f"metrics={summary['metrics']}")
+        check("completed cmd_run removes partial summary",
+              not (output / "partial_summary.json").exists())
+        check("completed cmd_run removes stale failure artifact",
+              not (output / "run_failure.json").exists())
 
 
 def test_non_marker_preflight_failure_does_not_hide_action_errors() -> None:

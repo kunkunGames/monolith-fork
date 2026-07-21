@@ -4,6 +4,11 @@ $ErrorActionPreference = 'Stop'
 
 $WatchdogPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'watch_mcp.ps1'
 $RecoverPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'recover_mcp.ps1'
+$HostRolePath = Join-Path (Split-Path -Parent $PSScriptRoot) 'mcp_host_role.ps1'
+if (-not (Test-Path -LiteralPath $HostRolePath -PathType Leaf)) {
+    throw ("mcp_host_role.ps1 was not found at {0}" -f $HostRolePath)
+}
+. $HostRolePath
 $Tokens = $null
 $ParseErrors = $null
 $Ast = [System.Management.Automation.Language.Parser]::ParseFile(
@@ -77,6 +82,52 @@ $RecoverAst = [System.Management.Automation.Language.Parser]::ParseFile(
     [ref]$RecoverParseErrors)
 if ($RecoverParseErrors.Count -gt 0) {
     throw ($RecoverParseErrors | ForEach-Object { $_.Message } | Out-String)
+}
+
+Describe 'recover_mcp headless wrapper argument contract' {
+    It 'uses UE_EDITOR_EXTRA_ARGS for the batch boundary and restores the caller environment' {
+        Invoke-Expression (Get-ScriptFunctionText -ScriptAst $RecoverAst -Name 'Start-MonolithHeadlessEditorWrapper')
+
+        $previousExtraArgs = [Environment]::GetEnvironmentVariable('UE_EDITOR_EXTRA_ARGS', 'Process')
+        $script:capturedExtraArgs = $null
+        $script:capturedArgumentList = 'not-called'
+        function Start-Process {
+            [CmdletBinding()]
+            param(
+                [string]$FilePath,
+                [string]$WorkingDirectory,
+                [object]$ArgumentList,
+                [System.Diagnostics.ProcessWindowStyle]$WindowStyle,
+                [switch]$PassThru
+            )
+            $script:capturedExtraArgs = [Environment]::GetEnvironmentVariable('UE_EDITOR_EXTRA_ARGS', 'Process')
+            $script:capturedArgumentList = $ArgumentList
+            return [PSCustomObject]@{ Id = 1234 }
+        }
+
+        try {
+            [Environment]::SetEnvironmentVariable('UE_EDITOR_EXTRA_ARGS', '-CallerFlag=Preserved', 'Process')
+            $process = Start-MonolithHeadlessEditorWrapper `
+                -Wrapper 'D:\Project Root\Build\BatchFiles\RunHeadlessEditor.bat' `
+                -WorkingDirectory 'D:\Project Root' `
+                -EditorArguments @(
+                    '-EditorLayoutINI="D:\Project Root\Saved\HeadlessMcp\Config\WindowsEditor\EditorLayout.ini"',
+                    '-ini:EditorPerProjectUserSettings:[/Script/UnrealEd.EditorLoadingSavingSettings]:RestoreOpenAssetTabsOnRestart=NeverRestore'
+                )
+
+            $process.Id | Should Be 1234
+            $script:capturedExtraArgs | Should Match '^-CallerFlag=Preserved '
+            $script:capturedExtraArgs | Should Match '-EditorLayoutINI="D:\\Project Root\\Saved\\HeadlessMcp'
+            $script:capturedExtraArgs | Should Match 'RestoreOpenAssetTabsOnRestart=NeverRestore$'
+            $script:capturedArgumentList | Should Be $null
+            [Environment]::GetEnvironmentVariable('UE_EDITOR_EXTRA_ARGS', 'Process') |
+                Should Be '-CallerFlag=Preserved'
+        }
+        finally {
+            [Environment]::SetEnvironmentVariable('UE_EDITOR_EXTRA_ARGS', $previousExtraArgs, 'Process')
+            Remove-Item Function:\Start-Process, Function:\Start-MonolithHeadlessEditorWrapper -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 Describe 'Monolith health request timeout contract' {
@@ -208,6 +259,31 @@ Describe 'Monolith trusted-busy endpoint state' {
                     -ProcessRecord $validEditor
                 $invalidHttp.State | Should Be 'blocked'
 
+                $ephemeralEditor = [PSCustomObject]@{
+                    ProcessId = 1234
+                    Name = 'UnrealEditor.exe'
+                    CommandLine = ('"C:\Engine\UnrealEditor.exe" "{0}" -ExecCmds="Automation RunTests X; Quit"' -f $projectFile)
+                }
+                $ephemeral = Get-MonolithUnavailableEndpointState `
+                    -HealthErrorClass 'health_identity' `
+                    -HealthErrorCode 'health_pid_ephemeral_automation' `
+                    -HealthStatusCode 200 `
+                    -HealthPid 1234 `
+                    -Root $root `
+                    -PortGate $ownedListener `
+                    -ProcessRecord $ephemeralEditor
+                $ephemeral.State | Should Be 'ephemeral_automation'
+                $ephemeral.Pid | Should Be 1234
+
+                (Get-MonolithUnavailableEndpointState `
+                        -HealthErrorClass 'health_identity' `
+                        -HealthErrorCode 'health_pid_ephemeral_automation' `
+                        -HealthStatusCode 200 `
+                        -HealthPid 9999 `
+                        -Root $root `
+                        -PortGate $ownedListener `
+                        -ProcessRecord $ephemeralEditor).State | Should Be 'blocked'
+
                 foreach ($badEditor in @(
                         [PSCustomObject]@{ ProcessId = 1234; Name = 'python.exe'; CommandLine = $validEditor.CommandLine },
                         [PSCustomObject]@{ ProcessId = 1234; Name = 'UnrealEditor.exe'; CommandLine = '"C:\Engine\UnrealEditor.exe" "D:\Other\Other.uproject" -NullRHI' },
@@ -333,6 +409,43 @@ Describe 'Monolith trusted-busy endpoint state' {
         $recoverText = Get-Content -LiteralPath $RecoverPath -Raw
         $recoverText | Should Match '(?s)if \(\$endpointState.State -eq ''trusted_busy''\).*RESULT=MCP_BUSY.*exit 2'
         $recoverText | Should Match '(?s)if \(\$endpointState.State -eq ''trusted_busy''\) \{\s*Write-Output \("INFO trusted_editor_process.*skipping_launch=true'
+
+        $watchText | Should Match '(?s)EPHEMERAL_AUTOMATION_ACTIVE.*mutation=none.*Start-Sleep\s+-Seconds\s+\$PollIntervalSec.*continue'
+        $recoverText | Should Match '(?s)MCP_EPHEMERAL_AUTOMATION.*mutation=none.*waiting_for_ephemeral_automation_exit'
+    }
+}
+
+Describe 'Monolith durable MCP host role contract' {
+    It 'is sourced by both recovery entry points' {
+        (Get-Content -LiteralPath $RecoverPath -Raw) | Should Match "Join-Path\s+\`$PSScriptRoot\s+'mcp_host_role\.ps1'"
+        (Get-Content -LiteralPath $WatchdogPath -Raw) | Should Match "Join-Path\s+\`$PSScriptRoot\s+'mcp_host_role\.ps1'"
+    }
+
+    It 'accepts persistent editor roles and rejects planned-exit automation roles' {
+        $root = Join-Path $TestDrive 'host_role'
+        New-Item -ItemType Directory -Path $root -Force | Out-Null
+        $projectFile = Join-Path $root 'Speed.uproject'
+        Set-Content -LiteralPath $projectFile -Value '{}'
+
+        foreach ($accepted in @(
+                ('"C:\Engine\UnrealEditor.exe" "{0}"' -f $projectFile),
+                ('"C:\Engine\UnrealEditor.exe" "{0}" -Unattended -NullRHI -AbsLog="{1}\Saved\HeadlessMcp\Headless.log"' -f $projectFile, $root),
+                ('"C:\Engine\UnrealEditor.exe" "{0}" -ExecCmds="Log LogTemp Warning Automation RunTests is deferred"' -f $projectFile)
+            )) {
+            Test-MonolithDurableMcpHostCommandLine -CommandLine $accepted -ProjectFile $projectFile |
+                Should Be $true
+        }
+
+        foreach ($rejected in @(
+                ('"C:\Engine\UnrealEditor.exe" "{0}" -ExecCmds="Automation RunTests Speed.PCG; Quit"' -f $projectFile),
+                ('"C:\Engine\UnrealEditor.exe" "{0}" -ExecCmds="Automation RunAll; Quit"' -f $projectFile),
+                ('"C:\Engine\UnrealEditor.exe" "{0}" -TestExit="Automation Test Queue Empty"' -f $projectFile),
+                ('"C:\Engine\UnrealEditor-Cmd.exe" "{0}" -run=MonolithReindex' -f $projectFile),
+                ('"C:\Engine\UnrealEditor.exe" "{0}" -game' -f $projectFile)
+            )) {
+            Test-MonolithDurableMcpHostCommandLine -CommandLine $rejected -ProjectFile $projectFile |
+                Should Be $false
+        }
     }
 }
 
@@ -368,7 +481,7 @@ Describe 'Monolith recovery health contract and project identity' {
                 (Test-MonolithHealthContract -Health $wrongPort -ExpectedPort 9316).ErrorCode | Should Be 'port_mismatch'
             }
 
-            It 'binds the reported PID to this project and rejects game, server, commandlet, and foreign-project modes' {
+            It 'binds the reported PID to this project and rejects game, server, commandlet, planned-exit automation, and foreign-project modes' {
                 Invoke-Expression (Get-ScriptFunctionText -ScriptAst $case.Ast -Name 'Get-ProjectFile')
                 Invoke-Expression (Get-ScriptFunctionText -ScriptAst $case.Ast -Name 'Test-MonolithEditorCommandLineForProject')
                 Invoke-Expression (Get-ScriptFunctionText -ScriptAst $case.Ast -Name 'Test-MonolithHealthProcessIdentity')
@@ -391,11 +504,20 @@ Describe 'Monolith recovery health contract and project identity' {
                         '"C:\Engine\UnrealEditor.exe" "D:\Other\Other.uproject" -NullRHI',
                         ('"C:\Engine\UnrealEditor.exe" "{0}" -game' -f $projectFile),
                         ('"C:\Engine\UnrealEditor.exe" "{0}" -server' -f $projectFile),
-                        ('"C:\Engine\UnrealEditor-Cmd.exe" "{0}" -run=MonolithReindex' -f $projectFile)
+                        ('"C:\Engine\UnrealEditor-Cmd.exe" "{0}" -run=MonolithReindex' -f $projectFile),
+                        ('"C:\Engine\UnrealEditor.exe" "{0}" -ExecCmds="Automation RunTests Speed.PCG; Quit"' -f $projectFile),
+                        ('"C:\Engine\UnrealEditor.exe" "{0}" -TestExit="Automation Test Queue Empty"' -f $projectFile)
                     )) {
                     $bad = [PSCustomObject]@{ Name = 'UnrealEditor.exe'; CommandLine = $badCommandLine }
                     (Test-MonolithHealthProcessIdentity -Health $health -Root $root -ProcessRecord $bad).Valid | Should Be $false
                 }
+
+                $ephemeral = [PSCustomObject]@{
+                    Name = 'UnrealEditor.exe'
+                    CommandLine = ('"C:\Engine\UnrealEditor.exe" "{0}" -ExecCmds="Automation RunTests Speed.PCG; Quit"' -f $projectFile)
+                }
+                (Test-MonolithHealthProcessIdentity -Health $health -Root $root -ProcessRecord $ephemeral).ErrorCode |
+                    Should Be 'health_pid_ephemeral_automation'
 
                 $wrongProcess = [PSCustomObject]@{ Name = 'python.exe'; CommandLine = $editor.CommandLine }
                 (Test-MonolithHealthProcessIdentity -Health $health -Root $root -ProcessRecord $wrongProcess).ErrorCode |

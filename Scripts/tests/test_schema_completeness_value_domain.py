@@ -560,6 +560,19 @@ class TransportTests(unittest.TestCase):
             row["value_domain_diagnostics"][0]["reason"],
             "numeric_domain_missing",
         )
+        self.assertEqual(row["raw_schema_hash_kind"], scb.RAW_SCHEMA_HASH_KIND)
+        self.assertEqual(row["raw_schema"], UNBOUNDED_NUMERIC_SCHEMA)
+        self.assertEqual(
+            row["raw_schema_sha256"],
+            scb._sha256_json(row["raw_schema"]),
+        )
+        self.assertEqual(
+            scb.validate_checkpoint_result_row(
+                row,
+                expected_action_ids={"scene.query"},
+            ),
+            "scene.query",
+        )
 
 
 if __name__ == "__main__":

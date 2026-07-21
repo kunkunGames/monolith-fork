@@ -314,6 +314,91 @@ namespace
 		}
 	}
 
+	struct FLegacyActionAliasSeed
+	{
+		FString Namespace;
+		FString Action;
+		TArray<FString> Aliases;
+	};
+
+	void AddLegacyActionAliasSeed(
+		TArray<FLegacyActionAliasSeed>& Seeds,
+		const TCHAR* Namespace,
+		const TCHAR* Action,
+		std::initializer_list<const TCHAR*> Aliases)
+	{
+		FLegacyActionAliasSeed Seed;
+		Seed.Namespace = Namespace;
+		Seed.Action = Action;
+		Seed.Aliases.Reserve(static_cast<int32>(Aliases.size()));
+		for (const TCHAR* Alias : Aliases)
+		{
+			Seed.Aliases.Add(Alias);
+		}
+		Seeds.Add(MoveTemp(Seed));
+	}
+
+	const TArray<FLegacyActionAliasSeed>& GetLegacyActionAliasSeeds()
+	{
+		// Compatibility revision 2026-07-17. Keep this table synchronized with
+		// ActionGuidance migration probes and LegacyActionAliasSeeds automation.
+		static const TArray<FLegacyActionAliasSeed> Seeds = []()
+		{
+			TArray<FLegacyActionAliasSeed> Result;
+			Result.Reserve(13);
+
+			// BEGIN ACTION_GUIDANCE_LEGACY_ALIAS_CONTRACT_20260717
+			AddLegacyActionAliasSeed(Result, TEXT("gas"), TEXT("get_ability_info"),
+				{TEXT("get_ability")});
+			AddLegacyActionAliasSeed(Result, TEXT("niagara"), TEXT("get_system_summary"),
+				{TEXT("get_system_info")});
+			AddLegacyActionAliasSeed(Result, TEXT("material"), TEXT("get_material_properties"),
+				{TEXT("get_material_info")});
+			AddLegacyActionAliasSeed(Result, TEXT("ui"), TEXT("get_widget_tree"),
+				{TEXT("list_widgets"), TEXT("get_widget_hierarchy")});
+			AddLegacyActionAliasSeed(Result, TEXT("ui"), TEXT("get_widget_bindings"),
+				{TEXT("get_viewmodel_bindings")});
+			AddLegacyActionAliasSeed(Result, TEXT("animation"), TEXT("get_montage_info"),
+				{TEXT("list_montages"), TEXT("get_montage_sections")});
+			AddLegacyActionAliasSeed(Result, TEXT("animation"), TEXT("get_graphs"),
+				{TEXT("get_anim_graph")});
+			AddLegacyActionAliasSeed(Result, TEXT("animation"), TEXT("get_state_machines"),
+				{TEXT("get_state_machine")});
+			AddLegacyActionAliasSeed(Result, TEXT("audio"), TEXT("list_audio_assets"),
+				{TEXT("list_sound_cues")});
+			AddLegacyActionAliasSeed(Result, TEXT("audio"), TEXT("get_sound_cue_graph"),
+				{TEXT("get_sound_cue")});
+			AddLegacyActionAliasSeed(Result, TEXT("scene"), TEXT("get_level_actors"),
+				{TEXT("list_actors")});
+			AddLegacyActionAliasSeed(Result, TEXT("config"), TEXT("resolve_setting"),
+				{TEXT("get_config_value")});
+			AddLegacyActionAliasSeed(Result, TEXT("localization"), TEXT("get_string_table"),
+				{TEXT("get_localized_string")});
+			// END ACTION_GUIDANCE_LEGACY_ALIAS_CONTRACT_20260717
+
+			return Result;
+		}();
+		return Seeds;
+	}
+
+	void ApplyLegacyActionAliasSeed(FMonolithActionInfo& ActionInfo)
+	{
+		for (const FLegacyActionAliasSeed& Seed : GetLegacyActionAliasSeeds())
+		{
+			if (!Seed.Namespace.Equals(ActionInfo.Namespace, ESearchCase::IgnoreCase)
+				|| !Seed.Action.Equals(ActionInfo.Action, ESearchCase::IgnoreCase))
+			{
+				continue;
+			}
+
+			for (const FString& Alias : Seed.Aliases)
+			{
+				AddUniqueString(ActionInfo.SearchMetadata.Aliases, Alias);
+			}
+			return;
+		}
+	}
+
 	TArray<TSharedPtr<FJsonValue>> StringArrayToJsonValues(const TArray<FString>& Values)
 	{
 		TArray<TSharedPtr<FJsonValue>> Result;
@@ -1335,6 +1420,7 @@ void FMonolithToolRegistry::RegisterAction(
 	RegAction.Info.ExecutionPolicy = InferExecutionPolicy(Namespace, Action, ExecutionPolicy);
 	RegAction.Info.SearchMetadata = SearchMetadata;
 	RegAction.Info.PlanningMetadata = PlanningMetadata;
+	ApplyLegacyActionAliasSeed(RegAction.Info);
 	ApplyHighTrafficPlanningMetadataSeed(RegAction.Info);
 	RegAction.Info.ParamSchema = ParamSchema;
 	RegAction.Handler = Handler;
@@ -1370,6 +1456,7 @@ bool FMonolithToolRegistry::SetActionSearchMetadata(
 	RegAction->Info.SearchMetadata.Keywords = Keywords;
 	RegAction->Info.SearchMetadata.Aliases = Aliases;
 	RegAction->Info.SearchMetadata.Examples = Examples;
+	ApplyLegacyActionAliasSeed(RegAction->Info);
 	return true;
 }
 
@@ -2238,8 +2325,15 @@ TArray<FString> FMonolithToolRegistry::FindSimilarActions(const FString& Namespa
 		return Result;
 	}
 
-	// Snapshot candidate names under the lock, then score outside the lock.
-	TArray<FString> Candidates;
+	// Snapshot candidate names and aliases under the lock, then score outside
+	// the lock. Aliases are recovery metadata: a match always returns the
+	// registered action name, never an unregistered alias.
+	struct FSimilarActionCandidate
+	{
+		FString Name;
+		TArray<FString> Aliases;
+	};
+	TArray<FSimilarActionCandidate> Candidates;
 	{
 		FScopeLock Lock(&RegistryLock);
 		const TArray<FString>* Keys = NamespaceActions.Find(Namespace);
@@ -2254,14 +2348,16 @@ TArray<FString> FMonolithToolRegistry::FindSimilarActions(const FString& Namespa
 			{
 				if (FMonolithToolProfileManager::Get().IsActionAllowed(Namespace, Reg->Info.Action))
 				{
-					Candidates.Add(Reg->Info.Action);
+					Candidates.Add({Reg->Info.Action, Reg->Info.SearchMetadata.Aliases});
 				}
 			}
 		}
 	}
 
-	// Score: prefix match (case-insensitive) wins; otherwise Levenshtein distance.
-	// Distance threshold scales with name length so longer names tolerate more typos.
+	// Score the registered name and every declared alias, retaining the best
+	// score per action. Exact matches beat prefix/substring matches; otherwise use bounded Levenshtein
+	// distance. The threshold scales with the requested name length so longer
+	// names tolerate more typos without making short requests overly broad.
 	struct FScoredCandidate { FString Name; int32 Score; };
 	TArray<FScoredCandidate> Scored;
 	Scored.Reserve(Candidates.Num());
@@ -2269,30 +2365,64 @@ TArray<FString> FMonolithToolRegistry::FindSimilarActions(const FString& Namespa
 	const int32 Threshold = FMath::Max(2, ActionName.Len() / 2);
 	const FString LowerName = ActionName.ToLower();
 
-	for (const FString& Cand : Candidates)
+	auto ScoreCandidateName = [&ActionName, &LowerName, Threshold](const FString& CandidateName) -> int32
 	{
-		const FString LowerCand = Cand.ToLower();
-
-		// Prefix or substring match — very strong signal, push to top.
-		if (LowerCand.StartsWith(LowerName) || LowerName.StartsWith(LowerCand))
+		if (CandidateName.IsEmpty())
 		{
-			Scored.Add({Cand, 0});
-			continue;
-		}
-		if (LowerCand.Contains(LowerName) || LowerName.Contains(LowerCand))
-		{
-			Scored.Add({Cand, 1});
-			continue;
+			return MAX_int32;
 		}
 
-		const int32 Dist = FMonolithFuzzyMatch::EditDistanceBounded(ActionName, Cand, Threshold, /*bCaseInsensitive=*/true);
-		if (Dist <= Threshold)
+		const FString LowerCandidate = CandidateName.ToLower();
+
+		// A retired alias must beat a longer action whose registered name merely
+		// shares the same prefix (for example get_ability vs get_ability_graph_flow).
+		if (LowerCandidate == LowerName)
 		{
-			Scored.Add({Cand, 2 + Dist});
+			return 0;
+		}
+
+		// Prefix or substring matches remain strong recovery signals.
+		if (LowerCandidate.StartsWith(LowerName) || LowerName.StartsWith(LowerCandidate))
+		{
+			return 1;
+		}
+		if (LowerCandidate.Contains(LowerName) || LowerName.Contains(LowerCandidate))
+		{
+			return 2;
+		}
+
+		const int32 Distance = FMonolithFuzzyMatch::EditDistanceBounded(
+			ActionName,
+			CandidateName,
+			Threshold,
+			/*bCaseInsensitive=*/true);
+		return Distance <= Threshold ? 3 + Distance : MAX_int32;
+	};
+
+	for (const FSimilarActionCandidate& Candidate : Candidates)
+	{
+		int32 BestScore = ScoreCandidateName(Candidate.Name);
+		for (const FString& Alias : Candidate.Aliases)
+		{
+			BestScore = FMath::Min(BestScore, ScoreCandidateName(Alias));
+		}
+		if (BestScore != MAX_int32)
+		{
+			Scored.Add({Candidate.Name, BestScore});
 		}
 	}
 
-	Scored.Sort([](const FScoredCandidate& L, const FScoredCandidate& R) { return L.Score < R.Score; });
+	Scored.Sort([](const FScoredCandidate& L, const FScoredCandidate& R)
+	{
+		if (L.Score != R.Score)
+		{
+			return L.Score < R.Score;
+		}
+		const int32 IgnoreCaseCompare = L.Name.Compare(R.Name, ESearchCase::IgnoreCase);
+		return IgnoreCaseCompare != 0
+			? IgnoreCaseCompare < 0
+			: L.Name.Compare(R.Name, ESearchCase::CaseSensitive) < 0;
+	});
 
 	const int32 Count = FMath::Min(MaxResults, Scored.Num());
 	Result.Reserve(Count);

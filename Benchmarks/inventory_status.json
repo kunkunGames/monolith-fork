@@ -1,0 +1,141 @@
+{
+  "schema_version": 1,
+  "snapshot_id": "post-rebase-20260721-02",
+  "suites": {
+    "OfflineParity": {
+      "state": "accepted",
+      "evidence": "Benchmarks/OfflineParity/accepted/post-rebase-20260721-02/summary.json",
+      "evidence_bundle_sha256": "eeb1883a04ddd5450194c688f3322afed0e593e740d2842c89ad8c83dc903b1d",
+      "input_fingerprint": "04cf86599ccfd4e8bfa24621bef592fbe0cb0260d0d0eff3aeb10bf210b6b7ff",
+      "diagnostic": "Post-rebase and post-repair generation: 311 MATCH, 0 DIFF, 0 ERROR, 6 explicit decision_id-dependent SKIP. Accepted freshness checks every input file SHA plus the 4.46 GB EngineSource.db content SHA-256.",
+      "namespace_results": {
+        "cppreflect": {"pass": 96, "fail": 0, "expected_skip": 0},
+        "decision": {"pass": 44, "fail": 0, "expected_skip": 6},
+        "network": {"pass": 46, "fail": 0, "expected_skip": 0},
+        "risk": {"pass": 62, "fail": 0, "expected_skip": 0},
+        "source": {"pass": 63, "fail": 0, "expected_skip": 0}
+      }
+    },
+    "ActionGuidance": {
+      "state": "pending",
+      "gap_id": "GAP-ACTION-001",
+      "evidence": "Saved/Monolith/Benchmarks/ActionGuidance/diagnostic-legacy-migrations/run-02/summary.json",
+      "diagnostic": "16/16 retired-action migration subset passed; explicit subset is non-canonical and does not reduce the 454-row full-run gap."
+    },
+    "SourceIndex": {
+      "state": "pending",
+      "gap_id": "GAP-SOURCE-001",
+      "evidence": "Saved/Monolith/Benchmarks/SourceIndex/audit-20260717-full01/partial_summary.json",
+      "diagnostic": "284 valid prefix rows followed by 3 transport failures; interrupted results are non-comparable, so all 376 rows remain unverified."
+    },
+    "SchemaCompletenessProbe": {
+      "state": "pending",
+      "gap_id": "GAP-SCHEMA-PROBE-001",
+      "diagnostic": "The previously reported 330-probe pre-link artifact is not retained locally, so no positive result is claimed. All probe rows remain unverified until the final-linked exact catalog identity is captured and the canonical probe run is retained."
+    },
+    "SchemaCompletenessFullCatalog": {
+      "state": "pending",
+      "gap_id": "GAP-SCHEMA-FULL-001",
+      "evidence": "Saved/Monolith/Benchmarks/SchemaCompleteness/diagnostic-live-prebuild-20260718-01/summary.json",
+      "diagnostic": "20/20 bounded diagnostic rows passed, but max-actions output is non-comparable; all 1,857 checked-in pre-link catalog-contract rows remain unverified."
+    },
+    "ProjectIndex": {
+      "state": "pending",
+      "gap_id": "GAP-PROJECT-001",
+      "evidence": "Saved/Monolith/Benchmarks/ProjectIndex/baseline-20260711e/summary.json",
+      "diagnostic": "The retained legacy run contains 314 rows but predates the current fail-closed identity and fixture-provenance contracts; it receives no completion credit and fixtures must be regenerated before a current full run."
+    },
+    "AICapability": {
+      "state": "pending",
+      "gap_id": "GAP-AI-001",
+      "evidence": "Saved/Monolith/Benchmarks/AICapability/baseline-20260711d/summary.json",
+      "diagnostic": "The older run covered 74 rows; the current canonical corpus has 212, so no row is credited to current full-run completion."
+    },
+    "AssetEditing": {
+      "state": "pending",
+      "gap_id": "GAP-ASSET-001",
+      "evidence": "Saved/Monolith/Benchmarks/AssetEditing/baseline-20260711-p1/summary.json",
+      "diagnostic": "The older run covered 578 rows and predates BEB-429 lifecycle correction; the current canonical corpus has 579."
+    }
+  },
+  "gaps": [
+    {
+      "id": "GAP-SCHEMA-FULL-001",
+      "suites": ["SchemaCompletenessFullCatalog"],
+      "done_when": "A final-linked current-identity exact-catalog scan publishes comparable=true, zero fetch failures, and zero quality failures for every catalog action.",
+      "blocker": "Run against the final linked live catalog; resumable diagnostics may proceed beforehand."
+    },
+    {
+      "id": "GAP-SCHEMA-PROBE-001",
+      "suites": ["SchemaCompletenessProbe"],
+      "done_when": "All 330 declared probes finish under the same current catalog identity with no required stale row.",
+      "blocker": "Run after the full live catalog identity is fixed."
+    },
+    {
+      "id": "GAP-SOURCE-001",
+      "suites": ["SourceIndex"],
+      "done_when": "All 376 canonical rows complete in one valid run with zero transport/protocol failures.",
+      "blocker": "Live HTTP MCP must remain stable for the full sequence."
+    },
+    {
+      "id": "GAP-ACTION-001",
+      "suites": ["ActionGuidance"],
+      "done_when": "All 454 canonical rows complete with current task and catalog fingerprints.",
+      "blocker": "Regenerate once against the final catalog, then run the canonical corpus."
+    },
+    {
+      "id": "GAP-PROJECT-001",
+      "suites": ["ProjectIndex"],
+      "done_when": "Live fixtures are regenerated and all 314 rows pass the fail-closed provenance gate.",
+      "blocker": "Fixture refresh must precede the full run."
+    },
+    {
+      "id": "GAP-AI-001",
+      "suites": ["AICapability"],
+      "done_when": "All 212 canonical AI rows complete with current fixture and catalog identity.",
+      "blocker": "Run after read-only index suites."
+    },
+    {
+      "id": "GAP-ASSET-001",
+      "suites": ["AssetEditing"],
+      "done_when": "All 579 canonical rows complete with jobs=1 and zero unexpected errors.",
+      "blocker": "Run last because it mutates benchmark assets."
+    }
+  ],
+  "execution_gates": [
+    {
+      "id": "GATE-NOLINK",
+      "status": "passed",
+      "contract": "Before the coordinated editor-down window, use only protected -NoLink partial compilation and do not replace the protected build scripts with direct UBT/UAT.",
+      "evidence": "2026-07-18: the latest CL 1100 protected strict non-unity -NoLink compile of MonolithCore+MonolithAnimation passed 111/111 compile actions. Core/Animation DLL and PDB SHA-256 values were identical before and after; no link, binary deletion, process termination, or binary reconcile ran."
+    },
+    {
+      "id": "GATE-FINAL-LINK",
+      "status": "passed",
+      "contract": "After CL 1198 PCG live revalidation, use one user-coordinated editor-down window for the CL 1100 protected link build.",
+      "evidence": "2026-07-21: BuildGameEditorAndRun.bat completed the full SpeedEditor link with exit 0; BuildGameEditorStrictNonUnity.bat then compiled and linked all 46 Monolith modules under Strict, WarningsAsErrors, and DisableUnity with exit 0."
+    },
+    {
+      "id": "GATE-CRG",
+      "status": "passed",
+      "contract": "Source health must prove CRG parity, then OfflineParity must be rerun against that exact EngineSource.db and promoted as a schema-v2 tracked accepted bundle.",
+      "evidence": "2026-07-21: source.repair_crg_cache rebuilt 91,020 edges, 1,328,685 node metrics, and 133,274 override edges; follow-up source.health was clean. post-rebase-20260721-02 then completed 317/317 rows as 311 MATCH, 0 DIFF, 0 ERROR, and 6 exact prerequisite-dependent SKIP rows."
+    },
+    {
+      "id": "GATE-ANIMATION",
+      "status": "pending_after_final_link",
+      "contract": "After MCP recovery, every discovered Monolith.ParamGuard.Animation test must pass on the newly linked binary (currently 11/11)."
+    },
+    {
+      "id": "GATE-PRECOMMIT",
+      "status": "passed",
+      "contract": "Run static CI, portable and full inventory checks, final P4/CL/default-CL audit, and review/reflection evidence after the final accepted bundles are fixed.",
+      "evidence": "2026-07-21: hosted static CI completed with 0 blocking findings; benchmark inventory unit tests passed 46/46; portable and full inventory checks verified 229 rows; git diff --check passed; final P4 audit confirmed Monolith build outputs remain isolated in CL 1271 while unrelated SpeedSwitching and SpeedCore work remains in CLs 1275/1276; final diff and accepted-bundle manifest were reviewed."
+    }
+  ],
+  "changelist_boundary": {
+    "1100": "Benchmark corpora, runners, benchmark-generated fixtures/assets, and Monolith defects directly discovered by those benchmark runs (currently Core, Animation, native Proxy, and Query CRG repair).",
+    "1200": "UI visual-artifact action/API implementation, its focused automation test, and UI/API documentation only.",
+    "overlap": "0 exact files and 0 source modules as of 2026-07-18; CL 1100 touches MonolithCore/MonolithAnimation while CL 1200 touches MonolithUI. Content/Monolith/CommonUI/MonolithDefaultCommonButton.uasset remains in CL 1100 because three CL 1100 benchmark assets hard-reference it: WBP_BenchCommonButton, WBP_BenchCommonContainers, and WBP_BenchCommonPauseMenu."
+  }
+}

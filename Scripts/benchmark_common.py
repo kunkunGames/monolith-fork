@@ -442,6 +442,20 @@ def validate_mcp_status_response(
             "raw": str(status_data)[:500],
             "transport_status": None,
         }
+    expected_project = local_project_name()
+    observed_project = str(
+        status_data.get("project_name") or status_data.get("project") or ""
+    ).strip()
+    if observed_project != expected_project:
+        return {
+            "ok": False,
+            "failure_kind": "invalid_status_identity",
+            "raw": (
+                f"status project identity mismatch: observed={observed_project or '<missing>'} "
+                f"expected={expected_project}"
+            ),
+            "transport_status": None,
+        }
     return {
         "ok": True,
         "failure_kind": "",
@@ -487,7 +501,7 @@ def status_identity_mismatches(
     return mismatches
 
 _PLUGIN_PREFIX = ("plugins", "monolith")
-_DB_CANDIDATES = (
+DEFAULT_DATABASE_PATHS = (
     "Saved/EngineSource.db",
     "Saved/graph.db",
     "Saved/ProjectIndex.db",
@@ -498,6 +512,32 @@ _DB_CANDIDATES = (
     "Logs/_graph_analysis_v2.db",
     "Logs/_graph_analysis_v3.db",
 )
+
+# Benchmark evidence must fingerprint only databases that can affect that
+# suite's answers.  The former broad default made unrelated index churn stale
+# every live suite and forced lightweight contract tests to hash multi-gigabyte
+# databases they never queried.
+BENCHMARK_DATABASE_PATHS: dict[str, tuple[str, ...]] = {
+    "ActionGuidance": (),
+    # Canonical SourceIndex execution reads the source subsystem's EngineSource
+    # database. Saved/graph.db is a derived CRG export used only by graph-specific
+    # handlers, none of which is executed by this corpus.
+    "SourceIndex": ("Saved/EngineSource.db",),
+    "SchemaCompleteness": (),
+    "OfflineParity": ("Saved/EngineSource.db",),
+    "ProjectIndex": ("Saved/ProjectIndex.db",),
+    "AICapability": (),
+    "AssetEditing": ("Saved/ProjectIndex.db",),
+}
+
+BENCHMARK_DATABASE_SCOPE_MARKERS: dict[str, str] = {
+    "ActionGuidance": "not_applicable_to_registry_routing",
+    "SchemaCompleteness": "not_applicable_to_live_schema_registry_scan",
+    "AICapability": "not_applicable_to_live_editor_ai_actions",
+}
+# Backward-compatible private alias for tests/callers that patched the original
+# name. New contracts should use DEFAULT_DATABASE_PATHS.
+_DB_CANDIDATES = DEFAULT_DATABASE_PATHS
 _MANIFEST_KEYS = (
     "benchmark",
     "generated_at",
@@ -523,8 +563,21 @@ _MCP_STABLE_KEYS = (
     "tool_count",
     "namespace_count",
     "project",
+    "project_name",
     "engine_version",
 )
+
+
+def local_project_name(plugin_root: pathlib.Path | None = None) -> str:
+    """Resolve the owning Unreal project from the local Monolith checkout."""
+    root = (plugin_root or PLUGIN_ROOT).resolve()
+    project_root = root.parent.parent
+    project_files = sorted(project_root.glob("*.uproject"))
+    if len(project_files) != 1:
+        raise RuntimeError(
+            f"expected exactly one .uproject beside Plugins, found {len(project_files)} in {project_root}"
+        )
+    return project_files[0].stem
 
 
 def plugin_relative_path(value: str | pathlib.Path) -> pathlib.Path:
@@ -628,9 +681,13 @@ def jsonl_input_signature(
 def database_signatures(
     plugin_root: pathlib.Path | None = None,
     extra_paths: Iterable[str | pathlib.Path] | None = None,
+    *,
+    candidate_paths: Iterable[str | pathlib.Path] | None = None,
 ) -> list[dict[str, Any]]:
     root = (plugin_root or PLUGIN_ROOT).resolve()
-    candidates: list[str | pathlib.Path] = list(_DB_CANDIDATES)
+    candidates: list[str | pathlib.Path] = list(
+        _DB_CANDIDATES if candidate_paths is None else candidate_paths
+    )
     if extra_paths:
         candidates.extend(extra_paths)
 
@@ -647,7 +704,7 @@ def database_signatures(
             path,
             kind="database",
             plugin_root=root,
-            include_sha256=False,
+            include_sha256=True,
             include_line_counts=False,
         ))
     return signatures
@@ -724,11 +781,25 @@ def build_benchmark_inputs(
     mcp_status: Mapping[str, Any] | None = None,
     catalog: Mapping[str, Any] | None = None,
     extra_files: Mapping[str, str | pathlib.Path] | None = None,
+    database_paths: Iterable[str | pathlib.Path] | None = None,
     extra_database_paths: Iterable[str | pathlib.Path] | None = None,
     plugin_root: pathlib.Path | None = None,
 ) -> dict[str, Any]:
     root = (plugin_root or PLUGIN_ROOT).resolve()
-    files: dict[str, Any] = {}
+    resolved_database_paths = (
+        BENCHMARK_DATABASE_PATHS.get(benchmark, DEFAULT_DATABASE_PATHS)
+        if database_paths is None
+        else tuple(database_paths)
+    )
+    files: dict[str, Any] = {
+        "benchmark_common": file_signature(
+            root / "Scripts" / "benchmark_common.py",
+            kind="benchmark_common",
+            plugin_root=root,
+            include_sha256=True,
+            include_line_counts=False,
+        )
+    }
     task_or_probe_path: pathlib.Path | None = None
 
     if tasks_path is not None:
@@ -750,6 +821,8 @@ def build_benchmark_inputs(
         )
 
     for name, value in (extra_files or {}).items():
+        if name in files:
+            raise ValueError(f"duplicate benchmark input file key: {name}")
         files[name] = file_signature(
             value,
             kind=name,
@@ -762,11 +835,43 @@ def build_benchmark_inputs(
         "schema_version": 1,
         "benchmark": benchmark,
         "files": files,
-        "database_files": database_signatures(root, extra_database_paths),
+        # ``None`` retains the shared broad diagnostic default. A benchmark
+        # with a known DB contract supplies an exact dependency set so an
+        # unrelated live index cannot invalidate an otherwise comparable run.
+        "database_files": database_signatures(
+            root,
+            extra_database_paths,
+            candidate_paths=resolved_database_paths,
+        ),
         "mcp_catalog": compact_mcp_catalog_metadata(mcp_status, catalog, manifest),
     }
-    digest_source = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-    payload["fingerprint_sha256"] = hashlib.sha256(digest_source.encode("utf-8")).hexdigest()
+    database_scope = BENCHMARK_DATABASE_SCOPE_MARKERS.get(benchmark)
+    if database_scope is not None:
+        payload["database_files_scope"] = database_scope
+    return refresh_benchmark_input_fingerprint(payload)
+
+
+def benchmark_input_fingerprint(payload: Mapping[str, Any]) -> str:
+    """Return the canonical SHA-256 for a benchmark-input payload.
+
+    The stored fingerprint is deliberately excluded from its own digest.  Keep
+    this operation public so runners that add suite-specific identity fields can
+    refresh the fingerprint instead of silently publishing unhashed metadata.
+    """
+    unsigned_payload = dict(payload)
+    unsigned_payload.pop("fingerprint_sha256", None)
+    digest_source = json.dumps(
+        unsigned_payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return hashlib.sha256(digest_source.encode("utf-8")).hexdigest()
+
+
+def refresh_benchmark_input_fingerprint(payload: dict[str, Any]) -> dict[str, Any]:
+    """Refresh ``fingerprint_sha256`` after suite-specific identity changes."""
+    payload["fingerprint_sha256"] = benchmark_input_fingerprint(payload)
     return payload
 
 

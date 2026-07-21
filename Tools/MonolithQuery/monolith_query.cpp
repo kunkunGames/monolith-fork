@@ -270,7 +270,8 @@ public:
             fs::create_directories(parent);
 
         close();
-        int rc = sqlite3_open_v2(path.c_str(), &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr);
+        int rc = sqlite3_open_v2(
+            path.c_str(), &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_URI, nullptr);
         if (rc != SQLITE_OK)
             die("Failed to open database: " + path + " — " + sqlite3_errmsg(db));
 
@@ -615,6 +616,24 @@ static std::string sql_quote(std::string value) {
     for (size_t pos = 0; (pos = value.find('\'', pos)) != std::string::npos; pos += 2)
         value.replace(pos, 1, "''");
     return "'" + value + "'";
+}
+
+static std::string sqlite_readonly_uri(const std::string& path) {
+    const std::string normalized = fs::absolute(fs::path(path)).lexically_normal().generic_string();
+    std::ostringstream encoded;
+    encoded << "file://";
+    if (normalized.empty() || normalized.front() != '/') encoded << '/';
+    encoded << std::uppercase << std::hex;
+    for (const unsigned char ch : normalized) {
+        if (std::isalnum(ch) || ch == '-' || ch == '.' || ch == '_' || ch == '~' ||
+            ch == '/' || ch == ':') {
+            encoded << static_cast<char>(ch);
+        } else {
+            encoded << '%' << std::setw(2) << std::setfill('0') << static_cast<int>(ch);
+        }
+    }
+    encoded << "?mode=ro&cache=private";
+    return encoded.str();
 }
 
 static std::string trim_copy(std::string value) {
@@ -2861,7 +2880,14 @@ LIMIT ?
 
         graph.open_or_create(temp_path);
         if (!exec_sql_ok(graph, "PRAGMA foreign_keys=OFF;", error)) fail("pragma foreign_keys", error);
-        if (ok && !exec_sql_ok(graph, "ATTACH DATABASE " + sql_quote(source_db_path) + " AS src;", error)) fail("attach source", error);
+        // The graph export is a read-only consumer of EngineSource.db. Attaching a plain
+        // pathname makes SQLite enlist the authoritative source DB in the graph write
+        // transaction, which can create/recover a source rollback journal and race live
+        // index readers. A mode=ro private URI enforces the ownership boundary at SQLite.
+        if (ok && !exec_sql_ok(graph,
+                "ATTACH DATABASE " + sql_quote(sqlite_readonly_uri(source_db_path)) + " AS src;", error)) {
+            fail("attach read-only source", error);
+        }
         if (ok && !exec_sql_ok(graph, "DROP TABLE IF EXISTS nodes_fts;", error)) fail("drop stale nodes_fts", error);
         if (ok && !ensure_crg_graph_base_tables(graph, error)) fail("create base schema", error);
         if (ok && !exec_sql_ok(graph, "BEGIN;", error)) fail("begin transaction", error);

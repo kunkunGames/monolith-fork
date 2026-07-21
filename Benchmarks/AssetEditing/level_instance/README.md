@@ -6,16 +6,17 @@ Generated AssetType slice for the AssetEditing benchmark.
 
 | Operation | Tasks |
 |---|---:|
-| `creation_or_import` | 3 |
-| `edit` | 3 |
-| `save` | 3 |
+| `creation_or_import` | 2 |
+| `edit` | 2 |
+| `save` | 2 |
 | `readback_verify` | 3 |
 
 ## Lifecycle
 
 | Lifecycle phase | Tasks |
 |---|---:|
-| `create_save` | 3 |
+| `create_save` | 2 |
+| `not_applicable` | 1 |
 
 ## Test Cases
 

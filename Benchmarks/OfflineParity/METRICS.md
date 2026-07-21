@@ -105,6 +105,17 @@ environment changed mid-run, that action is `ERROR(real)` and stays comparable.
 In particular, Query failure plus Python success is an error and cannot inflate
 the score.
 
+### Input fingerprint dependency boundary
+
+The run fingerprint includes `actions.jsonl`, `manifest.json`, the benchmark
+runner, the native Query executable, the Python fallback, and
+`Saved/EngineSource.db`. It intentionally excludes
+`ProjectIndex.db`, `graph.db`, and legacy analysis databases: none of the 317
+declared rows executes a project, bridge, or source-CRG-graph action. This exact
+dependency set prevents an unrelated live index writer from creating false
+baseline drift while retaining fail-closed invalidation when the actual
+source/reflection database changes.
+
 ### Action buckets and offline-unsupported reclassification
 
 Each row in `actions.jsonl` falls into one of three buckets (see `manifest.json`

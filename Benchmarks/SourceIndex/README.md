@@ -12,13 +12,13 @@ graphs, and plan C++ changes.
 
 | File | Purpose |
 | --- | --- |
-| `tasks.jsonl` | Static seed fixture set covering all six task categories. |
+| `tasks.jsonl` | Static seed fixture set covering all seven task categories. |
 | `manifest.json` | Catalog metadata, golden symbols, score formula, and run-integrity gates. |
 | `METRICS.md` | Metric definitions, score formula, and interpretation. |
 | `RESULTS.md` | Latest checked-in benchmark result summary. |
 | `Plugins/Monolith/Scripts/source_index_benchmark.py` | Generator, runner, and comparison tool. |
 
-Checked-in corpus size: **363 tasks**.
+Checked-in corpus size: **376 tasks**.
 
 ## Task Categories
 
@@ -36,6 +36,15 @@ All tasks are read-only and safe to run against any live Monolith MCP endpoint.
 The `negative_recovery` tasks send malformed input but every action is read-only,
 so they never mutate the index.
 
+### Database dependency contract
+
+Canonical `source_query` tasks read `Saved/EngineSource.db` through the source
+subsystem, including its internal CRG cache used by risk, review-context, and
+impact-radius actions. The remaining graph-specific source actions are exercised
+only as `monolith_discover` schema probes; the corpus does not execute their
+`Saved/graph.db` handlers. SourceIndex input evidence therefore fingerprints only
+`Saved/EngineSource.db`, and unrelated derived `graph.db` churn cannot stale a run.
+
 ## Generate
 
 ```powershell
@@ -46,13 +55,22 @@ python Plugins\Monolith\Scripts\source_index_benchmark.py generate `
   --manifest Benchmarks\SourceIndex\manifest.json
 ```
 
-The generator is fully deterministic and runs offline (no live MCP is contacted
-unless the static corpus falls below `--min-tasks`).  It starts from the source-index
-fixtures and includes the checked-in practical Unreal extension plus the curated
-`require_results` and adversarial `negative_recovery` sets: 227 `symbol_lookup`
-(of which 28 carry `require_results`), 32 `review_context_lookup`, 32
-`impact_radius_lookup`, 40 `ergonomics_text`, 13 `negative_recovery`, 7
-`health_check`, and 12 `schema_field_presence` tasks.
+The generator is deterministic but intentionally catalog-bound: it always performs
+read-only `monolith_status` + complete paginated `source` discovery + a second
+`monolith_status`, and refuses to publish if the catalog changes mid-generation or
+if a curated action no longer exists. It never invents generic `query` parameters
+for newly discovered actions. Instead, each live source action not already referenced
+by the curated corpus receives one exact `monolith_discover(mode=schema)` task in
+sorted action-name order. If the resulting corpus is still below `--min-tasks`,
+generation fails and requires schema-verified curated tasks.
+
+The current catalog generates 376 tasks: 217 `symbol_lookup` (of which 28 carry
+`require_results`), 32 `review_context_lookup`, 32 `impact_radius_lookup`, 40
+`ergonomics_text`, 13 `negative_recovery`, 7 `health_check`, and 35
+`schema_field_presence` tasks. The 23 appended schema tasks close live source action
+identity coverage from 14/37 to 37/37. All 353 curated tasks remain in order; the old
+10 generator top-ups that guessed a generic `query` parameter are replaced by exact
+schema discovery and no longer distort execution scoring.
 
 ## Run
 
@@ -79,6 +97,12 @@ envelope, a top-level JSON-RPC error, a missing MCP result, `isError` status, or
 not declare `server_running=true` writes `run_failure.json`, writes no `summary.json`, and exits
 non-zero. Known run outputs are removed first so an invalid rerun cannot expose a stale success.
 
+A canonical run also requires the non-empty `manifest.json` `catalog_version` to exactly match the
+live status `catalog_version`. A missing or stale manifest identity aborts before the first benchmark
+task call and writes only invalid-run artifacts; regenerate the canonical corpus against the stable
+live catalog instead of editing the version by hand. Explicit subsets remain non-comparable
+diagnostics and do not claim this canonical identity binding.
+
 Each task row distinguishes a transport failure (`transport_error`, HTTP status, bounded raw text)
 from an invalid MCP/JSON-RPC envelope (`protocol_error`). A valid semantic `result.isError=true`
 remains scoreable for `negative_recovery`; protocol failures are never allowed through the
@@ -96,7 +120,7 @@ budget to a completed corpus shorter than 20 tasks.
 | `partial_summary.json` | In-progress or invalid-run diagnostics; removed after valid completion |
 | `run_failure.json` | Invalid status, protocol, transport-budget, or runner-exception record; mutually exclusive with `summary.json` |
 
-Offline contract verification is `python Scripts/test_source_index_benchmark.py` (23 scorer and
+Offline contract verification is `python Scripts/test_source_index_benchmark.py` (41 scorer and
 run-integrity test functions; no editor or live MCP endpoint).
 
 ## Compare

@@ -2,9 +2,9 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-07-12T02:14:12.681671+00:00",
+  "generated_at": "2026-07-17T10:24:39.993026+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "308546814b77b03e591343886d3cbee8e70b26d9354f5734789a7255b0f25990",
+  "source_task_sha256": "ea3c428db9e0fdb056ad50f6e36fce5a1d12383eef5b97982b9e371308a10165",
   "module_storage": "module_shard",
   "shard_id": "asset_authoring.level_instance",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/level_instance.json",
@@ -199,12 +199,9 @@
           "edit_domain": "blueprint_prefab_guard",
           "blueprint_type": "",
           "workflow": "level_instance_rootless_prefab_rejected",
-          "operation_semantics": "create_save",
-          "lifecycle_phase": "create_save",
+          "operation_semantics": "rejection_guard",
+          "lifecycle_phase": "not_applicable",
           "asset_operations": [
-            "creation_or_import",
-            "save",
-            "edit",
             "readback_verify"
           ],
           "actions": [
@@ -265,26 +262,28 @@
         "by_operation_semantics": {
           "create_save": [
             "BEB-428",
-            "BEB-429",
             "BEB-499"
+          ],
+          "rejection_guard": [
+            "BEB-429"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
             "BEB-428",
-            "BEB-429",
             "BEB-499"
+          ],
+          "not_applicable": [
+            "BEB-429"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
             "BEB-428",
-            "BEB-429",
             "BEB-499"
           ],
           "edit": [
             "BEB-428",
-            "BEB-429",
             "BEB-499"
           ],
           "readback_verify": [
@@ -294,7 +293,6 @@
           ],
           "save": [
             "BEB-428",
-            "BEB-429",
             "BEB-499"
           ]
         }
@@ -440,12 +438,9 @@
           "edit_domain": "blueprint_prefab_guard",
           "blueprint_type": "",
           "workflow": "level_instance_rootless_prefab_rejected",
-          "operation_semantics": "create_save",
-          "lifecycle_phase": "create_save",
+          "operation_semantics": "rejection_guard",
+          "lifecycle_phase": "not_applicable",
           "asset_operations": [
-            "creation_or_import",
-            "save",
-            "edit",
             "readback_verify"
           ],
           "actions": [
@@ -461,26 +456,17 @@
       ],
       "groups": {
         "by_operation_semantics": {
-          "create_save": [
+          "rejection_guard": [
             "BEB-429"
           ]
         },
         "by_lifecycle_phase": {
-          "create_save": [
+          "not_applicable": [
             "BEB-429"
           ]
         },
         "by_asset_operation": {
-          "creation_or_import": [
-            "BEB-429"
-          ],
-          "edit": [
-            "BEB-429"
-          ],
           "readback_verify": [
-            "BEB-429"
-          ],
-          "save": [
             "BEB-429"
           ]
         }

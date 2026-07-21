@@ -4735,12 +4735,22 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetCustomHLSLText(const TSh
 FMonolithActionResult FMonolithNiagaraActions::HandleAddModule(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
+	FString ParamError;
 	FString EmitterHandleId;
-	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId)) return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"));
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("emitter"), EmitterHandleId, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString ScriptUsage;
-	if (!Params->TryGetStringField(TEXT("usage"), ScriptUsage)) return FMonolithActionResult::Error(TEXT("Parameter 'usage' must be a string"));
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("usage"), ScriptUsage, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString ModuleScriptPath;
-	if (!Params->TryGetStringField(TEXT("module_script"), ModuleScriptPath)) return FMonolithActionResult::Error(TEXT("Parameter 'module_script' must be a string"));
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("module_script"), ModuleScriptPath, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString ModuleScriptBaseName = FPaths::GetBaseFilename(ModuleScriptPath);
 	int32 Index = -1;
 	double Index_Double = Index;

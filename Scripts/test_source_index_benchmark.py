@@ -158,8 +158,50 @@ def _score(task: Dict[str, Any], response: Dict[str, Any]) -> Dict[str, Any]:
         sib.mcp_call = original
 
 
-def _status_response() -> Dict[str, Any]:
-    return _ok_text('{"server_running":true,"catalog_version":"sha256:test"}')
+def _status_response(catalog_version: str = "sha256:test") -> Dict[str, Any]:
+    return _ok_text(json.dumps({
+        "server_running": True,
+        "catalog_version": catalog_version,
+        "project_name": "Speed",
+        "plugin_version": "unit-test",
+        "engine_version": "unit-test",
+    }))
+
+
+def _curated_source_actions() -> List[str]:
+    return sorted({str(task["action"]) for task in sib.build_static_tasks()})
+
+
+def _generation_router(
+    actions: List[str],
+    *,
+    start_catalog_version: str = "sha256:test",
+    end_catalog_version: Optional[str] = None,
+    calls: Optional[List[str]] = None,
+):
+    status_calls = 0
+
+    def fake_mcp_call(url, tool, arguments, timeout_s=45.0):  # noqa: ANN001
+        nonlocal status_calls
+        if calls is not None:
+            calls.append(tool)
+        if tool == "monolith_status":
+            status_calls += 1
+            version = (
+                end_catalog_version
+                if status_calls > 1 and end_catalog_version is not None
+                else start_catalog_version
+            )
+            return _status_response(version)
+        if tool == "monolith_discover":
+            return _legacy_json({
+                "catalog_version": start_catalog_version,
+                "actions": [{"action": action} for action in actions],
+                "truncated": False,
+            })
+        raise AssertionError(f"unexpected generation tool call: {tool}")
+
+    return fake_mcp_call
 
 
 def _run_task(index: int) -> Dict[str, Any]:
@@ -220,12 +262,22 @@ def _run_with_fake_rows(
         "".join(json.dumps(task) + "\n" for task in tasks),
         encoding="utf-8",
     )
+    unit_database_path = output_dir.parent / "EngineSource.unit.db"
+    unit_database_path.write_bytes(b"source-index-unit-database")
     original_call = sib.mcp_call
     original_score = sib.score_task
+    original_build_inputs = sib.build_benchmark_inputs
     sib.mcp_call = lambda url, tool, arguments, timeout_s=45.0: (
         _status_response() if status_response is None else status_response
     )
     sib.score_task = fake_score
+    sib.build_benchmark_inputs = lambda *args, **kwargs: original_build_inputs(
+        *args,
+        **{
+            **kwargs,
+            "database_paths": (unit_database_path,),
+        },
+    )
     try:
         return sib.run_benchmark(
             "http://unused",
@@ -239,6 +291,7 @@ def _run_with_fake_rows(
     finally:
         sib.mcp_call = original_call
         sib.score_task = original_score
+        sib.build_benchmark_inputs = original_build_inputs
 
 
 # ---------------------------------------------------------------------------
@@ -787,6 +840,72 @@ def test_status_failures_clear_stale_outputs_and_write_no_summary() -> None:
         check("all invalid statuses execute zero tasks", calls == 0, f"calls={calls}")
 
 
+def test_canonical_stale_catalog_identity_aborts_before_task_calls() -> None:
+    task = _run_task(1)
+    status_calls = 0
+    task_calls = 0
+
+    def fake_call(url, tool, arguments, timeout_s=45.0):  # noqa: ANN001
+        nonlocal status_calls
+        if tool != "monolith_status":
+            raise AssertionError(f"unexpected MCP call before catalog gate: {tool}")
+        status_calls += 1
+        return _status_response("sha256:live")
+
+    def fake_score(url, scored_task, timeout_s):  # noqa: ANN001
+        nonlocal task_calls
+        task_calls += 1
+        return _run_row(scored_task)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        output = root / "run"
+        corpus = sib.TaskCorpus(
+            tasks=[task],
+            canonical=True,
+            comparable=True,
+            mode="canonical",
+            manifest={"catalog_version": "sha256:stale"},
+            manifest_path=root / "manifest.json",
+        )
+        original_load = sib.load_task_corpus
+        original_call = sib.mcp_call
+        original_score = sib.score_task
+        sib.load_task_corpus = lambda *args, **kwargs: corpus
+        sib.mcp_call = fake_call
+        sib.score_task = fake_score
+        try:
+            result = sib.run_benchmark(
+                "http://unused",
+                root / "tasks.jsonl",
+                output,
+                "stale-catalog",
+                1.0,
+            )
+        finally:
+            sib.load_task_corpus = original_load
+            sib.mcp_call = original_call
+            sib.score_task = original_score
+
+        failure = json.loads((output / "run_failure.json").read_text(encoding="utf-8"))
+        check(
+            "stale canonical catalog aborts before task calls",
+            result["completion_status"] == "aborted_catalog_identity_mismatch"
+            and result["failure_stage"] == "status_preflight"
+            and result["failure_kind"] == "catalog_identity_mismatch"
+            and result["completed_task_count"] == 0
+            and result["expected_catalog_version"] == "sha256:stale"
+            and result["observed_catalog_version"] == "sha256:live"
+            and failure["failure_kind"] == "catalog_identity_mismatch"
+            and status_calls == 1
+            and task_calls == 0,
+            f"result={result} status_calls={status_calls} task_calls={task_calls}",
+        )
+        check("stale catalog writes no summary", not (output / "summary.json").exists())
+        check("stale catalog writes no per_task", not (output / "per_task.json").exists())
+        check("stale catalog writes no per_task jsonl", not (output / "per_task.jsonl").exists())
+
+
 def test_three_consecutive_transport_failures_abort_on_third_task() -> None:
     tasks = [_run_task(index) for index in range(1, 7)]
     calls: List[str] = []
@@ -957,21 +1076,204 @@ def test_task_protocol_and_runner_exception_write_invalid_artifacts() -> None:
         )
 
 
+def test_generate_always_enumerates_and_validates_live_catalog() -> None:
+    curated_tasks = sib.build_static_tasks()
+    curated_actions = _curated_source_actions()
+    added_live_actions = ["get_module_info", "audit_module_dep_reality"]
+    live_actions = curated_actions + added_live_actions
+    calls: List[str] = []
+    original = sib.mcp_call
+    sib.mcp_call = _generation_router(live_actions, calls=calls)
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            manifest = sib.generate_tasks(
+                "http://offline", 0, root / "tasks.jsonl", root / "manifest.json"
+            )
+            generated_tasks = [
+                json.loads(line)
+                for line in (root / "tasks.jsonl").read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+    finally:
+        sib.mcp_call = original
+
+    validation = manifest["catalog_validation"]
+    check(
+        "generate always performs status/discover/status catalog validation",
+        calls == ["monolith_status", "monolith_discover", "monolith_status"],
+        f"calls={calls}",
+    )
+    check(
+        "generate preserves existing curated tasks before schema-only additions",
+        generated_tasks[:len(curated_tasks)] == curated_tasks,
+        f"generated={len(generated_tasks)} curated={len(curated_tasks)}",
+    )
+    check(
+        "generate records stable catalog identity and closes action coverage",
+        manifest["catalog_version"] == "sha256:test"
+        and validation["live_action_count"] == len(set(live_actions))
+        and validation["covered_action_count"] == len(set(live_actions))
+        and validation["preexisting_covered_action_count"] == len(curated_actions)
+        and validation["generated_schema_coverage_actions"] == sorted(added_live_actions)
+        and validation["uncovered_action_count"] == 0,
+        f"validation={validation}",
+    )
+    check(
+        "manifest schema action list includes curated and generated coverage",
+        manifest["schema_actions"] == sorted(set(sib.SCHEMA_ACTIONS) | set(added_live_actions)),
+        f"schema_actions={manifest.get('schema_actions')}",
+    )
+    appended = generated_tasks[len(curated_tasks):]
+    check(
+        "unreferenced live action receives exact schema-only coverage",
+        len(appended) == 2
+        and [task["action"] for task in appended] == sorted(added_live_actions)
+        and all(task["category"] == "schema_field_presence" for task in appended)
+        and all(task["tool"] == "monolith_discover" for task in appended)
+        and all(task["arguments"] == {
+            "namespace": "source", "action": task["action"], "mode": "schema"
+        } for task in appended),
+        f"appended={appended}",
+    )
+
+
+def test_generate_rejects_missing_live_action_without_overwrite() -> None:
+    curated_actions = _curated_source_actions()
+    missing_action = "search_source"
+    live_actions = [action for action in curated_actions if action != missing_action]
+    original = sib.mcp_call
+    sib.mcp_call = _generation_router(live_actions)
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            tasks_path = root / "tasks.jsonl"
+            manifest_path = root / "manifest.json"
+            tasks_path.write_text("TASKS_SENTINEL\n", encoding="utf-8")
+            manifest_path.write_text("MANIFEST_SENTINEL\n", encoding="utf-8")
+            try:
+                sib.generate_tasks("http://offline", 0, tasks_path, manifest_path)
+            except RuntimeError as exc:
+                error = str(exc)
+            else:
+                raise AssertionError("missing live action must fail generation")
+            check(
+                "generate names missing curated action",
+                missing_action in error,
+                f"error={error}",
+            )
+            check(
+                "missing catalog action leaves canonical outputs untouched",
+                tasks_path.read_text(encoding="utf-8") == "TASKS_SENTINEL\n"
+                and manifest_path.read_text(encoding="utf-8") == "MANIFEST_SENTINEL\n",
+            )
+    finally:
+        sib.mcp_call = original
+
+
+def test_generate_refuses_blind_generic_top_up() -> None:
+    curated_count = len(sib.build_static_tasks())
+    live_actions = _curated_source_actions() + ["future_schema_specific_action"]
+    original = sib.mcp_call
+    sib.mcp_call = _generation_router(live_actions)
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            try:
+                sib.generate_tasks(
+                    "http://offline",
+                    curated_count + 2,
+                    root / "tasks.jsonl",
+                    root / "manifest.json",
+                )
+            except RuntimeError as exc:
+                error = str(exc)
+            else:
+                raise AssertionError("min-task deficit must not invent generic query tasks")
+            check(
+                "top-up deficit requires schema-verified curated tasks",
+                "generic live-action/query top-ups are forbidden" in error,
+                f"error={error}",
+            )
+            check(
+                "top-up failure publishes no task or manifest artifact",
+                not (root / "tasks.jsonl").exists()
+                and not (root / "manifest.json").exists(),
+            )
+    finally:
+        sib.mcp_call = original
+
+
+def test_generate_rejects_catalog_change_during_discovery() -> None:
+    original = sib.mcp_call
+    sib.mcp_call = _generation_router(
+        _curated_source_actions(),
+        start_catalog_version="sha256:start",
+        end_catalog_version="sha256:end",
+    )
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            try:
+                sib.generate_tasks(
+                    "http://offline", 0, root / "tasks.jsonl", root / "manifest.json"
+                )
+            except RuntimeError as exc:
+                error = str(exc)
+            else:
+                raise AssertionError("catalog identity change must fail generation")
+            check(
+                "generation fails closed on catalog identity change",
+                "source catalog changed during generation" in error,
+                f"error={error}",
+            )
+    finally:
+        sib.mcp_call = original
+
+
 def test_manifest_run_gates_match_runner_defaults() -> None:
+    original = sib.mcp_call
+    sib.mcp_call = _generation_router(_curated_source_actions())
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            manifest = sib.generate_tasks(
+                "http://unused", 0, root / "tasks.jsonl", root / "manifest.json"
+            )
+            gates = manifest["run_gates"]
+            check(
+                "manifest run gates match runner defaults",
+                gates["max_transport_failed_fraction"] == sib.DEFAULT_MAX_TRANSPORT_FAILED_FRACTION
+                and gates["max_consecutive_transport_failures"] == sib.DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES
+                and gates["min_transport_fraction_sample"] == sib.DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES
+                and gates["canonical_catalog_version_mismatch_aborts_before_tasks"] is True
+                and gates["invalid_run_writes_summary"] is False,
+                f"gates={gates}",
+            )
+    finally:
+        sib.mcp_call = original
+
+
+def test_input_fingerprint_ignores_derived_graph_database_churn() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = pathlib.Path(tmp)
-        manifest = sib.generate_tasks(
-            "http://unused", 0, root / "tasks.jsonl", root / "manifest.json"
-        )
-        gates = manifest["run_gates"]
-        check(
-            "manifest run gates match runner defaults",
-            gates["max_transport_failed_fraction"] == sib.DEFAULT_MAX_TRANSPORT_FAILED_FRACTION
-            and gates["max_consecutive_transport_failures"] == sib.DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES
-            and gates["min_transport_fraction_sample"] == sib.DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES
-            and gates["invalid_run_writes_summary"] is False,
-            f"gates={gates}",
-        )
+        saved = root / "Saved"
+        saved.mkdir()
+        (saved / "EngineSource.db").write_bytes(b"source-index-authoritative")
+        graph_path = saved / "graph.db"
+        graph_path.write_bytes(b"derived-graph-v1")
+
+        before = sib.build_benchmark_inputs("SourceIndex", plugin_root=root)
+        graph_path.write_bytes(b"derived-graph-v2")
+        after = sib.build_benchmark_inputs("SourceIndex", plugin_root=root)
+
+    check(
+        "SourceIndex fingerprints only the authoritative EngineSource database",
+        [row["path"] for row in before["database_files"]]
+        == ["Saved/EngineSource.db"]
+        and before["fingerprint_sha256"] == after["fingerprint_sha256"],
+        f"before={before['database_files']} after={after['database_files']}",
+    )
 
 
 def test_main_returns_nonzero_for_invalid_run() -> None:

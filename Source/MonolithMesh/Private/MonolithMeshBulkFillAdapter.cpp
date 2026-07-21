@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+﻿// SPDX-License-Identifier: MIT
 // MonolithMeshBulkFillAdapter — Phase 5 Step 5 adapter.
 //
 // Routes "mesh" target_namespace traffic from bulk_fill.apply / describe.schema
@@ -13,11 +13,15 @@
 //     Detects + reorders the Mobility-before-SimulatePhysics dependency per
 //     design Cross-Cutting Engine Quirks row.
 //
+//   * fill_kind=StaticMeshMaterialSlots — transactionally assign existing
+//     UMaterialInterface assets to exact, name-guarded UStaticMesh slots.
+//
 // `monolith_reindex` silent-prerequisite annotation: the describe tree surfaces
 // the dependency so callers know `search_meshes_by_size` requires a reindex
 // after structural mesh asset changes.
 
 #include "MonolithMeshBulkFillAdapter.h"
+#include "MonolithMeshExactNameUtils.h"
 #include "MonolithBulkFillRegistry.h"
 #include "MonolithBulkFillTypes.h"
 #include "Reflection/MonolithReflectionWalker.h"
@@ -27,6 +31,8 @@
 #include "Dom/JsonValue.h"
 #include "ScopedTransaction.h"
 #include "Engine/DataTable.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
 #include "UObject/UnrealType.h"
 
 #define LOCTEXT_NAMESPACE "MonolithMeshBulkFillAdapter"
@@ -202,6 +208,247 @@ namespace MonolithMeshBulkFillInternal
 		return Report;
 	}
 
+	struct FStaticMeshMaterialSlotPlan
+	{
+		int32 SlotIndex = INDEX_NONE;
+		UMaterialInterface* Material = nullptr;
+		FString CurrentMaterialPath;
+		FString ProposedMaterialPath;
+	};
+
+	static void AddMaterialSlotFailure(
+		FDryRunReport& Report,
+		const FString& Path,
+		const FString& Reason,
+		bool bSilentDrop = false)
+	{
+		FBulkFillFieldWrite Write;
+		Write.Path = Path;
+		Write.bOk = false;
+		Write.Reason = Reason;
+		Report.FieldWrites.Add(Write);
+		if (bSilentDrop)
+		{
+			Report.SilentDrops.Add(Write);
+		}
+		Report.Errors++;
+	}
+
+	static FDryRunReport HandleStaticMeshMaterialSlots(const FBulkFillSpec& Spec)
+	{
+		UObject* Asset = FMonolithAssetUtils::LoadAssetByPath(Spec.TargetAsset);
+		UStaticMesh* StaticMesh = Cast<UStaticMesh>(Asset);
+		if (!StaticMesh)
+		{
+			return MakeResolveFailureReport(FString::Printf(
+				TEXT("mesh adapter: StaticMeshMaterialSlots requires UStaticMesh target (got %s)"),
+				Asset ? *Asset->GetClass()->GetName() : TEXT("(null)")));
+		}
+
+		FDryRunReport Report;
+		for (const auto& Field : FMonolithJsonUtils::GetFields(Spec.Tree))
+		{
+			const FString FieldName = MonolithKeyToString(Field.Key);
+			if (FieldName != TEXT("fill_kind") && FieldName != TEXT("slots"))
+			{
+				AddMaterialSlotFailure(
+					Report,
+					FieldName,
+					FString::Printf(TEXT("StaticMeshMaterialSlots has no field '%s'"), *FieldName),
+					true);
+			}
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* SlotValues = nullptr;
+		if (!Spec.Tree->TryGetArrayField(TEXT("slots"), SlotValues) || !SlotValues)
+		{
+			AddMaterialSlotFailure(Report, TEXT("slots"), TEXT("StaticMeshMaterialSlots requires a 'slots' array"));
+			return Report;
+		}
+		if (SlotValues->IsEmpty())
+		{
+			AddMaterialSlotFailure(Report, TEXT("slots"), TEXT("StaticMeshMaterialSlots requires at least one slot assignment"));
+			return Report;
+		}
+
+		TArray<FStaticMeshMaterialSlotPlan> Plans;
+		TSet<int32> SeenSlotIndices;
+		for (int32 EntryIndex = 0; EntryIndex < SlotValues->Num(); ++EntryIndex)
+		{
+			const FString EntryPath = FString::Printf(TEXT("slots[%d]"), EntryIndex);
+			const TSharedPtr<FJsonObject>* EntryObject = nullptr;
+			if (!(*SlotValues)[EntryIndex].IsValid()
+				|| !(*SlotValues)[EntryIndex]->TryGetObject(EntryObject)
+				|| !EntryObject
+				|| !EntryObject->IsValid())
+			{
+				AddMaterialSlotFailure(Report, EntryPath, TEXT("slot assignment must be a JSON object"));
+				continue;
+			}
+
+			for (const auto& Field : FMonolithJsonUtils::GetFields(*EntryObject))
+			{
+				const FString FieldName = MonolithKeyToString(Field.Key);
+				if (FieldName != TEXT("slot_index")
+					&& FieldName != TEXT("expected_slot_name")
+					&& FieldName != TEXT("material_path"))
+				{
+					AddMaterialSlotFailure(
+						Report,
+						FString::Printf(TEXT("%s.%s"), *EntryPath, *FieldName),
+						FString::Printf(TEXT("slot assignment has no field '%s'"), *FieldName),
+						true);
+				}
+			}
+
+			double SlotIndexNumber = -1.0;
+			if (!(*EntryObject)->TryGetNumberField(TEXT("slot_index"), SlotIndexNumber)
+				|| !FMath::IsFinite(SlotIndexNumber))
+			{
+				AddMaterialSlotFailure(
+					Report,
+					EntryPath + TEXT(".slot_index"),
+					TEXT("slot_index must be a finite number"));
+				continue;
+			}
+			if (SlotIndexNumber < 0.0 || SlotIndexNumber >= StaticMesh->GetStaticMaterials().Num())
+			{
+				AddMaterialSlotFailure(
+					Report,
+					EntryPath + TEXT(".slot_index"),
+					FString::Printf(
+						TEXT("slot_index %.0f is outside StaticMesh slot range [0, %d)"),
+						SlotIndexNumber,
+						StaticMesh->GetStaticMaterials().Num()));
+				continue;
+			}
+
+			const int32 SlotIndex = static_cast<int32>(SlotIndexNumber);
+			if (SlotIndexNumber != static_cast<double>(SlotIndex))
+			{
+				AddMaterialSlotFailure(
+					Report,
+					EntryPath + TEXT(".slot_index"),
+					TEXT("slot_index must be an integer"));
+				continue;
+			}
+			if (SeenSlotIndices.Contains(SlotIndex))
+			{
+				AddMaterialSlotFailure(
+					Report,
+					EntryPath + TEXT(".slot_index"),
+					FString::Printf(TEXT("slot_index %d appears more than once"), SlotIndex));
+				continue;
+			}
+			SeenSlotIndices.Add(SlotIndex);
+
+			FString ExpectedSlotName;
+			if (!(*EntryObject)->TryGetStringField(TEXT("expected_slot_name"), ExpectedSlotName)
+				|| ExpectedSlotName.IsEmpty())
+			{
+				AddMaterialSlotFailure(
+					Report,
+					EntryPath + TEXT(".expected_slot_name"),
+					TEXT("expected_slot_name must be a non-empty string"));
+				continue;
+			}
+
+			const FName ActualSlotName = StaticMesh->GetStaticMaterials()[SlotIndex].MaterialSlotName;
+			if (!MonolithMeshExactNameUtils::EqualsCaseSensitive(ActualSlotName, ExpectedSlotName))
+			{
+				AddMaterialSlotFailure(
+					Report,
+					EntryPath + TEXT(".expected_slot_name"),
+					FString::Printf(
+						TEXT("slot %d name mismatch: expected '%s', actual '%s'"),
+						SlotIndex,
+						*ExpectedSlotName,
+						*ActualSlotName.ToString()));
+				continue;
+			}
+
+			FString MaterialPath;
+			if (!(*EntryObject)->TryGetStringField(TEXT("material_path"), MaterialPath)
+				|| MaterialPath.IsEmpty())
+			{
+				AddMaterialSlotFailure(
+					Report,
+					EntryPath + TEXT(".material_path"),
+					TEXT("material_path must be a non-empty UMaterialInterface asset path"));
+				continue;
+			}
+
+			UMaterialInterface* Material = FMonolithAssetUtils::LoadAssetByPath<UMaterialInterface>(MaterialPath);
+			if (!Material)
+			{
+				AddMaterialSlotFailure(
+					Report,
+					EntryPath + TEXT(".material_path"),
+					FString::Printf(TEXT("material_path does not resolve to UMaterialInterface: %s"), *MaterialPath));
+				continue;
+			}
+
+			UMaterialInterface* CurrentMaterial = StaticMesh->GetMaterial(SlotIndex);
+			FStaticMeshMaterialSlotPlan& Plan = Plans.AddDefaulted_GetRef();
+			Plan.SlotIndex = SlotIndex;
+			Plan.Material = Material;
+			Plan.CurrentMaterialPath = CurrentMaterial ? CurrentMaterial->GetPathName() : TEXT("None");
+			Plan.ProposedMaterialPath = Material->GetPathName();
+
+			FBulkFillFieldWrite Write;
+			Write.Path = EntryPath + TEXT(".material_path");
+			Write.CurrentValue = Plan.CurrentMaterialPath;
+			Write.ProposedValue = Plan.ProposedMaterialPath;
+			Write.bOk = true;
+			Report.FieldWrites.Add(Write);
+		}
+
+		if (Report.Errors > 0)
+		{
+			Report.bWouldApply = false;
+			return Report;
+		}
+
+		TArray<FStaticMeshMaterialSlotPlan> ChangedPlans;
+		for (const FStaticMeshMaterialSlotPlan& Plan : Plans)
+		{
+			if (Plan.CurrentMaterialPath != Plan.ProposedMaterialPath)
+			{
+				ChangedPlans.Add(Plan);
+			}
+		}
+
+		if (ChangedPlans.IsEmpty())
+		{
+			Report.bWouldApply = false;
+			return Report;
+		}
+
+		Report.WouldModify.AddUnique(Spec.TargetAsset);
+		if (Spec.bDryRun)
+		{
+			Report.bWouldApply = false;
+			return Report;
+		}
+
+		StaticMesh->SetFlags(RF_Transactional);
+		FScopedTransaction Transaction(
+			LOCTEXT("MeshBulkFill_StaticMeshMaterialSlots", "Monolith StaticMesh Material Slots Bulk Fill"));
+		StaticMesh->Modify();
+		FProperty* StaticMaterialsProperty = FindFProperty<FProperty>(
+			UStaticMesh::StaticClass(),
+			TEXT("StaticMaterials"));
+		StaticMesh->PreEditChange(StaticMaterialsProperty);
+		for (const FStaticMeshMaterialSlotPlan& Plan : ChangedPlans)
+		{
+			StaticMesh->SetMaterial(Plan.SlotIndex, Plan.Material);
+		}
+		StaticMesh->PostEditChange();
+		StaticMesh->MarkPackageDirty();
+		Report.bWouldApply = true;
+		return Report;
+	}
+
 	static FDryRunReport HandleActorProperties(const FBulkFillSpec& Spec)
 	{
 		// v1 stub for actor property bulk_fill — full implementation requires
@@ -262,7 +509,8 @@ namespace MonolithMeshBulkFillInternal
 		Root.FieldPath = TEXT("mesh");
 		Root.TypeName = TEXT("Namespace");
 		Root.ImportTextForm = TEXT(
-			"fill_kind in {SurfaceDataTable, ActorProperties} — target=<UDataTable | Actor path>");
+			"fill_kind in {SurfaceDataTable, ActorProperties, StaticMeshMaterialSlots} — "
+			"target=<UDataTable | Actor path | UStaticMesh>");
 
 		auto AddKind = [&](const TCHAR* Kind, const TCHAR* Sample)
 		{
@@ -278,6 +526,9 @@ namespace MonolithMeshBulkFillInternal
 		AddKind(
 			TEXT("ActorProperties"),
 			TEXT("{\"fill_kind\":\"ActorProperties\",\"properties\":{\"Mobility\":\"Movable\",\"bSimulatePhysics\":true}}"));
+		AddKind(
+			TEXT("StaticMeshMaterialSlots"),
+			TEXT("{\"fill_kind\":\"StaticMeshMaterialSlots\",\"slots\":[{\"slot_index\":0,\"expected_slot_name\":\"Material_0\",\"material_path\":\"/Game/Materials/MI_Wall.MI_Wall\"}]}"));
 
 		// monolith_reindex silent-prerequisite annotation.
 		FSchemaDescriptor Reindex;
@@ -326,11 +577,12 @@ FDryRunReport FMonolithMeshBulkFillAdapter::MeshBulkFill(const FBulkFillSpec& Sp
 	{
 		return MakeResolveFailureReport(TEXT(
 			"mesh adapter: spec.tree.fill_kind required — one of "
-			"'SurfaceDataTable', 'ActorProperties'"));
+			"'SurfaceDataTable', 'ActorProperties', 'StaticMeshMaterialSlots'"));
 	}
 
 	if (FillKind == TEXT("SurfaceDataTable")) return HandleSurfaceDataTable(Spec);
 	if (FillKind == TEXT("ActorProperties"))  return HandleActorProperties(Spec);
+	if (FillKind == TEXT("StaticMeshMaterialSlots")) return HandleStaticMeshMaterialSlots(Spec);
 
 	return MakeResolveFailureReport(FString::Printf(
 		TEXT("mesh adapter: unknown fill_kind '%s'"), *FillKind));
@@ -354,6 +606,61 @@ FSchemaDescriptor FMonolithMeshBulkFillAdapter::MeshDescribe(const FString& Targ
 		Err.ImportTextForm = FString::Printf(
 			TEXT("mesh describe: asset not found at '%s'"), *TargetAsset);
 		return Err;
+	}
+
+	if (UStaticMesh* StaticMesh = Cast<UStaticMesh>(Asset))
+	{
+		FSchemaDescriptor Root;
+		Root.FieldPath = TargetAsset;
+		Root.TypeName = TEXT("StaticMeshMaterialSlots");
+		Root.ImportTextForm = TEXT(
+			"{\"fill_kind\":\"StaticMeshMaterialSlots\",\"slots\":[{\"slot_index\":0,\"expected_slot_name\":\"Material_0\",\"material_path\":\"/Game/Materials/MI_Wall.MI_Wall\"}]}");
+
+		FSchemaDescriptor FillKind;
+		FillKind.FieldPath = TEXT("fill_kind");
+		FillKind.TypeName = TEXT("string");
+		FillKind.ImportTextForm = TEXT("StaticMeshMaterialSlots");
+		FillKind.bRequired = true;
+		Root.Children.Add(FillKind);
+
+		FSchemaDescriptor Slots;
+		Slots.FieldPath = TEXT("slots");
+		Slots.TypeName = TEXT("TArray<StaticMeshMaterialSlotAssignment>");
+		Slots.ImportTextForm = TEXT("[{slot_index,expected_slot_name,material_path}]");
+		Slots.bRequired = true;
+
+		FSchemaDescriptor Slot;
+		Slot.FieldPath = TEXT("StaticMeshMaterialSlotAssignment");
+		Slot.TypeName = TEXT("object");
+
+		FSchemaDescriptor SlotIndex;
+		SlotIndex.FieldPath = TEXT("slot_index");
+		SlotIndex.TypeName = TEXT("int32");
+		SlotIndex.ImportTextForm = TEXT("0");
+		SlotIndex.bRequired = true;
+		SlotIndex.RangeMin = 0.0f;
+		SlotIndex.RangeMax = FMath::Max(0, StaticMesh->GetStaticMaterials().Num() - 1);
+		Slot.Children.Add(SlotIndex);
+
+		FSchemaDescriptor ExpectedSlotName;
+		ExpectedSlotName.FieldPath = TEXT("expected_slot_name");
+		ExpectedSlotName.TypeName = TEXT("FName");
+		ExpectedSlotName.ImportTextForm = StaticMesh->GetStaticMaterials().IsEmpty()
+			? TEXT("")
+			: StaticMesh->GetStaticMaterials()[0].MaterialSlotName.ToString();
+		ExpectedSlotName.bRequired = true;
+		Slot.Children.Add(ExpectedSlotName);
+
+		FSchemaDescriptor MaterialPath;
+		MaterialPath.FieldPath = TEXT("material_path");
+		MaterialPath.TypeName = TEXT("UMaterialInterface*");
+		MaterialPath.ImportTextForm = TEXT("/Game/Path/To/Material.Material");
+		MaterialPath.bRequired = true;
+		Slot.Children.Add(MaterialPath);
+
+		Slots.Children.Add(Slot);
+		Root.Children.Add(Slots);
+		return Root;
 	}
 
 	FSchemaDescriptor Out = FMonolithReflectionWalker::DescribeStruct(Asset->GetClass());

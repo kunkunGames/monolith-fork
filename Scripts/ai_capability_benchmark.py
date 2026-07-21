@@ -21,6 +21,7 @@ weight is concentrated on ADVERSARIAL categories that a clean-fixture happy-path
   discovery        - ai.list_* / search_ai_assets find the seeded fixtures (portable; not GO content)
   read_schema      - monolith_discover schema for read actions (lenient)
   edit_schema      - monolith_discover schema for edit actions (strict: isError fails)
+  catalog_schema   - unweighted schema discovery for every remaining live ai action
   edit_execute     - call real edit actions against fixtures AND read the mutation back
   error_path       - send invalid inputs and verify an INPUT-SPECIFIC structured isError that
                      names the OFFENDING IDENTIFIER (a reject-everything server cannot pass)
@@ -41,17 +42,18 @@ actions). So happy-path reads are minimized and the bulk of the weight sits on r
 edits, the offending-identifier error gate, duplicate rejection, and the lint/validate gate.
 
 The weights live in the single ``WEIGHTS`` dict below and are the sole source of truth consumed by
-aggregate(), the manifest score_formula, the comparison renderer, and this docstring. Every `ai`
-action name and param used here is verified against the live action catalog
-(`Saved/Monolith/LogAnalysis/_ai_catalog.txt`, 182 ai actions) and Source/MonolithAI/Private/*.cpp
+aggregate(), the manifest score_formula, the comparison renderer, and this docstring. Generation
+reads the live, paginated `ai` catalog, proves its count/version are stable, verifies every curated
+schema action still exists, and appends one read-only `catalog_schema` probe for each otherwise
+uncovered live action. The normalized action-set hash and exact coverage counts are written to the
+manifest; transport failure or catalog drift aborts before either canonical file is replaced.
+Curated action parameters and handler contracts are verified against Source/MonolithAI/Private/*.cpp
 (RegisterAction(TEXT("ai"), TEXT("<name>"), ...)) — no invented names. In particular, the `ai`
 namespace exposes NO granular StateTree authoring (no create_state_tree / add_st_state /
-compile_state_tree / add_st_task / add_st_transition / *_st_state); StateTree is reachable in the
-catalog only via `create_st_from_template` and the `lint_state_tree` quality lint, BOTH of which are
-runtime stubs returning isError "StateTree module not available (WITH_STATETREE=0)" on this build —
-so they remain ONLY in the read_schema/edit_schema/discovery lists (schema-presence tasks that pass
-because the action is registered), never in execute/lint gates. Verified handler error/return
-shapes (file:line in METRICS.md):
+compile_state_tree / add_st_task / add_st_transition / *_st_state). The registered StateTree
+create/lint actions are runtime stubs returning isError "StateTree module not available
+(WITH_STATETREE=0)" on this build, while runtime/crowd actions remain discovery-only; none enter an
+execute/lint gate. Verified handler error/return shapes (file:line in METRICS.md):
   - add_bb_key duplicate -> Error("Key '<name>' already exists in this blackboard")  [Blackboard L767]
   - remove_bb_key missing -> Error("Key '<name>' not found in blackboard ...")        [Blackboard L839]
   - create_*/EnsureAssetPathFree dup -> Error("Asset already exists at '<path>'. ...") [Internal L155]
@@ -69,6 +71,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import hashlib
 import json
 import pathlib
 import socket
@@ -91,6 +94,7 @@ from benchmark_common import (
     classify_mcp_protocol_failure,
     display_path,
     load_task_corpus,
+    paginate_discover_action_names,
     resolve_plugin_path,
     status_identity,
     status_identity_mismatches,
@@ -113,6 +117,7 @@ RUN_OUTPUT_FILENAMES = (
 )
 
 AI_TASK_CATEGORIES = {
+    "catalog_schema",
     "compile_gate",
     "discovery",
     "duplicate_reject",
@@ -122,8 +127,15 @@ AI_TASK_CATEGORIES = {
     "read_schema",
 }
 
-# The MCP tool name for the ai namespace (verified: Skills/unreal-ai/SKILL.md "245 actions via
-# ai_query(action, params)"). All ai.* actions are dispatched through this single tool.
+SCHEMA_DISCOVERY_CATEGORIES = frozenset({
+    "catalog_schema",
+    "edit_schema",
+    "read_schema",
+})
+
+# The MCP tool name for the ai namespace. All executable ai.* actions are dispatched through this
+# single tool; generation obtains the current action count from the live catalog instead of a
+# source-scanned or documentation snapshot.
 AI_TOOL = "ai_query"
 
 # Single source of truth for the composite score. aggregate(), the manifest score_formula,
@@ -637,14 +649,16 @@ def load_jsonl(path: pathlib.Path) -> List[Dict[str, Any]]:
 
 def write_json(path: pathlib.Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="\n") as handle:
+    # Preserve the client's native text convention so regenerated Perforce text files do not turn
+    # unchanged canonical rows into newline-only diffs.
+    with path.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, ensure_ascii=False)
         handle.write("\n")
 
 
 def write_jsonl(path: pathlib.Path, rows: Iterable[Dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="\n") as handle:
+    with path.open("w", encoding="utf-8") as handle:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
             handle.write("\n")
@@ -1624,7 +1638,7 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
         evidence = {"has_planning_signals": has_signals, "has_skill": has_skill,
                     "subsystem": task.get("subsystem", "")}
 
-    elif category == "edit_schema":
+    elif category in ("edit_schema", "catalog_schema"):
         schema = data.get("schema") if isinstance(data, dict) else None
         if not isinstance(schema, dict):
             schema = data
@@ -1687,6 +1701,12 @@ def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], r
 
     rates: Dict[str, float] = {name: rate(name) for name in WEIGHTS}
     ai_capability_score = sum(WEIGHTS[name] * rates[name] for name in WEIGHTS)
+    catalog_schema_rows = [
+        row for row in rows if row["category"] in SCHEMA_DISCOVERY_CATEGORIES
+    ]
+    catalog_schema_rate = avg([
+        1.0 if row["direct_success"] else 0.0 for row in catalog_schema_rows
+    ])
 
     # Per-subsystem breakdown over the executed edit_execute + error_path + duplicate_reject rows
     # (the adversarial categories), so a regression localized to one subsystem is visible.
@@ -1712,6 +1732,7 @@ def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], r
         "metrics": {
             "ai_capability_score": round(ai_capability_score, 6),
             **{f"{name}_rate": round(rates[name], 6) for name in WEIGHTS},
+            "catalog_schema_rate": round(catalog_schema_rate, 6),
             "task_count": len(rows),
             "error_count": error_count,
         },
@@ -1771,6 +1792,7 @@ def _cleanup_verify_is_meaningful(verify: Any) -> bool:
 def validate_task_integrity(tasks: List[Dict[str, Any]]) -> None:
     seen_ids: Dict[str, int] = {}
     seen_action_desc: Dict[Tuple[str, str], str] = {}
+    seen_schema_actions: Dict[str, str] = {}
     for index, task in enumerate(tasks, 1):
         task_id = str(task.get("id", ""))
         if not task_id:
@@ -1787,6 +1809,40 @@ def validate_task_integrity(tasks: List[Dict[str, Any]]) -> None:
             raise RuntimeError(f"duplicate action+description for {previous} and {task_id}: {key}")
         seen_action_desc[key] = task_id
         category = task.get("category")
+        if category in SCHEMA_DISCOVERY_CATEGORIES:
+            action = str(task.get("action", "")).strip()
+            if not action:
+                raise RuntimeError(f"{task_id} schema discovery task has no action")
+            previous_schema = seen_schema_actions.get(action)
+            if previous_schema:
+                raise RuntimeError(
+                    f"duplicate schema discovery action for {previous_schema} and {task_id}: {action}"
+                )
+            seen_schema_actions[action] = task_id
+        if category == "catalog_schema":
+            action = str(task.get("action", "")).strip()
+            expected_arguments = {
+                "action": action,
+                "mode": "schema",
+                "namespace": "ai",
+            }
+            if task.get("tool") != "monolith_discover":
+                raise RuntimeError(f"{task_id} catalog_schema must use monolith_discover")
+            if task.get("arguments") != expected_arguments:
+                raise RuntimeError(
+                    f"{task_id} catalog_schema arguments must be {expected_arguments}"
+                )
+            if task.get("safety") != "read_only_discovery":
+                raise RuntimeError(f"{task_id} catalog_schema must be read_only_discovery")
+            forbidden_fields = {
+                "chain", "cleanup_chain", "cleanup_verify", "gate_args", "setup_chain",
+            }
+            present_forbidden = sorted(forbidden_fields.intersection(task))
+            if present_forbidden:
+                raise RuntimeError(
+                    f"{task_id} catalog_schema cannot declare execution lifecycle fields: "
+                    f"{present_forbidden}"
+                )
         if category == "edit_execute" and not _verify_is_meaningful(task.get("verify")):
             raise RuntimeError(f"{task_id} edit_execute has a read_action verify with no assertion verb "
                                f"(content-free no-op read-back): {task.get('verify')}")
@@ -1941,11 +1997,258 @@ def build_static_tasks() -> List[Dict[str, Any]]:
     return tasks
 
 
-def generate_tasks(tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dict[str, Any]:
+def require_generation_status(url: str, timeout_s: float, phase: str) -> Dict[str, Any]:
+    """Return one validated live status snapshot for catalog-bound generation."""
+    response = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
+    validation = validate_status_response(response)
+    if not validation.get("ok"):
+        failure_kind = str(validation.get("failure_kind", "protocol_error"))
+        raw = str(validation.get("raw", ""))[:300]
+        raise RuntimeError(
+            f"AICapability {phase} status failed ({failure_kind}): "
+            f"{raw or '<no diagnostic>'}"
+        )
+    status = dict(validation["status"])
+    catalog_version = str(status.get("catalog_version", "")).strip()
+    if not catalog_version:
+        raise RuntimeError(f"AICapability {phase} status omitted catalog_version")
+    return status
+
+
+def _require_generation_discover_data(
+    url: str,
+    arguments: Dict[str, Any],
+    timeout_s: float,
+    phase: str,
+) -> Dict[str, Any]:
+    response = mcp_call(url, "monolith_discover", arguments, timeout_s=timeout_s)
+    if response.get("transport_error"):
+        raise RuntimeError(
+            f"AICapability {phase} discovery transport failure: "
+            f"{str(response.get('raw', ''))[:300]}"
+        )
+    protocol_failure = classify_protocol_failure(response)
+    if protocol_failure:
+        raise RuntimeError(
+            f"AICapability {phase} discovery {protocol_failure}: "
+            f"{str(response.get('raw', result_text(response)))[:300]}"
+        )
+    payload = result_payload(response)
+    if payload.get("isError"):
+        raise RuntimeError(
+            f"AICapability {phase} discovery returned isError: {result_text(response)[:300]}"
+        )
+    data = result_data(response)
+    if not isinstance(data, dict):
+        raise RuntimeError(f"AICapability {phase} discovery returned no object payload")
+    return data
+
+
+def discover_ai_catalog(
+    url: str,
+    timeout_s: float = 45.0,
+) -> Tuple[List[str], Dict[str, Any]]:
+    """Enumerate the complete live ai catalog under one stable registry identity."""
+    start_status = require_generation_status(url, timeout_s, "pre-discovery")
+    start_catalog_version = str(start_status["catalog_version"]).strip()
+
+    summary = _require_generation_discover_data(
+        url,
+        {"mode": "summary", "limit": 1000},
+        timeout_s,
+        "summary",
+    )
+    summary_catalog_version = str(summary.get("catalog_version", "")).strip()
+    if summary_catalog_version != start_catalog_version:
+        raise RuntimeError(
+            "AICapability status/discover catalog version mismatch "
+            f"({start_catalog_version} != {summary_catalog_version or '<missing>'})"
+        )
+    namespace_rows = summary.get("namespaces")
+    if not isinstance(namespace_rows, list):
+        raise RuntimeError("AICapability discovery summary returned no namespaces list")
+    ai_rows = [
+        row for row in namespace_rows
+        if isinstance(row, dict) and str(row.get("namespace", "")).strip() == "ai"
+    ]
+    if len(ai_rows) != 1:
+        raise RuntimeError(
+            f"AICapability discovery summary must contain exactly one ai namespace row; "
+            f"observed={len(ai_rows)}"
+        )
+    expected_action_count = ai_rows[0].get("action_count")
+    if (
+        isinstance(expected_action_count, bool)
+        or not isinstance(expected_action_count, int)
+        or expected_action_count < 1
+    ):
+        raise RuntimeError(
+            "AICapability discovery summary has invalid ai action_count="
+            f"{expected_action_count!r}"
+        )
+
+    page_catalog_versions: set[str] = set()
+
+    def fetch_page(arguments: Dict[str, Any]) -> Dict[str, Any]:
+        data = _require_generation_discover_data(
+            url, arguments, timeout_s, "action-page"
+        )
+        page_catalog_version = str(data.get("catalog_version", "")).strip()
+        if not page_catalog_version:
+            raise RuntimeError("AICapability action-page discovery omitted catalog_version")
+        page_catalog_versions.add(page_catalog_version)
+        rows = data.get("actions")
+        if not isinstance(rows, list):
+            raise RuntimeError("AICapability action-page discovery returned no actions list")
+        for index, row in enumerate(rows):
+            action = row.get("action") if isinstance(row, dict) else row
+            if not isinstance(action, str) or not action.strip():
+                raise RuntimeError(
+                    f"AICapability action-page discovery returned invalid action at index "
+                    f"{index}: {action!r}"
+                )
+        return data
+
+    action_names = paginate_discover_action_names(fetch_page, "ai")
+    normalized_actions = [str(name).strip() for name in action_names]
+    if not normalized_actions:
+        raise RuntimeError("live ai catalog contains no actions")
+
+    seen_casefold: Dict[str, str] = {}
+    for action in normalized_actions:
+        folded = action.casefold()
+        previous = seen_casefold.get(folded)
+        if previous is not None:
+            raise RuntimeError(
+                f"live ai catalog contains duplicate action names: {previous!r}, {action!r}"
+            )
+        seen_casefold[folded] = action
+    unique_actions = sorted(normalized_actions, key=lambda value: (value.casefold(), value))
+    if len(unique_actions) != expected_action_count:
+        raise RuntimeError(
+            "AICapability live ai action-count mismatch: "
+            f"summary={expected_action_count}, enumerated={len(unique_actions)}"
+        )
+
+    end_status = require_generation_status(url, timeout_s, "post-discovery")
+    end_catalog_version = str(end_status["catalog_version"]).strip()
+    if end_catalog_version != start_catalog_version:
+        raise RuntimeError(
+            "AICapability catalog changed during generation "
+            f"({start_catalog_version} -> {end_catalog_version})"
+        )
+    unexpected_page_versions = sorted(
+        version for version in page_catalog_versions if version != start_catalog_version
+    )
+    if unexpected_page_versions:
+        raise RuntimeError(
+            "AICapability action-page catalog_version disagrees with monolith_status: "
+            f"expected {start_catalog_version}, observed {unexpected_page_versions}"
+        )
+    return unique_actions, start_status
+
+
+def schema_discovery_actions(tasks: Iterable[Dict[str, Any]]) -> List[str]:
+    return sorted({
+        str(task.get("action", "")).strip()
+        for task in tasks
+        if task.get("category") in SCHEMA_DISCOVERY_CATEGORIES
+        and str(task.get("action", "")).strip()
+    }, key=lambda value: (value.casefold(), value))
+
+
+def action_set_sha256(actions: Iterable[str]) -> str:
+    normalized = sorted(
+        {str(action).strip() for action in actions if str(action).strip()},
+        key=lambda value: (value.casefold(), value),
+    )
+    payload = "".join(f"{action}\n" for action in normalized).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def validate_ai_catalog_contract(
+    tasks: List[Dict[str, Any]],
+    live_actions: Iterable[str],
+    *,
+    require_exact: bool,
+) -> Dict[str, Any]:
+    live_action_set = {str(action).strip() for action in live_actions if str(action).strip()}
+    schema_action_set = set(schema_discovery_actions(tasks))
+    unexpected_actions = sorted(schema_action_set - live_action_set)
+    uncovered_actions = sorted(live_action_set - schema_action_set)
+    if unexpected_actions:
+        raise RuntimeError(
+            "AICapability schema tasks reference actions absent from the live ai catalog: "
+            + ", ".join(unexpected_actions)
+        )
+    if require_exact and uncovered_actions:
+        raise RuntimeError(
+            "AICapability live ai actions lack schema discovery tasks: "
+            + ", ".join(uncovered_actions)
+        )
+    return {
+        "live_action_count": len(live_action_set),
+        "schema_covered_action_count": len(schema_action_set),
+        "uncovered_action_count": len(uncovered_actions),
+        "uncovered_actions": uncovered_actions,
+        "catalog_action_set_sha256": action_set_sha256(live_action_set),
+    }
+
+
+def append_live_schema_coverage_tasks(
+    tasks: List[Dict[str, Any]],
+    live_actions: Iterable[str],
+) -> List[str]:
+    """Append deterministic discovery-only tasks for every unprobed live ai action."""
+    existing_schema_actions = set(schema_discovery_actions(tasks))
+    uncovered_actions = sorted(
+        {str(action).strip() for action in live_actions if str(action).strip()}
+        - existing_schema_actions,
+        key=lambda value: (value.casefold(), value),
+    )
+    for action in uncovered_actions:
+        tasks.append({
+            "id": f"AIB-{len(tasks) + 1:03d}",
+            "category": "catalog_schema",
+            "namespace": "ai",
+            "action": action,
+            "tool": "monolith_discover",
+            "arguments": {"action": action, "mode": "schema", "namespace": "ai"},
+            "expected": {"requires_planning_signals": True, "requires_skill": True},
+            "safety": "read_only_discovery",
+            "subsystem": "catalog",
+            "description": f"Discover catalog schema for ai.{action}",
+        })
+    return uncovered_actions
+
+
+def generate_tasks(
+    url: str,
+    tasks_path: pathlib.Path,
+    manifest_path: pathlib.Path,
+    timeout_s: float = 45.0,
+) -> Dict[str, Any]:
     tasks_path = resolve_plugin_path(tasks_path)
     manifest_path = resolve_plugin_path(manifest_path)
     tasks = build_static_tasks()
-    write_jsonl(tasks_path, tasks)
+    curated_task_count = len(tasks)
+    live_actions, generation_status = discover_ai_catalog(url, timeout_s=timeout_s)
+    initial_catalog_validation = validate_ai_catalog_contract(
+        tasks, live_actions, require_exact=False
+    )
+    generated_schema_actions = append_live_schema_coverage_tasks(tasks, live_actions)
+    validate_task_integrity(tasks)
+    final_catalog_validation = validate_ai_catalog_contract(
+        tasks, live_actions, require_exact=True
+    )
+    catalog_validation = {
+        **final_catalog_validation,
+        "preexisting_schema_covered_action_count": initial_catalog_validation[
+            "schema_covered_action_count"
+        ],
+        "generated_schema_coverage_count": len(generated_schema_actions),
+        "generated_schema_coverage_actions": generated_schema_actions,
+    }
 
     edit_schema_subsystems: Dict[str, int] = {}
     for _, sub in AI_EDIT_ACTIONS:
@@ -1956,7 +2259,8 @@ def generate_tasks(tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dic
         "description": (
             "Measures engine-native AI authoring capability over the ai namespace's largest "
             "subsystems (Behavior Tree, Blackboard, EQS, plus the StateTree SCHEMA surface): "
-            "fixture discovery, read/edit action schemas, read-back-verified edit execution, "
+            "fixture discovery, complete live-catalog schemas, read/edit action schemas, "
+            "read-back-verified edit execution, "
             "input-specific error handling that names the offending identifier, duplicate-name "
             "rejection, and a falsifiable Behavior Tree validate gate (an empty BT must validate "
             "valid==false with an error issue; a clean BT must validate valid==true). NOTE: "
@@ -1966,8 +2270,13 @@ def generate_tasks(tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dic
         "primary_score": "ai_capability_score",
         "expected_namespace": "ai",
         "ai_tool": AI_TOOL,
+        "catalog_version": str(generation_status.get("catalog_version", "")),
+        "catalog_action_count": len(live_actions),
+        "catalog_action_set_sha256": action_set_sha256(live_actions),
+        "catalog_validation": catalog_validation,
         "generated_at": utc_now(),
         "task_count": len(tasks),
+        "curated_task_count": curated_task_count,
         "category_counts": count_by(tasks, "category"),
         "edit_schema_subsystems": edit_schema_subsystems,
         "subsystems_tested": ["blackboard", "behavior_tree", "state_tree", "eqs"],
@@ -1989,17 +2298,20 @@ def generate_tasks(tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dic
         "setup_fixtures_command": "python Scripts/ai_capability_benchmark.py setup_fixtures --mcp-url http://localhost:9316/mcp",
         "run_command": "python Scripts/ai_capability_benchmark.py run --mcp-url http://localhost:9316/mcp --output-dir Saved/Monolith/Benchmarks/AICapability/<label> --label <label>",
         "score_dimensions": list(SCORE_DIMENSIONS),
+        "diagnostic_dimensions": ["catalog_schema_rate"],
         "run_gates": {
             "max_transport_failed_fraction": DEFAULT_MAX_TRANSPORT_FAILED_FRACTION,
             "max_consecutive_transport_failures": DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
             "min_transport_fraction_sample": DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES,
             "status_transport_failure_aborts_before_tasks": True,
             "invalid_status_response_aborts_before_tasks": True,
+            "canonical_catalog_version_mismatch_aborts_before_tasks": True,
             "invalid_run_writes_summary": False,
         },
-        "catalog_version_verified": "ai-182-actions (Saved/Monolith/LogAnalysis/_ai_catalog.txt + Source/MonolithAI RegisterAction verified 2026-06-18; StateTree create/lint registered but stubbed on WITH_STATETREE=0)",
+        "catalog_version_verified": str(generation_status.get("catalog_version", "")),
         "task_file": display_path(tasks_path),
     }
+    write_jsonl(tasks_path, tasks)
     write_json(manifest_path, manifest)
     return manifest
 
@@ -2333,8 +2645,35 @@ def run_benchmark(
 
     status = dict(status_validation["status"])
     start_identity = status_identity(status, endpoint=url)
+    expected_catalog = str(corpus.manifest.get("catalog_version", "")).strip()
+    observed_catalog = str(status.get("catalog_version", "")).strip()
+    if corpus.canonical and (
+        not expected_catalog or observed_catalog != expected_catalog
+    ):
+        failure = {
+            "label": label,
+            "completion_status": "aborted_catalog_identity_mismatch",
+            "failure_stage": "status_preflight",
+            "failure_kind": "catalog_identity_mismatch",
+            "metrics_scope": "not_started",
+            "completed_task_count": 0,
+            "total_task_count": len(tasks),
+            "expected_catalog_version": expected_catalog,
+            "observed_catalog_version": observed_catalog,
+            "error": (
+                "canonical AICapability manifest catalog_version must exactly match "
+                "the live status catalog_version before fixture or task calls"
+            ),
+        }
+        attach_run_context(failure, corpus, start_identity)
+        write_run_failure(output_dir, failure)
+        return failure
+
     benchmark_inputs = build_benchmark_inputs(
-        "AICapability", tasks_path=tasks_path, mcp_status=status
+        "AICapability",
+        tasks_path=tasks_path,
+        mcp_status=status,
+        extra_files={"runner": pathlib.Path(__file__)},
     )
 
     if require_fixtures:
@@ -2669,9 +3008,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    gen = sub.add_parser("generate", help="Generate static task fixtures + manifest")
+    gen = sub.add_parser("generate", help="Generate catalog-bound task fixtures + manifest")
+    gen.add_argument("--mcp-url", default=DEFAULT_MCP_URL)
     gen.add_argument("--tasks", type=pathlib.Path, default=DEFAULT_TASKS)
     gen.add_argument("--manifest", type=pathlib.Path, default=DEFAULT_MANIFEST)
+    gen.add_argument("--request-timeout-s", type=float, default=45.0)
 
     sf_cmd = sub.add_parser("setup_fixtures",
                             help="Create AICapability AI fixtures at /Game/Benchmarks/AI/ via MCP")
@@ -2730,7 +3071,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     if args.cmd == "generate":
-        manifest = generate_tasks(args.tasks, args.manifest)
+        manifest = generate_tasks(
+            args.mcp_url,
+            args.tasks,
+            args.manifest,
+            timeout_s=args.request_timeout_s,
+        )
         sys.stdout.buffer.write((json.dumps(manifest, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
         return 0
 

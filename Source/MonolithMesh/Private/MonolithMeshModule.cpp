@@ -4,10 +4,12 @@
 #include "MonolithMeshTechArtActions.h"
 #include "MonolithMeshQualityActions.h"
 #include "MonolithMeshValidationActions.h"
+#include "MonolithMeshReplacementActions.h"
 #include "MonolithLevelInstanceActions.h"
 #include "MonolithHlodActions.h"
 #include "MonolithActorMergeActions.h"
 #include "MonolithMeshBulkFillAdapter.h"
+#include "MonolithActionExecutionGuard.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithSettings.h"
@@ -37,10 +39,14 @@ void FMonolithMeshModule::StartupModule()
 		FMonolithMeshTechArtActions::RegisterActions(OwnedRegistry);
 		FMonolithMeshQualityActions::RegisterActions(OwnedRegistry);
 		FMonolithMeshValidationActions::RegisterActions(OwnedRegistry);
+		FMonolithMeshReplacementActions::RegisterActions(OwnedRegistry);
 		FMonolithLevelInstanceActions::RegisterActions(OwnedRegistry);
 		FMonolithHlodActions::RegisterActions(OwnedRegistry);
 		FMonolithActorMergeActions::RegisterActions(OwnedRegistry);
 	});
+	FMonolithActionExecutionGuard::Get().RegisterHandlerOwnedSourceControlActions(
+		TEXT("mesh"),
+		{TEXT("replace_static_mesh_geometry_in_place")});
 
 #if WITH_GEOMETRYSCRIPT
 	HandlePool = NewObject<UMonolithMeshHandlePool>();
@@ -94,6 +100,7 @@ void FMonolithMeshModule::ShutdownModule()
 #endif
 
 	FMonolithMeshBulkFillAdapter::Unregister();
+	FMonolithActionExecutionGuard::Get().UnregisterHandlerOwnedSourceControlActions(TEXT("mesh"));
 	FMonolithToolRegistry::Get().UnregisterOwner(TEXT("MonolithMesh"));
 }
 

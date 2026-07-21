@@ -51,6 +51,12 @@ This skill owns the mesh **ASSET** (the StaticMesh/SkeletalMesh on disk and its 
 | `release_handle` | Release a mesh handle, freeing memory |
 | `save_handle` | Save a mesh handle as a new StaticMesh asset with auto-generated collision |
 
+### Transactional replacement (1)
+
+| Action | Purpose |
+|--------|---------|
+| `replace_static_mesh_geometry_in_place` | Narrow v1 replacement for committed, non-Nanite/no-HiRes StaticMeshes with named/remapped polygon-group slots or an explicit strict single-slot policy and target authored simple collision; preserves logical identity, exact section overrides and `NeverStream`, and enforces an exact numbered changelist, no-PIE/SIE execution, rollback, save/reload, and exact readback |
+
 ### Inspection (12)
 
 | Action | Purpose |
@@ -173,6 +179,8 @@ Adjacent mesh-related skills outside the split:
 
 - **Inspect a mesh:** `get_mesh_info` → `analyze_mesh_quality` → `get_mesh_lods` / `compare_meshes`
 - **Edit a mesh (GeometryScript):** `create_handle` → [`mesh_boolean` | `mesh_simplify` | `mesh_remesh` | `fill_holes` | `compute_uvs`] → `save_handle` → `release_handle`
+- **Assign existing materials to existing StaticMesh slots:** follow [StaticMesh material-slot authoring](references/material-slot-authoring.md) for the strict `bulk_fill.apply` dry-run, commit, save/reload, and readback contract
+- **Name-preserving donor geometry migration:** `replace_static_mesh_geometry_in_place` with `dry_run=true` → review every policy/mapping and source-control preflight → repeat with `dry_run=false, confirm=true` → inspect reload/readback postconditions
 - **Game-ready pass:** `validate_game_ready` → `fix_mesh_quality` → `auto_generate_lods` → `set_mesh_collision` → `compare_lod_chain`
 - **Optimize a region:** `get_region_performance` → `get_triangle_budget` → `find_instancing_candidates` → `convert_to_hism` / `generate_proxy_mesh`
 
@@ -180,6 +188,7 @@ Adjacent mesh-related skills outside the split:
 
 - `create_handle` opens a server-side editable mesh; always `release_handle` (or rely on idle eviction). `list_handles` shows leaks.
 - `save_handle` writes a new `StaticMesh` asset (auto-collision); it does NOT place a level actor — use `scene` to spawn it.
+- `replace_static_mesh_geometry_in_place` is the only mesh action for name-preserving geometry replacement. Its narrow contract rejects redirects, relative/filesystem paths, packages missing an on-disk committed file, dirty packages, missing render data, source/target meshes or dependencies with active compilation, HiRes or Nanite data, missing/ambiguous material-slot metadata, wrong-case target-slot spellings (`Wall` never satisfies `wall`), unsupported collision semantics, open target editors, section topology/ordered-slot mismatches, stale/added/deleted/ignored source-control states, a default or mismatched `target_changelist`, active/queued PIE or SIE execution, and execute calls without `confirm=true`. Use `preserve_target_single_slot` only for the explicit legacy case where source and target each have one material and every source/target LOD has one polygon group/render section; it may canonicalize the sole unnamed source or target polygon-group label to the target's sole canonical slot, but still rejects every multi-slot ambiguity. Dry-run changes only its snapshot comparison. The target must have authored simple primitives with `UseSimpleAsComplex` or `UseSimpleAndComplex` and no external complex mesh; `UseSimpleAndComplex` rebuilds derived complex collision from the copied geometry while preserving authored `UBodySetup` state. It never waits through active compilation or auto-checks out, and it revalidates the exact CL after reload as well as after save. Do not substitute `save_handle` or `import_mesh` overwrite paths.
 - GeometryScript ops require the engine built `#if WITH_GEOMETRYSCRIPT`; they error out if the plugin is disabled.
 - `search_meshes_by_size` / `get_mesh_catalog_stats` need the mesh catalog indexed first (`monolith_reindex()`).
 - `merge_actors` / `create_proxy_mesh_from_actors` require `confirm=true` and a `keep_sources` policy; previews are read-only.

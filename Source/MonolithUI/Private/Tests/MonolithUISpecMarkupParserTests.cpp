@@ -12,7 +12,11 @@
 #include "Registry/MonolithUIRegistrySubsystem.h"
 #include "MonolithUISlotActions.h"
 #include "MonolithUIStylingActions.h"
+#include "Blueprint/WidgetTree.h"
 #include "WidgetBlueprint.h"
+#include "Components/Border.h"
+#include "Components/BorderSlot.h"
+#include "Components/TextBlock.h"
 
 namespace
 {
@@ -377,6 +381,710 @@ bool FMonolithUISpecMarkupBuildDumpRoundtripTest::RunTest(const FString& /*Param
 	if (DumpedButton.IsValid())
 	{
 		TestEqual(TEXT("dumped button type"), DumpedButton->GetStringField(TEXT("type")), TEXT("Button"));
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithUISpecRequiredTextStyleAndSiblingOrderDiffTest,
+	"MonolithUI.SpecMarkup.DiffRequiredTextStyleAndSiblingOrder",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUISpecRequiredTextStyleAndSiblingOrderDiffTest::RunTest(const FString& /*Parameters*/)
+{
+	if (!TestNotNull(TEXT("UMonolithUIRegistrySubsystem available"), UMonolithUIRegistrySubsystem::Get()))
+	{
+		return false;
+	}
+
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	MonolithUI::FSpecActions::Register(Registry);
+	FMonolithUIActions::RegisterActions(Registry);
+	FMonolithUIStylingActions::RegisterActions(Registry);
+
+	const FString AssetPath = TEXT("/Game/Tests/Monolith/UI/WBP_SpecRequiredTextStyleOrder");
+	TSharedPtr<FJsonObject> ConvertParams = MakeShared<FJsonObject>();
+	ConvertParams->SetStringField(
+		TEXT("markup"),
+		TEXT("<VerticalBox Name=\"RootBox\">"
+			 "<TextBlock Name=\"FirstText\" Text=\"First\" FontSize=\"31\" />"
+			 "<TextBlock Name=\"SecondText\" Text=\"Second\" FontSize=\"20\" />"
+			 "</VerticalBox>"));
+	ConvertParams->SetStringField(TEXT("root_save_path"), AssetPath);
+	const FMonolithActionResult ConvertResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("convert_markup_to_ui_spec"), ConvertParams);
+	if (!TestTrue(TEXT("convert action succeeds"), ConvertResult.bSuccess && ConvertResult.Result.IsValid()))
+	{
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> BuildParams = MakeShared<FJsonObject>();
+	const TSharedPtr<FJsonObject> FixtureSpec = ConvertResult.Result->GetObjectField(TEXT("spec"));
+	const TSharedPtr<FJsonObject> FixtureRoot = FixtureSpec->GetObjectField(TEXT("rootWidget"));
+	TSharedPtr<FJsonObject> FixtureFirst;
+	if (!TestTrue(TEXT("fixture contains FirstText"), FindNodeById(FixtureRoot, TEXT("FirstText"), FixtureFirst)))
+	{
+		return false;
+	}
+	const TSharedPtr<FJsonObject> FixtureContent = FixtureFirst->GetObjectField(TEXT("content"));
+	FixtureContent->SetStringField(TEXT("fontFamily"), TEXT("/Engine/EngineFonts/RobotoDistanceField.RobotoDistanceField"));
+	FixtureContent->SetStringField(TEXT("typeface"), TEXT("Italic"));
+	FixtureContent->SetNumberField(TEXT("letterSpacing"), 14);
+	FixtureContent->SetStringField(TEXT("justification"), TEXT("Right"));
+	FixtureContent->SetNumberField(TEXT("outlineSize"), 2);
+	FixtureContent->SetStringField(TEXT("outlineColor"), TEXT("#FF4000FF"));
+	TSharedPtr<FJsonObject> FixtureShadowOffset = MakeShared<FJsonObject>();
+	FixtureShadowOffset->SetNumberField(TEXT("x"), 3.0);
+	FixtureShadowOffset->SetNumberField(TEXT("y"), 4.0);
+	FixtureContent->SetObjectField(TEXT("shadowOffset"), FixtureShadowOffset);
+	FixtureContent->SetStringField(TEXT("shadowColor"), TEXT("#00000080"));
+	FixtureContent->SetNumberField(TEXT("lineHeightPercentage"), 1.25);
+	TSharedPtr<FJsonObject> FixtureSecond;
+	if (!TestTrue(TEXT("fixture contains SecondText"), FindNodeById(FixtureRoot, TEXT("SecondText"), FixtureSecond)))
+	{
+		return false;
+	}
+	const UTextBlock* DefaultTextBlock = GetDefault<UTextBlock>();
+	if (!TestNotNull(TEXT("default TextBlock available"), DefaultTextBlock)
+		|| !TestNotNull(TEXT("default TextBlock font object available"), DefaultTextBlock->GetFont().FontObject.Get()))
+	{
+		return false;
+	}
+	const FSlateFontInfo& DefaultFont = DefaultTextBlock->GetFont();
+	const TSharedPtr<FJsonObject> FixtureSecondContent = FixtureSecond->GetObjectField(TEXT("content"));
+	FixtureSecondContent->SetNumberField(TEXT("fontSize"), DefaultFont.Size);
+	FixtureSecondContent->SetStringField(TEXT("fontFamily"), DefaultFont.FontObject->GetPathName());
+	FixtureSecondContent->SetStringField(TEXT("typeface"), DefaultFont.TypefaceFontName.ToString());
+	const TSharedPtr<FJsonObject> FixtureSecondSlot = FixtureSecond->GetObjectField(TEXT("slot"));
+	FixtureSecondSlot->SetStringField(TEXT("hAlign"), TEXT("Fill"));
+	FixtureSecondSlot->SetStringField(TEXT("vAlign"), TEXT("Fill"));
+	FixtureSecondSlot->SetStringField(TEXT("sizeRule"), TEXT("Automatic"));
+	FixtureSecondSlot->SetNumberField(TEXT("fillWeight"), 1.0);
+	BuildParams->SetStringField(TEXT("asset_path"), AssetPath);
+	BuildParams->SetObjectField(TEXT("spec"), FixtureSpec);
+	BuildParams->SetBoolField(TEXT("overwrite"), true);
+	BuildParams->SetBoolField(TEXT("dry_run"), false);
+	const FMonolithActionResult BuildResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("build_ui_from_spec"), BuildParams);
+	if (!TestTrue(TEXT("build action succeeds"), BuildResult.bSuccess && BuildResult.Result.IsValid()))
+	{
+		return false;
+	}
+
+	FMonolithActionResult LoadError;
+	UWidgetBlueprint* WBP = MonolithUI::LoadWidgetBlueprint(AssetPath, LoadError);
+	if (!TestNotNull(TEXT("built WBP loaded"), WBP))
+	{
+		return false;
+	}
+	UTextBlock* FirstText = Cast<UTextBlock>(WBP->WidgetTree->FindWidget(TEXT("FirstText")));
+	if (!TestNotNull(TEXT("FirstText loaded"), FirstText))
+	{
+		return false;
+	}
+
+	TestEqual(TEXT("builder applies font family"), FirstText->GetFont().FontObject->GetPathName(), TEXT("/Engine/EngineFonts/RobotoDistanceField.RobotoDistanceField"));
+	TestEqual(TEXT("builder applies typeface"), FirstText->GetFont().TypefaceFontName, FName(TEXT("Italic")));
+	TestEqual(TEXT("builder applies letter spacing"), FirstText->GetFont().LetterSpacing, 14);
+	TestEqual(TEXT("builder applies outline size"), FirstText->GetFont().OutlineSettings.OutlineSize, 2);
+	TestTrue(TEXT("builder applies shadow offset"), FirstText->GetShadowOffset().Equals(FVector2D(3.f, 4.f), 0.001f));
+	TestTrue(TEXT("builder applies shadow color"), FirstText->GetShadowColorAndOpacity().Equals(FLinearColor(0.f, 0.f, 0.f, 128.f / 255.f), 0.01f));
+
+	TSharedPtr<FJsonObject> IdenticalDiffParams = MakeShared<FJsonObject>();
+	IdenticalDiffParams->SetStringField(TEXT("asset_path"), AssetPath);
+	IdenticalDiffParams->SetObjectField(TEXT("desired_spec"), FixtureSpec);
+	IdenticalDiffParams->SetStringField(TEXT("compare_mode"), TEXT("properties"));
+	IdenticalDiffParams->SetBoolField(TEXT("required"), true);
+	const FMonolithActionResult IdenticalDiffResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("diff_ui_spec"), IdenticalDiffParams);
+	if (!TestTrue(TEXT("required full diff after build returns evidence"),
+		IdenticalDiffResult.bSuccess && IdenticalDiffResult.Result.IsValid()))
+	{
+		return false;
+	}
+	TestTrue(TEXT("omitted and explicit CDO defaults compare identical"), IdenticalDiffResult.Result->GetBoolField(TEXT("ok")));
+	TestTrue(TEXT("identical required diff bSuccess is true"), IdenticalDiffResult.Result->GetBoolField(TEXT("bSuccess")));
+	TestFalse(TEXT("identical required diff is unchanged"), IdenticalDiffResult.Result->GetBoolField(TEXT("changed")));
+	TestEqual(TEXT("identical required diff status"), IdenticalDiffResult.Result->GetStringField(TEXT("status")), TEXT("identical"));
+
+	TSharedPtr<FJsonObject> DumpParams = MakeShared<FJsonObject>();
+	DumpParams->SetStringField(TEXT("asset_path"), AssetPath);
+	const FMonolithActionResult DumpResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("dump_ui_spec"), DumpParams);
+	if (!TestTrue(TEXT("dump action succeeds"), DumpResult.bSuccess && DumpResult.Result.IsValid()))
+	{
+		return false;
+	}
+
+	const TSharedPtr<FJsonObject> DesiredSpec = DumpResult.Result->GetObjectField(TEXT("spec"));
+	const TSharedPtr<FJsonObject> DesiredRoot = DesiredSpec->GetObjectField(TEXT("rootWidget"));
+	TSharedPtr<FJsonObject> DesiredFirst;
+	if (!TestTrue(TEXT("dump contains FirstText"), FindNodeById(DesiredRoot, TEXT("FirstText"), DesiredFirst)))
+	{
+		return false;
+	}
+	const TSharedPtr<FJsonObject> FirstContent = DesiredFirst->GetObjectField(TEXT("content"));
+	TestEqual(
+		TEXT("font family exported"),
+		FirstContent->GetStringField(TEXT("fontFamily")),
+		TEXT("/Engine/EngineFonts/RobotoDistanceField.RobotoDistanceField"));
+	TestEqual(TEXT("typeface exported"), FirstContent->GetStringField(TEXT("typeface")), TEXT("Italic"));
+	TestEqual(TEXT("letter spacing exported"), static_cast<int32>(FirstContent->GetNumberField(TEXT("letterSpacing"))), 14);
+	TestEqual(TEXT("justification exported"), FirstContent->GetStringField(TEXT("justification")), TEXT("Right"));
+	TestEqual(TEXT("outline size exported"), static_cast<int32>(FirstContent->GetNumberField(TEXT("outlineSize"))), 2);
+	TestTrue(TEXT("outline color exported"), FirstContent->HasField(TEXT("outlineColor")));
+	TestTrue(TEXT("shadow offset exported"), FirstContent->HasField(TEXT("shadowOffset")));
+	TestTrue(TEXT("shadow color exported"), FirstContent->HasField(TEXT("shadowColor")));
+	TestTrue(TEXT("line height exported"),
+		FMath::IsNearlyEqual(FirstContent->GetNumberField(TEXT("lineHeightPercentage")), 1.25, 0.001));
+
+	TArray<TSharedPtr<FJsonValue>> DesiredChildren = DesiredRoot->GetArrayField(TEXT("children"));
+	if (!TestEqual(TEXT("fixture has two children"), DesiredChildren.Num(), 2))
+	{
+		return false;
+	}
+	Swap(DesiredChildren[0], DesiredChildren[1]);
+	DesiredRoot->SetArrayField(TEXT("children"), DesiredChildren);
+	FirstContent->SetStringField(TEXT("typeface"), TEXT("Bold"));
+	FirstContent->SetStringField(TEXT("text"), TEXT("First invariant"));
+	FirstContent->SetStringField(TEXT("justification"), TEXT("InvariantLeft"));
+
+	TSharedPtr<FJsonObject> RequiredDiffParams = MakeShared<FJsonObject>();
+	RequiredDiffParams->SetStringField(TEXT("asset_path"), AssetPath);
+	RequiredDiffParams->SetObjectField(TEXT("desired_spec"), DesiredSpec);
+	RequiredDiffParams->SetStringField(TEXT("compare_mode"), TEXT("properties"));
+	RequiredDiffParams->SetBoolField(TEXT("required"), true);
+	const FMonolithActionResult RequiredDiffResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("diff_ui_spec"), RequiredDiffParams);
+	if (!TestTrue(TEXT("required diff preserves transport success"), RequiredDiffResult.bSuccess && RequiredDiffResult.Result.IsValid()))
+	{
+		return false;
+	}
+	TestFalse(TEXT("required mismatch payload is semantic failure"), RequiredDiffResult.Result->GetBoolField(TEXT("ok")));
+	TestFalse(TEXT("required mismatch bSuccess is false"), RequiredDiffResult.Result->GetBoolField(TEXT("bSuccess")));
+	TestEqual(TEXT("required mismatch status"), RequiredDiffResult.Result->GetStringField(TEXT("status")), TEXT("failed"));
+	TestTrue(TEXT("required mismatch changed"), RequiredDiffResult.Result->GetBoolField(TEXT("changed")));
+
+	bool bFoundChildOrder = false;
+	bool bFoundContent = false;
+	const TArray<TSharedPtr<FJsonValue>>& Changes = RequiredDiffResult.Result->GetArrayField(TEXT("changes"));
+	for (const TSharedPtr<FJsonValue>& ChangeValue : Changes)
+	{
+		const TSharedPtr<FJsonObject> Change = ChangeValue.IsValid() ? ChangeValue->AsObject() : nullptr;
+		if (!Change.IsValid())
+		{
+			continue;
+		}
+		const FString Kind = Change->GetStringField(TEXT("kind"));
+		bFoundChildOrder |= Kind == TEXT("child_order");
+		bFoundContent |= Kind == TEXT("content") && Change->GetStringField(TEXT("widget_id")) == TEXT("FirstText");
+		TestTrue(TEXT("required diff row marked required"), Change->GetBoolField(TEXT("required")));
+		TestEqual(TEXT("required diff row severity"), Change->GetStringField(TEXT("severity")), TEXT("high"));
+	}
+	TestTrue(TEXT("sibling child-order mismatch reported"), bFoundChildOrder);
+	TestTrue(TEXT("TextBlock style mismatch reported as content"), bFoundContent);
+
+	bool bFoundSetFontPatch = false;
+	bool bFoundSafeSetTextPatch = false;
+	const TArray<TSharedPtr<FJsonValue>>& PatchCandidates = RequiredDiffResult.Result->GetArrayField(TEXT("patch_candidates"));
+	for (const TSharedPtr<FJsonValue>& PatchValue : PatchCandidates)
+	{
+		const TSharedPtr<FJsonObject> Patch = PatchValue.IsValid() ? PatchValue->AsObject() : nullptr;
+		bFoundSetFontPatch |= Patch.IsValid() && Patch->GetStringField(TEXT("op")) == TEXT("set_font");
+		if (Patch.IsValid() && Patch->GetStringField(TEXT("op")) == TEXT("set_text"))
+		{
+			bFoundSafeSetTextPatch = Patch->GetStringField(TEXT("text")) == TEXT("First invariant")
+				&& !Patch->HasField(TEXT("justification"));
+		}
+	}
+	TestTrue(TEXT("font mismatch routes to set_font owner action"), bFoundSetFontPatch);
+	TestTrue(TEXT("set_text patch omits unsupported invariant justification"), bFoundSafeSetTextPatch);
+	bool bFoundUnsupportedInvariantJustification = false;
+	for (const TSharedPtr<FJsonValue>& UnsupportedValue : RequiredDiffResult.Result->GetArrayField(TEXT("unsupported_fields")))
+	{
+		const TSharedPtr<FJsonObject> UnsupportedField = UnsupportedValue.IsValid() ? UnsupportedValue->AsObject() : nullptr;
+		bFoundUnsupportedInvariantJustification |= UnsupportedField.IsValid()
+			&& UnsupportedField->GetStringField(TEXT("field")) == TEXT("content.textStyle");
+	}
+	TestTrue(TEXT("invariant justification remains explicit unsupported evidence"), bFoundUnsupportedInvariantJustification);
+
+	TSharedPtr<FJsonObject> ApplyDryRunParams = MakeShared<FJsonObject>();
+	ApplyDryRunParams->SetStringField(TEXT("asset_path"), AssetPath);
+	ApplyDryRunParams->SetArrayField(TEXT("patch"), PatchCandidates);
+	ApplyDryRunParams->SetBoolField(TEXT("dry_run"), true);
+	const FMonolithActionResult ApplyDryRunResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("apply_ui_spec_patch"), ApplyDryRunParams);
+	if (!TestTrue(TEXT("font patch dry-run succeeds"), ApplyDryRunResult.bSuccess && ApplyDryRunResult.Result.IsValid()))
+	{
+		return false;
+	}
+	const TArray<TSharedPtr<FJsonValue>>* PlannedSteps = nullptr;
+	TestTrue(TEXT("font patch dry-run exposes steps"),
+		ApplyDryRunResult.Result->TryGetArrayField(TEXT("steps"), PlannedSteps) && PlannedSteps);
+	TestTrue(TEXT("font patch dry-run composes ui.set_font owner"), ContainsStepAction(PlannedSteps, TEXT("set_font")));
+	bool bTypefaceForwarded = false;
+	if (PlannedSteps)
+	{
+		for (const TSharedPtr<FJsonValue>& StepValue : *PlannedSteps)
+		{
+			const TSharedPtr<FJsonObject> Step = StepValue.IsValid() ? StepValue->AsObject() : nullptr;
+			if (!Step.IsValid() || Step->GetStringField(TEXT("action")) != TEXT("set_font"))
+			{
+				continue;
+			}
+			const TSharedPtr<FJsonObject>* StepParams = nullptr;
+			bTypefaceForwarded = Step->TryGetObjectField(TEXT("params"), StepParams)
+				&& StepParams
+				&& StepParams->IsValid()
+				&& (*StepParams)->GetStringField(TEXT("typeface")) == TEXT("Bold");
+			break;
+		}
+	}
+	TestTrue(TEXT("font patch forwards typeface to ui.set_font"), bTypefaceForwarded);
+
+	TSharedPtr<FJsonObject> OptionalDiffParams = MakeShared<FJsonObject>();
+	OptionalDiffParams->SetStringField(TEXT("asset_path"), AssetPath);
+	OptionalDiffParams->SetObjectField(TEXT("desired_spec"), DesiredSpec);
+	OptionalDiffParams->SetStringField(TEXT("compare_mode"), TEXT("properties"));
+	const FMonolithActionResult OptionalDiffResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("diff_ui_spec"), OptionalDiffParams);
+	if (!TestTrue(TEXT("optional diff succeeds"), OptionalDiffResult.bSuccess && OptionalDiffResult.Result.IsValid()))
+	{
+		return false;
+	}
+	TestTrue(TEXT("optional mismatch remains advisory"), OptionalDiffResult.Result->GetBoolField(TEXT("ok")));
+	TestEqual(TEXT("optional mismatch status"), OptionalDiffResult.Result->GetStringField(TEXT("status")), TEXT("different"));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithUISpecZeroBorderPaddingConvergenceTest,
+	"MonolithUI.SpecMarkup.ZeroBorderPaddingConverges",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUISpecZeroBorderPaddingConvergenceTest::RunTest(const FString& /*Parameters*/)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	MonolithUI::FSpecActions::Register(Registry);
+	FMonolithUIActions::RegisterActions(Registry);
+	FMonolithUISlotActions::RegisterActions(Registry);
+
+	const FString AssetPath = TEXT("/Game/Tests/Monolith/UI/WBP_SpecZeroBorderPadding");
+	TSharedPtr<FJsonObject> ConvertParams = MakeShared<FJsonObject>();
+	ConvertParams->SetStringField(
+		TEXT("markup"),
+		TEXT("<Border Name=\"RootBorder\" style.padding=\"0\">"
+			 "<TextBlock Name=\"Label\" Text=\"Zero padding\" slot.padding=\"0\" />"
+			 "</Border>"));
+	ConvertParams->SetStringField(TEXT("root_save_path"), AssetPath);
+	const FMonolithActionResult ConvertResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("convert_markup_to_ui_spec"), ConvertParams);
+	if (!TestTrue(TEXT("zero-padding markup converts"), ConvertResult.bSuccess && ConvertResult.Result.IsValid()
+		&& ConvertResult.Result->GetBoolField(TEXT("bSuccess"))))
+	{
+		return false;
+	}
+	const TSharedPtr<FJsonObject> DesiredSpec = ConvertResult.Result->GetObjectField(TEXT("spec"));
+	const TSharedPtr<FJsonObject> DesiredRoot = DesiredSpec->GetObjectField(TEXT("rootWidget"));
+	TestTrue(TEXT("converter retains explicit zero Border style padding"),
+		DesiredRoot->GetObjectField(TEXT("style"))->HasTypedField<EJson::Object>(TEXT("padding")));
+	TSharedPtr<FJsonObject> DesiredLabel;
+	if (!TestTrue(TEXT("converted spec contains Label"),
+		FindNodeById(DesiredRoot, TEXT("Label"), DesiredLabel)))
+	{
+		return false;
+	}
+	TestTrue(TEXT("converter retains explicit zero BorderSlot padding"),
+		DesiredLabel->GetObjectField(TEXT("slot"))->HasTypedField<EJson::Object>(TEXT("padding")));
+
+	TSharedPtr<FJsonObject> BuildParams = MakeShared<FJsonObject>();
+	BuildParams->SetStringField(TEXT("asset_path"), AssetPath);
+	BuildParams->SetObjectField(TEXT("spec"), DesiredSpec);
+	BuildParams->SetBoolField(TEXT("overwrite"), true);
+	BuildParams->SetBoolField(TEXT("dry_run"), false);
+	const FMonolithActionResult BuildResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("build_ui_from_spec"), BuildParams);
+	if (!TestTrue(TEXT("zero-padding WBP builds"), BuildResult.bSuccess && BuildResult.Result.IsValid()
+		&& BuildResult.Result->GetBoolField(TEXT("bSuccess"))))
+	{
+		return false;
+	}
+
+	FMonolithActionResult LoadError;
+	UWidgetBlueprint* WBP = MonolithUI::LoadWidgetBlueprint(AssetPath, LoadError);
+	UBorder* RootBorder = WBP && WBP->WidgetTree ? Cast<UBorder>(WBP->WidgetTree->RootWidget) : nullptr;
+	if (!TestNotNull(TEXT("built root Border loads"), RootBorder))
+	{
+		return false;
+	}
+	TestTrue(TEXT("builder preserves explicit zero Border padding"), RootBorder->GetPadding() == FMargin(0.f));
+
+	TSharedPtr<FJsonObject> NonZeroPadding = MakeShared<FJsonObject>();
+	NonZeroPadding->SetNumberField(TEXT("left"), 4.0);
+	NonZeroPadding->SetNumberField(TEXT("top"), 2.0);
+	NonZeroPadding->SetNumberField(TEXT("right"), 4.0);
+	NonZeroPadding->SetNumberField(TEXT("bottom"), 2.0);
+	TSharedPtr<FJsonObject> SetParams = MakeShared<FJsonObject>();
+	SetParams->SetStringField(TEXT("asset_path"), AssetPath);
+	SetParams->SetStringField(TEXT("widget_name"), TEXT("RootBorder"));
+	SetParams->SetStringField(TEXT("property_name"), TEXT("Padding"));
+	SetParams->SetObjectField(TEXT("value"), NonZeroPadding);
+	const FMonolithActionResult SetResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("set_widget_property"), SetParams);
+	if (!TestTrue(TEXT("set_widget_property accepts Margin object through public schema"),
+		SetResult.bSuccess && SetResult.Result.IsValid()))
+	{
+		return false;
+	}
+	TestTrue(TEXT("typed Margin echo remains an object"),
+		SetResult.Result->TryGetField(TEXT("value_json")).IsValid()
+		&& SetResult.Result->TryGetField(TEXT("value_json"))->Type == EJson::Object);
+	TestTrue(TEXT("object Margin write reaches Border"), RootBorder->GetPadding() == FMargin(4.f, 2.f, 4.f, 2.f));
+
+	TSharedPtr<FJsonObject> DiffParams = MakeShared<FJsonObject>();
+	DiffParams->SetStringField(TEXT("asset_path"), AssetPath);
+	DiffParams->SetObjectField(TEXT("desired_spec"), DesiredSpec);
+	DiffParams->SetStringField(TEXT("compare_mode"), TEXT("properties"));
+	DiffParams->SetBoolField(TEXT("required"), true);
+	const FMonolithActionResult DiffResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("diff_ui_spec"), DiffParams);
+	if (!TestTrue(TEXT("required padding diff returns evidence"), DiffResult.bSuccess && DiffResult.Result.IsValid()))
+	{
+		return false;
+	}
+	TestFalse(TEXT("non-zero padding is detected"), DiffResult.Result->GetBoolField(TEXT("ok")));
+	const TArray<TSharedPtr<FJsonValue>> PatchCandidates = DiffResult.Result->GetArrayField(TEXT("patch_candidates"));
+	if (!TestEqual(TEXT("padding diff emits only the owner style patch"), PatchCandidates.Num(), 1))
+	{
+		return false;
+	}
+	const TSharedPtr<FJsonObject> PaddingPatch = PatchCandidates[0]->AsObject();
+	TestEqual(TEXT("padding diff routes through set_style"), PaddingPatch->GetStringField(TEXT("op")), TEXT("set_style"));
+	const TSharedPtr<FJsonObject> PatchPadding = PaddingPatch->GetObjectField(TEXT("padding"));
+	TestTrue(TEXT("padding patch retains explicit all-zero Margin"),
+		FMath::IsNearlyZero(PatchPadding->GetNumberField(TEXT("left"))) &&
+		FMath::IsNearlyZero(PatchPadding->GetNumberField(TEXT("top"))) &&
+		FMath::IsNearlyZero(PatchPadding->GetNumberField(TEXT("right"))) &&
+		FMath::IsNearlyZero(PatchPadding->GetNumberField(TEXT("bottom"))));
+
+	TSharedPtr<FJsonObject> ApplyParams = MakeShared<FJsonObject>();
+	ApplyParams->SetStringField(TEXT("asset_path"), AssetPath);
+	ApplyParams->SetArrayField(TEXT("patch"), PatchCandidates);
+	ApplyParams->SetBoolField(TEXT("dry_run"), false);
+	ApplyParams->SetBoolField(TEXT("confirm"), true);
+	ApplyParams->SetBoolField(TEXT("compile"), true);
+	ApplyParams->SetBoolField(TEXT("save"), false);
+	ApplyParams->SetBoolField(TEXT("read_back"), true);
+	const FMonolithActionResult ApplyResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("apply_ui_spec_patch"), ApplyParams);
+	if (!TestTrue(TEXT("zero-padding patch applies"), ApplyResult.bSuccess && ApplyResult.Result.IsValid()
+		&& ApplyResult.Result->GetBoolField(TEXT("ok"))))
+	{
+		return false;
+	}
+	TestTrue(TEXT("patch restores exact zero Border padding"), RootBorder->GetPadding() == FMargin(0.f));
+
+	const FMonolithActionResult FinalDiffResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("diff_ui_spec"), DiffParams);
+	if (!TestTrue(TEXT("final required padding diff returns evidence"),
+		FinalDiffResult.bSuccess && FinalDiffResult.Result.IsValid()))
+	{
+		return false;
+	}
+	TestTrue(TEXT("final required padding diff converges"), FinalDiffResult.Result->GetBoolField(TEXT("ok")));
+	TestFalse(TEXT("final required padding diff is unchanged"), FinalDiffResult.Result->GetBoolField(TEXT("changed")));
+
+	UTextBlock* Label = WBP && WBP->WidgetTree
+		? Cast<UTextBlock>(WBP->WidgetTree->FindWidget(TEXT("Label")))
+		: nullptr;
+	UBorderSlot* LabelSlot = Label ? Cast<UBorderSlot>(Label->Slot) : nullptr;
+	if (!TestNotNull(TEXT("Label uses a Border slot"), LabelSlot))
+	{
+		return false;
+	}
+	LabelSlot->SetPadding(FMargin(8.f, 6.f, 4.f, 2.f));
+
+	const FMonolithActionResult SlotDiffResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("diff_ui_spec"), DiffParams);
+	if (!TestTrue(TEXT("explicit zero slot padding diff returns evidence"),
+		SlotDiffResult.bSuccess && SlotDiffResult.Result.IsValid()))
+	{
+		return false;
+	}
+	TestFalse(TEXT("non-zero slot padding is detected"), SlotDiffResult.Result->GetBoolField(TEXT("ok")));
+	const TArray<TSharedPtr<FJsonValue>> SlotPatchCandidates =
+		SlotDiffResult.Result->GetArrayField(TEXT("patch_candidates"));
+	if (!TestEqual(TEXT("slot padding diff emits one owner patch"), SlotPatchCandidates.Num(), 1))
+	{
+		return false;
+	}
+	const TSharedPtr<FJsonObject> SlotPatch = SlotPatchCandidates[0]->AsObject();
+	TestEqual(TEXT("slot padding diff routes through set_slot_property"),
+		SlotPatch->GetStringField(TEXT("op")), TEXT("set_slot_property"));
+	const TSharedPtr<FJsonObject> SlotPatchPadding =
+		SlotPatch->GetObjectField(TEXT("slot"))->GetObjectField(TEXT("padding"));
+	TestTrue(TEXT("slot patch retains explicit all-zero Margin"),
+		FMath::IsNearlyZero(SlotPatchPadding->GetNumberField(TEXT("left"))) &&
+		FMath::IsNearlyZero(SlotPatchPadding->GetNumberField(TEXT("top"))) &&
+		FMath::IsNearlyZero(SlotPatchPadding->GetNumberField(TEXT("right"))) &&
+		FMath::IsNearlyZero(SlotPatchPadding->GetNumberField(TEXT("bottom"))));
+
+	ApplyParams->SetArrayField(TEXT("patch"), SlotPatchCandidates);
+	const FMonolithActionResult ApplySlotResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("apply_ui_spec_patch"), ApplyParams);
+	if (!TestTrue(TEXT("zero slot-padding patch applies"),
+		ApplySlotResult.bSuccess && ApplySlotResult.Result.IsValid()
+		&& ApplySlotResult.Result->GetBoolField(TEXT("ok"))))
+	{
+		return false;
+	}
+	TestTrue(TEXT("patch restores exact zero BorderSlot padding"), LabelSlot->GetPadding() == FMargin(0.f));
+
+	const FMonolithActionResult FinalSlotDiffResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("diff_ui_spec"), DiffParams);
+	if (!TestTrue(TEXT("final required slot padding diff returns evidence"),
+		FinalSlotDiffResult.bSuccess && FinalSlotDiffResult.Result.IsValid()))
+	{
+		return false;
+	}
+	TestTrue(TEXT("final required slot padding diff converges"),
+		FinalSlotDiffResult.Result->GetBoolField(TEXT("ok")));
+	TestFalse(TEXT("final required slot padding diff is unchanged"),
+		FinalSlotDiffResult.Result->GetBoolField(TEXT("changed")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithUISpecChildOrderPatchConvergenceTest,
+	"MonolithUI.SpecMarkup.ChildOrderPatchConvergesPanels",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUISpecChildOrderPatchConvergenceTest::RunTest(const FString& /*Parameters*/)
+{
+	if (!TestNotNull(TEXT("UMonolithUIRegistrySubsystem available"), UMonolithUIRegistrySubsystem::Get()))
+	{
+		return false;
+	}
+
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	MonolithUI::FSpecActions::Register(Registry);
+	FMonolithUIActions::RegisterActions(Registry);
+	FMonolithUISlotActions::RegisterActions(Registry);
+
+	struct FPanelCase
+	{
+		FString Label;
+		FString AssetSuffix;
+		FString CurrentMarkup;
+		FString DesiredMarkup;
+	};
+
+	const TArray<FPanelCase> Cases = {
+		{
+			TEXT("VerticalBox"),
+			TEXT("VerticalBox"),
+			TEXT("<VerticalBox Name=\"RootPanel\">"
+				 "<TextBlock Name=\"First\" Text=\"First\" slot.padding=\"1,2,3,4\" />"
+				 "<TextBlock Name=\"Second\" Text=\"Second\" slot.padding=\"5,6,7,8\" />"
+				 "<TextBlock Name=\"Third\" Text=\"Third\" slot.padding=\"9,10,11,12\" />"
+				 "</VerticalBox>"),
+			TEXT("<VerticalBox Name=\"RootPanel\">"
+				 "<TextBlock Name=\"Third\" Text=\"Third\" slot.padding=\"9,10,11,12\" />"
+				 "<TextBlock Name=\"First\" Text=\"First\" slot.padding=\"1,2,3,4\" />"
+				 "<TextBlock Name=\"Second\" Text=\"Second\" slot.padding=\"5,6,7,8\" />"
+				 "</VerticalBox>")
+		},
+		{
+			TEXT("Overlay"),
+			TEXT("Overlay"),
+			TEXT("<Overlay Name=\"RootPanel\">"
+				 "<TextBlock Name=\"First\" Text=\"First\" slot.padding=\"1,2,3,4\" />"
+				 "<TextBlock Name=\"Second\" Text=\"Second\" slot.padding=\"5,6,7,8\" />"
+				 "<TextBlock Name=\"Third\" Text=\"Third\" slot.padding=\"9,10,11,12\" />"
+				 "</Overlay>"),
+			TEXT("<Overlay Name=\"RootPanel\">"
+				 "<TextBlock Name=\"Third\" Text=\"Third\" slot.padding=\"9,10,11,12\" />"
+				 "<TextBlock Name=\"First\" Text=\"First\" slot.padding=\"1,2,3,4\" />"
+				 "<TextBlock Name=\"Second\" Text=\"Second\" slot.padding=\"5,6,7,8\" />"
+				 "</Overlay>")
+		},
+		{
+			TEXT("CanvasPanel"),
+			TEXT("Canvas"),
+			TEXT("<CanvasPanel Name=\"RootPanel\">"
+				 "<TextBlock Name=\"First\" Text=\"First\" slot.position=\"10,20\" slot.size=\"100,30\" />"
+				 "<TextBlock Name=\"Second\" Text=\"Second\" slot.position=\"30,40\" slot.size=\"110,35\" />"
+				 "<TextBlock Name=\"Third\" Text=\"Third\" slot.position=\"50,60\" slot.size=\"120,40\" />"
+				 "</CanvasPanel>"),
+			TEXT("<CanvasPanel Name=\"RootPanel\">"
+				 "<TextBlock Name=\"Third\" Text=\"Third\" slot.position=\"50,60\" slot.size=\"120,40\" />"
+				 "<TextBlock Name=\"First\" Text=\"First\" slot.position=\"10,20\" slot.size=\"100,30\" />"
+				 "<TextBlock Name=\"Second\" Text=\"Second\" slot.position=\"30,40\" slot.size=\"110,35\" />"
+				 "</CanvasPanel>")
+		}
+	};
+
+	const TArray<FString> DesiredOrder = { TEXT("Third"), TEXT("First"), TEXT("Second") };
+	for (const FPanelCase& PanelCase : Cases)
+	{
+		const FString AssetPath = FString::Printf(
+			TEXT("/Game/Tests/Monolith/UI/WBP_SpecChildOrder_%s"),
+			*PanelCase.AssetSuffix);
+
+		TSharedPtr<FJsonObject> CurrentConvertParams = MakeShared<FJsonObject>();
+		CurrentConvertParams->SetStringField(TEXT("markup"), PanelCase.CurrentMarkup);
+		CurrentConvertParams->SetStringField(TEXT("root_save_path"), AssetPath);
+		const FMonolithActionResult CurrentConvertResult =
+			Registry.ExecuteAction(TEXT("ui"), TEXT("convert_markup_to_ui_spec"), CurrentConvertParams);
+		if (!TestTrue(*FString::Printf(TEXT("%s current markup converts"), *PanelCase.Label),
+			CurrentConvertResult.bSuccess && CurrentConvertResult.Result.IsValid()))
+		{
+			return false;
+		}
+
+		TSharedPtr<FJsonObject> BuildParams = MakeShared<FJsonObject>();
+		BuildParams->SetStringField(TEXT("asset_path"), AssetPath);
+		BuildParams->SetObjectField(TEXT("spec"), CurrentConvertResult.Result->GetObjectField(TEXT("spec")));
+		BuildParams->SetBoolField(TEXT("overwrite"), true);
+		BuildParams->SetBoolField(TEXT("dry_run"), false);
+		const FMonolithActionResult BuildResult =
+			Registry.ExecuteAction(TEXT("ui"), TEXT("build_ui_from_spec"), BuildParams);
+		if (!TestTrue(*FString::Printf(TEXT("%s current WBP builds"), *PanelCase.Label),
+			BuildResult.bSuccess && BuildResult.Result.IsValid() && BuildResult.Result->GetBoolField(TEXT("bSuccess"))))
+		{
+			return false;
+		}
+
+		FMonolithActionResult LoadError;
+		UWidgetBlueprint* WBP = MonolithUI::LoadWidgetBlueprint(AssetPath, LoadError);
+		if (!TestNotNull(*FString::Printf(TEXT("%s built WBP loads"), *PanelCase.Label), WBP))
+		{
+			return false;
+		}
+		UPanelWidget* RootPanel = WBP && WBP->WidgetTree ? Cast<UPanelWidget>(WBP->WidgetTree->RootWidget) : nullptr;
+		if (!TestNotNull(*FString::Printf(TEXT("%s root is a panel"), *PanelCase.Label), RootPanel))
+		{
+			return false;
+		}
+
+		TMap<FName, UPanelSlot*> OriginalSlots;
+		for (const FName ChildName : { FName(TEXT("First")), FName(TEXT("Second")), FName(TEXT("Third")) })
+		{
+			UWidget* Child = WBP->WidgetTree->FindWidget(ChildName);
+			if (!TestNotNull(*FString::Printf(TEXT("%s child %s exists"), *PanelCase.Label, *ChildName.ToString()), Child))
+			{
+				return false;
+			}
+			OriginalSlots.Add(ChildName, Child->Slot);
+		}
+
+		TSharedPtr<FJsonObject> DesiredConvertParams = MakeShared<FJsonObject>();
+		DesiredConvertParams->SetStringField(TEXT("markup"), PanelCase.DesiredMarkup);
+		DesiredConvertParams->SetStringField(TEXT("root_save_path"), AssetPath);
+		const FMonolithActionResult DesiredConvertResult =
+			Registry.ExecuteAction(TEXT("ui"), TEXT("convert_markup_to_ui_spec"), DesiredConvertParams);
+		if (!TestTrue(*FString::Printf(TEXT("%s desired markup converts"), *PanelCase.Label),
+			DesiredConvertResult.bSuccess && DesiredConvertResult.Result.IsValid()))
+		{
+			return false;
+		}
+		const TSharedPtr<FJsonObject> DesiredSpec = DesiredConvertResult.Result->GetObjectField(TEXT("spec"));
+
+		TSharedPtr<FJsonObject> DiffParams = MakeShared<FJsonObject>();
+		DiffParams->SetStringField(TEXT("asset_path"), AssetPath);
+		DiffParams->SetObjectField(TEXT("desired_spec"), DesiredSpec);
+		DiffParams->SetStringField(TEXT("compare_mode"), TEXT("structural"));
+		DiffParams->SetBoolField(TEXT("required"), true);
+		const FMonolithActionResult DiffResult =
+			Registry.ExecuteAction(TEXT("ui"), TEXT("diff_ui_spec"), DiffParams);
+		if (!TestTrue(*FString::Printf(TEXT("%s required diff returns evidence"), *PanelCase.Label),
+			DiffResult.bSuccess && DiffResult.Result.IsValid()))
+		{
+			return false;
+		}
+		TestFalse(*FString::Printf(TEXT("%s mismatch fails required semantic gate"), *PanelCase.Label),
+			DiffResult.Result->GetBoolField(TEXT("ok")));
+		TestEqual(*FString::Printf(TEXT("%s reports one child_order change"), *PanelCase.Label),
+			static_cast<int32>(DiffResult.Result->GetNumberField(TEXT("change_count"))), 1);
+
+		const TArray<TSharedPtr<FJsonValue>>& Unsupported = DiffResult.Result->GetArrayField(TEXT("unsupported_fields"));
+		TestEqual(*FString::Printf(TEXT("%s child order has no unsupported fields"), *PanelCase.Label), Unsupported.Num(), 0);
+		const TArray<TSharedPtr<FJsonValue>>& PatchCandidates = DiffResult.Result->GetArrayField(TEXT("patch_candidates"));
+		if (!TestEqual(*FString::Printf(TEXT("%s emits deterministic reorder patch count"), *PanelCase.Label),
+			PatchCandidates.Num(), DesiredOrder.Num()))
+		{
+			return false;
+		}
+		for (int32 Index = 0; Index < PatchCandidates.Num(); ++Index)
+		{
+			const TSharedPtr<FJsonObject> Patch = PatchCandidates[Index]->AsObject();
+			TestEqual(*FString::Printf(TEXT("%s patch %d owner op"), *PanelCase.Label, Index),
+				Patch->GetStringField(TEXT("op")), TEXT("move_widget"));
+			TestEqual(*FString::Printf(TEXT("%s patch %d child"), *PanelCase.Label, Index),
+				Patch->GetStringField(TEXT("widget_name")), DesiredOrder[Index]);
+			TestEqual(*FString::Printf(TEXT("%s patch %d parent"), *PanelCase.Label, Index),
+				Patch->GetStringField(TEXT("new_parent_name")), TEXT("RootPanel"));
+			TestEqual(*FString::Printf(TEXT("%s patch %d sibling index"), *PanelCase.Label, Index),
+				static_cast<int32>(Patch->GetNumberField(TEXT("sibling_index"))), Index);
+		}
+
+		TSharedPtr<FJsonObject> DryRunParams = MakeShared<FJsonObject>();
+		DryRunParams->SetStringField(TEXT("asset_path"), AssetPath);
+		DryRunParams->SetArrayField(TEXT("patch"), PatchCandidates);
+		DryRunParams->SetBoolField(TEXT("dry_run"), true);
+		const FMonolithActionResult DryRunResult =
+			Registry.ExecuteAction(TEXT("ui"), TEXT("apply_ui_spec_patch"), DryRunParams);
+		if (!TestTrue(*FString::Printf(TEXT("%s reorder dry-run succeeds"), *PanelCase.Label),
+			DryRunResult.bSuccess && DryRunResult.Result.IsValid() && DryRunResult.Result->GetBoolField(TEXT("ok"))))
+		{
+			return false;
+		}
+		const TArray<TSharedPtr<FJsonValue>>* DryRunSteps = nullptr;
+		TestTrue(*FString::Printf(TEXT("%s dry-run exposes steps"), *PanelCase.Label),
+			DryRunResult.Result->TryGetArrayField(TEXT("steps"), DryRunSteps) && DryRunSteps);
+		TestEqual(*FString::Printf(TEXT("%s dry-run uses only move owner steps"), *PanelCase.Label),
+			CountStepAction(DryRunSteps, TEXT("move_widget")), DesiredOrder.Num());
+
+		TSharedPtr<FJsonObject> ApplyParams = MakeShared<FJsonObject>();
+		ApplyParams->SetStringField(TEXT("asset_path"), AssetPath);
+		ApplyParams->SetArrayField(TEXT("patch"), PatchCandidates);
+		ApplyParams->SetBoolField(TEXT("dry_run"), false);
+		ApplyParams->SetBoolField(TEXT("confirm"), true);
+		ApplyParams->SetBoolField(TEXT("compile"), true);
+		ApplyParams->SetBoolField(TEXT("save"), false);
+		ApplyParams->SetBoolField(TEXT("read_back"), true);
+		const FMonolithActionResult ApplyResult =
+			Registry.ExecuteAction(TEXT("ui"), TEXT("apply_ui_spec_patch"), ApplyParams);
+		if (!TestTrue(*FString::Printf(TEXT("%s reorder apply succeeds"), *PanelCase.Label),
+			ApplyResult.bSuccess && ApplyResult.Result.IsValid() && ApplyResult.Result->GetBoolField(TEXT("ok"))))
+		{
+			return false;
+		}
+
+		for (int32 Index = 0; Index < DesiredOrder.Num(); ++Index)
+		{
+			UWidget* Child = WBP->WidgetTree->FindWidget(FName(*DesiredOrder[Index]));
+			TestEqual(*FString::Printf(TEXT("%s final child %d"), *PanelCase.Label, Index),
+				RootPanel->GetChildAt(Index), Child);
+			TestEqual(*FString::Printf(TEXT("%s %s preserves exact slot instance"), *PanelCase.Label, *DesiredOrder[Index]),
+				Child ? Child->Slot.Get() : nullptr, OriginalSlots.FindRef(FName(*DesiredOrder[Index])));
+		}
+
+		const FMonolithActionResult FinalDiffResult =
+			Registry.ExecuteAction(TEXT("ui"), TEXT("diff_ui_spec"), DiffParams);
+		if (!TestTrue(*FString::Printf(TEXT("%s final required diff succeeds"), *PanelCase.Label),
+			FinalDiffResult.bSuccess && FinalDiffResult.Result.IsValid()))
+		{
+			return false;
+		}
+		TestTrue(*FString::Printf(TEXT("%s final required diff is identical"), *PanelCase.Label),
+			FinalDiffResult.Result->GetBoolField(TEXT("ok")));
+		TestEqual(*FString::Printf(TEXT("%s final required status"), *PanelCase.Label),
+			FinalDiffResult.Result->GetStringField(TEXT("status")), TEXT("identical"));
+		TestEqual(*FString::Printf(TEXT("%s final structural diff count"), *PanelCase.Label),
+			static_cast<int32>(FinalDiffResult.Result->GetNumberField(TEXT("change_count"))), 0);
 	}
 
 	return true;

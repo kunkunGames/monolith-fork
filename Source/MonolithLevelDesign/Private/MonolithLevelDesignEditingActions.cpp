@@ -27,6 +27,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Editor.h"
+#include "FileHelpers.h"
 #include "UObject/UnrealType.h"
 
 // Reuse the transaction helper from SceneActions
@@ -307,6 +308,17 @@ void FMonolithLevelDesignEditingActions::RegisterActions(FMonolithToolRegistry& 
 			.Optional(TEXT("component_name"), TEXT("string"), TEXT("Specific component name (default: root component)"))
 			.Optional(TEXT("properties"), TEXT("array"), TEXT("Array of property names to read (default: all visible)"))
 			.Optional(TEXT("component_class"), TEXT("string"), TEXT("Filter by component class name"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("scene"), TEXT("set_actor_component_properties"),
+		TEXT("Write arbitrary component properties on a live level actor via FProperty reflection (ImportText). Mirror of get_actor_component_properties. Values may be string/number/bool. Optional save persists the owning level."),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignEditingActions::SetActorComponentProperties),
+		FParamSchemaBuilder()
+			.Required(TEXT("actor_name"), TEXT("string"), TEXT("Actor name or label"))
+			.Required(TEXT("properties"), TEXT("object"), TEXT("JSON object of {property_name: value}. Values (string/number/bool) are converted via ImportText."))
+			.Optional(TEXT("component_name"), TEXT("string"), TEXT("Specific component name (default: root component)"))
+			.Optional(TEXT("component_class"), TEXT("string"), TEXT("Filter by component class name"))
+			.Optional(TEXT("save"), TEXT("boolean"), TEXT("Save the owning level after verified edits"), TEXT("false"))
 			.Build());
 }
 
@@ -1521,4 +1533,156 @@ FMonolithActionResult FMonolithLevelDesignEditingActions::GetActorComponentPrope
 	Result->SetObjectField(TEXT("properties"), PropsObj);
 
 	return FMonolithActionResult::Success(Result);
+}
+
+// ============================================================================
+// 10. set_actor_component_properties
+// ============================================================================
+
+FMonolithActionResult FMonolithLevelDesignEditingActions::SetActorComponentProperties(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ActorName;
+	if (!Params->TryGetStringField(TEXT("actor_name"), ActorName))
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required param: actor_name"));
+	}
+
+	const TSharedPtr<FJsonObject>* PropsObjPtr = nullptr;
+	if (!Params->TryGetObjectField(TEXT("properties"), PropsObjPtr) || !PropsObjPtr || !(*PropsObjPtr).IsValid() || (*PropsObjPtr)->Values.Num() == 0)
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required param: properties (non-empty object of {name: value})"));
+	}
+
+	FString Error;
+	AActor* Actor = MonolithMeshUtils::FindActorByName(ActorName, Error);
+	if (!Actor)
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	// Resolve target component (mirror get_actor_component_properties)
+	UActorComponent* TargetComp = nullptr;
+	FString ComponentName;
+	FString ComponentClass;
+	Params->TryGetStringField(TEXT("component_name"), ComponentName);
+	Params->TryGetStringField(TEXT("component_class"), ComponentClass);
+
+	if (!ComponentName.IsEmpty())
+	{
+		TArray<UActorComponent*> AllComps;
+		Actor->GetComponents(AllComps);
+		for (UActorComponent* Comp : AllComps)
+		{
+			if (Comp->GetFName().ToString() == ComponentName) { TargetComp = Comp; break; }
+		}
+		if (!TargetComp)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("Component '%s' not found on actor '%s'"), *ComponentName, *ActorName));
+		}
+	}
+	else if (!ComponentClass.IsEmpty())
+	{
+		TArray<UActorComponent*> AllComps;
+		Actor->GetComponents(AllComps);
+		for (UActorComponent* Comp : AllComps)
+		{
+			if (Comp->GetClass()->GetName() == ComponentClass || Comp->GetClass()->GetName() == (TEXT("U") + ComponentClass)) { TargetComp = Comp; break; }
+		}
+		if (!TargetComp)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("No component of class '%s' found on actor '%s'"), *ComponentClass, *ActorName));
+		}
+	}
+	else
+	{
+		TargetComp = Actor->GetRootComponent();
+		if (!TargetComp)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("Actor '%s' has no root component"), *ActorName));
+		}
+	}
+
+	UClass* CompClass = TargetComp->GetClass();
+	TArray<TSharedPtr<FJsonValue>> Applied;
+	TArray<TSharedPtr<FJsonValue>> Skipped;
+
+	TargetComp->Modify();
+
+	for (const auto& Pair : (*PropsObjPtr)->Values)
+	{
+		const FString PropName(*Pair.Key);
+		const TSharedPtr<FJsonValue>& Val = Pair.Value;
+
+		FProperty* Prop = FindFProperty<FProperty>(CompClass, *PropName);
+		if (!Prop)
+		{
+			Skipped.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("%s (not found)"), *PropName)));
+			continue;
+		}
+
+		// Convert JSON value to an ImportText string
+		FString ValueStr;
+		switch (Val->Type)
+		{
+		case EJson::String:
+			ValueStr = Val->AsString();
+			break;
+		case EJson::Boolean:
+			ValueStr = Val->AsBool() ? TEXT("true") : TEXT("false");
+			break;
+		case EJson::Number:
+		{
+			const double Num = Val->AsNumber();
+			if (FMath::IsNearlyEqual(Num, FMath::RoundToDouble(Num)) && FMath::Abs(Num) < 1.0e15)
+			{
+				ValueStr = FString::Printf(TEXT("%lld"), (int64)FMath::RoundToDouble(Num));
+			}
+			else
+			{
+				ValueStr = FString::SanitizeFloat(Num);
+			}
+			break;
+		}
+		default:
+			Skipped.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("%s (unsupported json type)"), *PropName)));
+			continue;
+		}
+
+		void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(TargetComp);
+		const TCHAR* ImportResult = Prop->ImportText_Direct(*ValueStr, ValuePtr, TargetComp, PPF_None);
+		if (ImportResult == nullptr)
+		{
+			Skipped.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("%s (import failed: '%s')"), *PropName, *ValueStr)));
+			continue;
+		}
+
+		auto AppliedObj = MakeShared<FJsonObject>();
+		AppliedObj->SetStringField(TEXT("name"), PropName);
+		AppliedObj->SetStringField(TEXT("value"), ValueStr);
+		Applied.Add(MakeShared<FJsonValueObject>(AppliedObj));
+	}
+
+	TargetComp->PostEditChange();
+	TargetComp->MarkPackageDirty();
+
+	bool bSaved = false;
+	FString SavedFilename;
+	bool bSaveRequested = false;
+	Params->TryGetBoolField(TEXT("save"), bSaveRequested);
+	if (bSaveRequested && Applied.Num() > 0 && Actor->GetLevel())
+	{
+		bSaved = FEditorFileUtils::SaveLevel(Actor->GetLevel(), FString(), &SavedFilename);
+	}
+
+	auto ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetStringField(TEXT("actor_name"), Actor->GetActorNameOrLabel());
+	ResultObj->SetStringField(TEXT("component_name"), TargetComp->GetFName().ToString());
+	ResultObj->SetStringField(TEXT("component_class"), CompClass->GetName());
+	ResultObj->SetNumberField(TEXT("applied_count"), Applied.Num());
+	ResultObj->SetArrayField(TEXT("applied"), Applied);
+	ResultObj->SetArrayField(TEXT("skipped"), Skipped);
+	ResultObj->SetBoolField(TEXT("saved"), bSaved);
+	ResultObj->SetStringField(TEXT("saved_filename"), SavedFilename);
+
+	return FMonolithActionResult::Success(ResultObj);
 }

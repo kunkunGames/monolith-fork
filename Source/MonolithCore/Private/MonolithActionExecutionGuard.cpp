@@ -56,6 +56,23 @@ namespace
 			&& bDryRun;
 	}
 
+	bool IsExplicitNoChangeWithoutSave(const TSharedPtr<FJsonObject>& Object)
+	{
+		if (!Object.IsValid())
+		{
+			return false;
+		}
+
+		bool bChanged = true;
+		if (!Object->TryGetBoolField(TEXT("changed"), bChanged) || bChanged)
+		{
+			return false;
+		}
+
+		bool bSaved = false;
+		return !Object->TryGetBoolField(TEXT("saved"), bSaved) || !bSaved;
+	}
+
 	bool IsSourceControlTargetStringField(const FString& FieldName)
 	{
 		static const TSet<FString> FieldNames =
@@ -395,7 +412,10 @@ FMonolithActionExecutionGuard::FExecutionScope FMonolithActionExecutionGuard::Be
 	Scope.ExecutionPolicy = FMonolithToolRegistry::Get().GetActionExecutionPolicy(Namespace, Action);
 	Scope.bDirtyPackageTrackingActive = Scope.ExecutionPolicy.bDirtyPackageTracking;
 	const bool bExplicitDryRun = IsExplicitDryRun(Params);
+	Scope.bHandlerOwnedSourceControlPrepare = Scope.bDirtyPackageTrackingActive
+		&& IsHandlerOwnedSourceControlAction(Namespace, Action);
 	Scope.bSourceControlPrepareActive = Scope.bDirtyPackageTrackingActive
+		&& !Scope.bHandlerOwnedSourceControlPrepare
 		&& IsAutomaticSourceControlPrepareNamespace(Namespace)
 		&& IsAutomaticSourceControlPrepareAction(Action)
 		&& !bExplicitDryRun;
@@ -408,7 +428,13 @@ FMonolithActionExecutionGuard::FExecutionScope FMonolithActionExecutionGuard::Be
 	Scope.PostEditValidationStatus = Scope.ExecutionPolicy.bPostEditValidation
 		? TEXT("requested_by_policy")
 		: TEXT("not_requested");
-	if (Scope.bSourceControlPrepareActive)
+	if (Scope.bHandlerOwnedSourceControlPrepare)
+	{
+		Scope.SourceControlPrepareStatus = bExplicitDryRun
+			? TEXT("handler_owned_skipped_by_dry_run")
+			: TEXT("handler_owned_pending");
+	}
+	else if (Scope.bSourceControlPrepareActive)
 	{
 		Scope.SourceControlPrepareStatus = TEXT("no_pre_action_targets");
 	}
@@ -437,6 +463,43 @@ FMonolithActionExecutionGuard::FExecutionScope FMonolithActionExecutionGuard::Be
 	}
 	Scope.bActive = true;
 	return Scope;
+}
+
+void FMonolithActionExecutionGuard::RegisterHandlerOwnedSourceControlActions(
+	const FString& Namespace,
+	const TArray<FString>& Actions)
+{
+	if (Namespace.IsEmpty())
+	{
+		return;
+	}
+
+	FScopeLock Lock(&GuardLock);
+	for (const FString& Action : Actions)
+	{
+		if (!Action.IsEmpty())
+		{
+			HandlerOwnedSourceControlActions.Add(MakeActionKey(Namespace, Action));
+		}
+	}
+}
+
+void FMonolithActionExecutionGuard::UnregisterHandlerOwnedSourceControlActions(const FString& Namespace)
+{
+	if (Namespace.IsEmpty())
+	{
+		return;
+	}
+
+	const FString Prefix = Namespace + TEXT(".");
+	FScopeLock Lock(&GuardLock);
+	for (auto It = HandlerOwnedSourceControlActions.CreateIterator(); It; ++It)
+	{
+		if (It->StartsWith(Prefix, ESearchCase::CaseSensitive))
+		{
+			It.RemoveCurrent();
+		}
+	}
 }
 
 bool FMonolithActionExecutionGuard::RegisterPostEditValidator(
@@ -526,17 +589,57 @@ void FMonolithActionExecutionGuard::SetActionOutcome(
 	Scope.JsonRpcErrorCode = bSuccess ? 0 : ErrorCode;
 	Scope.ResultKind = bSuccess ? TEXT("json_object") : TEXT("error_text");
 
+	if (Scope.bHandlerOwnedSourceControlPrepare)
+	{
+		if (!bSuccess)
+		{
+			Scope.SourceControlPrepareStatus = TEXT("handler_owned_handler_error");
+		}
+		else if (IsExplicitDryRun(ResultObject))
+		{
+			Scope.SourceControlPrepareStatus = TEXT("handler_owned_skipped_by_dry_run");
+		}
+		else if (ResultObject.IsValid())
+		{
+			const TSharedPtr<FJsonObject>* PrepareObject = nullptr;
+			FString HandlerStatus;
+			if (ResultObject->TryGetObjectField(TEXT("source_control_prepare"), PrepareObject)
+				&& PrepareObject
+				&& PrepareObject->IsValid()
+				&& (*PrepareObject)->TryGetStringField(TEXT("status"), HandlerStatus)
+				&& !HandlerStatus.IsEmpty())
+			{
+				Scope.SourceControlPrepareStatus = TEXT("handler_owned_") + HandlerStatus;
+			}
+			else if (IsExplicitNoChangeWithoutSave(ResultObject))
+			{
+				Scope.SourceControlPrepareStatus = TEXT("handler_owned_no_change");
+			}
+			else
+			{
+				Scope.SourceControlPrepareStatus = TEXT("handler_owned_not_reported");
+			}
+		}
+	}
+
 	if (bSuccess
 		&& ResultObject.IsValid()
 		&& Scope.bSourceControlPrepareActive
 		&& !IsExplicitDryRun(ResultObject))
 	{
-		TArray<FString> Targets = Scope.SourceControlTargetPathsBefore;
-		AppendUniqueSourceControlTargets(Targets, CollectSourceControlTargetPaths(ResultObject));
-		AppendUniqueSourceControlTargets(Targets, CollectChangedDirtyPackages(Scope));
+		if (!IsExplicitNoChangeWithoutSave(ResultObject))
+		{
+			TArray<FString> Targets = Scope.SourceControlTargetPathsBefore;
+			AppendUniqueSourceControlTargets(Targets, CollectSourceControlTargetPaths(ResultObject));
+			AppendUniqueSourceControlTargets(Targets, CollectChangedDirtyPackages(Scope));
 
-		Scope.SourceControlPrepareAfter = PrepareSourceControlTargets(Targets, false);
-		Scope.SourceControlPrepareStatus = SummarizeSourceControlPrepare(Scope.SourceControlPrepareAfter);
+			Scope.SourceControlPrepareAfter = PrepareSourceControlTargets(Targets, false);
+			Scope.SourceControlPrepareStatus = SummarizeSourceControlPrepare(Scope.SourceControlPrepareAfter);
+		}
+		else if (!Scope.SourceControlPrepareBefore.IsValid())
+		{
+			Scope.SourceControlPrepareStatus = TEXT("no_change");
+		}
 
 		if (Scope.SourceControlPrepareBefore.IsValid() || Scope.SourceControlPrepareAfter.IsValid())
 		{
@@ -1120,6 +1223,14 @@ bool FMonolithActionExecutionGuard::IsAutomaticSourceControlPrepareAction(const 
 	return true;
 }
 
+bool FMonolithActionExecutionGuard::IsHandlerOwnedSourceControlAction(
+	const FString& Namespace,
+	const FString& Action) const
+{
+	FScopeLock Lock(&GuardLock);
+	return HandlerOwnedSourceControlActions.Contains(MakeActionKey(Namespace, Action));
+}
+
 TSet<FString> FMonolithActionExecutionGuard::SnapshotDirtyPackages()
 {
 	TSet<FString> DirtyPackages;
@@ -1131,7 +1242,7 @@ TSet<FString> FMonolithActionExecutionGuard::SnapshotDirtyPackages()
 			continue;
 		}
 		const FString PackageName = Package->GetName();
-		if (!PackageName.StartsWith(TEXT("/Game")))
+		if (!FMonolithAssetUtils::IsProjectOwnedPackage(PackageName))
 		{
 			continue;
 		}

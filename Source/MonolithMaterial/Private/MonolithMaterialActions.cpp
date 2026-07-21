@@ -1,4 +1,5 @@
 ﻿#include "MonolithMaterialActions.h"
+#include "MonolithMaterialValidation.h"
 #include "MonolithParamUtils.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithToolRegistry.h"
@@ -6,6 +7,8 @@
 #include "MonolithPackagePathValidator.h"
 
 #include "Materials/Material.h"
+#include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstance.h"
 #include "Materials/MaterialExpression.h"
 #include "Materials/MaterialExpressionParameter.h"
 #include "Materials/MaterialExpressionTextureBase.h"
@@ -17,6 +20,7 @@
 #include "Materials/MaterialExpressionCustomOutput.h"
 #include "Materials/MaterialExpressionMaterialAttributeLayers.h"
 #include "Materials/MaterialExpressionMaterialFunctionCall.h"
+#include "Materials/MaterialExpressionNamedReroute.h"
 #include "Materials/MaterialFunction.h"
 #include "Materials/MaterialFunctionInterface.h"
 #include "Materials/MaterialFunctionMaterialLayer.h"
@@ -213,11 +217,11 @@ void FMonolithMaterialActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Build());
 
 	Registry.RegisterAction(TEXT("material"), TEXT("validate_material"),
-		TEXT("Validate material graph health and optionally auto-fix issues"),
+		TEXT("Validate a base material graph or a material instance and its resolved parent graph"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMaterialActions::ValidateMaterial),
 		FParamSchemaBuilder()
-			.RequiredAssetPath(TEXT("asset_path"), TEXT("Material asset path"))
-			.Optional(TEXT("fix_issues"), TEXT("bool"), TEXT("Auto-fix detected issues"), TEXT("false"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Base material or material instance asset path"))
+			.Optional(TEXT("fix_issues"), TEXT("bool"), TEXT("Auto-fix detected base-material graph issues; rejected for material instances"), TEXT("false"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("material"), TEXT("render_preview"),
@@ -2094,10 +2098,75 @@ FMonolithActionResult FMonolithMaterialActions::ValidateMaterial(const TSharedPt
 	bool bFixIssues = false;
 	Params->TryGetBoolField(TEXT("fix_issues"), bFixIssues);
 
-	UMaterial* Mat = LoadBaseMaterial(AssetPath);
-	if (!Mat)
+	UMaterialInterface* RequestedMaterial = FMonolithAssetUtils::LoadAssetByPath<UMaterialInterface>(AssetPath);
+	if (!RequestedMaterial)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load base material at '%s'"), *AssetPath));
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Failed to load material interface at '%s'"),
+			*AssetPath));
+	}
+
+	const UMaterialInstance* RequestedInstance = Cast<UMaterialInstance>(RequestedMaterial);
+	if (RequestedInstance && bFixIssues)
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(
+				TEXT("fix_issues is not valid for material instance '%s': graph ownership belongs to its resolved base material; validate the instance with fix_issues=false or target the base material explicitly"),
+				*AssetPath),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	// Material instances own overrides, not expression graphs. Resolve the explicit
+	// parent chain without calling GetMaterial()/GetBaseMaterial(), because those
+	// APIs may return an engine default material for a broken chain and would mask
+	// the invalid source contract we are validating.
+	UMaterial* Mat = Cast<UMaterial>(RequestedMaterial);
+	TArray<TSharedPtr<FJsonValue>> ParentChain;
+	if (RequestedInstance)
+	{
+		TSet<const UMaterialInterface*> Visited;
+		Visited.Add(RequestedMaterial);
+		UMaterialInterface* Current = RequestedMaterial;
+
+		while (const UMaterialInstance* CurrentInstance = Cast<UMaterialInstance>(Current))
+		{
+			UMaterialInterface* Parent = CurrentInstance->Parent.Get();
+			if (!Parent)
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("Material instance '%s' has a missing parent in its explicit parent chain at '%s'"),
+					*AssetPath,
+					*CurrentInstance->GetPathName()));
+			}
+			if (Visited.Contains(Parent))
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("Material instance '%s' has a cyclic parent chain at '%s'"),
+					*AssetPath,
+					*Parent->GetPathName()));
+			}
+
+			Visited.Add(Parent);
+			ParentChain.Add(MakeShared<FJsonValueString>(Parent->GetPathName()));
+			Current = Parent;
+		}
+
+		Mat = Cast<UMaterial>(Current);
+		if (!Mat)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Material instance '%s' does not resolve to a base UMaterial; parent-chain root is '%s' (%s)"),
+				*AssetPath,
+				Current ? *Current->GetPathName() : TEXT("<null>"),
+				Current ? *Current->GetClass()->GetName() : TEXT("null")));
+		}
+	}
+	else if (!Mat)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Unsupported material interface type at '%s': %s"),
+			*AssetPath,
+			*RequestedMaterial->GetClass()->GetName()));
 	}
 
 	TConstArrayView<TObjectPtr<UMaterialExpression>> Expressions = Mat->GetExpressions();
@@ -2153,6 +2222,21 @@ FMonolithActionResult FMonolithMaterialActions::ValidateMaterial(const TSharedPt
 	while (BfsQueue.Num() > 0)
 	{
 		UMaterialExpression* Current = BfsQueue.Pop(EAllowShrinking::No);
+
+		// Named reroute usages carry their upstream edge in the reflected
+		// Declaration property rather than an FExpressionInput. Treat that edge as
+		// part of reachability so a valid declaration chain is never reported (or
+		// auto-deleted) as a disconnected island.
+		if (const UMaterialExpressionNamedRerouteUsage* Usage = Cast<UMaterialExpressionNamedRerouteUsage>(Current))
+		{
+			UMaterialExpressionNamedRerouteDeclaration* Declaration = Usage->Declaration.Get();
+			if (IsValid(Declaration) && !ReachableSet.Contains(Declaration))
+			{
+				ReachableSet.Add(Declaration);
+				BfsQueue.Add(Declaration);
+			}
+		}
+
 		for (int32 i = 0; ; ++i)
 		{
 			FExpressionInput* NodeInput = Current->GetInput(i);
@@ -2203,7 +2287,7 @@ FMonolithActionResult FMonolithMaterialActions::ValidateMaterial(const TSharedPt
 		// Check: Broken texture refs
 		if (const auto* TexBase = Cast<UMaterialExpressionTextureBase>(Expr))
 		{
-			if (!TexBase->Texture)
+			if (MonolithMaterialValidation::HasBrokenTextureReference(TexBase))
 			{
 				auto IssueJson = MakeShared<FJsonObject>();
 				IssueJson->SetStringField(TEXT("severity"), TEXT("error"));
@@ -2376,6 +2460,13 @@ FMonolithActionResult FMonolithMaterialActions::ValidateMaterial(const TSharedPt
 
 	auto ResultJson = MakeShared<FJsonObject>();
 	ResultJson->SetStringField(TEXT("asset_path"), AssetPath);
+	ResultJson->SetStringField(TEXT("asset_type"), RequestedMaterial->GetClass()->GetName());
+	ResultJson->SetStringField(
+		TEXT("validation_scope"),
+		RequestedInstance ? TEXT("material_instance_and_resolved_base_graph") : TEXT("base_material_graph"));
+	ResultJson->SetStringField(TEXT("validated_graph_asset_path"), Mat->GetPathName());
+	ResultJson->SetArrayField(TEXT("instance_parent_chain"), ParentChain);
+	ResultJson->SetNumberField(TEXT("instance_parent_chain_depth"), ParentChain.Num());
 	ResultJson->SetArrayField(TEXT("issues"), IssuesArray);
 	ResultJson->SetNumberField(TEXT("issue_count"), IssuesArray.Num());
 	ResultJson->SetNumberField(TEXT("fixed_count"), FixedCount);
@@ -7602,6 +7693,21 @@ void FMonolithMaterialActions::BuildGraphFromSpec(
 	OutNodesCreated = 0;
 	OutConnectionsMade = 0;
 
+	struct FDeferredExpressionObjectProperty
+	{
+		UMaterialExpression* Owner = nullptr;
+		FObjectProperty* Property = nullptr;
+		FString SourceReference;
+		FString NodeId;
+	};
+
+	// Expression-to-expression UObject properties (for example a named-reroute
+	// usage's Declaration) cannot be imported while nodes are still being
+	// created. Loading the exported source path here would retain a private
+	// object from the source package and make the destination package impossible
+	// to save. Resolve these references through IdToExpr after every node exists.
+	TArray<FDeferredExpressionObjectProperty> DeferredExpressionObjectProperties;
+
 	// Phase 1 — Standard nodes
 	const TArray<TSharedPtr<FJsonValue>>* NodesArray = nullptr;
 	if (Spec->TryGetArrayField(TEXT("nodes"), NodesArray))
@@ -7745,21 +7851,32 @@ void FMonolithMaterialActions::BuildGraphFromSpec(
 					}
 					else if (FObjectProperty* ObjProp = CastField<FObjectProperty>(Prop))
 					{
-						// ValueStr is a plain asset path like "/Game/Textures/T_Foo" — load and assign directly.
-						// StaticLoadObject works with either bare paths or full class-prefix reference notation.
-						UObject* LoadedObj = StaticLoadObject(ObjProp->PropertyClass, nullptr, *ValueStr);
-						if (LoadedObj)
+						if (ObjProp->PropertyClass && ObjProp->PropertyClass->IsChildOf(UMaterialExpression::StaticClass()))
 						{
-							ObjProp->SetObjectPropertyValue(ValuePtr, LoadedObj);
+							FDeferredExpressionObjectProperty& Deferred = DeferredExpressionObjectProperties.AddDefaulted_GetRef();
+							Deferred.Owner = NewExpr;
+							Deferred.Property = ObjProp;
+							Deferred.SourceReference = ValueStr;
+							Deferred.NodeId = Id;
 						}
 						else
 						{
-							auto ErrJson = MakeShared<FJsonObject>();
-							ErrJson->SetStringField(TEXT("node_id"), Id);
-							ErrJson->SetStringField(TEXT("warning"), FString::Printf(
-								TEXT("Could not load asset '%s' for property '%s' on '%s'"),
-								*ValueStr, *Pair.Key, *FullClassName));
-							OutErrors.Add(MakeShared<FJsonValueObject>(ErrJson));
+							// ValueStr is a plain asset path like "/Game/Textures/T_Foo" — load and assign directly.
+							// StaticLoadObject works with either bare paths or full class-prefix reference notation.
+							UObject* LoadedObj = StaticLoadObject(ObjProp->PropertyClass, nullptr, *ValueStr);
+							if (LoadedObj)
+							{
+								ObjProp->SetObjectPropertyValue(ValuePtr, LoadedObj);
+							}
+							else
+							{
+								auto ErrJson = MakeShared<FJsonObject>();
+								ErrJson->SetStringField(TEXT("node_id"), Id);
+								ErrJson->SetStringField(TEXT("warning"), FString::Printf(
+									TEXT("Could not load asset '%s' for property '%s' on '%s'"),
+									*ValueStr, *Pair.Key, *FullClassName));
+								OutErrors.Add(MakeShared<FJsonValueObject>(ErrJson));
+							}
 						}
 					}
 					else if (FByteProperty* ByteProp = CastField<FByteProperty>(Prop))
@@ -7956,6 +8073,78 @@ void FMonolithMaterialActions::BuildGraphFromSpec(
 				IdToExpr.Add(CustomUserName, CustomExpr);
 			}
 			OutNodesCreated++;
+		}
+	}
+
+	// Resolve private expression references inside the destination graph. ExportText
+	// commonly emits Class'/Package.Asset:Expression_0'; only the terminal subobject
+	// name is stable across a graph round-trip.
+	for (const FDeferredExpressionObjectProperty& Deferred : DeferredExpressionObjectProperties)
+	{
+		if (!Deferred.Owner || !Deferred.Property)
+		{
+			continue;
+		}
+
+		FString ReferencePath = Deferred.SourceReference;
+		if (ReferencePath.Equals(TEXT("None"), ESearchCase::IgnoreCase) || ReferencePath.IsEmpty())
+		{
+			void* ValuePtr = Deferred.Property->ContainerPtrToValuePtr<void>(Deferred.Owner);
+			Deferred.Property->SetObjectPropertyValue(ValuePtr, nullptr);
+			continue;
+		}
+
+		int32 FirstQuote = INDEX_NONE;
+		int32 LastQuote = INDEX_NONE;
+		if (ReferencePath.FindChar(TEXT('\''), FirstQuote) && ReferencePath.FindLastChar(TEXT('\''), LastQuote)
+			&& LastQuote > FirstQuote)
+		{
+			ReferencePath = ReferencePath.Mid(FirstQuote + 1, LastQuote - FirstQuote - 1);
+		}
+
+		FString ReferenceId = ReferencePath;
+		int32 Separator = INDEX_NONE;
+		if (ReferenceId.FindLastChar(TEXT(':'), Separator) || ReferenceId.FindLastChar(TEXT('.'), Separator))
+		{
+			ReferenceId = ReferenceId.Mid(Separator + 1);
+		}
+
+		UMaterialExpression** RemappedExpression = IdToExpr.Find(ReferenceId);
+		if (!RemappedExpression || !IsValid(*RemappedExpression)
+			|| !(*RemappedExpression)->IsA(Deferred.Property->PropertyClass))
+		{
+			auto ErrJson = MakeShared<FJsonObject>();
+			ErrJson->SetStringField(TEXT("node_id"), Deferred.NodeId);
+			ErrJson->SetStringField(TEXT("property"), Deferred.Property->GetName());
+			ErrJson->SetStringField(TEXT("source_reference"), Deferred.SourceReference);
+			ErrJson->SetStringField(TEXT("error"), FString::Printf(
+				TEXT("Could not remap expression object reference '%s' into the destination graph"),
+				*ReferenceId));
+			OutErrors.Add(MakeShared<FJsonValueObject>(ErrJson));
+			continue;
+		}
+
+		void* ValuePtr = Deferred.Property->ContainerPtrToValuePtr<void>(Deferred.Owner);
+		Deferred.Property->SetObjectPropertyValue(ValuePtr, *RemappedExpression);
+	}
+
+	// Material-function call pins are derived from the referenced function. Direct
+	// property assignment does not rebuild those pins, so refresh them before the
+	// connection phase attempts to resolve named inputs and outputs.
+	TSet<UMaterialExpression*> RefreshedExpressions;
+	for (const TPair<FString, UMaterialExpression*>& Pair : IdToExpr)
+	{
+		if (!IsValid(Pair.Value))
+		{
+			continue;
+		}
+		if (UMaterialExpressionMaterialFunctionCall* FunctionCall = Cast<UMaterialExpressionMaterialFunctionCall>(Pair.Value))
+		{
+			if (!RefreshedExpressions.Contains(FunctionCall))
+			{
+				FunctionCall->UpdateFromFunctionResource();
+				RefreshedExpressions.Add(FunctionCall);
+			}
 		}
 	}
 

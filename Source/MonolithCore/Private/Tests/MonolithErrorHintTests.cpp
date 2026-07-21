@@ -71,6 +71,14 @@ bool FMonolithFindSimilarActionsTest::RunTest(const FString& Parameters)
 	Reg.RegisterAction(TestNs, TEXT("get_graph_summary"),TEXT("d"), NoopHandler);
 	Reg.RegisterAction(TestNs, TEXT("search_nodes"),    TEXT("d"), NoopHandler);
 	Reg.RegisterAction(TestNs, TEXT("compile_blueprint"),TEXT("d"), NoopHandler);
+	Reg.RegisterAction(TestNs, TEXT("resolve_setting"), TEXT("d"), NoopHandler);
+	Reg.RegisterAction(TestNs, TEXT("get_config_value_history"), TEXT("d"), NoopHandler);
+	Reg.SetActionSearchMetadata(
+		TestNs,
+		TEXT("resolve_setting"),
+		{TEXT("config"), TEXT("setting")},
+		{TEXT("get_config_value")},
+		{TEXT("Resolve an effective config setting.")});
 
 	// 1) Typo "list_grafs" should suggest "list_graphs" first.
 	{
@@ -106,8 +114,116 @@ bool FMonolithFindSimilarActionsTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("unknown namespace returns empty"), Hits.Num(), 0);
 	}
 
+	// 6) A retired action name declared as an alias resolves to the current
+	// registered action. A typo in that alias uses the same recovery path.
+	{
+		const TArray<FString> ExactAliasHits = Reg.FindSimilarActions(TestNs, TEXT("get_config_value"));
+		TestTrue(TEXT("exact alias gets suggestions"), ExactAliasHits.Num() > 0);
+		if (ExactAliasHits.Num() > 0)
+		{
+			TestEqual(TEXT("exact alias returns registered action"), ExactAliasHits[0], FString(TEXT("resolve_setting")));
+			const int32 AliasIndex = ExactAliasHits.IndexOfByKey(TEXT("resolve_setting"));
+			const int32 PrefixCompetitorIndex = ExactAliasHits.IndexOfByKey(TEXT("get_config_value_history"));
+			TestTrue(TEXT("action-name prefix competitor is present"), PrefixCompetitorIndex != INDEX_NONE);
+			TestTrue(TEXT("exact alias beats action-name prefix competitor"),
+				AliasIndex != INDEX_NONE && PrefixCompetitorIndex != INDEX_NONE && AliasIndex < PrefixCompetitorIndex);
+		}
+
+		const TArray<FString> TypoAliasHits = Reg.FindSimilarActions(TestNs, TEXT("get_config_vlaue"));
+		TestTrue(TEXT("alias typo gets suggestions"), TypoAliasHits.Num() > 0);
+		if (TypoAliasHits.Num() > 0)
+		{
+			TestEqual(TEXT("alias typo returns registered action"), TypoAliasHits[0], FString(TEXT("resolve_setting")));
+		}
+	}
+
 	// Cleanup so we don't leak registrations across test runs.
 	Reg.UnregisterNamespace(TestNs);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLegacyActionAliasSeedTest,
+	"Monolith.Core.ErrorHints.LegacyActionAliasSeeds",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithLegacyActionAliasSeedTest::RunTest(const FString& Parameters)
+{
+	struct FLegacyAliasExpectation
+	{
+		FString Namespace;
+		FString CurrentAction;
+		FString RetiredAlias;
+	};
+
+	const TArray<FLegacyAliasExpectation> Expectations =
+	{
+		{TEXT("gas"), TEXT("get_ability_info"), TEXT("get_ability")},
+		{TEXT("niagara"), TEXT("get_system_summary"), TEXT("get_system_info")},
+		{TEXT("material"), TEXT("get_material_properties"), TEXT("get_material_info")},
+		{TEXT("ui"), TEXT("get_widget_tree"), TEXT("list_widgets")},
+		{TEXT("ui"), TEXT("get_widget_tree"), TEXT("get_widget_hierarchy")},
+		{TEXT("ui"), TEXT("get_widget_bindings"), TEXT("get_viewmodel_bindings")},
+		{TEXT("animation"), TEXT("get_montage_info"), TEXT("list_montages")},
+		{TEXT("animation"), TEXT("get_montage_info"), TEXT("get_montage_sections")},
+		{TEXT("animation"), TEXT("get_graphs"), TEXT("get_anim_graph")},
+		{TEXT("animation"), TEXT("get_state_machines"), TEXT("get_state_machine")},
+		{TEXT("audio"), TEXT("list_audio_assets"), TEXT("list_sound_cues")},
+		{TEXT("audio"), TEXT("get_sound_cue_graph"), TEXT("get_sound_cue")},
+		{TEXT("scene"), TEXT("get_level_actors"), TEXT("list_actors")},
+		{TEXT("config"), TEXT("resolve_setting"), TEXT("get_config_value")},
+		{TEXT("localization"), TEXT("get_string_table"), TEXT("get_localized_string")},
+	};
+
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	for (const FLegacyAliasExpectation& Expectation : Expectations)
+	{
+		const FString CurrentActionId = Expectation.Namespace + TEXT(".") + Expectation.CurrentAction;
+		const FString RetiredActionId = Expectation.Namespace + TEXT(".") + Expectation.RetiredAlias;
+		const TArray<FMonolithActionInfo> NamespaceActions = Registry.GetActions(Expectation.Namespace);
+		const FMonolithActionInfo* CurrentAction = NamespaceActions.FindByPredicate(
+			[&Expectation](const FMonolithActionInfo& ActionInfo)
+			{
+				return ActionInfo.Action.Equals(Expectation.CurrentAction, ESearchCase::IgnoreCase);
+			});
+
+		TestTrue(FString::Printf(TEXT("current action is registered: %s"), *CurrentActionId), CurrentAction != nullptr);
+		TestFalse(FString::Printf(TEXT("retired alias is not a dispatch endpoint: %s"), *RetiredActionId),
+			Registry.HasAction(Expectation.Namespace, Expectation.RetiredAlias));
+		TestFalse(FString::Printf(TEXT("retired alias differs from current action: %s"), *RetiredActionId),
+			Expectation.RetiredAlias.Equals(Expectation.CurrentAction, ESearchCase::IgnoreCase));
+
+		int32 AliasOwnerCount = 0;
+		FString AliasOwner;
+		for (const FMonolithActionInfo& ActionInfo : NamespaceActions)
+		{
+			const bool bOwnsAlias = ActionInfo.SearchMetadata.Aliases.ContainsByPredicate(
+				[&Expectation](const FString& Alias)
+				{
+					return Alias.Equals(Expectation.RetiredAlias, ESearchCase::IgnoreCase);
+				});
+			if (bOwnsAlias)
+			{
+				++AliasOwnerCount;
+				AliasOwner = ActionInfo.Action;
+			}
+		}
+
+		TestEqual(FString::Printf(TEXT("retired alias has one owner: %s"), *RetiredActionId), AliasOwnerCount, 1);
+		TestEqual(FString::Printf(TEXT("retired alias owner is current action: %s"), *RetiredActionId),
+			AliasOwner, Expectation.CurrentAction);
+
+		const TArray<FString> Similar = Registry.FindSimilarActions(
+			Expectation.Namespace,
+			Expectation.RetiredAlias,
+			/*MaxResults=*/5);
+		TestTrue(FString::Printf(TEXT("retired alias has a recovery candidate: %s"), *RetiredActionId), Similar.Num() > 0);
+		if (Similar.Num() > 0)
+		{
+			TestEqual(FString::Printf(TEXT("retired alias top hit is current action: %s"), *RetiredActionId),
+				Similar[0], Expectation.CurrentAction);
+		}
+	}
+
 	return true;
 }
 

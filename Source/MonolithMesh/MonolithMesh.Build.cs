@@ -75,7 +75,6 @@ public class MonolithMesh : ModuleRules
 			"NavigationSystem",
 			"RenderCore",
 			"RHI",
-			"EditorScriptingUtilities",
 			"Json",
 			"JsonUtilities",
 			"Slate",
@@ -84,7 +83,8 @@ public class MonolithMesh : ModuleRules
 			"AssetTools",
 			"MeshReductionInterface",
 			"MeshMergeUtilities",
-			"LevelInstanceEditor"
+			"LevelInstanceEditor",
+			"SourceControl"
 		});
 
 		// Optional: GeometryScripting (Tier 5 mesh operations only)

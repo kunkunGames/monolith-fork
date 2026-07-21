@@ -6,12 +6,13 @@ Measures whether the source namespace (C++ symbol index) returns data that is
 rich enough for agents to get useful code context.  The benchmark is
 deterministic and does not call an LLM.
 
-Six task categories:
+Seven task categories:
   symbol_lookup          - search_source / find_callers / find_callees / risk_score for engine symbols.
   review_context_lookup  - review_context for engine symbols (scored like symbol_lookup).
   impact_radius_lookup   - impact_radius for engine symbols (scored like symbol_lookup).
   ergonomics_text        - get_include_path / get_signature / check_deprecations / verify_symbols /
                            find_example_usage - plain-text ergonomic tools.
+  negative_recovery      - deliberately bad input must return identifier-specific recovery guidance.
   health_check           - source health, presence of status + symbol_count.
   schema_field_presence  - monolith_discover schema check for planning signals.
 """
@@ -1782,58 +1783,211 @@ def append_negative_recovery_tasks(tasks: List[Dict[str, Any]], next_id: Any) ->
         })
 
 
+def require_generation_status(url: str, timeout_s: float, phase: str) -> Dict[str, Any]:
+    """Return one validated MCP status snapshot for catalog-bound generation."""
+    response = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
+    validation = validate_status_response(response)
+    if not validation.get("ok"):
+        failure_kind = str(validation.get("failure_kind", "protocol_error"))
+        raw = str(validation.get("raw", ""))[:300]
+        raise RuntimeError(
+            f"SourceIndex {phase} status failed ({failure_kind}): {raw or '<no diagnostic>'}"
+        )
+    status = dict(validation["status"])
+    catalog_version = str(status.get("catalog_version", "")).strip()
+    if not catalog_version:
+        raise RuntimeError(f"SourceIndex {phase} status omitted catalog_version")
+    return status
+
+
+def discover_source_catalog(
+    url: str,
+    timeout_s: float = 45.0,
+) -> Tuple[List[str], Dict[str, Any]]:
+    """Enumerate the complete live source catalog under one stable identity.
+
+    Generation is intentionally catalog-bound even when the curated static corpus
+    already satisfies ``--min-tasks``.  This catches removed/renamed actions before
+    canonical files are written and prevents a transient editor restart from mixing
+    pages from different registries.
+    """
+    start_status = require_generation_status(url, timeout_s, "pre-discovery")
+    start_catalog_version = str(start_status["catalog_version"]).strip()
+    page_catalog_versions: set[str] = set()
+
+    def fetch_page(arguments: Dict[str, Any]) -> Dict[str, Any]:
+        response = mcp_call(url, "monolith_discover", arguments, timeout_s=timeout_s)
+        if response.get("transport_error"):
+            raise RuntimeError(
+                "source catalog discovery transport failure: "
+                f"{str(response.get('raw', ''))[:300]}"
+            )
+        protocol_failure = classify_protocol_failure(response)
+        if protocol_failure:
+            raise RuntimeError(
+                f"source catalog discovery {protocol_failure}: "
+                f"{str(response.get('raw', result_text(response)))[:300]}"
+            )
+        payload = result_payload(response)
+        if payload.get("isError"):
+            raise RuntimeError(
+                "source catalog discovery returned isError: "
+                f"{result_text(response)[:300]}"
+            )
+        data = result_data(response)
+        page_catalog_version = str(data.get("catalog_version", "")).strip()
+        if page_catalog_version:
+            page_catalog_versions.add(page_catalog_version)
+        return data
+
+    action_names = paginate_discover_action_names(fetch_page, "source")
+    if not action_names:
+        raise RuntimeError("live source catalog contains no actions")
+    normalized_actions = [str(name).strip() for name in action_names if str(name).strip()]
+    unique_actions = sorted(set(normalized_actions))
+    if len(unique_actions) != len(normalized_actions):
+        raise RuntimeError("live source catalog contains duplicate action names")
+
+    end_status = require_generation_status(url, timeout_s, "post-discovery")
+    end_catalog_version = str(end_status["catalog_version"]).strip()
+    if end_catalog_version != start_catalog_version:
+        raise RuntimeError(
+            "source catalog changed during generation "
+            f"({start_catalog_version} -> {end_catalog_version})"
+        )
+    unexpected_page_versions = sorted(
+        version for version in page_catalog_versions if version != start_catalog_version
+    )
+    if unexpected_page_versions:
+        raise RuntimeError(
+            "source discover page catalog_version disagrees with monolith_status: "
+            f"expected {start_catalog_version}, observed {unexpected_page_versions}"
+        )
+
+    return unique_actions, start_status
+
+
+def validate_source_catalog_contract(
+    tasks: List[Dict[str, Any]],
+    live_actions: Iterable[str],
+) -> Dict[str, Any]:
+    """Validate curated tasks against live action identities without guessing schemas."""
+    live_action_set = {str(action).strip() for action in live_actions if str(action).strip()}
+    referenced_actions: set[str] = set()
+    for task in tasks:
+        task_id = str(task.get("id", "<missing-id>"))
+        namespace = str(task.get("namespace", "")).strip()
+        action = str(task.get("action", "")).strip()
+        arguments = task.get("arguments")
+        if namespace != "source":
+            raise RuntimeError(f"{task_id} must target namespace 'source', got {namespace!r}")
+        if not action:
+            raise RuntimeError(f"{task_id} has no source action")
+        if not isinstance(arguments, dict) or str(arguments.get("action", "")).strip() != action:
+            raise RuntimeError(
+                f"{task_id} arguments.action must exactly match task action {action!r}"
+            )
+        referenced_actions.add(action)
+
+    missing_actions = sorted(referenced_actions - live_action_set)
+    if missing_actions:
+        raise RuntimeError(
+            "SourceIndex curated tasks reference actions absent from the live source catalog: "
+            + ", ".join(missing_actions)
+        )
+    uncovered_actions = sorted(live_action_set - referenced_actions)
+    return {
+        "live_action_count": len(live_action_set),
+        "referenced_action_count": len(referenced_actions),
+        "uncovered_action_count": len(uncovered_actions),
+        "uncovered_actions": uncovered_actions,
+    }
+
+
+def append_live_schema_coverage_tasks(
+    tasks: List[Dict[str, Any]],
+    live_actions: Iterable[str],
+) -> List[str]:
+    """Add deterministic discovery-only coverage for otherwise-unreferenced actions."""
+    referenced_actions = {
+        str(task.get("action", "")).strip()
+        for task in tasks
+        if str(task.get("action", "")).strip()
+    }
+    uncovered_actions = sorted(
+        {str(action).strip() for action in live_actions if str(action).strip()}
+        - referenced_actions
+    )
+    for action in uncovered_actions:
+        tasks.append({
+            "id": f"SIB-{len(tasks) + 1:03d}",
+            "category": "schema_field_presence",
+            "namespace": "source",
+            "action": action,
+            "tool": "monolith_discover",
+            "arguments": {
+                "namespace": "source",
+                "action": action,
+                "mode": "schema",
+            },
+            "expected": {
+                "requires_planning_signals": True,
+                "requires_skill": True,
+                "requires_status_declared": True,
+            },
+            "safety": "read_only_discovery",
+        })
+    return uncovered_actions
+
+
 def generate_tasks(url: str, min_tasks: int, tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dict[str, Any]:
-    """Generate task fixtures from golden symbols plus live discover for additional coverage."""
+    """Generate curated fixtures after validating the complete live source catalog."""
     tasks_path = resolve_plugin_path(tasks_path)
     manifest_path = resolve_plugin_path(manifest_path)
+    if min_tasks < 0:
+        raise RuntimeError("--min-tasks must be >= 0")
     tasks = build_static_tasks()
-
-    # Top up from live catalog if needed. Paginate — the source namespace has
-    # more actions than the server's default 50-row discover page.
+    live_actions, generation_status = discover_source_catalog(url)
+    initial_catalog_validation = validate_source_catalog_contract(tasks, live_actions)
+    generated_schema_actions = append_live_schema_coverage_tasks(tasks, live_actions)
+    final_catalog_validation = validate_source_catalog_contract(tasks, live_actions)
+    catalog_validation = {
+        "live_action_count": final_catalog_validation["live_action_count"],
+        "covered_action_count": final_catalog_validation["referenced_action_count"],
+        "preexisting_covered_action_count": initial_catalog_validation["referenced_action_count"],
+        "generated_schema_coverage_count": len(generated_schema_actions),
+        "generated_schema_coverage_actions": generated_schema_actions,
+        "uncovered_action_count": final_catalog_validation["uncovered_action_count"],
+        "uncovered_actions": final_catalog_validation["uncovered_actions"],
+    }
     if len(tasks) < min_tasks:
-        def fetch_page(arguments: Dict[str, Any]) -> Dict[str, Any]:
-            response = mcp_call(url, "monolith_discover", arguments, timeout_s=45.0)
-            return result_data(response) or {}
-
-        try:
-            live_actions: List[str] = paginate_discover_action_names(fetch_page, "source")
-        except RuntimeError as exc:
-            print(f"[source_index] WARNING: discover action enumeration failed: {exc}", file=sys.stderr)
-            live_actions = []
-
-        existing_lookup_actions = {t["action"] for t in tasks if t["category"] == "symbol_lookup"}
-        for action in live_actions:
-            if action in existing_lookup_actions:
-                continue
-            for symbol in GOLDEN_SYMBOLS[:2]:
-                if len(tasks) >= min_tasks:
-                    break
-                tasks.append({
-                    "id": f"SIB-{len(tasks) + 1:03d}",
-                    "category": "symbol_lookup",
-                    "namespace": "source",
-                    "action": action,
-                    "tool": "source_query",
-                    "arguments": {"action": action, "query": symbol},
-                    "expected": {"min_results": 0, "required_fields": ["name", "kind", "file_path"]},
-                    "safety": "read_only",
-                })
-            if len(tasks) >= min_tasks:
-                break
+        raise RuntimeError(
+            f"SourceIndex curated corpus has {len(tasks)} tasks, below --min-tasks={min_tasks}. "
+            "Add schema-verified curated tasks; generic live-action/query top-ups are forbidden."
+        )
 
     # Re-assign IDs to be monotonic after any additions.
     for index, task in enumerate(tasks, 1):
         task["id"] = f"SIB-{index:03d}"
+
+    schema_actions = sorted({
+        str(task["action"])
+        for task in tasks
+        if task.get("category") == "schema_field_presence"
+    })
 
     write_jsonl(tasks_path, tasks)
 
     manifest = {
         "generated_at": utc_now(),
         "mcp_url": url,
+        "catalog_version": str(generation_status.get("catalog_version", "")),
+        "catalog_validation": catalog_validation,
         "task_count": len(tasks),
         "min_tasks_requested": min_tasks,
         "golden_symbols": GOLDEN_SYMBOLS,
-        "schema_actions": SCHEMA_ACTIONS,
+        "schema_actions": schema_actions,
+        "curated_schema_actions": SCHEMA_ACTIONS,
         "category_counts": count_by(tasks, "category"),
         "task_file": display_path(tasks_path),
         "scoring": {
@@ -1859,6 +2013,7 @@ def generate_tasks(url: str, min_tasks: int, tasks_path: pathlib.Path, manifest_
             "min_transport_fraction_sample": DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES,
             "status_transport_failure_aborts_before_tasks": True,
             "invalid_status_response_aborts_before_tasks": True,
+            "canonical_catalog_version_mismatch_aborts_before_tasks": True,
             "invalid_run_writes_summary": False,
         },
     }
@@ -2041,8 +2196,35 @@ def run_benchmark(
 
     status = dict(status_validation["status"])
     start_identity = status_identity(status, endpoint=url)
+    expected_catalog = str(corpus.manifest.get("catalog_version", "")).strip()
+    observed_catalog = str(status.get("catalog_version", "")).strip()
+    if corpus.canonical and (
+        not expected_catalog or observed_catalog != expected_catalog
+    ):
+        failure = {
+            "label": label,
+            "completion_status": "aborted_catalog_identity_mismatch",
+            "failure_stage": "status_preflight",
+            "failure_kind": "catalog_identity_mismatch",
+            "metrics_scope": "not_started",
+            "completed_task_count": 0,
+            "total_task_count": len(tasks),
+            "expected_catalog_version": expected_catalog,
+            "observed_catalog_version": observed_catalog,
+            "error": (
+                "canonical SourceIndex manifest catalog_version must exactly match "
+                "the live status catalog_version before task calls"
+            ),
+        }
+        attach_run_context(failure, corpus, start_identity)
+        write_run_failure(output_dir, failure)
+        return failure
+
     benchmark_inputs = build_benchmark_inputs(
-        "SourceIndex", tasks_path=tasks_path, mcp_status=status
+        "SourceIndex",
+        tasks_path=tasks_path,
+        mcp_status=status,
+        extra_files={"runner": pathlib.Path(__file__)},
     )
     rows: List[Dict[str, Any]] = []
     per_task_jsonl = output_dir / "per_task.jsonl"

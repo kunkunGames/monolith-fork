@@ -21,6 +21,7 @@ _SCRIPTS_DIR = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPTS_DIR))
 
 import asset_editing_benchmark as aeb  # noqa: E402
+import benchmark_common as benchmark_common  # noqa: E402
 
 REQUIRED_BLUEPRINT_RECOVERY_ACTIONS = {
     "remove_event_dispatcher",
@@ -525,6 +526,82 @@ def test_expect_error_requires_a_rejection() -> None:
         aeb.mcp_call = original  # type: ignore[assignment]
 
 
+def test_expected_rejection_has_non_success_lifecycle(tasks: List[Dict[str, Any]]) -> None:
+    """Expected mutation rejection must never advertise a successful asset lifecycle."""
+    guard = next(
+        (task for task in tasks if task.get("workflow") == "level_instance_rootless_prefab_rejected"),
+        None,
+    )
+    check("BEB rootless-prefab rejection guard exists", isinstance(guard, dict))
+    if not isinstance(guard, dict):
+        return
+
+    capabilities = aeb.task_capabilities(guard)
+    success_operations = {"creation_or_import", "edit", "save"}
+    actual_operations = set(capabilities.get("asset_operations") or [])
+    check("expected mutation rejection routes to rejection_guard semantics",
+          capabilities.get("operation_semantics") == aeb.REJECTION_GUARD_SEMANTIC,
+          f"capabilities={capabilities}")
+    check("expected mutation rejection has no successful persistence lifecycle",
+          capabilities.get("lifecycle_phase") == "not_applicable",
+          f"capabilities={capabilities}")
+    check("expected mutation rejection is excluded from successful asset-operation roles",
+          not success_operations.intersection(actual_operations),
+          f"asset_operations={sorted(actual_operations)}")
+    check("expected mutation rejection retains absence read-back coverage",
+          actual_operations == {"readback_verify"},
+          f"asset_operations={sorted(actual_operations)}")
+    check("rejection guard records the guarded mutation action",
+          capabilities.get("expected_rejection_actions") == ["create_blueprint_prefab"],
+          f"actions={capabilities.get('expected_rejection_actions')}")
+    check("rejection guard does not claim asset creation/edit/save success flags",
+          capabilities.get("creates_or_imports_assets") is False
+          and capabilities.get("asset_edits") is False
+          and capabilities.get("saves_assets") is False,
+          f"capabilities={capabilities}")
+
+    stale_guard = dict(guard)
+    stale_guard["operation_semantics"] = "create_save"
+    stale_guard["lifecycle_phase"] = "create_save"
+    stale_guard["capabilities"] = {
+        "creates_or_imports_assets": True,
+        "saves_assets": True,
+        "asset_edits": True,
+        "asset_operations": ["creation_or_import", "edit", "save", "readback_verify"],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save",
+    }
+    recovered = aeb.task_capabilities(stale_guard)
+    check("inference overrides stale generated rejection lifecycle metadata",
+          recovered.get("operation_semantics") == aeb.REJECTION_GUARD_SEMANTIC
+          and recovered.get("lifecycle_phase") == "not_applicable"
+          and not success_operations.intersection(recovered.get("asset_operations") or []),
+          f"capabilities={recovered}")
+
+    modules = aeb.load_testset_modules(aeb.DEFAULT_TESTSETS)
+    guard_id = str(guard.get("id"))
+    rejection_module = modules.get("operation_semantics.rejection_guard", {})
+    lifecycle_module = modules.get("lifecycle.not_applicable", {})
+    check("persisted testset exposes operation_semantics.rejection_guard",
+          guard_id in set(rejection_module.get("task_ids") or []),
+          f"guard={guard_id} task_ids={rejection_module.get('task_ids')}")
+    check("persisted testset routes rejection guard to lifecycle.not_applicable",
+          guard_id in set(lifecycle_module.get("task_ids") or []),
+          f"guard={guard_id}")
+    wrongly_routed = sorted(
+        module_id
+        for module_id, module in modules.items()
+        if module_id.startswith((
+            "asset_operation.creation_or_import",
+            "asset_operation.edit",
+            "asset_operation.save",
+        ))
+        and guard_id in set(module.get("task_ids") or [])
+    )
+    check("persisted testset excludes rejection guard from successful asset-operation routes",
+          not wrongly_routed, f"modules={wrongly_routed[:8]}")
+
+
 def test_structured_expect_scoring() -> None:
     exact_ok, exact_evidence = aeb._evaluate_structured_expect(
         mcp_success_response({"status": "updated", "saved": True, "nested": {"value": None}}),
@@ -869,6 +946,39 @@ def test_manifest_matches_tasks(tasks: List[Dict[str, Any]], manifest: Dict[str,
         check(f"manifest category count matches {category}",
               manifest.get("category_counts", {}).get(category) == category_counts.get(category),
               f"manifest={manifest.get('category_counts', {}).get(category)} rows={category_counts.get(category)}")
+
+
+def test_root_readme_generated_summary(tasks: List[Dict[str, Any]], manifest: Dict[str, Any]) -> None:
+    asset_index = load_json(pathlib.Path(str(manifest.get("asset_type_index", ""))))
+    testset_index = load_json(pathlib.Path(str(manifest.get("testset_index", ""))))
+    counts = aeb.asset_editing_global_counts(tasks, asset_index, testset_index)
+    readme_path = aeb.resolve_plugin_path(aeb.DEFAULT_TASKS).parent / "README.md"
+    readme_text = readme_path.read_text(encoding="utf-8") if readme_path.exists() else ""
+    expected_summary = aeb.render_root_readme_summary(counts)
+
+    check("root README has one generated corpus summary marker pair",
+          readme_text.count(aeb.ROOT_README_SUMMARY_START) == 1
+          and readme_text.count(aeb.ROOT_README_SUMMARY_END) == 1,
+          str(readme_path))
+    check("root README global corpus counts match generated artifacts",
+          expected_summary in readme_text,
+          f"expected={expected_summary!r}")
+    expected_asset_authoring_row = (
+        f"| `asset_authoring` | {counts['asset_authoring_tasks']} | mixed owner namespaces |"
+    )
+    check("root README category table matches generated asset-authoring count",
+          expected_asset_authoring_row in readme_text,
+          f"expected_prefix={expected_asset_authoring_row!r}")
+    check("manifest global corpus counts match README source artifacts",
+          manifest.get("task_count") == counts["canonical_tasks"]
+          and manifest.get("asset_authoring_tasks") == counts["asset_authoring_tasks"]
+          and manifest.get("testset_module_count") == counts["testset_modules"]
+          and manifest.get("testset_module_shard_count") == counts["module_shards"],
+          f"manifest={{'task_count': {manifest.get('task_count')}, "
+          f"'asset_authoring_tasks': {manifest.get('asset_authoring_tasks')}, "
+          f"'testset_module_count': {manifest.get('testset_module_count')}, "
+          f"'testset_module_shard_count': {manifest.get('testset_module_shard_count')}}} "
+          f"counts={counts}")
 
 
 def test_task_shape(tasks: List[Dict[str, Any]]) -> None:
@@ -1382,6 +1492,147 @@ def test_transport_gate_passes_a_healthy_run() -> None:
         check("healthy run records a zero transport-failure snapshot",
               summary.get("transport", {}).get("transport_failure_count") == 0,
               json.dumps(summary.get("transport", {})))
+        inputs = summary.get("benchmark_inputs", {})
+        check("asset benchmark fingerprints its runner",
+              set(inputs.get("files", {})) == {"benchmark_common", "tasks", "manifest", "runner"},
+              json.dumps(sorted(inputs.get("files", {}))))
+        check("asset task selection is covered by the stored fingerprint",
+              inputs.get("task_selection") == summary.get("task_selection")
+              and inputs.get("fingerprint_sha256")
+              == benchmark_common.benchmark_input_fingerprint(inputs),
+              str(inputs.get("fingerprint_sha256")))
+        check("explicit subset is not comparison-valid",
+              summary.get("metrics_valid") is True
+              and summary.get("metrics_scope") == "explicit_subset"
+              and summary.get("comparison_valid") is False,
+              json.dumps({
+                  "metrics_valid": summary.get("metrics_valid"),
+                  "metrics_scope": summary.get("metrics_scope"),
+                  "comparison_valid": summary.get("comparison_valid"),
+              }))
+
+
+def test_status_preflight_and_stale_output_contract() -> None:
+    """Invalid endpoint identity must abort before scoring and cannot preserve stale success."""
+    tasks = aeb.load_jsonl(aeb.resolve_plugin_path(aeb.DEFAULT_TASKS))[:1]
+    task_ids = [str(tasks[0]["id"])]
+    invalid_statuses = (
+        (
+            "server stopped",
+            {
+                "jsonrpc": "2.0",
+                "result": {
+                    "isError": False,
+                    "structuredContent": {
+                        "server_running": False,
+                        "project_name": "Speed",
+                    },
+                    "content": [{"type": "text", "text": STRUCTURED_STUB_TEXT}],
+                },
+            },
+        ),
+        (
+            "wrong project",
+            {
+                "jsonrpc": "2.0",
+                "result": {
+                    "isError": False,
+                    "structuredContent": {
+                        "server_running": True,
+                        "project_name": "AnotherProject",
+                    },
+                    "content": [{"type": "text", "text": STRUCTURED_STUB_TEXT}],
+                },
+            },
+        ),
+    )
+
+    for case_name, status_response in invalid_statuses:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = pathlib.Path(tmp) / "run"
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "summary.json").write_text('{"stale": true}', encoding="utf-8")
+            score_calls: List[str] = []
+            original_mcp_call = aeb.mcp_call
+            original_score_task = aeb.score_task
+            try:
+                aeb.mcp_call = lambda url, tool, arguments, timeout_s=45.0: status_response  # type: ignore[assignment]
+                aeb.score_task = lambda url, task, timeout_s: score_calls.append(str(task["id"]))  # type: ignore[assignment]
+                failure = aeb.run_benchmark(
+                    "http://localhost:9316/mcp", aeb.DEFAULT_TASKS, out,
+                    f"invalid-status-{case_name}", 5.0, jobs=1, task_ids=task_ids,
+                )
+            finally:
+                aeb.mcp_call = original_mcp_call  # type: ignore[assignment]
+                aeb.score_task = original_score_task  # type: ignore[assignment]
+
+            check(f"{case_name} status is rejected", failure.get("run_valid") is False,
+                  json.dumps(failure, default=str)[:500])
+            check(f"{case_name} aborts at status preflight",
+                  failure.get("failure_stage") == "status_preflight",
+                  str(failure.get("failure_stage")))
+            check(f"{case_name} never scores a task", not score_calls, str(score_calls))
+            check(f"{case_name} removes stale summary", not (out / "summary.json").exists())
+            check(f"{case_name} writes failure evidence", (out / "run_failure.json").exists())
+
+
+def test_selection_preflight_clears_stale_summary() -> None:
+    """A zero-match selector can raise, but it cannot leave an older accepted result behind."""
+    with tempfile.TemporaryDirectory() as tmp:
+        out = pathlib.Path(tmp) / "run"
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "summary.json").write_text('{"stale": true}', encoding="utf-8")
+        raised = False
+        try:
+            aeb.run_benchmark(
+                "http://localhost:9316/mcp", aeb.DEFAULT_TASKS, out,
+                "zero-match", 5.0, jobs=1,
+                task_ids=["ASSET-BENCHMARK-NO-SUCH-TASK"],
+            )
+        except RuntimeError as exc:
+            raised = "matched 0 tasks" in str(exc)
+        check("zero-match selector still reports its contract error", raised)
+        check("selection preflight removes stale summary before raising",
+              not (out / "summary.json").exists())
+
+
+def test_failed_then_healthy_run_removes_invalid_artifacts() -> None:
+    """Reusing an output directory must publish one coherent terminal state."""
+    tasks = aeb.load_jsonl(aeb.resolve_plugin_path(aeb.DEFAULT_TASKS))[:2]
+    task_ids = [str(task["id"]) for task in tasks]
+    stopped_status = {
+        "jsonrpc": "2.0",
+        "result": {
+            "isError": False,
+            "structuredContent": {"server_running": False, "project_name": "Speed"},
+            "content": [{"type": "text", "text": STRUCTURED_STUB_TEXT}],
+        },
+    }
+    with tempfile.TemporaryDirectory() as tmp:
+        out = pathlib.Path(tmp) / "run"
+        original_mcp_call = aeb.mcp_call
+        try:
+            aeb.mcp_call = lambda url, tool, arguments, timeout_s=45.0: stopped_status  # type: ignore[assignment]
+            failed = aeb.run_benchmark(
+                "http://localhost:9316/mcp", aeb.DEFAULT_TASKS, out,
+                "failed-first", 5.0, jobs=1, task_ids=task_ids,
+            )
+        finally:
+            aeb.mcp_call = original_mcp_call  # type: ignore[assignment]
+        check("failed first run writes invalid artifacts",
+              failed.get("run_valid") is False
+              and (out / "run_failure.json").exists()
+              and (out / "partial_summary.json").exists())
+
+        healthy = _run_gate_benchmark(
+            out, task_ids,
+            lambda url, task, timeout_s: _gate_row(task, transport_error=False),
+        )
+        check("healthy rerun succeeds in the same output directory",
+              healthy.get("run_valid") is True)
+        check("healthy rerun publishes summary", (out / "summary.json").exists())
+        check("healthy rerun removes run_failure", not (out / "run_failure.json").exists())
+        check("healthy rerun removes partial summary", not (out / "partial_summary.json").exists())
 
 
 def main() -> int:
@@ -1393,7 +1644,11 @@ def main() -> int:
     test_transport_failure_gate()
     test_transport_flapping_editor_gate()
     test_transport_gate_passes_a_healthy_run()
+    test_status_preflight_and_stale_output_contract()
+    test_selection_preflight_clears_stale_summary()
+    test_failed_then_healthy_run_removes_invalid_artifacts()
     test_expect_error_requires_a_rejection()
+    test_expected_rejection_has_non_success_lifecycle(tasks)
     test_structured_results_token_scanning()
     test_compile_signal_requires_evidence()
     test_error_text_assertions_still_use_human_text()
@@ -1402,6 +1657,7 @@ def main() -> int:
     test_pcg_asset_authoring_contract(tasks)
     test_high_error_recovery_coverage(tasks)
     test_asset_type_and_testset_indexes(tasks, manifest)
+    test_root_readme_generated_summary(tasks, manifest)
     test_compact_route_helpers()
 
     if _FAILURES:

@@ -8,6 +8,7 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/BlockingVolume.h"
+#include "Engine/Level.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
@@ -16,7 +17,11 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Editor.h"
+#include "Editor/UnrealEdEngine.h"
 #include "Selection.h"
+#include "UnrealEdGlobals.h"
+#include "UObject/ObjectKey.h"
+#include "UObject/Package.h"
 #include "UObject/UObjectGlobals.h"
 #include "CollisionQueryParams.h"
 
@@ -26,12 +31,162 @@
 
 bool FMonolithMeshSceneActions::bBatchTransactionActive = false;
 
+#if WITH_DEV_AUTOMATION_TESTS
+namespace UE::MonolithScene::Private
+{
+namespace
+{
+	FString GDeleteActorsFaultActorPath;
+	EDeleteActorsTestFault GDeleteActorsFault = EDeleteActorsTestFault::None;
+}
+
+void ConfigureDeleteActorsTestFault(
+	const FString& ExactActorPath,
+	EDeleteActorsTestFault Fault)
+{
+	GDeleteActorsFaultActorPath = ExactActorPath;
+	GDeleteActorsFault = Fault;
+}
+
+void ResetDeleteActorsTestFault()
+{
+	GDeleteActorsFaultActorPath.Reset();
+	GDeleteActorsFault = EDeleteActorsTestFault::None;
+}
+
+bool ConsumeDeleteActorsTestFault(
+	const FString& ExactActorPath,
+	EDeleteActorsTestFault Fault)
+{
+	if (GDeleteActorsFault != Fault ||
+		!GDeleteActorsFaultActorPath.Equals(ExactActorPath, ESearchCase::CaseSensitive))
+	{
+		return false;
+	}
+	GDeleteActorsFault = EDeleteActorsTestFault::None;
+	return true;
+}
+}
+#endif
+
 // ============================================================================
 // Helpers
 // ============================================================================
 
 namespace SceneActionHelpers
 {
+	static constexpr int32 MaxDeleteActorsPerRequest = 1000;
+
+	struct FDeleteActorTarget
+	{
+		FString RequestedIdentity;
+		FString ActorPath;
+		FString ActorName;
+		FString ActorLabel;
+		FObjectKey ObjectKey;
+	};
+
+	AActor* ResolveDeleteActor(UWorld* World, const FString& Identity, FString& OutError)
+	{
+		if (!World || Identity.IsEmpty())
+		{
+			OutError = Identity.IsEmpty()
+				? TEXT("Actor identity must be a non-empty string")
+				: TEXT("No editor world available");
+			return nullptr;
+		}
+
+		const bool bLooksLikeObjectPath = Identity.StartsWith(TEXT("/")) || Identity.Contains(TEXT(":"));
+		if (bLooksLikeObjectPath)
+		{
+			for (TActorIterator<AActor> It(World); It; ++It)
+			{
+				AActor* const Actor = *It;
+				if (Actor && Actor->GetPathName().Equals(Identity, ESearchCase::CaseSensitive))
+				{
+					return Actor;
+				}
+			}
+			OutError = FString::Printf(
+				TEXT("Exact actor object path is not live in the current editor world: %s"),
+				*Identity);
+			return nullptr;
+		}
+
+		// Destructive short-name resolution must be unique across both label and
+		// internal-name domains. The shared convenience resolver preserves legacy
+		// label precedence and returns the first internal-name match, which is not
+		// an exact enough contract when streamed levels contain duplicate FNames.
+		TArray<AActor*> Matches;
+		TSet<FObjectKey> MatchKeys;
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			AActor* const Actor = *It;
+			if (!Actor || !IsValid(Actor) || Actor->IsActorBeingDestroyed())
+			{
+				continue;
+			}
+			if (Actor->GetActorLabel() == Identity || Actor->GetFName().ToString() == Identity)
+			{
+				const FObjectKey ActorKey(Actor);
+				if (!MatchKeys.Contains(ActorKey))
+				{
+					MatchKeys.Add(ActorKey);
+					Matches.Add(Actor);
+				}
+			}
+		}
+
+		if (Matches.Num() == 1)
+		{
+			return Matches[0];
+		}
+		if (Matches.Num() > 1)
+		{
+			OutError = FString::Printf(
+				TEXT("Actor name/label '%s' is ambiguous across %d live actors; use an exact object path:"),
+				*Identity,
+				Matches.Num());
+			for (const AActor* const Match : Matches)
+			{
+				OutError += FString::Printf(TEXT("\n  - %s"), *Match->GetPathName());
+			}
+			return nullptr;
+		}
+
+		OutError = FString::Printf(TEXT("Actor not found in the current editor world: %s"), *Identity);
+		return nullptr;
+	}
+
+	FMonolithActionResult DeleteActorsPreflightError(
+		const FString& Message,
+		const FString& MapPackage,
+		int32 RequestedCount,
+		int32 FailedIndex,
+		const FString& RequestedIdentity,
+		const FString& ActorPath = FString())
+	{
+		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+		Data->SetStringField(TEXT("namespace"), TEXT("scene"));
+		Data->SetStringField(TEXT("action"), TEXT("delete_actors"));
+		Data->SetStringField(TEXT("status"), TEXT("rejected_preflight"));
+		Data->SetStringField(TEXT("phase"), TEXT("preflight"));
+		Data->SetStringField(TEXT("map_package"), MapPackage);
+		Data->SetNumberField(TEXT("requested_count"), RequestedCount);
+		Data->SetNumberField(TEXT("failed_index"), FailedIndex);
+		Data->SetStringField(TEXT("requested_identity"), RequestedIdentity);
+		Data->SetNumberField(TEXT("deleted_count"), 0);
+		Data->SetNumberField(TEXT("unmodified_request_count"), RequestedCount);
+		Data->SetBoolField(TEXT("mutation_started"), false);
+		Data->SetBoolField(TEXT("partial_failure"), false);
+		Data->SetBoolField(TEXT("rollback_performed"), false);
+		if (!ActorPath.IsEmpty())
+		{
+			Data->SetStringField(TEXT("actor_path"), ActorPath);
+		}
+		return FMonolithActionResult::Error(Message).WithErrorData(Data);
+	}
+
 	/** Make a JSON array from a FVector */
 	TArray<TSharedPtr<FJsonValue>> VectorToJsonArray(const FVector& V)
 	{
@@ -46,14 +201,13 @@ namespace SceneActionHelpers
 	/** Scoped undo transaction that respects bBatchTransactionActive */
 	struct FScopedMeshTransaction
 	{
-		bool bOwnsTransaction;
+		bool bOwnsTransaction = false;
 
 		FScopedMeshTransaction(const FText& Description)
-			: bOwnsTransaction(!FMonolithMeshSceneActions::bBatchTransactionActive)
 		{
-			if (bOwnsTransaction && GEditor)
+			if (!FMonolithMeshSceneActions::bBatchTransactionActive && GEditor)
 			{
-				GEditor->BeginTransaction(Description);
+				bOwnsTransaction = GEditor->BeginTransaction(Description) != INDEX_NONE;
 			}
 		}
 
@@ -65,13 +219,23 @@ namespace SceneActionHelpers
 			}
 		}
 
-		void Cancel()
+		/**
+		 * Close a failed action without claiming rollback. UE's CancelTransaction
+		 * discards the transaction record; it does not undo mutations that already
+		 * happened. Ending instead keeps any partial mutation available to Undo.
+		 */
+		void EndForFailure()
 		{
 			if (bOwnsTransaction && GEditor)
 			{
-				GEditor->CancelTransaction(0);
-				bOwnsTransaction = false; // prevent EndTransaction in destructor
+				GEditor->EndTransaction();
 			}
+			bOwnsTransaction = false; // prevent a second EndTransaction in destructor
+		}
+
+		bool HasUndoTransaction() const
+		{
+			return bOwnsTransaction;
 		}
 	};
 
@@ -144,10 +308,10 @@ void FMonolithMeshSceneActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Build());
 
 	Registry.RegisterAction(TEXT("scene"), TEXT("delete_actors"),
-		TEXT("Delete one or more actors from the editor world. Validates ALL exist before deleting ANY. Does NOT delete asset files."),
+		TEXT("Delete exact live actors from the current map package. Preflights every target and verifies every requested actor identity is absent after one undoable commit. Does NOT delete asset files."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSceneActions::DeleteActors),
 		FParamSchemaBuilder()
-			.Required(TEXT("actor_names"), TEXT("array"), TEXT("Array of actor names or labels to delete"))
+			.Required(TEXT("actor_names"), TEXT("array"), TEXT("Array of exact object paths or unique actor names/labels to delete (1-1000, no duplicates)"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("scene"), TEXT("group_actors"),
@@ -172,7 +336,7 @@ void FMonolithMeshSceneActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Build());
 
 	Registry.RegisterAction(TEXT("scene"), TEXT("batch_execute"),
-		TEXT("Execute multiple scene actions in a single undo transaction. Max 200 actions. No nested batch_execute allowed."),
+		TEXT("Execute up to 200 scene actions in one undo transaction. Stops at the first failure, ends the transaction for Undo, and never claims automatic rollback. No nested batch_execute allowed."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSceneActions::BatchExecute),
 		FParamSchemaBuilder()
 			.Required(TEXT("actions"), TEXT("array"), TEXT("Array of {action, params, namespace?} objects; namespace defaults to scene"))
@@ -384,7 +548,7 @@ FMonolithActionResult FMonolithMeshSceneActions::SpawnActor(const TSharedPtr<FJs
 		AStaticMeshActor* SMActor = World->SpawnActor<AStaticMeshActor>(Location, Rotation, SpawnParams);
 		if (!SMActor)
 		{
-			Transaction.Cancel();
+			Transaction.EndForFailure();
 			return FMonolithActionResult::Error(TEXT("Failed to spawn StaticMeshActor"));
 		}
 		SMActor->GetStaticMeshComponent()->SetStaticMesh(MeshToSpawn);
@@ -397,7 +561,7 @@ FMonolithActionResult FMonolithMeshSceneActions::SpawnActor(const TSharedPtr<FJs
 		SpawnedActor = World->SpawnActor(ClassToSpawn, &Location, &Rotation, SpawnParams);
 		if (!SpawnedActor)
 		{
-			Transaction.Cancel();
+			Transaction.EndForFailure();
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to spawn actor of class '%s'"), *ClassOrMesh));
 		}
 		SpawnedActor->SetActorScale3D(Scale);
@@ -553,7 +717,7 @@ FMonolithActionResult FMonolithMeshSceneActions::DuplicateActor(const TSharedPtr
 
 	if (!DupActor)
 	{
-		Transaction.Cancel();
+		Transaction.EndForFailure();
 		return FMonolithActionResult::Error(TEXT("Failed to duplicate actor"));
 	}
 
@@ -580,53 +744,288 @@ FMonolithActionResult FMonolithMeshSceneActions::DuplicateActor(const TSharedPtr
 
 FMonolithActionResult FMonolithMeshSceneActions::DeleteActors(const TSharedPtr<FJsonObject>& Params)
 {
-	const TArray<TSharedPtr<FJsonValue>>* NamesArr;
+	const TArray<TSharedPtr<FJsonValue>>* NamesArr = nullptr;
 	if (!Params->TryGetArrayField(TEXT("actor_names"), NamesArr) || NamesArr->Num() == 0)
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or empty required param: actor_names (array of strings)"));
 	}
+	if (NamesArr->Num() > SceneActionHelpers::MaxDeleteActorsPerRequest)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("actor_names is capped at %d exact actors per request; got %d"),
+			SceneActionHelpers::MaxDeleteActorsPerRequest,
+			NamesArr->Num()));
+	}
 
-	// Phase 1: resolve ALL actors first, fail if any are missing
+	UWorld* const World = MonolithMeshUtils::GetEditorWorld();
+	if (!World)
+	{
+		return FMonolithActionResult::Error(TEXT("No editor world available"));
+	}
+	ULevel* const CurrentLevel = World->GetCurrentLevel();
+	UPackage* const CurrentMapPackage = CurrentLevel ? CurrentLevel->GetOutermost() : nullptr;
+	if (!CurrentLevel || !CurrentMapPackage)
+	{
+		return FMonolithActionResult::Error(
+			TEXT("The editor world has no exact current level/map package"));
+	}
+	const FString CurrentMapPackageName = CurrentMapPackage->GetName();
+	if (!GUnrealEd || !GUnrealEd->GetSelectedActors() ||
+		!GUnrealEd->GetSelectedActors()->GetElementSelectionSet())
+	{
+		return SceneActionHelpers::DeleteActorsPreflightError(
+			TEXT("The UE 5.8 actor-deletion service or editor selection set is unavailable"),
+			CurrentMapPackageName,
+			NamesArr->Num(),
+			INDEX_NONE,
+			FString());
+	}
+
+	// Phase 1: resolve and validate the complete set before the first side effect.
 	TArray<AActor*> Actors;
 	Actors.Reserve(NamesArr->Num());
+	TArray<SceneActionHelpers::FDeleteActorTarget> Targets;
+	Targets.Reserve(NamesArr->Num());
+	TSet<FObjectKey> ResolvedActorKeys;
 
-	for (const auto& Val : *NamesArr)
+	for (int32 Index = 0; Index < NamesArr->Num(); ++Index)
 	{
-		FString Name = Val->AsString();
+		const TSharedPtr<FJsonValue>& Value = (*NamesArr)[Index];
+		if (!Value.IsValid() || Value->Type != EJson::String)
+		{
+			return SceneActionHelpers::DeleteActorsPreflightError(
+				FString::Printf(TEXT("actor_names[%d] must be a string. No actors deleted."), Index),
+				CurrentMapPackageName,
+				NamesArr->Num(),
+				Index,
+				FString());
+		}
+
+		FString RequestedIdentity = Value->AsString();
+		RequestedIdentity.TrimStartAndEndInline();
 		FString Error;
-		AActor* Actor = MonolithMeshUtils::FindActorByName(Name, Error);
+		AActor* const Actor = SceneActionHelpers::ResolveDeleteActor(
+			World, RequestedIdentity, Error);
 		if (!Actor)
 		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("Actor not found: %s. No actors deleted."), *Name));
+			return SceneActionHelpers::DeleteActorsPreflightError(
+				FString::Printf(TEXT("%s. No actors deleted."), *Error),
+				CurrentMapPackageName,
+				NamesArr->Num(),
+				Index,
+				RequestedIdentity);
 		}
+
+		if (!IsValid(Actor) || Actor->IsActorBeingDestroyed())
+		{
+			return SceneActionHelpers::DeleteActorsPreflightError(
+				FString::Printf(TEXT("Actor target '%s' is not a stable live actor. No actors deleted."), *RequestedIdentity),
+				CurrentMapPackageName,
+				NamesArr->Num(),
+				Index,
+				RequestedIdentity);
+		}
+
+		const FString ActorPath = Actor->GetPathName();
+		const FObjectKey ActorKey(Actor);
+		if (ResolvedActorKeys.Contains(ActorKey))
+		{
+			return SceneActionHelpers::DeleteActorsPreflightError(
+				FString::Printf(
+					TEXT("Duplicate actor target '%s' resolves to exact actor '%s'. No actors deleted."),
+					*RequestedIdentity,
+					*ActorPath),
+				CurrentMapPackageName,
+				NamesArr->Num(),
+				Index,
+				RequestedIdentity,
+				ActorPath);
+		}
+		if (Actor->GetWorld() != World || Actor->GetLevel() != CurrentLevel ||
+			Actor->GetLevel()->GetOutermost() != CurrentMapPackage)
+		{
+			const FString ActorMapPackage = Actor->GetLevel() && Actor->GetLevel()->GetOutermost()
+				? Actor->GetLevel()->GetOutermost()->GetName()
+				: FString(TEXT("<none>"));
+			return SceneActionHelpers::DeleteActorsPreflightError(
+				FString::Printf(
+					TEXT("Actor '%s' belongs to map package '%s', not the current map package '%s'. No actors deleted."),
+					*ActorPath,
+					*ActorMapPackage,
+					*CurrentMapPackageName),
+				CurrentMapPackageName,
+				NamesArr->Num(),
+				Index,
+				RequestedIdentity,
+				ActorPath);
+		}
+
+		FText CannotDeleteReason;
+		if (!GUnrealEd->CanDeleteActor(Actor, &CannotDeleteReason))
+		{
+			return SceneActionHelpers::DeleteActorsPreflightError(
+				FString::Printf(
+					TEXT("Actor '%s' cannot be deleted: %s. No actors deleted."),
+					*ActorPath,
+					*CannotDeleteReason.ToString()),
+				CurrentMapPackageName,
+				NamesArr->Num(),
+				Index,
+				RequestedIdentity,
+				ActorPath);
+		}
+
+		ResolvedActorKeys.Add(ActorKey);
 		Actors.Add(Actor);
+		SceneActionHelpers::FDeleteActorTarget& Target = Targets.AddDefaulted_GetRef();
+		Target.RequestedIdentity = RequestedIdentity;
+		Target.ActorPath = ActorPath;
+		Target.ActorName = Actor->GetFName().ToString();
+		Target.ActorLabel = Actor->GetActorLabel();
+		Target.ObjectKey = ActorKey;
 	}
 
-	// Phase 2: delete all via editor selection (undo-compatible)
-	SceneActionHelpers::FScopedMeshTransaction Transaction(FText::FromString(TEXT("Monolith: Delete Actors")));
-
-	TArray<TSharedPtr<FJsonValue>> DeletedNames;
-
-	// Collect names before deletion
-	for (AActor* Actor : Actors)
+	FText AbortReason;
+	if (GUnrealEd->ShouldAbortActorDeletion(Actors, &AbortReason))
 	{
-		DeletedNames.Add(MakeShared<FJsonValueString>(Actor->GetActorNameOrLabel()));
+		return SceneActionHelpers::DeleteActorsPreflightError(
+			FString::Printf(
+				TEXT("UE 5.8 rejected the complete actor-deletion set: %s. No actors deleted."),
+				*AbortReason.ToString()),
+			CurrentMapPackageName,
+			NamesArr->Num(),
+			INDEX_NONE,
+			FString());
 	}
 
-	// Select all targets and delete via editor (participates in undo)
-	GEditor->SelectNone(false, true, false);
-	for (AActor* Actor : Actors)
+	// Phase 2: issue one direct UE deletion call. This avoids selection/component
+	// ambiguity and keeps the exact preflight set in one undo transaction.
+	TArray<AActor*> CommitActors = Actors;
+#if WITH_DEV_AUTOMATION_TESTS
+	for (int32 Index = 0; Index < Targets.Num(); ++Index)
 	{
-		GEditor->SelectActor(Actor, true, false, true);
+		if (UE::MonolithScene::Private::ConsumeDeleteActorsTestFault(
+			Targets[Index].ActorPath,
+			UE::MonolithScene::Private::EDeleteActorsTestFault::SkipExactActorDuringCommit))
+		{
+			CommitActors.RemoveAt(Index);
+			break;
+		}
 	}
-	// bVerifyDeletionCanHappen=false to suppress editor confirmation dialogs
-	// bWarnAboutReferences=false, bWarnAboutSoftReferences=false for programmatic use
-	GEditor->edactDeleteSelected(MonolithMeshUtils::GetEditorWorld(), false, false, false);
+#endif
 
-	auto Result = MakeShared<FJsonObject>();
-	Result->SetNumberField(TEXT("deleted"), DeletedNames.Num());
-	Result->SetArrayField(TEXT("actors"), DeletedNames);
+	bool bEngineDeleteReturned = true;
+	bool bUndoTransactionOpened = false;
+	{
+		SceneActionHelpers::FScopedMeshTransaction Transaction(
+			FText::FromString(TEXT("Monolith: Delete Exact Actors")));
+		bUndoTransactionOpened = bBatchTransactionActive
+			? (GEditor && GEditor->IsTransactionActive())
+			: Transaction.HasUndoTransaction();
+		if (!CommitActors.IsEmpty())
+		{
+			bEngineDeleteReturned = GUnrealEd->DeleteActors(
+				CommitActors,
+				World,
+				GUnrealEd->GetSelectedActors()->GetElementSelectionSet(),
+				/*bVerifyDeletionCanHappen=*/true,
+				/*bWarnAboutReferences=*/false,
+				/*bWarnAboutSoftReferences=*/false);
+		}
+	}
 
+	// Phase 3: exact identity/path read-back. UUnrealEdEngine::DeleteActors can
+	// return true after skipping an undeletable actor, so its bool is not proof.
+	TSet<FObjectKey> LiveActorKeys;
+	TSet<FString> LiveActorPaths;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* const LiveActor = *It;
+		if (LiveActor && IsValid(LiveActor) && !LiveActor->IsActorBeingDestroyed())
+		{
+			LiveActorKeys.Add(FObjectKey(LiveActor));
+			LiveActorPaths.Add(LiveActor->GetPathName());
+		}
+	}
+
+	int32 DeletedCount = 0;
+	int32 SurvivorCount = 0;
+	TArray<TSharedPtr<FJsonValue>> LegacyDeletedActors;
+	TArray<TSharedPtr<FJsonValue>> ActorResults;
+	TArray<TSharedPtr<FJsonValue>> Survivors;
+	for (const SceneActionHelpers::FDeleteActorTarget& Target : Targets)
+	{
+		const bool bIdentitySurvives = LiveActorKeys.Contains(Target.ObjectKey);
+		const bool bPathOccupied = LiveActorPaths.Contains(Target.ActorPath);
+		const bool bDeleted = !bIdentitySurvives && !bPathOccupied;
+
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("requested_identity"), Target.RequestedIdentity);
+		Row->SetStringField(TEXT("actor_path"), Target.ActorPath);
+		Row->SetStringField(TEXT("actor_name"), Target.ActorName);
+		Row->SetStringField(TEXT("actor_label"), Target.ActorLabel);
+		Row->SetBoolField(TEXT("deleted"), bDeleted);
+		Row->SetBoolField(TEXT("exact_identity_survives"), bIdentitySurvives);
+		Row->SetBoolField(TEXT("actor_path_occupied"), bPathOccupied);
+		Row->SetStringField(
+			TEXT("status"),
+			bDeleted ? TEXT("deleted") :
+				(bIdentitySurvives ? TEXT("exact_identity_survives") : TEXT("actor_path_reused")));
+		ActorResults.Add(MakeShared<FJsonValueObject>(Row));
+
+		if (bDeleted)
+		{
+			++DeletedCount;
+			LegacyDeletedActors.Add(MakeShared<FJsonValueString>(Target.ActorLabel));
+		}
+		else
+		{
+			++SurvivorCount;
+			Survivors.Add(MakeShared<FJsonValueObject>(Row));
+		}
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("namespace"), TEXT("scene"));
+	Result->SetStringField(TEXT("action"), TEXT("delete_actors"));
+	Result->SetStringField(TEXT("map_package"), CurrentMapPackageName);
+	Result->SetStringField(TEXT("level_path"), CurrentLevel->GetPathName());
+	Result->SetNumberField(TEXT("requested_count"), Targets.Num());
+	Result->SetNumberField(TEXT("deleted_count"), DeletedCount);
+	Result->SetNumberField(TEXT("survivor_count"), SurvivorCount);
+	Result->SetNumberField(TEXT("deleted"), DeletedCount);
+	Result->SetArrayField(TEXT("actors"), LegacyDeletedActors);
+	Result->SetArrayField(TEXT("actor_results"), ActorResults);
+	Result->SetArrayField(TEXT("survivors"), Survivors);
+	Result->SetBoolField(TEXT("engine_delete_returned"), bEngineDeleteReturned);
+	Result->SetBoolField(TEXT("exact_deletion_verified"), SurvivorCount == 0);
+	Result->SetBoolField(TEXT("partial_failure"), DeletedCount > 0 && SurvivorCount > 0);
+	Result->SetBoolField(TEXT("rollback_performed"), false);
+	Result->SetBoolField(TEXT("requires_manual_undo"),
+		bUndoTransactionOpened && DeletedCount > 0 && (!bEngineDeleteReturned || SurvivorCount > 0));
+	Result->SetBoolField(TEXT("requires_manual_recovery"),
+		DeletedCount > 0 && (!bEngineDeleteReturned || SurvivorCount > 0));
+	Result->SetStringField(
+		TEXT("transaction_scope"),
+		bBatchTransactionActive ? TEXT("batch") : TEXT("action"));
+	Result->SetBoolField(TEXT("undo_available"), bUndoTransactionOpened);
+
+	if (!bEngineDeleteReturned || SurvivorCount > 0)
+	{
+		Result->SetStringField(
+			TEXT("status"),
+			DeletedCount > 0 ? TEXT("partial_failure") : TEXT("delete_failed"));
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("delete_actors did not satisfy its exact postcondition: deleted %d/%d, survivors=%d, engine_returned=%s. No rollback was claimed; any completed deletion remains applied%s."),
+			DeletedCount,
+			Targets.Num(),
+			SurvivorCount,
+			bEngineDeleteReturned ? TEXT("true") : TEXT("false"),
+			bUndoTransactionOpened ? TEXT(" and is available in the reported undo transaction") : TEXT("; no undo transaction was available")))
+			.WithErrorData(Result);
+	}
+
+	Result->SetStringField(TEXT("status"), TEXT("deleted"));
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -671,7 +1070,7 @@ FMonolithActionResult FMonolithMeshSceneActions::GroupActors(const TSharedPtr<FJ
 
 	if (Count == 0 && !FirstError.IsEmpty())
 	{
-		Transaction.Cancel();
+		Transaction.EndForFailure();
 		return FMonolithActionResult::Error(FirstError);
 	}
 
@@ -714,13 +1113,13 @@ FMonolithActionResult FMonolithMeshSceneActions::SetActorProperties(const TShare
 	{
 		if (!Root)
 		{
-			Transaction.Cancel();
+			Transaction.EndForFailure();
 			return FMonolithActionResult::Error(TEXT("Actor has no root component to set mobility on"));
 		}
 		EComponentMobility::Type Mob;
 		if (!SceneActionHelpers::ParseMobility(MobilityStr, Mob))
 		{
-			Transaction.Cancel();
+			Transaction.EndForFailure();
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid mobility: '%s'. Use Static, Stationary, or Movable."), *MobilityStr));
 		}
 		Root->SetMobility(Mob);
@@ -733,12 +1132,12 @@ FMonolithActionResult FMonolithMeshSceneActions::SetActorProperties(const TShare
 	{
 		if (!Primitive)
 		{
-			Transaction.Cancel();
+			Transaction.EndForFailure();
 			return FMonolithActionResult::Error(TEXT("Actor's root component is not a PrimitiveComponent — cannot set physics"));
 		}
 		if (bSimPhysics && Root->Mobility != EComponentMobility::Movable)
 		{
-			Transaction.Cancel();
+			Transaction.EndForFailure();
 			return FMonolithActionResult::Error(TEXT("Mobility must be Movable before enabling SimulatePhysics. Set mobility first."));
 		}
 		Primitive->SetSimulatePhysics(bSimPhysics);
@@ -751,7 +1150,7 @@ FMonolithActionResult FMonolithMeshSceneActions::SetActorProperties(const TShare
 	{
 		if (!Primitive)
 		{
-			Transaction.Cancel();
+			Transaction.EndForFailure();
 			return FMonolithActionResult::Error(TEXT("Actor's root component is not a PrimitiveComponent — cannot set collision"));
 		}
 		Primitive->SetCollisionProfileName(FName(*CollisionPreset));
@@ -764,7 +1163,7 @@ FMonolithActionResult FMonolithMeshSceneActions::SetActorProperties(const TShare
 	{
 		if (!Primitive)
 		{
-			Transaction.Cancel();
+			Transaction.EndForFailure();
 			return FMonolithActionResult::Error(TEXT("Actor's root component is not a PrimitiveComponent — cannot set shadow"));
 		}
 		Primitive->SetCastShadow(bCastShadow);
@@ -789,7 +1188,7 @@ FMonolithActionResult FMonolithMeshSceneActions::SetActorProperties(const TShare
 	{
 		if (!Primitive)
 		{
-			Transaction.Cancel();
+			Transaction.EndForFailure();
 			return FMonolithActionResult::Error(TEXT("Actor's root component is not a PrimitiveComponent — cannot set mass"));
 		}
 		Primitive->SetMassOverrideInKg(NAME_None, static_cast<float>(MassKg), true);
@@ -798,7 +1197,7 @@ FMonolithActionResult FMonolithMeshSceneActions::SetActorProperties(const TShare
 
 	if (PropertiesSet.Num() == 0)
 	{
-		Transaction.Cancel();
+		Transaction.EndForFailure();
 		return FMonolithActionResult::Error(TEXT("No properties provided to set. Specify at least one of: mobility, simulate_physics, collision_preset, cast_shadow, tags, mass_kg"));
 	}
 
@@ -833,17 +1232,20 @@ FMonolithActionResult FMonolithMeshSceneActions::BatchExecute(const TSharedPtr<F
 			TEXT("batch_execute is capped at 200 actions, got %d"), ActionsArr->Num()));
 	}
 
-	// Begin single outer transaction
-	if (GEditor)
-	{
-		GEditor->BeginTransaction(FText::FromString(TEXT("Monolith: Batch Execute")));
-	}
+	// Begin one outer transaction. A failure stops dispatch but still ends this
+	// transaction so completed mutations remain available to Undo. UE's
+	// CancelTransaction only discards the record; it is not a rollback API.
+	const int32 BatchTransactionIndex = GEditor
+		? GEditor->BeginTransaction(FText::FromString(TEXT("Monolith: Batch Execute")))
+		: INDEX_NONE;
+	const bool bUndoTransactionOpen = BatchTransactionIndex != INDEX_NONE;
 	bBatchTransactionActive = true;
 
 	int32 Succeeded = 0;
 	int32 Failed = 0;
 	TArray<TSharedPtr<FJsonValue>> ResultsArr;
 	bool bHadFailure = false;
+	bool bFailingActionReportedMutation = false;
 
 	for (int32 i = 0; i < ActionsArr->Num(); ++i)
 	{
@@ -907,27 +1309,32 @@ FMonolithActionResult FMonolithMeshSceneActions::BatchExecute(const TSharedPtr<F
 		if (!ActionResult.bSuccess)
 		{
 			ItemResult->SetStringField(TEXT("error"), ActionResult.ErrorMessage);
+			if (ActionResult.ErrorData.IsValid())
+			{
+				ItemResult->SetObjectField(TEXT("error_data"), ActionResult.ErrorData);
+
+				bool bPartialFailure = false;
+				double DeletedCount = 0.0;
+				ActionResult.ErrorData->TryGetBoolField(TEXT("partial_failure"), bPartialFailure);
+				ActionResult.ErrorData->TryGetNumberField(TEXT("deleted_count"), DeletedCount);
+				bFailingActionReportedMutation = bPartialFailure || DeletedCount > 0.0;
+			}
 			ResultsArr.Add(MakeShared<FJsonValueObject>(ItemResult));
 			Failed++;
 			bHadFailure = true;
-			break; // Cancel on first failure
+			break; // Stop dispatch on first failure.
 		}
 		Succeeded++;
 		ResultsArr.Add(MakeShared<FJsonValueObject>(ItemResult));
 	}
 
-	// End or cancel transaction
+	// Always close the transaction. Never represent CancelTransaction as an
+	// automatic rollback: completed actions and a partially-mutated failing
+	// action retain their actual state and their Undo record.
 	bBatchTransactionActive = false;
-	if (GEditor)
+	if (bUndoTransactionOpen && GEditor)
 	{
-		if (bHadFailure)
-		{
-			GEditor->CancelTransaction(0);
-		}
-		else
-		{
-			GEditor->EndTransaction();
-		}
+		GEditor->EndTransaction();
 	}
 
 	auto Result = MakeShared<FJsonObject>();
@@ -935,6 +1342,17 @@ FMonolithActionResult FMonolithMeshSceneActions::BatchExecute(const TSharedPtr<F
 	Result->SetNumberField(TEXT("succeeded"), Succeeded);
 	Result->SetNumberField(TEXT("failed"), Failed);
 	Result->SetArrayField(TEXT("results"), ResultsArr);
+	Result->SetStringField(
+		TEXT("transaction_status"),
+		!bUndoTransactionOpen ? TEXT("unavailable") :
+			(bHadFailure ? TEXT("ended_after_failure_for_undo") : TEXT("committed")));
+	Result->SetBoolField(TEXT("rollback_performed"), false);
+	Result->SetBoolField(TEXT("undo_available"), bUndoTransactionOpen);
+	Result->SetBoolField(TEXT("completed_actions_retained"), bHadFailure && Succeeded > 0);
+	Result->SetBoolField(TEXT("failing_action_mutation_retained"), bFailingActionReportedMutation);
+	Result->SetBoolField(
+		TEXT("completed_mutations_may_be_retained"),
+		bHadFailure && (Succeeded > 0 || bFailingActionReportedMutation));
 
 	if (bHadFailure)
 	{
@@ -951,6 +1369,9 @@ FMonolithActionResult FMonolithMeshSceneActions::BatchExecute(const TSharedPtr<F
 				}
 			}
 		}
+		ErrorMsg += bUndoTransactionOpen
+			? TEXT(" Dispatch stopped at the first failure; no rollback was claimed. Any completed changes remain in the closed batch transaction for Undo.")
+			: TEXT(" Dispatch stopped at the first failure; no rollback was claimed. Any completed changes remain applied, and no Undo transaction was available.");
 		return FMonolithActionResult::Error(ErrorMsg).WithErrorData(Result);
 	}
 

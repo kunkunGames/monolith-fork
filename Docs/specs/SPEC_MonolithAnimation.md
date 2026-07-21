@@ -72,6 +72,8 @@
 
 > **`use_grid` vs `has_blendspace_data` semantics.** `has_blendspace_data` is `!FBlendSpaceData::IsEmpty()`. With `use_grid:false` (default — triangulation interpolation) it reports `true` after baking. With `use_grid:true` (grid interpolation) the triangulation array is legitimately EMPTY, so `has_blendspace_data` reports `false` — this is CORRECT for grid mode, not a regression.
 
+> **1D creation axis contract.** `create_blend_space_1d` parses optional `axis_min` and `axis_max` independently, keeps the documented `0..100` defaults for omitted endpoints, rejects non-numeric or non-increasing ranges before package creation, and never reads a parsed temporary before `TryGetNumberField` succeeds. The strict non-unity `-WarningsAsErrors` compile is the regression gate for this control flow.
+
 | Action | Description |
 |--------|-------------|
 | `get_blend_space_info` | Get blend space samples and axis settings. **(2026-06-16):** also reports each sample's authored root-motion speed plus the `triangulation_baked` (`!FBlendSpaceData::IsEmpty()`) and `interpolate_using_grid` (`bInterpolateUsingGrid`) flags, so a blend space's bake/interpolation state is readable without a separate call. |
@@ -140,12 +142,13 @@ Wraps `USkeleton::CompatibleSkeletons` — the canonical UE5 mechanism that lets
 |--------|-------------|
 | `set_root_motion_settings` | Configure root motion settings (enable, lock mode, force root lock) |
 
-**Asset Creation (3)**
+**Asset Creation (4)**
 | Action | Description |
 |--------|-------------|
 | `create_sequence` | Create a new empty animation sequence |
 | `duplicate_sequence` | Duplicate an animation sequence to a new path |
 | `create_montage` | Create a new animation montage with skeleton |
+| `build_sequence_from_poses` | Build or replace an `AnimSequence` from a non-empty array of per-frame bone transforms. The complete nested payload is validated before any asset load or mutation: every bone requires a string `name`; every frame must contain the same unique skeleton-bone set; `location[3]`, normalized-quaternion `rotation[4]`, and `scale[3]` are mandatory finite float-compatible tuples; `frame_rate` is a whole number at least 1; and an existing sequence must already use the requested skeleton. Missing or non-string names, transforms, or bones are explicit errors and are never filled with identity defaults. |
 
 **Anim Modifiers (2)**
 | Action | Description |

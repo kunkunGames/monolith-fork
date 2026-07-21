@@ -42,6 +42,9 @@ private:
 	/** Read arbitrary component properties via FProperty reflection */
 	static FMonolithActionResult GetActorComponentProperties(const TSharedPtr<FJsonObject>& Params);
 
+	/** Write arbitrary component properties via FProperty reflection (ImportText). Mirror of the reader. */
+	static FMonolithActionResult SetActorComponentProperties(const TSharedPtr<FJsonObject>& Params);
+
 	// --- Helpers ---
 
 	/** Apply light properties from JSON to a light component. Returns list of properties set. */

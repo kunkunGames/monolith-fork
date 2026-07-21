@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+﻿// SPDX-License-Identifier: MIT
 // FMonolithReflectionWalker implementation. Phase 0 framework primitive.
 
 #include "Reflection/MonolithReflectionWalker.h"
@@ -6,6 +6,7 @@
 #include "UObject/UnrealType.h"
 #include "UObject/EnumProperty.h"
 #include "UObject/PropertyPortFlags.h"
+#include "UObject/SoftObjectPath.h"
 #include "UObject/SoftObjectPtr.h"
 #include "UObject/Class.h"
 #include "Misc/StringOutputDevice.h"
@@ -19,6 +20,81 @@
 
 namespace
 {
+	/** Owns one initialized FProperty value and destroys it on every exit path. */
+	class FMonolithScopedPropertyValue
+	{
+	public:
+		explicit FMonolithScopedPropertyValue(FProperty* InProperty) : Property(InProperty)
+		{
+			check(Property);
+			Value = FMemory::Malloc(Property->GetSize(), FMath::Max(1, Property->GetMinAlignment()));
+			check(Value);
+			Property->InitializeValue(Value);
+		}
+
+		~FMonolithScopedPropertyValue()
+		{
+			Property->DestroyValue(Value);
+			FMemory::Free(Value);
+		}
+
+		FMonolithScopedPropertyValue(const FMonolithScopedPropertyValue&) = delete;
+		FMonolithScopedPropertyValue& operator=(const FMonolithScopedPropertyValue&) = delete;
+
+		void* Get() const
+		{
+			return Value;
+		}
+
+		void CopyFrom(const void* Source) const
+		{
+			Property->CopyCompleteValue(Value, Source);
+		}
+
+		void CommitTo(void* Destination) const
+		{
+			Property->CopyCompleteValue(Destination, Value);
+		}
+
+	private:
+		FProperty* Property = nullptr;
+		void* Value = nullptr;
+	};
+
+	bool GetReferencePath(
+		const TSharedPtr<FJsonValue>& JsonVal,
+		FString& OutPath,
+		bool& bOutClear,
+		FBulkFillFieldWrite& OutWrite)
+	{
+		if (!JsonVal.IsValid())
+		{
+			OutWrite.bOk = false;
+			OutWrite.Reason = TEXT("class reference requires a JSON string or null");
+			return false;
+		}
+
+		if (JsonVal->Type == EJson::Null)
+		{
+			OutPath.Reset();
+			bOutClear = true;
+			OutWrite.ProposedValue = TEXT("null");
+			return true;
+		}
+
+		if (JsonVal->Type != EJson::String)
+		{
+			OutWrite.bOk = false;
+			OutWrite.Reason = TEXT("class reference requires a JSON string or null");
+			return false;
+		}
+
+		OutPath = JsonVal->AsString().TrimStartAndEnd();
+		bOutClear = OutPath.IsEmpty() || OutPath.Equals(TEXT("None"), ESearchCase::IgnoreCase);
+		OutWrite.ProposedValue = bOutClear ? TEXT("null") : OutPath;
+		return true;
+	}
+
 	// -----------------------------------------------------------------------
 	// Robust per-index test for the auto-generated _MAX sentinel.
 	//
@@ -549,6 +625,99 @@ bool FMonolithReflectionWalker::ResolveUserDefinedEnumToken(const FProperty* Pro
 #endif
 }
 
+namespace
+{
+	void WriteClassReference(FClassProperty* ClassProp, void* ValuePtr, const TSharedPtr<FJsonValue>& JsonVal,
+							 UObject* Owner, FBulkFillFieldWrite& OutWrite)
+	{
+		ClassProp->ExportText_Direct(OutWrite.CurrentValue, ValuePtr, ValuePtr, Owner, PPF_None);
+
+		FString ClassPath;
+		bool bClear = false;
+		if (!GetReferencePath(JsonVal, ClassPath, bClear, OutWrite))
+		{
+			return;
+		}
+
+		FMonolithScopedPropertyValue StagedValue(ClassProp);
+		if (!bClear)
+		{
+			FStringOutputDevice ErrorText;
+			const TCHAR* ImportResult =
+				ClassProp->ImportText_Direct(*ClassPath, StagedValue.Get(), Owner, PPF_None, &ErrorText);
+			if (!ImportResult)
+			{
+				OutWrite.bOk = false;
+				OutWrite.Reason =
+					FString::Printf(TEXT("class ref '%s' rejected by %s MetaClass%s%s"), *ClassPath,
+									ClassProp->MetaClass ? *ClassProp->MetaClass->GetName() : TEXT("<missing>"),
+									ErrorText.IsEmpty() ? TEXT("") : TEXT(": "), *ErrorText);
+				return;
+			}
+
+			UClass* ResolvedClass = Cast<UClass>(ClassProp->GetObjectPropertyValue(StagedValue.Get()));
+			if (!ClassProp->MetaClass || !ResolvedClass || !ResolvedClass->IsChildOf(ClassProp->MetaClass))
+			{
+				OutWrite.bOk = false;
+				OutWrite.Reason =
+					FString::Printf(TEXT("class ref '%s' is not a child of %s"), *ClassPath,
+									ClassProp->MetaClass ? *ClassProp->MetaClass->GetName() : TEXT("<missing>"));
+				return;
+			}
+		}
+
+		StagedValue.CommitTo(ValuePtr);
+		OutWrite.bOk = true;
+	}
+
+	void WriteSoftClassReference(FSoftClassProperty* SoftClassProp, void* ValuePtr, const TSharedPtr<FJsonValue>& JsonVal,
+								 UObject* Owner, FBulkFillFieldWrite& OutWrite)
+	{
+		SoftClassProp->ExportText_Direct(OutWrite.CurrentValue, ValuePtr, ValuePtr, Owner, PPF_None);
+
+		FString ClassPath;
+		bool bClear = false;
+		if (!GetReferencePath(JsonVal, ClassPath, bClear, OutWrite))
+		{
+			return;
+		}
+
+		FMonolithScopedPropertyValue StagedValue(SoftClassProp);
+		if (!bClear)
+		{
+			FStringOutputDevice ErrorText;
+			const TCHAR* ImportResult =
+				SoftClassProp->ImportText_Direct(*ClassPath, StagedValue.Get(), Owner, PPF_None, &ErrorText);
+			if (!ImportResult)
+			{
+				OutWrite.bOk = false;
+				OutWrite.Reason = FString::Printf(TEXT("soft class ref '%s' failed to import%s%s"), *ClassPath,
+												  ErrorText.IsEmpty() ? TEXT("") : TEXT(": "), *ErrorText);
+				return;
+			}
+
+			const FSoftObjectPtr* StagedSoftPtr = static_cast<const FSoftObjectPtr*>(StagedValue.Get());
+			const FSoftClassPath StagedClassPath(StagedSoftPtr->ToSoftObjectPath().ToString());
+			UClass* ResolvedClass = StagedClassPath.ResolveClass();
+			if (!ResolvedClass)
+			{
+				ResolvedClass = StagedClassPath.TryLoadClass<UObject>();
+			}
+			if (!SoftClassProp->MetaClass || !ResolvedClass || !ResolvedClass->IsChildOf(SoftClassProp->MetaClass))
+			{
+				OutWrite.bOk = false;
+				OutWrite.Reason =
+					FString::Printf(TEXT("soft class ref '%s' is not a resolvable child of %s"), *ClassPath,
+									SoftClassProp->MetaClass ? *SoftClassProp->MetaClass->GetName() : TEXT("<missing>"));
+				return;
+			}
+		}
+
+		StagedValue.CommitTo(ValuePtr);
+		OutWrite.bOk = true;
+	}
+} // namespace
+
 // ---------------------------------------------------------------------------
 // Inner switch — routes a single JSON value to its FProperty subtype handler.
 // Order matters: most-derived subclasses tested first (FEnumProperty before the
@@ -594,6 +763,16 @@ void FMonolithReflectionWalker::DispatchByPropertyType(
 	if (FStructProperty* StructProp = CastField<FStructProperty>(Prop))
 	{
 		WriteStruct(StructProp, ValuePtr, JsonVal, Owner, Spec, OutReport, PathPrefix, OutWrite);
+		return;
+	}
+	if (FClassProperty* ClassProp = CastField<FClassProperty>(Prop))
+	{
+		WriteClassReference(ClassProp, ValuePtr, JsonVal, Owner, OutWrite);
+		return;
+	}
+	if (FSoftClassProperty* SoftClassProp = CastField<FSoftClassProperty>(Prop))
+	{
+		WriteSoftClassReference(SoftClassProp, ValuePtr, JsonVal, Owner, OutWrite);
 		return;
 	}
 	if (FSoftObjectProperty* SoftProp = CastField<FSoftObjectProperty>(Prop))
@@ -803,7 +982,11 @@ void FMonolithReflectionWalker::WriteArray(FArrayProperty* ArrayProp, void* Valu
 		return;
 	}
 
-	FScriptArrayHelper Helper(ArrayProp, ValuePtr);
+	// Build the replacement off-object and commit only after every element passes.
+	// This is required for class-element MetaClass failures: clearing the live array
+	// before validation would turn a rejected request into a destructive partial write.
+	FMonolithScopedPropertyValue StagedValue(ArrayProp);
+	FScriptArrayHelper Helper(ArrayProp, StagedValue.Get());
 	Helper.EmptyValues(JsonArray->Num());
 	if (JsonArray->Num() > 0)
 	{
@@ -825,6 +1008,10 @@ void FMonolithReflectionWalker::WriteArray(FArrayProperty* ArrayProp, void* Valu
 	}
 
 	OutWrite.bOk = (LocalErrors == 0);
+	if (OutWrite.bOk)
+	{
+		StagedValue.CommitTo(ValuePtr);
+	}
 	OutWrite.ProposedValue = FString::Printf(TEXT("[%d elements]"), JsonArray->Num());
 	if (!OutWrite.bOk)
 	{
@@ -846,7 +1033,10 @@ void FMonolithReflectionWalker::WriteMap(FMapProperty* MapProp, void* ValuePtr, 
 		return;
 	}
 
-	FScriptMapHelper Helper(MapProp, ValuePtr);
+	// Stage the complete map so an invalid value (including nested class refs)
+	// cannot clear or partially repopulate the caller's existing map.
+	FMonolithScopedPropertyValue StagedValue(MapProp);
+	FScriptMapHelper Helper(MapProp, StagedValue.Get());
 	Helper.EmptyValues((*JsonObj)->Values.Num());
 
 	int32 LocalErrors = 0;
@@ -898,6 +1088,10 @@ void FMonolithReflectionWalker::WriteMap(FMapProperty* MapProp, void* ValuePtr, 
 
 	Helper.Rehash();
 	OutWrite.bOk = (LocalErrors == 0);
+	if (OutWrite.bOk)
+	{
+		StagedValue.CommitTo(ValuePtr);
+	}
 	OutWrite.ProposedValue = FString::Printf(TEXT("{%d entries}"), (*JsonObj)->Values.Num());
 	if (!OutWrite.bOk)
 	{
@@ -920,7 +1114,9 @@ void FMonolithReflectionWalker::WriteSet(FSetProperty* SetProp, void* ValuePtr, 
 		return;
 	}
 
-	FScriptSetHelper Helper(SetProp, ValuePtr);
+	// Stage the complete set so rejected elements leave the original set intact.
+	FMonolithScopedPropertyValue StagedValue(SetProp);
+	FScriptSetHelper Helper(SetProp, StagedValue.Get());
 	Helper.EmptyElements(JsonArray->Num());
 
 	int32 LocalErrors = 0;
@@ -946,6 +1142,10 @@ void FMonolithReflectionWalker::WriteSet(FSetProperty* SetProp, void* ValuePtr, 
 
 	Helper.Rehash();
 	OutWrite.bOk = (LocalErrors == 0);
+	if (OutWrite.bOk)
+	{
+		StagedValue.CommitTo(ValuePtr);
+	}
 	OutWrite.ProposedValue = FString::Printf(TEXT("{%d unique elements}"), JsonArray->Num());
 	if (!OutWrite.bOk)
 	{
@@ -978,6 +1178,12 @@ void FMonolithReflectionWalker::WriteStruct(FStructProperty* StructProp, void* V
 			return;
 		}
 
+		// Nested writes are property-atomic. Start from a complete copy so omitted
+		// fields retain their values, but do not expose any successful sibling write
+		// if a later nested class reference violates its MetaClass.
+		FMonolithScopedPropertyValue StagedValue(StructProp);
+		StagedValue.CopyFrom(ValuePtr);
+
 		int32 LocalErrors = 0;
 		for (const auto& Pair : FMonolithJsonUtils::GetFields(*NestedObj))
 		{
@@ -993,12 +1199,16 @@ void FMonolithReflectionWalker::WriteStruct(FStructProperty* StructProp, void* V
 				++LocalErrors;
 				continue;
 			}
-			void* InnerPtr = InnerProp->ContainerPtrToValuePtr<void>(ValuePtr);
+			void* InnerPtr = InnerProp->ContainerPtrToValuePtr<void>(StagedValue.Get());
 			DispatchByPropertyType(InnerProp, InnerPtr, Pair.Value, Owner, Spec, OutReport, W.Path, W);
 			if (!W.bOk) { ++LocalErrors; }
 			OutReport.FieldWrites.Add(W);
 		}
 		OutWrite.bOk = (LocalErrors == 0);
+		if (OutWrite.bOk)
+		{
+			StagedValue.CommitTo(ValuePtr);
+		}
 		OutWrite.ProposedValue = FString::Printf(TEXT("{%d fields}"), (*NestedObj)->Values.Num());
 		if (!OutWrite.bOk)
 		{
@@ -1007,8 +1217,15 @@ void FMonolithReflectionWalker::WriteStruct(FStructProperty* StructProp, void* V
 		return;
 	}
 
-	// String form -> ImportText literal grammar ("(X=1,Y=2,Z=3)").
-	WriteScalar(StructProp, ValuePtr, JsonVal, Owner, OutWrite);
+	// String form -> ImportText literal grammar ("(X=1,Y=2,Z=3)"). Keep the
+	// same atomicity guarantee in case ImportText rejects after parsing a prefix.
+	FMonolithScopedPropertyValue StagedValue(StructProp);
+	StagedValue.CopyFrom(ValuePtr);
+	WriteScalar(StructProp, StagedValue.Get(), JsonVal, Owner, OutWrite);
+	if (OutWrite.bOk)
+	{
+		StagedValue.CommitTo(ValuePtr);
+	}
 }
 
 // ---------------------------------------------------------------------------

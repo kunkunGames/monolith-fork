@@ -106,7 +106,11 @@ struct MONOLITHCORE_API FMonolithActionExecutionPolicy
 	TSharedPtr<FJsonObject> ToJson() const;
 };
 
-/** Optional search metadata used by monolith.find ranking. */
+/**
+ * Optional metadata used by monolith.find ranking and unknown-action recovery.
+ * Aliases are search-only names: they do not register dispatch endpoints, and
+ * recovery returns the current registered action name rather than the alias.
+ */
 struct MONOLITHCORE_API FMonolithActionSearchMetadata
 {
 	TArray<FString> Keywords;
@@ -213,8 +217,9 @@ public:
 
 	/**
 	 * Attach search metadata (keywords/aliases/examples) to an already-registered action
-	 * for monolith.find ranking (see BuildFindSearchMetadataText). Safe post-registration
-	 * setter: it does NOT touch execution policy, unlike passing SearchMetadata as the 8th
+	 * for monolith.find ranking and unknown-action recovery. Registry-owned compatibility
+	 * aliases are reapplied after these arrays are replaced. Safe post-registration setter:
+	 * it does NOT touch execution policy, unlike passing SearchMetadata as the 8th
 	 * RegisterAction positional arg (which would force re-specifying Category/ExecutionPolicy
 	 * and could downgrade a write action's transaction policy). Idempotent; call after the
 	 * action's RegisterAction (typically at the end of a module's RegisterAll).
@@ -310,8 +315,9 @@ public:
 
 	/**
 	 * CC-05: Find action names in a namespace that are similar to the given name.
-	 * Uses prefix match + Levenshtein distance to surface "did you mean" suggestions.
-	 * Returns up to MaxResults names, ordered by best match first.
+	 * Profile-filtered registered names and aliases use exact, prefix, substring,
+	 * then bounded-Levenshtein scoring. Returns only registered action names, up
+	 * to MaxResults, with deterministic best-match-first ordering.
 	 */
 	TArray<FString> FindSimilarActions(const FString& Namespace, const FString& ActionName, int32 MaxResults = 5) const;
 

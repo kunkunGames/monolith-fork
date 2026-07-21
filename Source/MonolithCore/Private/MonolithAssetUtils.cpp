@@ -4,10 +4,34 @@
 #include "AssetRegistry/IAssetRegistry.h"
 #include "AssetRegistry/AssetData.h"
 #include "Misc/PackageName.h"
+#include "Misc/Paths.h"
 #include "UObject/ObjectRedirector.h"
 #include "UObject/SoftObjectPath.h"
 #include "UObject/UObjectHash.h"
 #include "UObject/Package.h"
+
+bool FMonolithAssetUtils::IsProjectOwnedPackage(const FString& PackageName)
+{
+	if (!FPackageName::IsValidLongPackageName(PackageName, false))
+	{
+		return false;
+	}
+
+	FString PackageFilename;
+	if (!FPackageName::TryConvertLongPackageNameToFilename(
+			PackageName,
+			PackageFilename,
+			FPackageName::GetAssetPackageExtension()))
+	{
+		return false;
+	}
+
+	PackageFilename = FPaths::ConvertRelativePathToFull(PackageFilename);
+	FPaths::NormalizeFilename(PackageFilename);
+	FString ProjectDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+	FPaths::NormalizeDirectoryName(ProjectDirectory);
+	return FPaths::IsUnderDirectory(PackageFilename, ProjectDirectory);
+}
 
 FString FMonolithAssetUtils::ResolveAssetPath(const FString& InPath)
 {
