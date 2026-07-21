@@ -75,6 +75,32 @@ bool FGetSMComponentConfigRejectsMalformedParamsTest::RunTest(const FString& Par
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverFindNodesByClassRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.FindNodesByClassRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverFindNodesByClassRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("find_nodes_by_class")))
+	{
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	{
+		TSharedPtr<FJsonObject> EmptyParams = MakeShared<FJsonObject>();
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("find_nodes_by_class"), EmptyParams);
+		TestTrue(TEXT("find_nodes_by_class rejects missing asset_path"), !Result.bSuccess);
+		TestTrue(TEXT("find_nodes_by_class reports missing asset_path"), Result.ErrorMessage.Contains(TEXT("Missing required param 'asset_path'")));
+	}
+	{
+		TSharedPtr<FJsonObject> MissingTypeParams = MakeShared<FJsonObject>();
+		MissingTypeParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("find_nodes_by_class"), MissingTypeParams);
+		TestTrue(TEXT("find_nodes_by_class rejects missing class_name"), !Result.bSuccess);
+		TestTrue(TEXT("find_nodes_by_class reports missing class_name"), Result.ErrorMessage.Contains(TEXT("Missing required param 'class_name'")));
+	}
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverScaffoldRejectsMalformedArraysTest, "Monolith.ParamGuard.LogicDriver.ScaffoldRejectsMalformedArrays", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithParamGuardLogicDriverScaffoldRejectsMalformedArraysTest::RunTest(const FString& Parameters)
 {
