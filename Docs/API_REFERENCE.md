@@ -2106,11 +2106,29 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithGAS.md` for the deep dive.
 
 Optional Geometry Collection and Fracture module visibility. Read-only probes; does not load Fracture tools or mutate assets. **3 actions.**
 
-| Action | Params |
-|--------|--------|
-| `get_status` | none |
-| `list_geometry_collection_assets` | `package_path` (optional string), `limit` (optional integer) |
-| `list_geometry_collection_components` | `limit` (optional integer) |
+### `chaos_fracture.get_status`
+
+Report optional Geometry Collection / Fracture module and reflected type availability without mutating assets.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+
+### `chaos_fracture.list_geometry_collection_assets`
+
+List Geometry Collection-like assets using AssetRegistry class paths without loading Fracture modules.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `package_path` | string | optional | Root package path to scan (must be under /Game). Default: `/Game` |
+| `limit` | integer | optional | Maximum rows to return (1-500). Default: `100` |
+
+### `chaos_fracture.list_geometry_collection_components`
+
+List Geometry Collection-like components in the current editor world using reflected class names.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `limit` | integer | optional | Maximum rows to return (1-500). Default: `100` |
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithChaosFracture.md` for the deep dive.
 
@@ -3780,6 +3798,7 @@ List Dataflow editor comment boxes with bounded node membership hints without mu
 |-----------|------|----------|-------------|
 | `asset_path` | string | **required** | Dataflow asset path, e.g. /Game/Geometry/DF_Fracture |
 | `node_limit` | integer | optional | Maximum contained-node rows per comment, clamped to 1..500. Default: `128` |
+
 
 
 ## Public C++ Surface (MonolithCore)
