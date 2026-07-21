@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Removed
+
+- **Separate CRG graph export (`Saved/graph.db`)** — `source.search_crg_graph` now preserves the File/Symbol graph-node search contract directly over the canonical `source_graph_nodes` VIEW and `source_graph_nodes_fts` inside `EngineSource.db` (`backend=engine_source_fts`). Removed `source.build_crg_graph`, `source.rebuild_crg_graph`, `source.crg_graph_health`, the offline `repair_crg_graph` alias, `graph_db` / `--graph-db`, and watchdog/export maintenance; graph-node health and repair now use `source.health` and `source.repair_fts --target=graph_nodes --execute`.
+
 ### Fixed
 
 - **FullyLoad data-loss prevention** — Replaced unsafe `CreatePackage` logic with robust data-loss prevention wrappers across multiple domains (e.g., Blueprint, LogicDriver), preventing asset corruption when mutating live packages or packages without properly loaded content (e.g. #1042).

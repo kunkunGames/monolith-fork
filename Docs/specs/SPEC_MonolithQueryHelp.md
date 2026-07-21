@@ -48,6 +48,8 @@ The source survey for this spec was based on `Tools/MonolithQuery/monolith_query
 | Agent scripts | Maintenance scripts such as `check_offline_exe_fresh.py`, `verify_offline_parity.py`, `ci_static_checks.py`, `index_project.py`, `tag_path_params.py`, and `make_release.ps1` already have argparse/PowerShell help or narrowly scoped usage comments. | They are useful verification tools, but they are not Monolith runtime binaries and should not be mixed into the binary help contract. |
 | Existing docs | `SPEC_MonolithSource.md`, `SPEC_MonolithIndex.md`, `AGENTS.md`, and the default DB verification doc already define DB locations and preferred offline commands. | Help should reuse these contracts, not invent new behavior. |
 
+The table above is retained as pre-implementation evidence. Its `repair_crg_graph` alias and graph-specific DB observations describe the retired export implementation; they are not current help or dispatch requirements. The current catalog routes `source.search_crg_graph` to `EngineSource.db` and exposes no graph build/rebuild/health alias or `--graph-db` option.
+
 ## 3. User Stories
 
 | Story | Required result |
@@ -56,7 +58,7 @@ The source survey for this spec was based on `Tools/MonolithQuery/monolith_query
 | Agent wants the exact options for a review action. | `monolith_query.exe source review_context --help` prints required seed, optional params, defaults, examples, and output keys. |
 | Agent uses PowerShell-style separated args. | `--max-results 10`, `--detail-level standard`, and `--include-counts false` parse exactly like their `--key=value` forms. |
 | Agent mistypes a namespace or action. | The error prints nearest valid names and points to the matching `--help` command before any DB open. |
-| Agent works from copied DBs. | Help explains default DB resolution and `--db`, `--source-db`, `--project-db`, and `--graph-db` override rules. |
+| Agent works from copied DBs. | Help explains default DB resolution and the `--db`, `--source-db`, and `--project-db` override rules. `source.search_crg_graph` follows the EngineSource selection and has no graph-specific override. |
 
 ## 4. Requirements
 
@@ -91,11 +93,11 @@ Top-level help must include:
   - `source`, `console`, and RI namespaces read `Saved\EngineSource.db`;
   - `project` reads `Saved\ProjectIndex.db`;
   - `bridge` reads both;
-  - source CRG graph actions read or write `Saved\graph.db`;
-  - `--db`, `--source-db`, `--project-db`, and `--graph-db` override copied or non-standard DBs.
+  - every `source` action, including `search_crg_graph`, reads `Saved\EngineSource.db`;
+  - `--db`, `--source-db`, and `--project-db` override copied or non-standard DBs; `--graph-db` is not a supported option.
 - Logging controls: `MONOLITH_TOOL_LOG_ENABLED=0` disables query logs; `MONOLITH_TOOL_LOG_DIR` redirects them.
 - Query trace/log context variables: `MONOLITH_TOOL_LOG_MAX_FIELD_BYTES`, `MONOLITH_TRACE_ID`, `MONOLITH_PARENT_SPAN_ID`, and `MONOLITH_VERSION`.
-- Examples for the highest ROI workflows: health, source search, review context, project search, bridge asset-symbol search, and CRG graph health.
+- Examples for the highest ROI workflows: health, source search, EngineSource graph-node search, review context, project search, and bridge asset-symbol search.
 
 Namespace help must include:
 
@@ -103,7 +105,7 @@ Namespace help must include:
 - Backing DBs and whether help itself is DB-free.
 - Action list grouped by workflow, not just alphabetical order.
 - A short "start here" section with 3 to 6 examples.
-- Mutating/offline-write warnings for execute-gated actions: `repair_fts`, `repair_crg_cache`, `build_crg_graph --execute`, `snapshot --execute`.
+- Mutating/offline-write warnings for execute-gated actions: `repair_fts`, `repair_crg_cache`, and `snapshot --execute`.
 
 Action help must include:
 
@@ -157,7 +159,7 @@ At minimum, P0 must correctly type all options already read by `Args::opt`, `Arg
 asset_path, before, blueprint_callable_only, blueprint_visible_only,
 changed_paths, class_name, context_lines, cursor, decision_id,
 dependency_type, depth, detail_level, diff_file, diff_stdin, direction,
-edge_kinds, end, execute, file_path, force, graph_db, include_content,
+edge_kinds, end, execute, file_path, include_content,
 include_counts, include_questions, include_unused, interface_name, kind,
 label, limit, macro_filter, max_age_days, max_depth, max_lines, max_results,
 min_confidence, min_lines, min_tier, module, module_name, no_header,
@@ -251,7 +253,7 @@ P0 covers all namespaces currently executable by `monolith_query.exe`:
 
 | Namespace | P0 help coverage |
 |-----------|------------------|
-| `source` | All 36 dispatch entries, including alias note for `repair_crg_graph -> rebuild_crg_graph` and the C++ authoring-ergonomics actions `get_include_path`, `get_signature`, `check_deprecations`, `verify_symbols`, `find_example_usage`, `lint_header`, and `generate_class_stub` (plain-text output, byte-parity-gated against `Scripts/monolith_offline.py`). |
+| `source` | Every current source dispatch entry, including EngineSource-backed `search_crg_graph` and the C++ authoring-ergonomics actions `get_include_path`, `get_signature`, `check_deprecations`, `verify_symbols`, `find_example_usage`, `lint_header`, and `generate_class_stub` (plain-text output, byte-parity-gated against `Scripts/monolith_offline.py`). The catalog must not expose removed `build_crg_graph`, `rebuild_crg_graph`, `repair_crg_graph`, or `crg_graph_health` entries. |
 | `project` | All 17 dispatch entries. Do not include live-only `list_gameplay_tags` or `search_gameplay_tags` unless offline dispatch is added separately. |
 | `bridge` | `search_asset_symbols`. |
 | `console` | Snapshot-backed `search_objects`, `get_object`, and `health`; `refresh_snapshot` and `execute` are documented live-only guidance actions. |

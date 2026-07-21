@@ -276,6 +276,10 @@
       {
         "name": "BenchmarkCIInventory",
         "script": "Scripts/tests/test_benchmark_ci_inventory.py"
+      },
+      {
+        "name": "StaticOfflineParityExeSelection",
+        "script": "Scripts/tests/test_ci_static_offline_parity.py"
       }
     ]
   },

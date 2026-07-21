@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "snapshot_id": "post-rebase-20260721-02",
+  "snapshot_id": "graph-retirement-20260721-08",
   "suites": {
     "OfflineParity": {
       "state": "accepted",
-      "evidence": "Benchmarks/OfflineParity/accepted/post-rebase-20260721-02/summary.json",
-      "evidence_bundle_sha256": "eeb1883a04ddd5450194c688f3322afed0e593e740d2842c89ad8c83dc903b1d",
-      "input_fingerprint": "04cf86599ccfd4e8bfa24621bef592fbe0cb0260d0d0eff3aeb10bf210b6b7ff",
-      "diagnostic": "Post-rebase and post-repair generation: 311 MATCH, 0 DIFF, 0 ERROR, 6 explicit decision_id-dependent SKIP. Accepted freshness checks every input file SHA plus the 4.46 GB EngineSource.db content SHA-256.",
+      "evidence": "Benchmarks/OfflineParity/accepted/graph-retirement-20260721-08/summary.json",
+      "evidence_bundle_sha256": "2dadec0e8b6ddab672f8e60b7a27957f136dd56153401b3800bbc3b19afee34e",
+      "input_fingerprint": "f2acf3584953af0c3cf89414467ec57c81f31fc1c2768bf93dcf65558e5fb9d6",
+      "diagnostic": "Final Query graph-retirement generation: 311 MATCH, 0 DIFF, 0 ERROR, 6 explicit decision_id-dependent SKIP. Accepted freshness checks every input file SHA plus the 4.66 GB EngineSource.db content SHA-256; no graph.db input exists.",
       "namespace_results": {
         "cppreflect": {"pass": 96, "fail": 0, "expected_skip": 0},
         "decision": {"pass": 44, "fail": 0, "expected_skip": 6},
@@ -26,12 +26,12 @@
       "state": "pending",
       "gap_id": "GAP-SOURCE-001",
       "evidence": "Saved/Monolith/Benchmarks/SourceIndex/audit-20260717-full01/partial_summary.json",
-      "diagnostic": "284 valid prefix rows followed by 3 transport failures; interrupted results are non-comparable, so all 376 rows remain unverified."
+      "diagnostic": "284 valid prefix rows followed by 3 transport failures; interrupted results are non-comparable, so all 374 rows remain unverified."
     },
     "SchemaCompletenessProbe": {
       "state": "pending",
       "gap_id": "GAP-SCHEMA-PROBE-001",
-      "diagnostic": "The previously reported 330-probe pre-link artifact is not retained locally, so no positive result is claimed. All probe rows remain unverified until the final-linked exact catalog identity is captured and the canonical probe run is retained."
+      "diagnostic": "The previously reported 329-probe pre-link artifact is not retained locally, so no positive result is claimed. All probe rows remain unverified until the final-linked exact catalog identity is captured and the canonical probe run is retained."
     },
     "SchemaCompletenessFullCatalog": {
       "state": "pending",
@@ -68,13 +68,13 @@
     {
       "id": "GAP-SCHEMA-PROBE-001",
       "suites": ["SchemaCompletenessProbe"],
-      "done_when": "All 330 declared probes finish under the same current catalog identity with no required stale row.",
+      "done_when": "All 329 declared probes finish under the same current catalog identity with no required stale row.",
       "blocker": "Run after the full live catalog identity is fixed."
     },
     {
       "id": "GAP-SOURCE-001",
       "suites": ["SourceIndex"],
-      "done_when": "All 376 canonical rows complete in one valid run with zero transport/protocol failures.",
+      "done_when": "All 374 canonical rows complete in one valid run with zero transport/protocol failures.",
       "blocker": "Live HTTP MCP must remain stable for the full sequence."
     },
     {
@@ -113,13 +113,13 @@
       "id": "GATE-FINAL-LINK",
       "status": "passed",
       "contract": "After CL 1198 PCG live revalidation, use one user-coordinated editor-down window for the CL 1100 protected link build.",
-      "evidence": "2026-07-21: BuildGameEditorAndRun.bat completed the full SpeedEditor link with exit 0; BuildGameEditorStrictNonUnity.bat then compiled and linked all 46 Monolith modules under Strict, WarningsAsErrors, and DisableUnity with exit 0."
+      "evidence": "2026-07-21: BuildGameEditorAndRun.bat completed the normal SpeedEditor build with exit 0; BuildGameEditorStrictNonUnity.bat then compiled and linked 1,472 actions under Strict, WarningsAsErrors, DisableUnity, and NoUBTMakefiles with exit 0."
     },
     {
       "id": "GATE-CRG",
       "status": "passed",
       "contract": "Source health must prove CRG parity, then OfflineParity must be rerun against that exact EngineSource.db and promoted as a schema-v2 tracked accepted bundle.",
-      "evidence": "2026-07-21: source.repair_crg_cache rebuilt 91,020 edges, 1,328,685 node metrics, and 133,274 override edges; follow-up source.health was clean. post-rebase-20260721-02 then completed 317/317 rows as 311 MATCH, 0 DIFF, 0 ERROR, and 6 exact prerequisite-dependent SKIP rows."
+      "evidence": "2026-07-21: source.repair_crg_cache rebuilt 91,028 edges, 1,328,817 node metrics, and 133,279 override edges; follow-up deep source.health was clean. graph-retirement-20260721-08 then completed 317/317 rows as 311 MATCH, 0 DIFF, 0 ERROR, and 6 exact prerequisite-dependent SKIP rows against that EngineSource.db and the final Query binary."
     },
     {
       "id": "GATE-ANIMATION",
@@ -130,7 +130,7 @@
       "id": "GATE-PRECOMMIT",
       "status": "passed",
       "contract": "Run static CI, portable and full inventory checks, final P4/CL/default-CL audit, and review/reflection evidence after the final accepted bundles are fixed.",
-      "evidence": "2026-07-21: hosted static CI completed with 0 blocking findings; benchmark inventory unit tests passed 46/46; portable and full inventory checks verified 229 rows; git diff --check passed; final P4 audit confirmed Monolith build outputs remain isolated in CL 1271 while unrelated SpeedSwitching and SpeedCore work remains in CLs 1275/1276; final diff and accepted-bundle manifest were reviewed."
+      "evidence": "2026-07-21: final graph-retirement OfflineParity scored 1.0; hosted static CI completed with 0 blocking findings; benchmark inventory unit tests passed; portable and full inventory checks verified 229 rows; Strict Non-Unity compiled and linked 1,472 actions; git diff --check passed; final scope and accepted-bundle reviews found no blocking regression."
     }
   ],
   "changelist_boundary": {

@@ -220,9 +220,10 @@ public:
 	TSharedPtr<FJsonObject> ComputeHealth(bool bIncludeCounts, bool bIncludeDeepChecks = false);
 	/**
 	 * Rebuild FTS. Default dry-run; mutates only when bExecute is true.
-	 * Only `symbols_fts` is external-content and rebuildable; `source_fts` is a
-	 * plain fts5 table with no backing content, so target=source always degrades
-	 * to a reindex recommendation. Caller must gate on subsystem IsIndexing().
+	 * `symbols_fts`, `console_objects_fts`, and `source_graph_nodes_fts` are
+	 * external-content and rebuildable. `source_fts` is a plain fts5 table with
+	 * no backing content, so target=source always degrades to a reindex
+	 * recommendation. Caller must gate on subsystem IsIndexing().
 	 */
 	TSharedPtr<FJsonObject> RepairFts(const FString& Target, bool bExecute);
 	/**
@@ -301,6 +302,9 @@ public:
 		TMap<FString, TPair<int32,int32>>& OutSymbolSpans, TMap<FString, TPair<int32,int32>>& OutClassSpans);
 
 private:
+	/** Create/upgrade schema while DbLock is already held. */
+	bool CreateTablesIfNeededLocked();
+
 	FMonolithSourceSymbol ReadSymbolFromStatement(FSQLitePreparedStatement& Stmt);
 	FMonolithSourceReference ReadReferenceFromStatement(FSQLitePreparedStatement& Stmt, bool bIsRefTo);
 

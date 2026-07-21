@@ -1,16 +1,14 @@
 {
-  "generated_at": "2026-07-17T11:26:52.891820+00:00",
+  "generated_at": "2026-07-21T17:28:04.942650+00:00",
   "mcp_url": "http://localhost:9316/mcp",
-  "catalog_version": "sha256:32d46c1de26877a1",
+  "catalog_version": "sha256:da587bf9771ad847",
   "catalog_validation": {
-    "live_action_count": 37,
-    "covered_action_count": 37,
-    "preexisting_covered_action_count": 14,
-    "generated_schema_coverage_count": 23,
+    "live_action_count": 34,
+    "covered_action_count": 34,
+    "preexisting_covered_action_count": 15,
+    "generated_schema_coverage_count": 19,
     "generated_schema_coverage_actions": [
       "audit_module_dep_reality",
-      "build_crg_graph",
-      "crg_graph_health",
       "detect_changes",
       "diff_snapshots",
       "find_references",
@@ -23,10 +21,8 @@
       "pre_merge_check",
       "read_file",
       "read_source",
-      "rebuild_crg_graph",
       "repair_crg_cache",
       "repair_fts",
-      "search_crg_graph",
       "snapshot",
       "suggest_build_cs_deps",
       "trigger_project_reindex",
@@ -35,7 +31,7 @@
     "uncovered_action_count": 0,
     "uncovered_actions": []
   },
-  "task_count": 376,
+  "task_count": 374,
   "min_tasks_requested": 363,
   "golden_symbols": [
     "AActor",
@@ -66,8 +62,6 @@
   ],
   "schema_actions": [
     "audit_module_dep_reality",
-    "build_crg_graph",
-    "crg_graph_health",
     "detect_changes",
     "diff_snapshots",
     "find_callees",
@@ -87,7 +81,6 @@
     "pre_merge_check",
     "read_file",
     "read_source",
-    "rebuild_crg_graph",
     "repair_crg_cache",
     "repair_fts",
     "review_context",
@@ -113,7 +106,8 @@
     "verify_symbols",
     "find_example_usage",
     "find_overrides",
-    "review_hotspots"
+    "review_hotspots",
+    "search_crg_graph"
   ],
   "category_counts": {
     "ergonomics_text": 40,
@@ -121,8 +115,8 @@
     "impact_radius_lookup": 32,
     "negative_recovery": 13,
     "review_context_lookup": 32,
-    "schema_field_presence": 35,
-    "symbol_lookup": 217
+    "schema_field_presence": 32,
+    "symbol_lookup": 218
   },
   "task_file": "Benchmarks/SourceIndex/tasks.jsonl",
   "scoring": {

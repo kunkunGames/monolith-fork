@@ -42,9 +42,9 @@ Current coverage:
   after a successful preflight is a real per-action `ERROR`, never a `SKIP`, so
   a one-sided failure cannot shrink the denominator or inflate the score.
 - Input fingerprinting follows the executed dependency boundary. All declared
-  `cppreflect`, `network`, `decision`, `risk`, and non-CRG `source` rows read
+  `cppreflect`, `network`, `decision`, `risk`, and `source` rows read
   `Saved/EngineSource.db`, so that is the only database in the run identity.
-  `ProjectIndex.db`, `graph.db`, and legacy analysis DBs are excluded because no
+  `ProjectIndex.db` and legacy analysis DBs are excluded because no
   OfflineParity row reads them; unrelated live index updates must not stale an
   otherwise comparable parity result.
   The same identity includes `actions.jsonl`, `manifest.json`, the benchmark

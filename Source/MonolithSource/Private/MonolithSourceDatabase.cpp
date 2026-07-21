@@ -715,7 +715,11 @@ bool FMonolithSourceDatabase::Open(const FString& DbPath)
 
 	if (Database)
 	{
-		Close();
+		// Open already owns DbLock. Calling Close() here would try to acquire the
+		// same non-recursive lock and deadlock when an instance is reopened.
+		Database->Close();
+		delete Database;
+		Database = nullptr;
 	}
 
 	CachedDbPath = DbPath;
@@ -739,6 +743,18 @@ bool FMonolithSourceDatabase::Open(const FString& DbPath)
 	if (!ApplyEngineSourceDeletePragmas(*Database, DbPath))
 	{
 		UE_LOG(LogMonolithSource, Error, TEXT("Failed to configure EngineSource DB journal mode: %s"), *DbPath);
+		Database->Close();
+		delete Database;
+		Database = nullptr;
+		return false;
+	}
+
+	// Open is the editor-startup path for an existing EngineSource.db. Ensure
+	// additive migrations (including the v3 -> v4 graph-search VIEW/FTS) run
+	// here instead of relying on a later indexing operation to call schema setup.
+	if (!CreateTablesIfNeededLocked())
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("Failed to migrate/verify EngineSource DB schema: %s"), *DbPath);
 		Database->Close();
 		delete Database;
 		Database = nullptr;
@@ -1266,15 +1282,77 @@ static TSet<FString> SetDifference(const TSet<FString>& Left, const TSet<FString
 	return Out;
 }
 
-static bool TableExistsLocked(FSQLiteDatabase& DB, const TCHAR* Name)
+static bool ObjectExistsLocked(FSQLiteDatabase& DB, const TCHAR* Type, const TCHAR* Name)
 {
 	FSQLitePreparedStatement S;
-	if (!S.Create(DB, TEXT("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?;")))
+	if (!S.Create(DB, TEXT("SELECT 1 FROM sqlite_master WHERE type = ? AND name = ?;")))
 	{
 		return false;
 	}
-	S.SetBindingValueByIndex(1, FString(Name));
+	S.SetBindingValueByIndex(1, FString(Type));
+	S.SetBindingValueByIndex(2, FString(Name));
 	return S.Step() == ESQLitePreparedStatementStepResult::Row;
+}
+
+static bool DropGraphSearchObjectByActualTypeLocked(FSQLiteDatabase& DB, const TCHAR* Name)
+{
+	const bool bIsGraphView = FCString::Strcmp(Name, TEXT("source_graph_nodes")) == 0;
+	const bool bIsGraphFts = FCString::Strcmp(Name, TEXT("source_graph_nodes_fts")) == 0;
+	if (!bIsGraphView && !bIsGraphFts)
+	{
+		return false;
+	}
+
+	FString ActualType;
+	{
+		// Finalize the sqlite_master reader before issuing schema-changing SQL.
+		// UE's SQLite wrapper keeps the prepared statement active until its
+		// destructor runs, and DROP TABLE/VIEW can otherwise fail with the
+		// schema locked when an object actually exists. Missing objects did not
+		// expose this because that path returned before any DROP was attempted.
+		FSQLitePreparedStatement S;
+		if (!S.Create(DB, TEXT("SELECT type FROM sqlite_master WHERE name = ? LIMIT 1;")))
+		{
+			return false;
+		}
+		S.SetBindingValueByIndex(1, FString(Name));
+		const ESQLitePreparedStatementStepResult StepResult = S.Step();
+		if (StepResult == ESQLitePreparedStatementStepResult::Done)
+		{
+			return true;
+		}
+		if (StepResult != ESQLitePreparedStatementStepResult::Row)
+		{
+			return false;
+		}
+		S.GetColumnValueByIndex(0, ActualType);
+	}
+
+	if (bIsGraphView && ActualType.Equals(TEXT("view"), ESearchCase::IgnoreCase))
+	{
+		return DB.Execute(TEXT("DROP VIEW source_graph_nodes;"));
+	}
+	if (bIsGraphView && ActualType.Equals(TEXT("table"), ESearchCase::IgnoreCase))
+	{
+		return DB.Execute(TEXT("DROP TABLE source_graph_nodes;"));
+	}
+	if (bIsGraphFts && ActualType.Equals(TEXT("view"), ESearchCase::IgnoreCase))
+	{
+		return DB.Execute(TEXT("DROP VIEW source_graph_nodes_fts;"));
+	}
+	if (bIsGraphFts && ActualType.Equals(TEXT("table"), ESearchCase::IgnoreCase))
+	{
+		return DB.Execute(TEXT("DROP TABLE source_graph_nodes_fts;"));
+	}
+
+	// sqlite_master names are fixed and allowlisted above. An index or trigger
+	// occupying either name is not safe to reinterpret as a graph VIEW/FTS table.
+	return false;
+}
+
+static bool TableExistsLocked(FSQLiteDatabase& DB, const TCHAR* Name)
+{
+	return ObjectExistsLocked(DB, TEXT("table"), Name);
 }
 
 static bool CrgMetaEqualsLocked(FSQLiteDatabase& DB, const TCHAR* Key, const TCHAR* Expected)
@@ -3315,10 +3393,26 @@ bool FMonolithSourceDatabase::OpenForWriting(const FString& DbPath)
 bool FMonolithSourceDatabase::CreateTablesIfNeeded()
 {
 	FScopeLock Lock(&DbLock);
+	return CreateTablesIfNeededLocked();
+}
+
+bool FMonolithSourceDatabase::CreateTablesIfNeededLocked()
+{
 	if (!Database || !Database->IsValid())
 	{
 		UE_LOG(LogMonolithSource, Error, TEXT("CreateTablesIfNeeded: DB not open"));
 		return false;
+	}
+
+	// Capture readiness before CREATE IF NOT EXISTS so a partially created v4
+	// schema cannot skip the one-shot content rebuild.
+	bool bGraphSearchSchemaWasComplete =
+		ObjectExistsLocked(*Database, TEXT("view"), TEXT("source_graph_nodes"))
+		&& TableExistsLocked(*Database, TEXT("source_graph_nodes_fts"));
+	for (const TCHAR* Trigger : MonolithSourceSchema::GraphSearchTriggerNames)
+	{
+		bGraphSearchSchemaWasComplete = bGraphSearchSchemaWasComplete
+			&& ObjectExistsLocked(*Database, TEXT("trigger"), Trigger);
 	}
 
 	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_Tables))
@@ -3352,14 +3446,76 @@ bool FMonolithSourceDatabase::CreateTablesIfNeeded()
 		return false;
 	}
 
-	// Stamp the schema version into meta
-	FSQLitePreparedStatement MetaStmt;
-	MetaStmt.Create(*Database, TEXT("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?);"));
-	MetaStmt.SetBindingValueByIndex(1, FString(TEXT("schema_version")));
-	MetaStmt.SetBindingValueByIndex(2, FString::FromInt(MonolithSourceSchema::SchemaVersion));
-	MetaStmt.Step();
+	FString GraphSearchVersion;
+	{
+		FSQLitePreparedStatement VersionStmt;
+		if (VersionStmt.Create(*Database,
+			TEXT("SELECT value FROM meta WHERE key = 'source_graph_nodes_fts_version';"))
+			&& VersionStmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			VersionStmt.GetColumnValueByIndex(0, GraphSearchVersion);
+		}
+	}
+	const bool bNeedsGraphSearchRebuild = !bGraphSearchSchemaWasComplete
+		|| GraphSearchVersion != MonolithSourceSchema::GraphSearchFtsVersion;
 
-	UE_LOG(LogMonolithSource, Log, TEXT("Schema created/verified (version %d)"), MonolithSourceSchema::SchemaVersion);
+	// v3 -> v4 is an additive, idempotent transaction. The marker and overall
+	// schema version are written only after the external-content index has been
+	// rebuilt and checked, so a failed migration retries cleanly next time.
+	if (!Database->Execute(TEXT("BEGIN;")))
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("CreateTablesIfNeeded: failed to begin graph-search migration — %s"), *Database->GetLastError());
+		return false;
+	}
+
+	bool bMigrationOk = ExecuteMulti(*Database, MonolithSourceSchema::DDL_GraphSearchView)
+		&& ExecuteMulti(*Database, MonolithSourceSchema::DDL_GraphSearchFTS)
+		&& ExecuteMulti(*Database, MonolithSourceSchema::DDL_GraphSearchTriggers);
+	if (bMigrationOk && bNeedsGraphSearchRebuild)
+	{
+		bMigrationOk = Database->Execute(
+			TEXT("INSERT INTO source_graph_nodes_fts(source_graph_nodes_fts) VALUES('rebuild');"));
+	}
+	if (bMigrationOk && bNeedsGraphSearchRebuild)
+	{
+		bMigrationOk = Database->Execute(
+			TEXT("INSERT INTO source_graph_nodes_fts(source_graph_nodes_fts, rank) VALUES('integrity-check', 1);"));
+	}
+
+	auto WriteMeta = [&](const FString& Key, const FString& Value) -> bool
+	{
+		FSQLitePreparedStatement MetaStmt;
+		if (!MetaStmt.Create(*Database, TEXT("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?);")))
+		{
+			return false;
+		}
+		MetaStmt.SetBindingValueByIndex(1, Key);
+		MetaStmt.SetBindingValueByIndex(2, Value);
+		return MetaStmt.Step() == ESQLitePreparedStatementStepResult::Done;
+	};
+	if (bMigrationOk)
+	{
+		bMigrationOk = WriteMeta(TEXT("source_graph_nodes_fts_version"), MonolithSourceSchema::GraphSearchFtsVersion)
+			&& WriteMeta(TEXT("schema_version"), FString::FromInt(MonolithSourceSchema::SchemaVersion));
+	}
+	if (bMigrationOk)
+	{
+		bMigrationOk = Database->Execute(TEXT("COMMIT;"));
+	}
+	if (!bMigrationOk)
+	{
+		const FString MigrationError = Database->GetLastError();
+		Database->Execute(TEXT("ROLLBACK;"));
+		UE_LOG(LogMonolithSource, Error,
+			TEXT("CreateTablesIfNeeded: graph-search schema migration failed — %s"), *MigrationError);
+		return false;
+	}
+
+	UE_LOG(LogMonolithSource, Log,
+		TEXT("Schema created/verified (version %d, graph-search FTS %s%s)"),
+		MonolithSourceSchema::SchemaVersion,
+		MonolithSourceSchema::GraphSearchFtsVersion,
+		bNeedsGraphSearchRebuild ? TEXT(", rebuilt") : TEXT(""));
 	return true;
 }
 
@@ -3410,48 +3566,9 @@ bool FMonolithSourceDatabase::ResetDatabase()
 
 	UE_LOG(LogMonolithSource, Log, TEXT("ResetDatabase: recreated DB file at %s; recreating schema"), *CachedDbPath);
 
-	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_Tables))
+	if (!CreateTablesIfNeededLocked())
 	{
-		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: DDL_Tables failed — %s"), *Database->GetLastError());
-		return false;
-	}
-	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_FTS))
-	{
-		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: DDL_FTS failed — %s"), *Database->GetLastError());
-		return false;
-	}
-	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_ConsoleTables))
-	{
-		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: DDL_ConsoleTables failed — %s"), *Database->GetLastError());
-		return false;
-	}
-	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_ConsoleFTS))
-	{
-		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: DDL_ConsoleFTS failed — %s"), *Database->GetLastError());
-		return false;
-	}
-	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_Triggers))
-	{
-		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: DDL_Triggers failed — %s"), *Database->GetLastError());
-		return false;
-	}
-	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_ConsoleTriggers))
-	{
-		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: DDL_ConsoleTriggers failed — %s"), *Database->GetLastError());
-		return false;
-	}
-
-	FSQLitePreparedStatement MetaStmt;
-	if (!MetaStmt.Create(*Database, TEXT("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?);")))
-	{
-		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: meta statement failed — %s"), *Database->GetLastError());
-		return false;
-	}
-	MetaStmt.SetBindingValueByIndex(1, FString(TEXT("schema_version")));
-	MetaStmt.SetBindingValueByIndex(2, FString::FromInt(MonolithSourceSchema::SchemaVersion));
-	if (MetaStmt.Step() != ESQLitePreparedStatementStepResult::Done)
-	{
-		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: meta write failed — %s"), *Database->GetLastError());
+		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: failed to recreate schema — %s"), *Database->GetLastError());
 		return false;
 	}
 
@@ -4176,6 +4293,8 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 	const bool bRunExpensiveChecks = bIncludeCounts || bIncludeDeepChecks;
 	bool bNeedsReindex = false;
 	bool bNeedsFtsRepair = false;
+	bool bNeedsSymbolsFtsRepair = false;
+	bool bNeedsGraphNodeFtsRepair = false;
 	bool bNeedsCrgRepair = false;
 	bool bNeedsOverrideRepair = false;
 
@@ -4239,9 +4358,13 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 
 	static const TCHAR* Tables[] = { TEXT("modules"), TEXT("files"), TEXT("symbols"),
 		TEXT("inheritance"), TEXT("references"), TEXT("includes"), TEXT("meta") };
+	bool bHasFilesTable = false;
+	bool bHasSymbolsTable = false;
 	for (const TCHAR* T : Tables)
 	{
 		const bool bHas = Exists(TEXT("table"), T);
+		if (FCString::Strcmp(T, TEXT("files")) == 0) bHasFilesTable = bHas;
+		if (FCString::Strcmp(T, TEXT("symbols")) == 0) bHasSymbolsTable = bHas;
 		if (!bHas)
 		{
 			bNeedsReindex = true;
@@ -4259,6 +4382,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 			if (FCString::Strcmp(F, TEXT("symbols_fts")) == 0)
 			{
 				bNeedsFtsRepair = true;
+				bNeedsSymbolsFtsRepair = true;
 			}
 			else
 			{
@@ -4270,17 +4394,203 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 				: FString::Printf(TEXT("missing FTS table %s"), F));
 	}
 
-	// Source has exactly symbols_ai / symbols_ad (no _au, no source_fts trigger).
-	for (const TCHAR* Tr : { TEXT("symbols_ai"), TEXT("symbols_ad") })
+	for (const TCHAR* Tr : { TEXT("symbols_ai"), TEXT("symbols_ad"), TEXT("symbols_au") })
 	{
 		const bool bHas = Exists(TEXT("trigger"), Tr);
 		if (!bHas)
 		{
 			bNeedsFtsRepair = true;
+			bNeedsSymbolsFtsRepair = true;
 		}
 		Check(FString::Printf(TEXT("trigger:%s"), Tr), bHas,
 			bHas ? FString::Printf(TEXT("trigger %s present"), Tr)
 				: FString::Printf(TEXT("missing trigger %s (symbols_fts may drift)"), Tr));
+	}
+
+	const bool bHasGraphNodeView = Exists(TEXT("view"), TEXT("source_graph_nodes"));
+	const bool bHasGraphNodeFts = Exists(TEXT("table"), TEXT("source_graph_nodes_fts"));
+	if (!bHasGraphNodeView || !bHasGraphNodeFts)
+	{
+		bNeedsFtsRepair = true;
+		bNeedsGraphNodeFtsRepair = true;
+	}
+	Check(TEXT("fts:graph_nodes_view"), bHasGraphNodeView,
+		bHasGraphNodeView ? TEXT("canonical source_graph_nodes view present")
+			: TEXT("missing source_graph_nodes view (run source.repair_fts target=graph_nodes)"));
+	Check(TEXT("fts:graph_nodes_table"), bHasGraphNodeFts,
+		bHasGraphNodeFts ? TEXT("external-content FTS table source_graph_nodes_fts present")
+			: TEXT("missing source_graph_nodes_fts (run source.repair_fts target=graph_nodes)"));
+
+	for (const TCHAR* Tr : MonolithSourceSchema::GraphSearchTriggerNames)
+	{
+		const bool bHas = Exists(TEXT("trigger"), Tr);
+		if (!bHas)
+		{
+			bNeedsFtsRepair = true;
+			bNeedsGraphNodeFtsRepair = true;
+		}
+		Check(FString::Printf(TEXT("trigger:%s"), Tr), bHas,
+			bHas ? FString::Printf(TEXT("trigger %s present"), Tr)
+				: FString::Printf(TEXT("missing trigger %s (source_graph_nodes_fts may drift)"), Tr));
+	}
+
+	// Bounded read-only readiness probe: exercise both a File and Symbol row
+	// through MATCH+rowid rather than trusting SELECT COUNT(*) on an
+	// external-content FTS table (which can read through to the content VIEW).
+	if (bHasGraphNodeView && bHasGraphNodeFts)
+	{
+		auto FirstProbeToken = [](const FString& Text) -> FString
+		{
+			FString Best;
+			FString Current;
+			for (TCHAR Ch : Text)
+			{
+				if (FChar::IsAlnum(Ch) || Ch == TEXT('_'))
+				{
+					Current += Ch;
+				}
+				else
+				{
+					if (Current.Len() > Best.Len()) Best = Current;
+					Current.Reset();
+				}
+			}
+			if (Current.Len() > Best.Len()) Best = Current;
+			return Best;
+		};
+		auto BaseFamilyHasRows = [&](const TCHAR* Sql, bool bTableExists,
+			bool& bOutHasRows, FString& OutError) -> bool
+		{
+			bOutHasRows = false;
+			if (!bTableExists) return true;
+			FSQLitePreparedStatement S;
+			if (!S.Create(*Database, Sql))
+			{
+				OutError = Database->GetLastError();
+				return false;
+			}
+			const ESQLitePreparedStatementStepResult StepResult = S.Step();
+			if (StepResult == ESQLitePreparedStatementStepResult::Row)
+			{
+				bOutHasRows = true;
+				return true;
+			}
+			if (StepResult == ESQLitePreparedStatementStepResult::Done) return true;
+			OutError = Database->GetLastError();
+			return false;
+		};
+
+		bool bHasBaseFiles = false;
+		bool bHasBaseSymbols = false;
+		FString ProbeFailureDetail;
+		const bool bBaseProbeOk = BaseFamilyHasRows(
+			TEXT("SELECT 1 FROM files LIMIT 1;"), bHasFilesTable,
+			bHasBaseFiles, ProbeFailureDetail)
+			&& BaseFamilyHasRows(
+				TEXT("SELECT 1 FROM symbols LIMIT 1;"), bHasSymbolsTable,
+				bHasBaseSymbols, ProbeFailureDetail);
+
+		auto ProbeSample = [&](const TCHAR* Family, bool bFamilyRequired,
+			const TCHAR* SampleSql, int32& OutRows, int32& OutFailures) -> bool
+		{
+			FSQLitePreparedStatement Samples;
+			if (!Samples.Create(*Database, SampleSql))
+			{
+				ProbeFailureDetail = FString::Printf(TEXT("%s sample query failed: %s"),
+					Family, *Database->GetLastError());
+				++OutFailures;
+				return false;
+			}
+			for (;;)
+			{
+				const ESQLitePreparedStatementStepResult StepResult = Samples.Step();
+				if (StepResult == ESQLitePreparedStatementStepResult::Done)
+				{
+					if (bFamilyRequired)
+					{
+						ProbeFailureDetail = FString::Printf(
+							TEXT("%s base rows exist but the graph VIEW returned no sample"), Family);
+						++OutFailures;
+					}
+					return true;
+				}
+				if (StepResult != ESQLitePreparedStatementStepResult::Row)
+				{
+					ProbeFailureDetail = FString::Printf(TEXT("%s sample query failed: %s"),
+						Family, *Database->GetLastError());
+					++OutFailures;
+					return false;
+				}
+				int64 Id = 0;
+				FString Name;
+				Samples.GetColumnValueByIndex(0, Id);
+				Samples.GetColumnValueByIndex(1, Name);
+				const FString Token = FirstProbeToken(Name);
+				if (Token.IsEmpty())
+				{
+					if (bFamilyRequired)
+					{
+						ProbeFailureDetail = FString::Printf(
+							TEXT("%s graph sample has no searchable token"), Family);
+						++OutFailures;
+					}
+					return true;
+				}
+
+				++OutRows;
+				FSQLitePreparedStatement Probe;
+				if (!Probe.Create(*Database,
+					TEXT("SELECT 1 FROM source_graph_nodes_fts WHERE source_graph_nodes_fts MATCH ? AND rowid = ? LIMIT 1;")))
+				{
+					ProbeFailureDetail = FString::Printf(TEXT("%s MATCH probe failed: %s"),
+						Family, *Database->GetLastError());
+					++OutFailures;
+					return false;
+				}
+				Probe.SetBindingValueByIndex(1, EscapeFTS(Token));
+				Probe.SetBindingValueByIndex(2, Id);
+				if (Probe.Step() != ESQLitePreparedStatementStepResult::Row)
+				{
+					ProbeFailureDetail = FString::Printf(
+						TEXT("%s graph sample is absent from index-owned MATCH rows"), Family);
+					++OutFailures;
+				}
+				return true;
+			}
+		};
+
+		int32 ProbeRows = 0;
+		int32 ProbeFailures = bBaseProbeOk ? 0 : 1;
+		const bool bProbeExecuted = bBaseProbeOk && ProbeSample(
+			TEXT("File"), bHasBaseFiles,
+			TEXT("SELECT id,name FROM source_graph_nodes WHERE id = (SELECT -MIN(id) FROM files) LIMIT 1;"),
+			ProbeRows, ProbeFailures)
+			&& ProbeSample(
+				TEXT("Symbol"), bHasBaseSymbols,
+				TEXT("SELECT id,name FROM source_graph_nodes WHERE id = (SELECT MIN(id) FROM symbols) LIMIT 1;"),
+				ProbeRows, ProbeFailures);
+		const bool bProbeOk = bProbeExecuted && ProbeFailures == 0;
+		if (!bProbeOk)
+		{
+			bNeedsFtsRepair = true;
+			bNeedsGraphNodeFtsRepair = true;
+		}
+		Check(TEXT("fts:graph_nodes_readiness"), bProbeOk,
+			bProbeOk
+				? FString::Printf(
+					TEXT("bounded required-family File/Symbol MATCH readiness probe passed (%d row(s); base File=%s, Symbol=%s)"),
+					ProbeRows,
+					bHasBaseFiles ? TEXT("present") : TEXT("empty"),
+					bHasBaseSymbols ? TEXT("present") : TEXT("empty"))
+				: FString::Printf(
+					TEXT("bounded graph-node FTS probe failed (%d failure(s))%s%s; run source.repair_fts target=graph_nodes"),
+					ProbeFailures,
+					ProbeFailureDetail.IsEmpty() ? TEXT("") : TEXT(": "),
+					*ProbeFailureDetail));
+	}
+	else
+	{
+		Info(TEXT("fts:graph_nodes_readiness"), TEXT("skipped because graph-node VIEW/FTS is missing"));
 	}
 
 	FString SchemaVer;
@@ -4301,9 +4611,35 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 		SchemaVer.IsEmpty() ? TEXT("meta.schema_version missing")
 			: FString::Printf(TEXT("schema_version=%s (expected %s)"), *SchemaVer, *ExpectedSchemaVersion));
 
+	FString GraphSearchVersion;
+	{
+		FSQLitePreparedStatement S;
+		if (S.Create(*Database, TEXT("SELECT value FROM meta WHERE key = 'source_graph_nodes_fts_version';"))
+			&& S.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			S.GetColumnValueByIndex(0, GraphSearchVersion);
+		}
+	}
+	const bool bGraphVersionOk = GraphSearchVersion == MonolithSourceSchema::GraphSearchFtsVersion;
+	if (!bGraphVersionOk)
+	{
+		bNeedsFtsRepair = true;
+		bNeedsGraphNodeFtsRepair = true;
+	}
+	Check(TEXT("meta:source_graph_nodes_fts_version"), bGraphVersionOk,
+		bGraphVersionOk
+			? FString::Printf(TEXT("source graph-node FTS version=%s"), *GraphSearchVersion)
+			: (GraphSearchVersion.IsEmpty()
+				? TEXT("source_graph_nodes_fts_version missing (run source.repair_fts target=graph_nodes)")
+				: FString::Printf(TEXT("source graph-node FTS version=%s (expected %s)"),
+					*GraphSearchVersion, MonolithSourceSchema::GraphSearchFtsVersion)));
+
 	int64 OrphanRefs = -1;
+	int64 FileCnt = -1;
 	int64 SymCnt = -1;
 	int64 SymFtsCnt = -1;
+	int64 GraphNodeCnt = -1;
+	int64 GraphNodeFtsCnt = -1;
 	if (bRunExpensiveChecks)
 	{
 		const int64 OrphanSymbols = CountOf(TEXT(
@@ -4335,16 +4671,64 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 		if (SymCnt != SymFtsCnt)
 		{
 			bNeedsFtsRepair = true;
+			bNeedsSymbolsFtsRepair = true;
 		}
 		Check(TEXT("fts:symbols_row_parity"), SymCnt == SymFtsCnt,
 			FString::Printf(TEXT("symbols=%lld symbols_fts=%lld%s"), SymCnt, SymFtsCnt,
 				SymCnt == SymFtsCnt ? TEXT("") : TEXT(" (mismatch -> source.repair_fts target=symbols)")));
+
+		if (bHasGraphNodeView && bHasGraphNodeFts)
+		{
+			FileCnt = CountOf(TEXT("SELECT COUNT(*) FROM files;"));
+			GraphNodeCnt = CountOf(TEXT("SELECT COUNT(*) FROM source_graph_nodes;"));
+			// docsize is the bounded, index-owned row manifest. COUNT(*) on an
+			// external-content FTS table can instead reflect its content VIEW.
+			GraphNodeFtsCnt = CountOf(TEXT("SELECT COUNT(*) FROM source_graph_nodes_fts_docsize;"));
+			const int64 ExpectedGraphNodeCnt = FileCnt >= 0 && SymCnt >= 0
+				? FileCnt + SymCnt
+				: -1;
+			const bool bGraphProjectionParity = ExpectedGraphNodeCnt >= 0
+				&& GraphNodeCnt >= 0
+				&& ExpectedGraphNodeCnt == GraphNodeCnt;
+			if (!bGraphProjectionParity)
+			{
+				bNeedsFtsRepair = true;
+				bNeedsGraphNodeFtsRepair = true;
+			}
+			Check(TEXT("fts:graph_nodes_projection_parity"), bGraphProjectionParity,
+				FString::Printf(TEXT("files+symbols=%lld source_graph_nodes=%lld%s"),
+					ExpectedGraphNodeCnt, GraphNodeCnt,
+					bGraphProjectionParity ? TEXT("")
+						: TEXT(" (projection mismatch -> source.repair_fts target=graph_nodes)")));
+
+			const bool bGraphNodeParity = GraphNodeCnt >= 0 && GraphNodeFtsCnt >= 0
+				&& GraphNodeCnt == GraphNodeFtsCnt;
+			if (!bGraphNodeParity)
+			{
+				bNeedsFtsRepair = true;
+				bNeedsGraphNodeFtsRepair = true;
+			}
+			Check(TEXT("fts:graph_nodes_row_parity"), bGraphNodeParity,
+				FString::Printf(TEXT("source_graph_nodes=%lld indexed_docs=%lld%s"),
+					GraphNodeCnt, GraphNodeFtsCnt,
+					bGraphNodeParity ? TEXT("")
+						: TEXT(" (mismatch -> source.repair_fts target=graph_nodes)")));
+		}
+		else
+		{
+			Check(TEXT("fts:graph_nodes_projection_parity"), false,
+				TEXT("graph-node VIEW/FTS missing; run source.repair_fts target=graph_nodes"));
+			Check(TEXT("fts:graph_nodes_row_parity"), false,
+				TEXT("graph-node VIEW/FTS missing; run source.repair_fts target=graph_nodes"));
+		}
 	}
 	else
 	{
 		Info(TEXT("integrity:orphan_symbols"), TEXT("skipped; pass include_deep_checks=true or include_counts=true"));
 		Info(TEXT("integrity:orphan_references"), TEXT("skipped; pass include_deep_checks=true or include_counts=true"));
 		Info(TEXT("fts:symbols_row_parity"), TEXT("skipped; pass include_deep_checks=true or include_counts=true"));
+		Info(TEXT("fts:graph_nodes_projection_parity"), TEXT("skipped; pass include_deep_checks=true or include_counts=true"));
+		Info(TEXT("fts:graph_nodes_row_parity"), TEXT("skipped; pass include_deep_checks=true or include_counts=true"));
 	}
 
 	bool bHasCoreCrg = true;
@@ -4553,6 +4937,8 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 		Counts->SetNumberField(TEXT("inheritance"),
 			static_cast<double>(CountOf(TEXT("SELECT COUNT(*) FROM inheritance;"))));
 		Counts->SetNumberField(TEXT("source_fts"), static_cast<double>(SrcFtsCnt));
+		Counts->SetNumberField(TEXT("source_graph_nodes"), static_cast<double>(GraphNodeCnt));
+		Counts->SetNumberField(TEXT("source_graph_nodes_fts"), static_cast<double>(GraphNodeFtsCnt));
 		if (bHasCoreCrg)
 		{
 			Counts->SetNumberField(TEXT("crg_nodes"), static_cast<double>(CrgNodeCnt));
@@ -4572,8 +4958,8 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 	Root->SetStringField(TEXT("status"), bHealthy ? TEXT("ok") : TEXT("warning"));
 	Root->SetStringField(TEXT("summary"), bHealthy
 		? (bRunExpensiveChecks
-			? TEXT("EngineSource schema, triggers, symbols_fts parity and integrity OK")
-			: TEXT("EngineSource schema, required tables/triggers, and CRG structure OK; deep parity checks skipped"))
+			? TEXT("EngineSource schema, native/source-graph FTS parity, triggers, and CRG integrity OK")
+			: TEXT("EngineSource schema, source-graph FTS readiness, required triggers, and CRG structure OK; deep parity checks skipped"))
 		: FString::Printf(TEXT("%d health warning(s)"), Warnings.Num()));
 	Root->SetArrayField(TEXT("checks"), Checks);
 	Root->SetArrayField(TEXT("warnings"), Warnings);
@@ -4587,6 +4973,10 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 	if (bNeedsFtsRepair)
 	{
 		MaintenanceReasons.Add(TEXT("fts_repair_required"));
+	}
+	if (bNeedsGraphNodeFtsRepair)
+	{
+		MaintenanceReasons.Add(TEXT("graph_node_fts_repair_required"));
 	}
 	if (bNeedsCrgRepair)
 	{
@@ -4609,6 +4999,8 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 	Maintenance->SetBoolField(TEXT("expensive_maintenance_required"), bMaintenanceRequired);
 	Maintenance->SetBoolField(TEXT("reindex_required"), bNeedsReindex);
 	Maintenance->SetBoolField(TEXT("repair_fts_required"), bNeedsFtsRepair);
+	Maintenance->SetBoolField(TEXT("repair_symbols_fts_required"), bNeedsSymbolsFtsRepair);
+	Maintenance->SetBoolField(TEXT("repair_graph_nodes_fts_required"), bNeedsGraphNodeFtsRepair);
 	Maintenance->SetBoolField(TEXT("repair_crg_cache_required"), bNeedsCrgRepair);
 	Maintenance->SetBoolField(TEXT("repair_override_edges_required"), bNeedsOverrideRepair);
 	Maintenance->SetBoolField(TEXT("deep_health_ran"), bRunExpensiveChecks);
@@ -4641,7 +5033,11 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 	{
 		AddNextUnique(TEXT("source.repair_crg_cache scope=override_edges"));
 	}
-	if (bNeedsFtsRepair)
+	if (bNeedsGraphNodeFtsRepair)
+	{
+		AddNextUnique(TEXT("source.repair_fts target=graph_nodes"));
+	}
+	if (bNeedsSymbolsFtsRepair)
 	{
 		AddNextUnique(TEXT("source.repair_fts target=symbols"));
 	}
@@ -4669,7 +5065,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairFts(const FString& Target
 {
 	FScopeLock Lock(&DbLock);
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
-	const FString T = Target.IsEmpty() ? TEXT("all") : Target;
+	const FString T = Target.IsEmpty() ? TEXT("all") : Target.ToLower();
 
 	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
 	Input->SetStringField(TEXT("target"), T);
@@ -4695,13 +5091,15 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairFts(const FString& Target
 
 	const bool bDoSymbols = (T == TEXT("all") || T == TEXT("symbols"));
 	const bool bDoConsole = (T == TEXT("all") || T == TEXT("console_objects"));
+	const bool bDoGraphNodes = (T == TEXT("all") || T == TEXT("graph_nodes"));
 	const bool bAskedSource = (T == TEXT("all") || T == TEXT("source"));
 
-	if (T != TEXT("all") && T != TEXT("symbols") && T != TEXT("console_objects") && T != TEXT("source"))
+	if (T != TEXT("all") && T != TEXT("symbols") && T != TEXT("graph_nodes")
+		&& T != TEXT("console_objects") && T != TEXT("source"))
 	{
 		Root->SetStringField(TEXT("status"), TEXT("error"));
 		Root->SetStringField(TEXT("summary"),
-			FString::Printf(TEXT("Unknown target '%s' (expected all|symbols|console_objects|source)"), *T));
+			FString::Printf(TEXT("Unknown target '%s' (expected all|symbols|graph_nodes|console_objects|source)"), *T));
 		Root->SetArrayField(TEXT("warnings"), Warnings);
 		Root->SetBoolField(TEXT("truncated"), false);
 		AddNextActions(Root, { TEXT("source.repair_fts"), TEXT("source.health") });
@@ -4722,10 +5120,19 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairFts(const FString& Target
 		static_cast<double>(Count(TEXT("SELECT COUNT(*) FROM symbols_fts;"))));
 	if (bDoConsole) Before->SetNumberField(TEXT("console_objects_fts"),
 		static_cast<double>(Count(TEXT("SELECT COUNT(*) FROM console_objects_fts;"))));
+	if (bDoGraphNodes)
+	{
+		Before->SetNumberField(TEXT("source_graph_nodes"),
+			static_cast<double>(Count(TEXT("SELECT COUNT(*) FROM source_graph_nodes;"))));
+		Before->SetNumberField(TEXT("source_graph_nodes_fts"),
+			static_cast<double>(Count(TEXT("SELECT COUNT(*) FROM source_graph_nodes_fts_docsize;"))));
+	}
 	Root->SetObjectField(TEXT("before"), Before);
 
 	if (bDoSymbols)
 	{
+		Plan.Add(MakeShared<FJsonValueString>(
+			TEXT("CREATE missing canonical symbols/source FTS tables and symbols maintenance triggers")));
 		Plan.Add(MakeShared<FJsonValueString>(
 			TEXT("INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild');")));
 	}
@@ -4733,6 +5140,11 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairFts(const FString& Target
 	{
 		Plan.Add(MakeShared<FJsonValueString>(
 			TEXT("INSERT INTO console_objects_fts(console_objects_fts) VALUES('rebuild');")));
+	}
+	if (bDoGraphNodes)
+	{
+		Plan.Add(MakeShared<FJsonValueString>(
+			TEXT("transactionally recreate source_graph_nodes VIEW/FTS/triggers, rebuild, and run FTS5 external-content integrity-check")));
 	}
 	if (bAskedSource)
 	{
@@ -4748,7 +5160,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairFts(const FString& Target
 	if (!bExecute)
 	{
 		Root->SetStringField(TEXT("status"), TEXT("ok"));
-		Root->SetStringField(TEXT("summary"), (bDoSymbols || bDoConsole)
+		Root->SetStringField(TEXT("summary"), (bDoSymbols || bDoConsole || bDoGraphNodes)
 			? TEXT("Dry-run: FTS table(s) would be rebuilt. Pass execute=true to apply.")
 			: TEXT("Dry-run: nothing rebuildable for this target."));
 		Root->SetObjectField(TEXT("after"), MakeShared<FJsonObject>());
@@ -4759,24 +5171,92 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairFts(const FString& Target
 	}
 
 	bool bOk = true;
-	if (bDoSymbols || bDoConsole)
+	if (bDoSymbols || bDoConsole || bDoGraphNodes)
 	{
+		bool bSymbolsAttempted = false;
+		bool bConsoleAttempted = false;
+		bool bGraphNodesAttempted = false;
 		bOk = Database->Execute(TEXT("BEGIN;"));
-		if (bOk && bDoSymbols && !Database->Execute(TEXT("INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild');")))
+		if (bOk && bDoSymbols)
 		{
-			bOk = false;
+			bSymbolsAttempted = true;
+			bOk = ExecuteMulti(*Database, MonolithSourceSchema::DDL_FTS)
+				&& ExecuteMulti(*Database, MonolithSourceSchema::DDL_Triggers)
+				&& Database->Execute(TEXT("INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild');"));
+		}
+		if (!bOk && bSymbolsAttempted)
+		{
 			Warnings.Add(MakeShared<FJsonValueString>(TEXT("symbols_fts rebuild failed")));
 		}
-		if (bOk && bDoConsole && !Database->Execute(TEXT("INSERT INTO console_objects_fts(console_objects_fts) VALUES('rebuild');")))
+		if (bOk && bDoConsole)
 		{
-			bOk = false;
+			bConsoleAttempted = true;
+			bOk = ExecuteMulti(*Database, MonolithSourceSchema::DDL_ConsoleTables)
+				&& ExecuteMulti(*Database, MonolithSourceSchema::DDL_ConsoleFTS)
+				&& ExecuteMulti(*Database, MonolithSourceSchema::DDL_ConsoleTriggers)
+				&& Database->Execute(TEXT("INSERT INTO console_objects_fts(console_objects_fts) VALUES('rebuild');"));
+		}
+		if (!bOk && bConsoleAttempted)
+		{
 			Warnings.Add(MakeShared<FJsonValueString>(TEXT("console_objects_fts rebuild failed")));
+		}
+		if (bOk && bDoGraphNodes)
+		{
+			bGraphNodesAttempted = true;
+			// DROP TABLE/VIEW IF EXISTS still fails when the name exists with the
+			// opposite SQLite object type. Normalize both canonical allowlisted
+			// names first so repair can recover partially migrated databases.
+			bOk = DropGraphSearchObjectByActualTypeLocked(*Database, TEXT("source_graph_nodes_fts"))
+				&& DropGraphSearchObjectByActualTypeLocked(*Database, TEXT("source_graph_nodes"))
+				&& ExecuteMulti(*Database, MonolithSourceSchema::DDL_GraphSearchDrop)
+				&& ExecuteMulti(*Database, MonolithSourceSchema::DDL_GraphSearchView)
+				&& ExecuteMulti(*Database, MonolithSourceSchema::DDL_GraphSearchFTS)
+				&& ExecuteMulti(*Database, MonolithSourceSchema::DDL_GraphSearchTriggers)
+				&& Database->Execute(TEXT("INSERT INTO source_graph_nodes_fts(source_graph_nodes_fts) VALUES('rebuild');"))
+				&& Database->Execute(TEXT("INSERT INTO source_graph_nodes_fts(source_graph_nodes_fts, rank) VALUES('integrity-check', 1);"));
+			if (bOk)
+			{
+				FSQLitePreparedStatement VersionStmt;
+				bOk = VersionStmt.Create(*Database, TEXT("INSERT OR REPLACE INTO meta(key,value) VALUES(?,?);"));
+				if (bOk)
+				{
+					VersionStmt.SetBindingValueByIndex(1, FString(TEXT("source_graph_nodes_fts_version")));
+					VersionStmt.SetBindingValueByIndex(2, FString(MonolithSourceSchema::GraphSearchFtsVersion));
+					bOk = VersionStmt.Step() == ESQLitePreparedStatementStepResult::Done;
+				}
+			}
+			if (bOk)
+			{
+				const FString SchemaStamp = FString::Printf(
+					TEXT("INSERT OR REPLACE INTO meta(key,value) VALUES('schema_version','%d');"),
+					MonolithSourceSchema::SchemaVersion);
+				bOk = Database->Execute(*SchemaStamp);
+			}
+		}
+		if (!bOk && bGraphNodesAttempted)
+		{
+			const FString GraphRepairError = Database->GetLastError();
+			Warnings.Add(MakeShared<FJsonValueString>(
+				GraphRepairError.IsEmpty()
+					? TEXT("source_graph_nodes_fts recreate/rebuild/integrity-check failed")
+					: FString::Printf(
+						TEXT("source_graph_nodes_fts recreate/rebuild/integrity-check failed: %s"),
+						*GraphRepairError)));
 		}
 		if (bOk)
 		{
-			Database->Execute(TEXT("COMMIT;"));
+			bOk = Database->Execute(TEXT("COMMIT;"));
 		}
-		else Database->Execute(TEXT("ROLLBACK;"));
+		if (!bOk)
+		{
+			const FString RebuildError = Database->GetLastError();
+			Database->Execute(TEXT("ROLLBACK;"));
+			if (Warnings.Num() == 0)
+			{
+				Warnings.Add(MakeShared<FJsonValueString>(FString::Printf(
+					TEXT("FTS rebuild transaction failed: %s"), *RebuildError)));
+			}
+		}
 	}
 
 	TSharedPtr<FJsonObject> After = MakeShared<FJsonObject>();
@@ -4784,16 +5264,23 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairFts(const FString& Target
 		static_cast<double>(Count(TEXT("SELECT COUNT(*) FROM symbols_fts;"))));
 	if (bDoConsole) After->SetNumberField(TEXT("console_objects_fts"),
 		static_cast<double>(Count(TEXT("SELECT COUNT(*) FROM console_objects_fts;"))));
+	if (bDoGraphNodes)
+	{
+		After->SetNumberField(TEXT("source_graph_nodes"),
+			static_cast<double>(Count(TEXT("SELECT COUNT(*) FROM source_graph_nodes;"))));
+		After->SetNumberField(TEXT("source_graph_nodes_fts"),
+			static_cast<double>(Count(TEXT("SELECT COUNT(*) FROM source_graph_nodes_fts_docsize;"))));
+	}
 	Root->SetObjectField(TEXT("after"), After);
 
 	Root->SetStringField(TEXT("status"), bOk ? TEXT("ok") : TEXT("error"));
 	Root->SetStringField(TEXT("summary"), bOk
-		? ((bDoSymbols || bDoConsole) ? TEXT("Rebuilt FTS tables")
+		? ((bDoSymbols || bDoConsole || bDoGraphNodes) ? TEXT("Rebuilt FTS tables")
 			: TEXT("Nothing rebuilt; see warnings for source_fts reindex guidance"))
 		: TEXT("FTS rebuild failed; rolled back"));
 	Root->SetArrayField(TEXT("warnings"), Warnings);
 	Root->SetBoolField(TEXT("truncated"), false);
-	AddNextActions(Root, { TEXT("source.health"), TEXT("source.search_symbols") });
+	AddNextActions(Root, { TEXT("source.health"), TEXT("source.search_crg_graph"), TEXT("source.search_source") });
 	return Root;
 }
 

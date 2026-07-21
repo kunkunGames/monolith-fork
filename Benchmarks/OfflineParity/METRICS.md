@@ -110,8 +110,8 @@ the score.
 The run fingerprint includes `actions.jsonl`, `manifest.json`, the benchmark
 runner, the native Query executable, the Python fallback, and
 `Saved/EngineSource.db`. It intentionally excludes
-`ProjectIndex.db`, `graph.db`, and legacy analysis databases: none of the 317
-declared rows executes a project, bridge, or source-CRG-graph action. This exact
+`ProjectIndex.db` and legacy analysis databases: none of the 317
+declared rows executes a project or bridge action. This exact
 dependency set prevents an unrelated live index writer from creating false
 baseline drift while retaining fail-closed invalidation when the actual
 source/reflection database changes.

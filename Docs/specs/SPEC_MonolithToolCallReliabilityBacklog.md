@@ -50,7 +50,7 @@ Each candidate's error rows were bucketed against the source-fix date(s) that br
 | `source.read_source` param-confusion (no `symbol`) | ~150 | 97 | 53 | 0 (last 06-09) | 0 | Mostly closed; reroute cleanup in 5.5 |
 | `source.read_source`/`read_file` **index miss** ("No symbol/file found") | ~28 + tail | — | — | persists | **all 4 latest-day read errors** | **Open — EngineSource.db coverage gap (5.2)** |
 | `logicdriver` discover unknown-namespace | 11 | 0 | 0 | 11 | **11 on 06-13 (latest action day)** | **Open — routing gap (5.3)** |
-| `source.build_crg_graph` + `repair_crg_cache` | ~18 | low | low | low | **23–25/day each** | **Open — cost, not errors (5.1)** |
+| `source.build_crg_graph` + `repair_crg_cache` | ~18 | low | low | low | **23–25/day each (historical)** | **Closed/retired 2026-07-21 — graph export removed (5.1)** |
 
 Closure rule: a row that is `0` on the latest *real-call* day is closed; a post-bucket that is loud but zero on the latest day (imagegen) is closed for that failure mode. Always confirm against source AND the last real-call day before scheduling.
 
@@ -79,12 +79,11 @@ Ranking = bleed confirmed on the latest real-call days × cost × confidence, wi
 
 | Rank | Item | Latest-day evidence | Cost driver | Risk |
 |---:|---|---|---|---|
-| 1 | source CRG maintenance loop (5.1) | 23–25 `build_crg_graph` + 23–25 `repair_crg_cache` **per day**, 06-12/13/14 | ~14k s/week recent; ~127k s cumulative (≈90% historical pre-0608) | medium |
-| 2 | EngineSource.db symbol/file index-coverage gap (5.2) | all 4 latest-day read errors are "No symbol/file found" on correctly-passed inputs | repeated failed reads → retries/fallbacks; misleads triage | medium |
-| 3 | `logicdriver` discover unknown-namespace routing gap (5.3) | 11 identical `-32602` on 06-13 (latest action day) | retry loop; agent cannot discover an enabled module | low |
-| 4 | imagegen blind-retry / provider cost (5.4) | latent — classifier shipped 06-13, but no server-side backoff/dedup | duplicate expensive calls during a provider storm | low |
-| 5 | input-tolerance cleanups: read param-routing (5.5 partial remains) | param-routing dried up post-06-09; source_control coercion is closed | wasted round-trips on natural-but-wrong input | low |
-| 6 | large-result context pressure (5.6) | 4 actions ≥ 209 KB (window-wide) | context bloat → extra follow-up calls | medium |
+| 1 | EngineSource.db symbol/file index-coverage gap (5.2) | all 4 latest-day read errors are "No symbol/file found" on correctly-passed inputs | repeated failed reads → retries/fallbacks; misleads triage | medium |
+| 2 | `logicdriver` discover unknown-namespace routing gap (5.3) | 11 identical `-32602` on 06-13 (latest action day) | retry loop; agent cannot discover an enabled module | low |
+| 3 | imagegen blind-retry / provider cost (5.4) | latent — classifier shipped 06-13, but no server-side backoff/dedup | duplicate expensive calls during a provider storm | low |
+| 4 | input-tolerance cleanups: read param-routing (5.5 partial remains) | param-routing dried up post-06-09; source_control coercion is closed | wasted round-trips on natural-but-wrong input | low |
+| 5 | large-result context pressure (5.6) | 4 actions ≥ 209 KB (window-wide) | context bloat → extra follow-up calls | medium |
 
 #### 5.0 Two value axes — agent-experience vs machine-cost vs measurement
 
@@ -96,7 +95,7 @@ The table above ranks by *bleed × cost*, which mixes two different ROI axes. If
 | 5.3 logicdriver discover | 🧭 agent routing/operation | Yes — direct: ends a `-32602` discover retry loop |
 | 5.5 input tolerance · 5.4 imagegen retryable · 5.6 large-result | 🧭 agent routing/operation | Yes, but low current volume / latent |
 | (Section 4 alias + schema fixes) | 🧭 agent routing/operation | **Already shipped** — these were the biggest agent-routing wins |
-| 5.1 CRG maintenance loop | 💰 machine cost / infra | **No** — automation-driven, offline-CLI surface, does not contend with the live editor; saves ~14k s/week of machine time but changes no agent's success rate |
+| 5.1 CRG maintenance loop | 💰 machine cost / infra | **Resolved by elimination** — the separate graph export and its maintenance loop were retired on 2026-07-21. |
 | 6A build/binary lag | 🔭 delivery multiplier | Indirect — makes every other fix reach agents in hours not days |
 | 6B analyzer recency | 🔭 our triage tooling | No direct agent impact |
 | MCP endpoint availability (measured via 6C) | 🧭 agent routing/operation | **Yes — the largest measured agent-facing failure.** A downed endpoint = the agent does nothing. 136 transport failures across 20 sessions (§2). The 6C reader that surfaces it is 🔭 tooling; the availability fix itself is 🧭 |
@@ -104,22 +103,32 @@ The table above ranks by *bleed × cost*, which mixes two different ROI axes. If
 
 **Honest magnitude (updated by §6C measurement).** The largest agent-routing *schema/alias* improvements already landed (Section 4); the open *server-visible* agent-facing residue is modest (index ~4 errors/day, logicdriver 11/day). But the §6C measurement changed the picture: the **single largest agent-facing failure class is MCP endpoint availability — 136 transport failures (99.3% of client-observed Monolith errors), invisible to the server logs.** It dwarfs every server-visible open item and is the true top agent-operation priority.
 
-**Agent-experience-first ordering** (use this if the goal is agents routing/operating better, not machine cost): **MCP availability fix (endpoint uptime / reconnect hardening, now measured as #1) → 5.2 index-coverage → 5.3 discover → 5.4/5.5/5.6**. The cost/tooling track (5.1 CRG, 6A, 6B, the 6C reader) runs in parallel and is justified on its own axis. 6C measurement is done; the open work it points to is the availability fix.
+**Agent-experience-first ordering** (use this if the goal is agents routing/operating better, not machine cost): **MCP availability fix (endpoint uptime / reconnect hardening, now measured as #1) → 5.2 index-coverage → 5.3 discover → 5.4/5.5/5.6**. The former 5.1 graph-export cost track is closed; 6A, 6B, and the 6C reader remain independent tooling work. 6C measurement is done; the open work it points to is the availability fix.
 
-### 5.1 source CRG maintenance loop — enforce a cooldown gate (Rank 1 by cost, not by agent impact)
+### 5.1 Historical source CRG maintenance loop — retired by export removal
 
-**Evidence.** `query:source.repair_crg_cache` and `query:source.build_crg_graph` are the only candidates **still running on every recent day** — 25/23/25 paired calls on 06-12/13/14, error count ~0. This is a wasted-wall-time problem, not a correctness one. Sampled records: `--force` **never present**, `routing_context.namespace_source = "offline_cli"`, `decision_source = "direct"`.
+**Historical evidence.** `query:source.repair_crg_cache` and `query:source.build_crg_graph` were the only candidates running on every sampled day — 25/23/25 paired calls on 06-12/13/14, error count ~0. This was a wasted-wall-time problem, not a correctness one. Sampled records: `--force` **never present**, `routing_context.namespace_source = "offline_cli"`, `decision_source = "direct"`.
 
 **Cost (recency-honest).** On the latest 3 days `build_crg_graph` runs ~13–17 s/call (06-12 13.4 s / 06-13 17.3 s / 06-14 15.0 s) and `repair_crg_cache` ~58–78 s/call (58.5 / 77.7 / 68.1 s) — about ~14k s/week combined right now. The headline ~127k s cumulative (`repair` ~462 calls/~76.9k s, `build` ~443/~50.1k s) is ~90% pre-0608 heavy rebuilds; do not quote the ~114 s whole-window per-call average as the current rate. At ~15 s/build + ~68 s/repair these are still real incremental rebuilds (`build_mode=atomic_temp_replace`, `replaced=true`, source signature churns every call), not a sub-second skip — so the `CLAUDE.md` §12 skip-when-fresh path cannot engage and the right remedy is a cooldown, not the existing freshness no-op. (The maintenance class scopes to the `source` namespace; ~10 `project.repair_crg_cache` fast no-ops are excluded, so a raw grep returns more.)
 
 **Root cause (confirm in step 1).** A direct offline caller (script or schedule) chains `repair_crg_cache --execute` + `build_crg_graph --execute` as a routine pair — the anti-pattern `CLAUDE.md` §12 warns against. Documented guidance alone has not stopped it; it must become an enforced gate. Either skip-when-fresh does not engage on the offline path, or the source signature is invalidated between calls by incremental builds.
 
-**Fix.**
+**Historical interim fix (superseded by the 2026-07-21 resolution below).**
 1. Find the caller: grep `BatchFiles/`, `Scripts/`, and `.jules/` schedules for a `repair_crg_cache` + `build_crg_graph` sequence; identify the offline_cli trigger.
 2. Add a **cooldown-per-signature-change** gate on the offline path in `Tools/MonolithQuery/monolith_query.cpp` (and the shared builder): rebuild at most once per source-signature change; when parity is fresh and `--force` is absent, return `status=skipped, reason=parity_fresh` in well under a second with a `return_summary` field the analyzer can read.
 3. Remove the routine chaining at the trigger; keep `repair_crg_cache` health-gated and `build_crg_graph` on-demand per `CLAUDE.md` §12.
 
-**Verification.** Force the cold state (call 1 with `--force` or after touching the signature), assert call 1 did real rebuild work (> ~10 s), then assert a second call with no intervening source change returns `skipped/parity_fresh` in < 1 s — so the rebuild→skip *transition* is tested, not a vacuous already-fresh pass. Analyzer `maintenance_loop` cumulative-seconds for the next window drops.
+**Historical verification.** The former cold-build/cooldown transition was verified before removal. It is no longer a current command or acceptance gate; current verification asserts the builder/export surface is absent and `search_crg_graph` is EngineSource-backed.
+
+**2026-07-21 final resolution.** The later caller/log census showed that the
+separate graph export had negligible search demand while its build lifecycle
+remained a material cost. `source.search_crg_graph` now searches the canonical
+File/Symbol VIEW and external-content FTS inside `EngineSource.db`; the graph
+build/rebuild/health actions and their watchdog step are retired. The cooldown
+description above remains historical evidence for why the export was removed.
+The invocation analyzer classifies old graph action rows as `retired_action`, so
+they remain available for before/after cost analysis without becoming current
+maintenance-loop or missing-action recommendations.
 
 ### 5.2 EngineSource.db symbol/file index-coverage gap (Rank 2)
 
@@ -211,7 +220,7 @@ item; implementation and regression coverage are complete, pending submit.
 Direct Codex HTTP configurations that bypass the proxy, and root-cause
 in-editor `9316` flicker, remain separate open boundaries.
 
-**2026-07-03 follow-up and mitigation.** A fresh session transcript run over 3,355 Codex/Claude files (`Saved/Monolith/SessionAnalysis/roi-20260703`) found 2,432 Monolith tool results and 282 errors; 246 were transport/availability failures across 48 sessions, all from Codex direct calls. The immediate local mitigation is `Scripts/watch_mcp.ps1`: keep `/health` supervised during long agent work, and when the endpoint is down because the editor process is gone or a headless editor is alive but unhealthy, run the host editor UBT build, restart-triggered source/graph DB maintenance, restart through `recover_mcp.ps1`, and run post-health asset DB maintenance before returning to the normal loop. `recover_mcp.ps1` also forces headless-safe asset-editor settings to avoid stale docked-toolkit modal loops. This closes the "dead editor stays dead" and "headless PID alive but MCP blocked" operational gaps, but it does not close the root-cause work for in-process 9316 flicker while a non-headless editor is still alive, nor the Codex client retry path.
+**2026-07-03 follow-up and mitigation.** A fresh session transcript run over 3,355 Codex/Claude files (`Saved/Monolith/SessionAnalysis/roi-20260703`) found 2,432 Monolith tool results and 282 errors; 246 were transport/availability failures across 48 sessions, all from Codex direct calls. The immediate local mitigation is `Scripts/watch_mcp.ps1`: keep `/health` supervised during long agent work, and when the endpoint is down because the editor process is gone or a headless editor is alive but unhealthy, run the host editor UBT build, restart-triggered source DB maintenance, restart through `recover_mcp.ps1`, and run post-health asset DB maintenance before returning to the normal loop. `recover_mcp.ps1` also forces headless-safe editor settings to avoid stale docked-toolkit modal loops. This closes the "dead editor stays dead" and "headless PID alive but MCP blocked" operational gaps, but it does not close the root-cause work for in-process 9316 flicker while a non-headless editor is still alive, nor the Codex client retry path.
 
 **2026-07-04 follow-up.** `Scripts/recover_mcp.ps1 -ProbeOnly` now preserves the down-path exit code 2 while reporting actionable local diagnostics in the same `RESULT=MCP_DOWN` line: health failure reason/detail, MCP-port listener count/PIDs, listener owners, editor-server candidate count/PIDs, headless candidate count/PIDs, and a deterministic `next_action`. This does not reduce transport failures by itself, but it removes the blind "MCP_DOWN only" branch from the recovery path and gives the next agent enough evidence to distinguish "nothing is listening", "a non-editor owns 9316", "editor boot is still in progress", and "headless editor likely needs watchdog recovery".
 

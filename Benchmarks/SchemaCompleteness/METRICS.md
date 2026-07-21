@@ -134,7 +134,7 @@ set. The required hash kind is `sorted_json_namespace_dot_action_v1`: sorted
 unique `namespace.action` strings encoded as a canonical JSON array. The kind
 and hash must agree across benchmark inputs, resume identity, and checkpoint
 provenance. Live schema scans do not read
-`EngineSource.db`, `ProjectIndex.db`, or `graph.db`; their volatile signatures
+`EngineSource.db` or `ProjectIndex.db`; their volatile signatures
 are deliberately marked not applicable so a normal editor restart does not
 invalidate otherwise identical schema inputs.
 
@@ -227,7 +227,7 @@ unchanged (every dimension has applicable rows over the full catalog).
 
 | Property | ActionGuidance | SchemaCompleteness |
 | --- | --- | --- |
-| Scope | 454 sampled tasks | All live catalog actions, plus 330 targeted probes |
+| Scope | 454 sampled tasks | All live catalog actions, plus 329 targeted probes |
 | Namespaces | All 61 (at least 1 representative action each) | All 61 live namespaces (every action) |
 | Measures | Agent task success, recovery, param correction | Schema structural quality + value-domain documentation |
 | Primary metric | `effectiveness_score` | `schema_completeness_score` |

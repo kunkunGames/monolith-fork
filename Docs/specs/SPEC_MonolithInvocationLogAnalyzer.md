@@ -335,7 +335,8 @@ Noise classes:
 |---|---|---|
 | `heartbeat` | Summarize counts and duration, exclude from ROI ranking unless `--include-heartbeats` is passed. | `monolith.status`, `monolith_status` proxy calls |
 | `synthetic_test` | Summarize separately, exclude from missing-action recommendations unless `--include-synthetic-tests` is passed. Two primary signals on v3 rows: `environment.is_automation_test == true` (stamped from `GIsAutomationTesting`, so it covers only in-process C++ automation) and `routing_context.client_kind == "benchmark"` (self-declared by the out-of-process benchmark runners, which send hallucinated action names and typo fixtures on purpose — without it those rows rank as `needed_action` demand). Synthetic argument markers and per-action fixture whitelists remain only as fallback for legacy rows without either stamp. | `__missing_action_for_headless_log_test`, `__cc05_dispatch_ns__`, `worldgen.get_blockout_volumse` (benchmark typo fixture) |
-| `maintenance` | Include in ROI ranking only when repeated, slow, or failing. | `source.repair_crg_cache`, `source.build_crg_graph`, `source.health` |
+| `retired_action` | Preserve counts and duration as historical evidence, but exclude from current maintenance-loop and missing-action recommendations. | retired source graph build/rebuild/health records |
+| `maintenance` | Include in ROI ranking only when repeated, slow, or failing. | `source.repair_crg_cache`, `source.repair_fts`, `source.health` |
 | `expected_slow_domain` | Rank by error/retry rate first, duration second. | image generation actions |
 | `escape_hatch` | Always rank when frequent enough to suggest missing first-class actions. | `editor.run_python` |
 
@@ -601,7 +602,7 @@ The first implementation is acceptable when all criteria pass:
 | Child query | A parent action plus child `query.jsonl` row is not double-counted as two unrelated slow operations. |
 | Duplicate retry | Repeated same action plus argument fingerprint produces a duplicate or retry-loop finding. |
 | Heartbeat noise | Repeated `monolith.status` records are counted in `noise_summary` but excluded from default high-ROI rankings. |
-| Maintenance loop | Repeated slow `source.repair_crg_cache` or `source.build_crg_graph` fixtures produce a `maintenance_loop` finding. |
+| Maintenance and retired actions | Repeated slow `source.repair_crg_cache` fixtures produce a `maintenance_loop`; removed graph build/rebuild/health fixtures produce a `retired_action` noise summary and never `needed_action`. |
 | Escape hatch | Repeated `editor.run_python` fixtures produce an `escape_hatch_replacement` finding. |
 | Malformed line | Non-strict mode reports parse warnings and continues; strict mode exits with code 2. |
 | Output | `summary.md`, `findings.json`, and CSV files are created outside `Logs/`. |

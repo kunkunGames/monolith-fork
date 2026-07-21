@@ -87,6 +87,7 @@ SCHEMA_ACTIONS = [
     "search_source", "find_callers", "find_callees", "risk_score",
     "review_context", "impact_radius", "get_include_path", "get_signature",
     "verify_symbols", "find_example_usage", "find_overrides", "review_hotspots",
+    "search_crg_graph",
 ]
 REQUIRED_RESULT_FIELDS = {"name", "kind", "file_path", "location"}
 
@@ -1448,6 +1449,23 @@ def build_static_tasks() -> List[Dict[str, Any]]:
             "expected": {"min_results": 1, "required_fields": ["name", "kind", "file_path"]},
             "safety": "read_only",
         })
+
+    # Exercise the retained public graph-node search through its EngineSource
+    # backend; schema-only discovery cannot catch storage/backend regressions.
+    tasks.append({
+        "id": next_id(),
+        "category": "symbol_lookup",
+        "namespace": "source",
+        "action": "search_crg_graph",
+        "tool": "source_query",
+        "arguments": {"action": "search_crg_graph", "query": "UObject", "limit": 5},
+        "expected": {
+            "min_results": 1,
+            "require_results": True,
+            "required_fields": ["name", "kind", "file_path"],
+        },
+        "safety": "read_only",
+    })
 
     # --- symbol_lookup: find_callers for 15 symbols ---
     for symbol in _CALLERS_CALLEES_SYMBOLS:

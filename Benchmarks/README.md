@@ -61,7 +61,7 @@ Database identity is an exact dependency contract, not a scan of every DB that h
 | Suite | Database files in accepted evidence |
 | --- | --- |
 | ActionGuidance | none; registry-routing scope marker |
-| SourceIndex | `Saved/EngineSource.db`, `Saved/graph.db` |
+| SourceIndex | `Saved/EngineSource.db` |
 | SchemaCompleteness | none; live schema-registry scope marker |
 | OfflineParity | `Saved/EngineSource.db` |
 | ProjectIndex | `Saved/ProjectIndex.db` |

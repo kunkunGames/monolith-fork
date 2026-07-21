@@ -1254,25 +1254,20 @@ def test_manifest_run_gates_match_runner_defaults() -> None:
         sib.mcp_call = original
 
 
-def test_input_fingerprint_ignores_derived_graph_database_churn() -> None:
+def test_input_fingerprint_uses_only_engine_source_database() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = pathlib.Path(tmp)
         saved = root / "Saved"
         saved.mkdir()
         (saved / "EngineSource.db").write_bytes(b"source-index-authoritative")
-        graph_path = saved / "graph.db"
-        graph_path.write_bytes(b"derived-graph-v1")
 
-        before = sib.build_benchmark_inputs("SourceIndex", plugin_root=root)
-        graph_path.write_bytes(b"derived-graph-v2")
-        after = sib.build_benchmark_inputs("SourceIndex", plugin_root=root)
+        inputs = sib.build_benchmark_inputs("SourceIndex", plugin_root=root)
 
     check(
         "SourceIndex fingerprints only the authoritative EngineSource database",
-        [row["path"] for row in before["database_files"]]
-        == ["Saved/EngineSource.db"]
-        and before["fingerprint_sha256"] == after["fingerprint_sha256"],
-        f"before={before['database_files']} after={after['database_files']}",
+        [row["path"] for row in inputs["database_files"]]
+        == ["Saved/EngineSource.db"],
+        f"database_files={inputs['database_files']}",
     )
 
 

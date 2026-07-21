@@ -1,5 +1,5 @@
 {
-  "action_count": 2074,
+  "action_count": 2071,
   "actions": [
     {
       "action": "add_bb_key",
@@ -17947,7 +17947,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintDataTableActions.cpp",
-      "source_line": 203,
+      "source_line": 213,
       "summary": "Return ONLY a DataTable's row schema (no row data). Useful for planning edits to a large table. Returns row_struct, row_struct_path, and an FSchemaDescriptor-shaped 'schema' array.",
       "supports_progress": false,
       "writes_logs": true
@@ -18092,7 +18092,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintDataTableActions.cpp",
-      "source_line": 231,
+      "source_line": 241,
       "summary": "Duplicate a DataTable row under a new name. Refreshes any open DataTable editor.",
       "supports_progress": false,
       "writes_logs": true
@@ -18150,7 +18150,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintDataTableActions.cpp",
-      "source_line": 241,
+      "source_line": 251,
       "summary": "Export an entire DataTable as a JSON or CSV text blob for token-efficient round-trip editing. Returns row_struct, row_struct_path, total_rows, format, and 'text'. By default nested structs export as clean JSON objects (use_json_objects).",
       "supports_progress": false,
       "writes_logs": true
@@ -18933,7 +18933,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintDataTableActions.cpp",
-      "source_line": 251,
+      "source_line": 261,
       "summary": "Import a JSON or CSV text blob into a DataTable. REPLACES the entire row set (rows not present in the blob are deleted by design). The DataTable must already have a RowStruct set. mode must be \"replace\". Refreshes any open DataTable editor.",
       "supports_progress": false,
       "writes_logs": true
@@ -19136,7 +19136,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintDataTableActions.cpp",
-      "source_line": 194,
+      "source_line": 204,
       "summary": "Read a DataTable's full contents plus its inline row schema. Returns the row struct, total_rows, an FSchemaDescriptor-shaped 'schema' array (field type_name, import_text_form, enum_values, range, nested children), and a 'rows' array of {row_name, values}. Supersedes get_data_table_rows by inlining schema with data.",
       "supports_progress": false,
       "writes_logs": true
@@ -19600,7 +19600,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintDataTableActions.cpp",
-      "source_line": 221,
+      "source_line": 231,
       "summary": "Rename a single DataTable row. Refreshes any open DataTable editor.",
       "supports_progress": false,
       "writes_logs": true
@@ -20296,7 +20296,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintDataTableActions.cpp",
-      "source_line": 210,
+      "source_line": 220,
       "summary": "Bulk add/update DataTable rows in one call. Each row is {row_name, values:{field:value}, mode?}. Mode is upsert (default), add, or update. Supports dry_run (validate only) and strict (promote coercion/unknown-field/enum-miss to hard errors). Returns an FDryRunReport-shaped per-field result {path,current,proposed,ok,reason}. Fires one editor-refresh broadcast at the end.",
       "supports_progress": false,
       "writes_logs": true
@@ -25342,7 +25342,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithPieObjectActions.cpp",
-      "source_line": 476,
+      "source_line": 481,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -25371,7 +25371,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithPieObjectActions.cpp",
-      "source_line": 459,
+      "source_line": 464,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -26531,7 +26531,7 @@
       "skill": "gameplay_message",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithGameplayMessage/Private/MonolithGameplayMessageActions.cpp",
-      "source_line": 738,
+      "source_line": 742,
       "summary": "Describe GameplayMessageRouter listener/broadcast payload and match-type contract.",
       "supports_progress": false,
       "writes_logs": true
@@ -26560,7 +26560,7 @@
       "skill": "gameplay_message",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithGameplayMessage/Private/MonolithGameplayMessageActions.cpp",
-      "source_line": 731,
+      "source_line": 735,
       "summary": "Report GameplayMessageRouter plugin/module/class availability without hard-linking GameplayMessageRuntime.",
       "supports_progress": false,
       "writes_logs": true
@@ -26589,7 +26589,7 @@
       "skill": "gameplay_message",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithGameplayMessage/Private/MonolithGameplayMessageActions.cpp",
-      "source_line": 769,
+      "source_line": 773,
       "summary": "Trace GameplayMessageRouter broadcaster/listener source call sites and report channel/payload compatibility candidates read-only.",
       "supports_progress": false,
       "writes_logs": true
@@ -26618,7 +26618,7 @@
       "skill": "gameplay_message",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithGameplayMessage/Private/MonolithGameplayMessageActions.cpp",
-      "source_line": 756,
+      "source_line": 760,
       "summary": "Validate a gameplay message channel tag, match type, and optional payload struct contract read-only.",
       "supports_progress": false,
       "writes_logs": true
@@ -26647,7 +26647,7 @@
       "skill": "gameplay_message",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithGameplayMessage/Private/MonolithGameplayMessageActions.cpp",
-      "source_line": 745,
+      "source_line": 749,
       "summary": "Validate a GameplayMessageRouter payload UScriptStruct without loading or mutating assets.",
       "supports_progress": false,
       "writes_logs": true
@@ -30794,7 +30794,7 @@
       "skill": "hlod",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithHlodActions.cpp",
-      "source_line": 201,
+      "source_line": 202,
       "summary": "Report HLOD build orchestration status. Does not launch long-running builds yet.",
       "supports_progress": false,
       "writes_logs": true
@@ -30823,7 +30823,7 @@
       "skill": "hlod",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithHlodActions.cpp",
-      "source_line": 197,
+      "source_line": 198,
       "summary": "Compute a lightweight HLOD readiness hash from layer and actor identity rows.",
       "supports_progress": false,
       "writes_logs": true
@@ -30852,7 +30852,7 @@
       "skill": "hlod",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithHlodActions.cpp",
-      "source_line": 205,
+      "source_line": 206,
       "summary": "Report legacy HLOD clear orchestration status. Does not clear generated actors yet.",
       "supports_progress": false,
       "writes_logs": true
@@ -30881,7 +30881,7 @@
       "skill": "hlod",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithHlodActions.cpp",
-      "source_line": 176,
+      "source_line": 177,
       "summary": "Configure a HLOD layer through mesh.setup_hlod.",
       "supports_progress": false,
       "writes_logs": true
@@ -30910,7 +30910,7 @@
       "skill": "hlod",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithHlodActions.cpp",
-      "source_line": 167,
+      "source_line": 168,
       "summary": "Create/configure a HLOD layer through mesh.setup_hlod.",
       "supports_progress": false,
       "writes_logs": true
@@ -30939,7 +30939,7 @@
       "skill": "hlod",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithHlodActions.cpp",
-      "source_line": 213,
+      "source_line": 214,
       "summary": "Export a bounded HLOD inspection report JSON file under Saved/Monolith/HLOD.",
       "supports_progress": false,
       "writes_logs": true
@@ -30968,7 +30968,7 @@
       "skill": "hlod",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithHlodActions.cpp",
-      "source_line": 163,
+      "source_line": 164,
       "summary": "Inspect a HLODLayer asset using AssetRegistry and reflection.",
       "supports_progress": false,
       "writes_logs": true
@@ -30997,7 +30997,7 @@
       "skill": "hlod",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithHlodActions.cpp",
-      "source_line": 193,
+      "source_line": 194,
       "summary": "Return HLOD layer and loaded actor counts for the current editor world.",
       "supports_progress": false,
       "writes_logs": true
@@ -31026,7 +31026,7 @@
       "skill": "hlod",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithHlodActions.cpp",
-      "source_line": 209,
+      "source_line": 210,
       "summary": "Return a conservative legacy-HLOD needs-build signal based on loaded HLOD actor presence.",
       "supports_progress": false,
       "writes_logs": true
@@ -31055,7 +31055,7 @@
       "skill": "hlod",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithHlodActions.cpp",
-      "source_line": 189,
+      "source_line": 190,
       "summary": "List loaded HLOD-like actors in the editor world.",
       "supports_progress": false,
       "writes_logs": true
@@ -31084,7 +31084,7 @@
       "skill": "hlod",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithHlodActions.cpp",
-      "source_line": 156,
+      "source_line": 157,
       "summary": "List HLODLayer assets under a package path.",
       "supports_progress": false,
       "writes_logs": true
@@ -31113,7 +31113,7 @@
       "skill": "hlod",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithHlodActions.cpp",
-      "source_line": 185,
+      "source_line": 186,
       "summary": "List loaded static mesh actors that are eligible source candidates for HLOD reports.",
       "supports_progress": false,
       "writes_logs": true
@@ -32186,7 +32186,7 @@
       "skill": "level_instance",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithLevelInstanceActions.cpp",
-      "source_line": 237,
+      "source_line": 238,
       "summary": "Report Level Instance commit availability and dirty-package context.",
       "supports_progress": false,
       "writes_logs": true
@@ -32244,7 +32244,7 @@
       "skill": "level_instance",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithLevelInstanceActions.cpp",
-      "source_line": 224,
+      "source_line": 225,
       "summary": "Preview or create a Level Instance from actor_names. Requires confirm=true for mutation.",
       "supports_progress": false,
       "writes_logs": true
@@ -32273,7 +32273,7 @@
       "skill": "level_instance",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithLevelInstanceActions.cpp",
-      "source_line": 270,
+      "source_line": 271,
       "summary": "Preview or create a Packed Level Actor from actor_names. Requires confirm=true for mutation.",
       "supports_progress": false,
       "writes_logs": true
@@ -32331,7 +32331,7 @@
       "skill": "level_instance",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithLevelInstanceActions.cpp",
-      "source_line": 241,
+      "source_line": 242,
       "summary": "Report Level Instance discard availability and dirty-package context.",
       "supports_progress": false,
       "writes_logs": true
@@ -32360,7 +32360,7 @@
       "skill": "level_instance",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithLevelInstanceActions.cpp",
-      "source_line": 233,
+      "source_line": 234,
       "summary": "Report Level Instance edit-session availability without taking over editor-global state.",
       "supports_progress": false,
       "writes_logs": true
@@ -32389,7 +32389,7 @@
       "skill": "level_instance",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithLevelInstanceActions.cpp",
-      "source_line": 217,
+      "source_line": 218,
       "summary": "Inspect a Level Instance actor by label, name, or object path.",
       "supports_progress": false,
       "writes_logs": true
@@ -32418,7 +32418,7 @@
       "skill": "level_instance",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithLevelInstanceActions.cpp",
-      "source_line": 254,
+      "source_line": 255,
       "summary": "List attached child Level Instance-like actors for a parent Level Instance.",
       "supports_progress": false,
       "writes_logs": true
@@ -32447,7 +32447,7 @@
       "skill": "level_instance",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithLevelInstanceActions.cpp",
-      "source_line": 258,
+      "source_line": 259,
       "summary": "List directly attached actors for a Level Instance actor.",
       "supports_progress": false,
       "writes_logs": true
@@ -32476,7 +32476,7 @@
       "skill": "level_instance",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithLevelInstanceActions.cpp",
-      "source_line": 210,
+      "source_line": 211,
       "summary": "List Level Instance-like actors in the current editor world.",
       "supports_progress": false,
       "writes_logs": true
@@ -32505,7 +32505,7 @@
       "skill": "level_instance",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithLevelInstanceActions.cpp",
-      "source_line": 245,
+      "source_line": 246,
       "summary": "Report Level Instance load availability without forcing nested edit state.",
       "supports_progress": false,
       "writes_logs": true
@@ -32534,7 +32534,7 @@
       "skill": "level_instance",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithLevelInstanceActions.cpp",
-      "source_line": 262,
+      "source_line": 263,
       "summary": "Preview actor movement into a Level Instance; direct nested mutation is unavailable until conflict tests exist.",
       "supports_progress": false,
       "writes_logs": true
@@ -32563,7 +32563,7 @@
       "skill": "level_instance",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithLevelInstanceActions.cpp",
-      "source_line": 278,
+      "source_line": 279,
       "summary": "Preview or create a Packed Level Actor using the Level Instance creation path. Requires confirm=true.",
       "supports_progress": false,
       "writes_logs": true
@@ -32621,7 +32621,7 @@
       "skill": "level_instance",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithLevelInstanceActions.cpp",
-      "source_line": 249,
+      "source_line": 250,
       "summary": "Report Level Instance unload availability without forcing nested edit state.",
       "supports_progress": false,
       "writes_logs": true
@@ -32650,7 +32650,7 @@
       "skill": "level_sequence",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelSequence/Private/MonolithLevelSequenceActions.cpp",
-      "source_line": 628,
+      "source_line": 631,
       "summary": "Cross-sequence reverse lookup: given a Director function name, return every event-track section across the project that fires it, with LS path and binding context. Optional asset_path_filter is a glob (* and ?) to narrow the search.",
       "supports_progress": false,
       "writes_logs": true
@@ -32679,7 +32679,7 @@
       "skill": "level_sequence",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelSequence/Private/MonolithLevelSequenceActions.cpp",
-      "source_line": 651,
+      "source_line": 654,
       "summary": "Report whether Epic's UE 5.8 Experimental MovieSceneAnimMixer plugin/modules/classes are visible. Reflection-only; UE 5.7 builds never hard-link the optional plugin.",
       "supports_progress": false,
       "writes_logs": true
@@ -32708,7 +32708,7 @@
       "skill": "level_sequence",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelSequence/Private/MonolithLevelSequenceActions.cpp",
-      "source_line": 606,
+      "source_line": 609,
       "summary": "Get summary information for a single Level Sequence Director: function counts grouped by kind (user / custom_event / sequencer_endpoint), variable count, event-binding counts (total + resolved), and a sample of up to 10 functions for quick orientation.",
       "supports_progress": false,
       "writes_logs": true
@@ -32737,7 +32737,7 @@
       "skill": "level_sequence",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelSequence/Private/MonolithLevelSequenceActions.cpp",
-      "source_line": 573,
+      "source_line": 576,
       "summary": "Report editor/PIE replay readiness and the project-local Saved replay/demo folders inspected by Monolith. Read-only; runtime recording/playback controls remain future guarded work.",
       "supports_progress": false,
       "writes_logs": true
@@ -32766,7 +32766,7 @@
       "skill": "level_sequence",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelSequence/Private/MonolithLevelSequenceActions.cpp",
-      "source_line": 588,
+      "source_line": 591,
       "summary": "Inspect one project-local saved replay/demo container or file by Saved-relative path. Metadata only; file bytes are never returned.",
       "supports_progress": false,
       "writes_logs": true
@@ -32795,7 +32795,7 @@
       "skill": "level_sequence",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelSequence/Private/MonolithLevelSequenceActions.cpp",
-      "source_line": 656,
+      "source_line": 659,
       "summary": "Load one Level Sequence and list reflected Sequencer Anim Mixer tracks/layers when the optional MovieSceneAnimMixer plugin is present. Returns track_count=0 safely on UE 5.7 or when no mixer tracks exist.",
       "supports_progress": false,
       "writes_logs": true
@@ -32824,7 +32824,7 @@
       "skill": "level_sequence",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelSequence/Private/MonolithLevelSequenceActions.cpp",
-      "source_line": 643,
+      "source_line": 646,
       "summary": "List ALL bindings inside a Level Sequence regardless of event tracks. UE 5.7 stores modern Spawnables as Possessables inside UMovieScene while their real identity (UMovieSceneSpawnableActorBinding etc.) lives on UMovieSceneSequence::GetBindingReferences(); list_event_bindings sees only event-bound rows and would miss them. Each row reports kind (possessable/spawnable/replaceable/custom), bound class, and \u2014 for custom bindings \u2014 the exact UCLASS name and pretty label. Optional kind filter narrows the result.",
       "supports_progress": false,
       "writes_logs": true
@@ -32853,7 +32853,7 @@
       "skill": "level_sequence",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelSequence/Private/MonolithLevelSequenceActions.cpp",
-      "source_line": 613,
+      "source_line": 616,
       "summary": "List a Director's own functions, optionally filtered by kind. Inherited base-class methods and compiler-generated dispatchers are not indexed (own-functions only, matching blueprint_query convention).",
       "supports_progress": false,
       "writes_logs": true
@@ -32882,7 +32882,7 @@
       "skill": "level_sequence",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelSequence/Private/MonolithLevelSequenceActions.cpp",
-      "source_line": 636,
+      "source_line": 639,
       "summary": "List a Director's variables (name + K2-schema-formatted type) in declaration order. Variables come from DirBP->NewVariables and follow the same own-only convention as functions (no inherited base-class properties).",
       "supports_progress": false,
       "writes_logs": true
@@ -32911,7 +32911,7 @@
       "skill": "level_sequence",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelSequence/Private/MonolithLevelSequenceActions.cpp",
-      "source_line": 599,
+      "source_line": 602,
       "summary": "List all Level Sequences that have a Director Blueprint, with director name and function/variable counts. Optional asset_path_filter is a glob pattern (* and ?) matched against ls_path.",
       "supports_progress": false,
       "writes_logs": true
@@ -32940,7 +32940,7 @@
       "skill": "level_sequence",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelSequence/Private/MonolithLevelSequenceActions.cpp",
-      "source_line": 621,
+      "source_line": 624,
       "summary": "List all event-track bindings inside one Level Sequence, grouped by binding GUID. Each binding entry describes a Possessable (existing level actor), Spawnable (template-spawned), or master track (no GUID), and lists the sections that fire Director functions.",
       "supports_progress": false,
       "writes_logs": true
@@ -32969,7 +32969,7 @@
       "skill": "level_sequence",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelSequence/Private/MonolithLevelSequenceActions.cpp",
-      "source_line": 578,
+      "source_line": 581,
       "summary": "List project-local saved replay/demo containers and optional file metadata from Saved/Demos, Saved/Replays, and Saved/Replay. File bytes are never returned.",
       "supports_progress": false,
       "writes_logs": true
@@ -32998,7 +32998,7 @@
       "skill": "level_sequence",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelSequence/Private/MonolithLevelSequenceActions.cpp",
-      "source_line": 568,
+      "source_line": 571,
       "summary": "Smoke test \u2014 returns {status:ok, module:MonolithLevelSequence} when the module is loaded.",
       "supports_progress": false,
       "writes_logs": true
@@ -33230,7 +33230,7 @@
       "skill": "leveldesign",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelDesign/Private/MonolithLevelDesignAudioActions.cpp",
-      "source_line": 227,
+      "source_line": 253,
       "summary": "Sample surfaces via raycasts in a volume, compute area-weighted absorption. Sabine RT60: 0.161 * Volume_m3 / TotalAbsorption. Classify: dead/dry/live/echo.",
       "supports_progress": false,
       "writes_logs": true
@@ -33288,7 +33288,7 @@
       "skill": "leveldesign",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelDesign/Private/MonolithLevelDesignAudioActions.cpp",
-      "source_line": 236,
+      "source_line": 262,
       "summary": "Analyzes sound propagation between two points. Direct trace (wall occlusion) + indirect navmesh path (doorway propagation). Returns whichever path has better audibility.",
       "supports_progress": false,
       "writes_logs": true
@@ -33346,7 +33346,7 @@
       "skill": "leveldesign",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelDesign/Private/MonolithLevelDesignAudioActions.cpp",
-      "source_line": 270,
+      "source_line": 296,
       "summary": "Can AI hear the player? Direct trace (wall occlusion) + indirect navmesh path (doorway propagation). Uses best path. Returns yes/faintly/no + detection radius.",
       "supports_progress": false,
       "writes_logs": true
@@ -33404,7 +33404,7 @@
       "skill": "leveldesign",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelDesign/Private/MonolithLevelDesignAudioActions.cpp",
-      "source_line": 311,
+      "source_line": 337,
       "summary": "Spawn an AAudioVolume matching a blocking volume's shape. Set reverb/interior settings. Undo transaction.",
       "supports_progress": false,
       "writes_logs": true
@@ -33433,7 +33433,7 @@
       "skill": "leveldesign",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelDesign/Private/MonolithLevelDesignAudioActions.cpp",
-      "source_line": 331,
+      "source_line": 357,
       "summary": "Bootstrap the acoustic system: create a DataTable with surface properties and register surface types via UPhysicsSettings CDO.",
       "supports_progress": false,
       "writes_logs": true
@@ -33491,7 +33491,7 @@
       "skill": "leveldesign",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelDesign/Private/MonolithLevelDesignAudioActions.cpp",
-      "source_line": 219,
+      "source_line": 245,
       "summary": "Downward trace at a location to determine floor surface type and footstep loudness factor.",
       "supports_progress": false,
       "writes_logs": true
@@ -33723,7 +33723,7 @@
       "skill": "leveldesign",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelDesign/Private/MonolithLevelDesignAudioActions.cpp",
-      "source_line": 246,
+      "source_line": 272,
       "summary": "Find surfaces with high footstep loudness (metal, glass, gravel) in a volume or region. Returns locations, areas, detection radii.",
       "supports_progress": false,
       "writes_logs": true
@@ -33752,7 +33752,7 @@
       "skill": "leveldesign",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelDesign/Private/MonolithLevelDesignAudioActions.cpp",
-      "source_line": 291,
+      "source_line": 317,
       "summary": "Sample candidate navmesh paths between two points, score by surface loudness along path. Returns lowest-loudness route.",
       "supports_progress": false,
       "writes_logs": true
@@ -33810,7 +33810,7 @@
       "skill": "leveldesign",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelDesign/Private/MonolithLevelDesignAudioActions.cpp",
-      "source_line": 257,
+      "source_line": 283,
       "summary": "Multi-method sound path finder: direct trace, first-bounce reflections (image-source), and navmesh indirect path (doorway propagation). Returns all viable paths sorted by attenuation.",
       "supports_progress": false,
       "writes_logs": true
@@ -33926,7 +33926,7 @@
       "skill": "leveldesign",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelDesign/Private/MonolithLevelDesignAudioActions.cpp",
-      "source_line": 200,
+      "source_line": 226,
       "summary": "Enumerate all AAudioVolume actors. Returns reverb/interior settings, priority, bounds. Flags uncovered regions.",
       "supports_progress": false,
       "writes_logs": true
@@ -33955,7 +33955,7 @@
       "skill": "leveldesign",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelDesign/Private/MonolithLevelDesignAudioActions.cpp",
-      "source_line": 281,
+      "source_line": 307,
       "summary": "Grid-sample a volume: per-cell footstep loudness + AI detection radius. Returns heatmap data.",
       "supports_progress": false,
       "writes_logs": true
@@ -33984,7 +33984,7 @@
       "skill": "leveldesign",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelDesign/Private/MonolithLevelDesignAudioActions.cpp",
-      "source_line": 208,
+      "source_line": 234,
       "summary": "Cast rays in all directions to catalog physical materials in a volume or region. Returns material breakdown with acoustic properties.",
       "supports_progress": false,
       "writes_logs": true
@@ -34042,7 +34042,7 @@
       "skill": "leveldesign",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelDesign/Private/MonolithLevelDesignAudioActions.cpp",
-      "source_line": 322,
+      "source_line": 348,
       "summary": "Set physical material surface type override on a mesh actor's component. Undo transaction.",
       "supports_progress": false,
       "writes_logs": true
@@ -34071,7 +34071,7 @@
       "skill": "leveldesign",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithLevelDesign/Private/MonolithLevelDesignAudioActions.cpp",
-      "source_line": 301,
+      "source_line": 327,
       "summary": "Given room geometry + surface materials, suggest AAudioVolume reverb settings based on RT60 + material classification.",
       "supports_progress": false,
       "writes_logs": true
@@ -39407,7 +39407,7 @@
       "skill": "mesh",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithMeshProceduralActions.cpp",
-      "source_line": 3215,
+      "source_line": 3219,
       "summary": "Clear the procedural mesh cache. Removes manifest entries (assets remain on disk). Optionally filter by type.",
       "supports_progress": false,
       "writes_logs": true
@@ -40277,7 +40277,7 @@
       "skill": "mesh",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithMeshProceduralActions.cpp",
-      "source_line": 3228,
+      "source_line": 3232,
       "summary": "Get cache statistics: entry counts by type, total entries.",
       "supports_progress": false,
       "writes_logs": true
@@ -40625,7 +40625,7 @@
       "skill": "mesh",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithMeshProceduralActions.cpp",
-      "source_line": 3207,
+      "source_line": 3211,
       "summary": "List all procedural meshes in the cache manifest with metadata (type, path, triangle count, age).",
       "supports_progress": false,
       "writes_logs": true
@@ -41118,7 +41118,7 @@
       "skill": "mesh",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithMesh/Private/MonolithMeshProceduralActions.cpp",
-      "source_line": 3222,
+      "source_line": 3226,
       "summary": "Validate the cache manifest against disk. Removes entries whose assets no longer exist.",
       "supports_progress": false,
       "writes_logs": true
@@ -41594,7 +41594,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1695,
+      "source_line": 1693,
       "summary": "Request cooperative cancellation of an async Monolith job by job_id and return its current row. Reports disabled when async jobs are off.",
       "supports_progress": false,
       "writes_logs": true
@@ -41681,7 +41681,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1771,
+      "source_line": 1769,
       "summary": "Return one Monolith domain's profile-filtered actions and schemas without changing tools/list.",
       "supports_progress": false,
       "writes_logs": true
@@ -41710,7 +41710,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1568,
+      "source_line": 1566,
       "summary": "List available tool namespaces, actions, or an exact action schema. Pass namespace/action/mode to narrow the live registry output.",
       "supports_progress": false,
       "writes_logs": true
@@ -41768,7 +41768,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1542,
+      "source_line": 1540,
       "summary": "Find profile-allowed Monolith actions by task, namespace, category, action name, or description. Use this before monolith_discover when the exact action is unclear.",
       "supports_progress": false,
       "writes_logs": true
@@ -41797,7 +41797,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1739,
+      "source_line": 1737,
       "summary": "Measure factual discovery-planning metadata coverage across profile-allowed actions without fabricating outputs or next-action predictions.",
       "supports_progress": false,
       "writes_logs": true
@@ -41884,7 +41884,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1681,
+      "source_line": 1679,
       "summary": "Return one async Monolith job's status, progress, and result by job_id. Reports disabled when async jobs are off.",
       "supports_progress": false,
       "writes_logs": true
@@ -41942,7 +41942,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1791,
+      "source_line": 1789,
       "summary": "Return process/profile-scoped loaded domain state for the deferred domain catalog.",
       "supports_progress": false,
       "writes_logs": true
@@ -41971,7 +41971,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1730,
+      "source_line": 1728,
       "summary": "Return the current live registry discovery snapshot and refresh semantics.",
       "supports_progress": false,
       "writes_logs": true
@@ -42000,7 +42000,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1655,
+      "source_line": 1653,
       "summary": "Return Monolith MCP transport status, CORS/header policy, protocol support, route state, and request limits.",
       "supports_progress": false,
       "writes_logs": true
@@ -42029,7 +42029,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1841,
+      "source_line": 1839,
       "summary": "Return local Monolith notification preferences.",
       "supports_progress": false,
       "writes_logs": true
@@ -42058,7 +42058,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1801,
+      "source_line": 1799,
       "summary": "Return local Monolith onboarding progress, skipped steps, and next recommended setup step.",
       "supports_progress": false,
       "writes_logs": true
@@ -42087,7 +42087,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1831,
+      "source_line": 1829,
       "summary": "Return safe help text for Monolith readiness check failures without running installers.",
       "supports_progress": false,
       "writes_logs": true
@@ -42116,7 +42116,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1822,
+      "source_line": 1820,
       "summary": "Run read-only Monolith readiness checks for server, registry, index, optional modules, and settings gates.",
       "supports_progress": false,
       "writes_logs": true
@@ -42232,7 +42232,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1761,
+      "source_line": 1759,
       "summary": "Return cheap profile-filtered Monolith domain metadata without per-action schemas.",
       "supports_progress": false,
       "writes_logs": true
@@ -42261,7 +42261,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1664,
+      "source_line": 1662,
       "summary": "Report MCP session tracking availability. Current Monolith streamable HTTP mode does not persist per-client sessions.",
       "supports_progress": false,
       "writes_logs": true
@@ -42377,7 +42377,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1781,
+      "source_line": 1779,
       "summary": "Mark a Monolith domain loaded for discovery scope without exposing additional tools by default.",
       "supports_progress": false,
       "writes_logs": true
@@ -42406,7 +42406,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1634,
+      "source_line": 1632,
       "summary": "Re-index the Monolith project database. Incremental by default (delta only). Pass force=true for full wipe+rebuild.",
       "supports_progress": true,
       "writes_logs": true
@@ -42551,7 +42551,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1720,
+      "source_line": 1718,
       "summary": "Set safe MCP compatibility options. Supports browser_access=loopback_only|disabled; legacy routes remain unsupported.",
       "supports_progress": false,
       "writes_logs": true
@@ -42609,7 +42609,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1850,
+      "source_line": 1848,
       "summary": "Persist local Monolith notification preferences with boolean validation.",
       "supports_progress": false,
       "writes_logs": true
@@ -42638,7 +42638,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1810,
+      "source_line": 1808,
       "summary": "Mark a Monolith onboarding step completed, skipped, reopened, or reset.",
       "supports_progress": false,
       "writes_logs": true
@@ -42667,7 +42667,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1601,
+      "source_line": 1599,
       "summary": "Get Monolith server health: version, uptime, port, registered action count, module status.",
       "supports_progress": false,
       "writes_logs": true
@@ -42696,7 +42696,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1710,
+      "source_line": 1708,
       "summary": "Report MCP session termination availability without inventing session state.",
       "supports_progress": false,
       "writes_logs": true
@@ -42725,7 +42725,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1860,
+      "source_line": 1858,
       "summary": "Trigger a harmless local Monolith notification test when editor toasts are enabled.",
       "supports_progress": false,
       "writes_logs": true
@@ -42754,7 +42754,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1617,
+      "source_line": 1615,
       "summary": "Check for or install Monolith updates from GitHub Releases.",
       "supports_progress": false,
       "writes_logs": true
@@ -51251,7 +51251,7 @@
       "skill": "slate",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSlate/Private/MonolithSlateInspectorActions.cpp",
-      "source_line": 805,
+      "source_line": 808,
       "summary": "Capture a Slate widget or active top-level window with FSlateApplication::TakeScreenshot. No level viewport fallback.",
       "supports_progress": false,
       "writes_logs": true
@@ -51280,7 +51280,7 @@
       "skill": "slate",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSlate/Private/MonolithSlateInspectorActions.cpp",
-      "source_line": 796,
+      "source_line": 799,
       "summary": "Describe a current Slate ref: type, visibility, focus, geometry, text, parent, and capped children.",
       "supports_progress": false,
       "writes_logs": true
@@ -51309,7 +51309,7 @@
       "skill": "slate",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSlate/Private/MonolithSlateInspectorActions.cpp",
-      "source_line": 760,
+      "source_line": 763,
       "summary": "Report Slate inspector flag state, Slate availability, visible window count, ref generation, and gated read-only actions.",
       "supports_progress": false,
       "writes_logs": true
@@ -51338,7 +51338,7 @@
       "skill": "slate",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSlate/Private/MonolithSlateInspectorActions.cpp",
-      "source_line": 773,
+      "source_line": 776,
       "summary": "List visible top-level Slate windows with bounded metadata and redacted titles.",
       "supports_progress": false,
       "writes_logs": true
@@ -51367,7 +51367,7 @@
       "skill": "slate",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSlate/Private/MonolithSlateInspectorActions.cpp",
-      "source_line": 782,
+      "source_line": 785,
       "summary": "Return a bounded live Slate widget snapshot and short-lived opaque refs. Rebuilds the ref cache.",
       "supports_progress": false,
       "writes_logs": true
@@ -51396,7 +51396,7 @@
       "skill": "slate",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSlate/Private/MonolithSlateInspectorActions.cpp",
-      "source_line": 816,
+      "source_line": 819,
       "summary": "Poll visible Slate widgets for text/type/visibility state without input simulation.",
       "supports_progress": false,
       "writes_logs": true
@@ -51431,35 +51431,6 @@
       "writes_logs": true
     },
     {
-      "action": "build_crg_graph",
-      "available_offline": true,
-      "full_name": "source.build_crg_graph",
-      "implementation_status": "offline_query_implemented",
-      "long_running": true,
-      "mutates_assets": true,
-      "namespace": "source",
-      "next_actions_status": "availability_required",
-      "output_contract_status": "snapshot_only",
-      "outputs": [],
-      "planning_signals": [
-        "skill:source",
-        "source",
-        "source_scanned_candidate",
-        "mutating"
-      ],
-      "preconditions": [],
-      "preconditions_status": "snapshot_only",
-      "proof_anchor": "",
-      "requires_live_editor": false,
-      "skill": "source",
-      "source": "cpp_registry_scan",
-      "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 438,
-      "summary": "Build Saved/graph.db from EngineSource symbols, references and inheritance via atomic temp replacement. Dry-run unless execute=true",
-      "supports_progress": true,
-      "writes_logs": true
-    },
-    {
       "action": "check_deprecations",
       "available_offline": true,
       "full_name": "source.check_deprecations",
@@ -51483,37 +51454,8 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 281,
+      "source_line": 329,
       "summary": "Batch-check whether symbols are UE_DEPRECATED. Returns per-symbol {deprecated, version, message, kind}. If the deprecation index is empty (schema v2 landed but no reindex yet), returns index_state:\"empty\" with a hint to run source.trigger_reindex.",
-      "supports_progress": false,
-      "writes_logs": true
-    },
-    {
-      "action": "crg_graph_health",
-      "available_offline": true,
-      "full_name": "source.crg_graph_health",
-      "implementation_status": "offline_query_implemented",
-      "long_running": false,
-      "mutates_assets": false,
-      "namespace": "source",
-      "next_actions_status": "availability_required",
-      "output_contract_status": "snapshot_only",
-      "outputs": [],
-      "planning_signals": [
-        "skill:source",
-        "source",
-        "source_scanned_candidate",
-        "read_only"
-      ],
-      "preconditions": [],
-      "preconditions_status": "snapshot_only",
-      "proof_anchor": "",
-      "requires_live_editor": false,
-      "skill": "source",
-      "source": "cpp_registry_scan",
-      "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 466,
-      "summary": "Read-only health check for Saved/graph.db schema, FTS parity and metadata",
       "supports_progress": false,
       "writes_logs": true
     },
@@ -51541,7 +51483,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 482,
+      "source_line": 504,
       "summary": "Map changed source paths to indexed symbols, direct caller impact, test gaps, and risk-ranked review priorities",
       "supports_progress": false,
       "writes_logs": true
@@ -51570,7 +51512,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 523,
+      "source_line": 545,
       "summary": "Compare stored/current EngineSource CRG projection snapshots",
       "supports_progress": false,
       "writes_logs": true
@@ -51599,7 +51541,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 319,
+      "source_line": 367,
       "summary": "Find all functions called by the given function",
       "supports_progress": false,
       "writes_logs": true
@@ -51628,7 +51570,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 311,
+      "source_line": 359,
       "summary": "Find all functions that call the given function",
       "supports_progress": false,
       "writes_logs": true
@@ -51657,7 +51599,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 580,
+      "source_line": 602,
       "summary": "Find real call-site examples of a symbol via full-text search over indexed source lines (pattern `SymbolName(`). Returns ranked snippets with ~3 lines of context. `prefer`: \"engine\" (default \u2014 engine Runtime first, then other engine, then project) or \"project\" (flips project ahead). Supports cursor pagination \u2014 pass `cursor` from a prior response's `next_cursor`.",
       "supports_progress": false,
       "writes_logs": true
@@ -51686,7 +51628,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 400,
+      "source_line": 448,
       "summary": "Find function override relationships for a symbol using indexed class inheritance and matching method signatures",
       "supports_progress": false,
       "writes_logs": true
@@ -51715,7 +51657,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 301,
+      "source_line": 349,
       "summary": "Find all usage sites of a symbol (calls, includes, type references)",
       "supports_progress": false,
       "writes_logs": true
@@ -51744,7 +51686,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 494,
+      "source_line": 516,
       "summary": "Find advisory dead-symbol candidates with confidence and reasons; read-only",
       "supports_progress": false,
       "writes_logs": true
@@ -51773,7 +51715,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 602,
+      "source_line": 624,
       "summary": "Generate a UCLASS-derived .h/.cpp stub pair as TEXT (never writes to disk). Resolves the parent header + owning module via the source DB, emits <MODULE>_API, parent header include FIRST, \"<Class>.generated.h\" LAST, GENERATED_BODY(), and a plain default constructor (the FObjectInitializer& overload only when the parent requires it). UCLASS-derived parents only; other parents are rejected cleanly.",
       "supports_progress": false,
       "writes_logs": true
@@ -51802,7 +51744,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 343,
+      "source_line": 391,
       "summary": "Show the inheritance tree for a class",
       "supports_progress": false,
       "writes_logs": true
@@ -51831,7 +51773,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 266,
+      "source_line": 314,
       "summary": "Get the canonical #include path for a symbol (resolves via the owning class header). Public/Classes/Internal headers are includable cross-module; Private headers return includable:false with a same-module note.",
       "supports_progress": false,
       "writes_logs": true
@@ -51860,7 +51802,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 352,
+      "source_line": 400,
       "summary": "Get module statistics: file count, symbol counts by kind, and key classes",
       "supports_progress": false,
       "writes_logs": true
@@ -51889,7 +51831,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 273,
+      "source_line": 321,
       "summary": "Get the declaration signature(s) for a symbol or Class::Method. Reads the declaration line(s) from source (engine class-body methods are not indexed as symbols); strips inline bodies and macro line-continuations. Overloads returned as separate entries.",
       "supports_progress": false,
       "writes_logs": true
@@ -51918,7 +51860,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 359,
+      "source_line": 407,
       "summary": "Get a symbol definition with surrounding context lines",
       "supports_progress": false,
       "writes_logs": true
@@ -51947,8 +51889,8 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 414,
-      "summary": "Read-only EngineSource diagnostics: schema v1, symbols_ai/ad triggers, symbols_fts parity, orphans",
+      "source_line": 462,
+      "summary": "Read-only EngineSource diagnostics: schema v4, source graph-node FTS readiness, native FTS/CRG parity, and orphans",
       "supports_progress": false,
       "writes_logs": true
     },
@@ -51976,7 +51918,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 389,
+      "source_line": 437,
       "summary": "Bounded BFS over call/type references, inheritance and function overrides: who is impacted within N hops",
       "supports_progress": false,
       "writes_logs": true
@@ -52005,7 +51947,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 595,
+      "source_line": 617,
       "summary": "Regex-level UHT-gotcha lint of a single header file. Works on UNINDEXED files (a header you just wrote). Deterministic rule table: GENERATED_BODY presence/position, *.generated.h last-include, UCLASS/class-name match, missing <MODULE>_API, UPROPERTY/UFUNCTION in a non-reflected type, invalid specifier token. Returns structured findings {rule_id, line, message, severity}; a clean header returns zero findings.",
       "supports_progress": false,
       "writes_logs": true
@@ -52034,7 +51976,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 503,
+      "source_line": 525,
       "summary": "Read-only source pre-merge gate over health, detect_changes, and optional find_unused",
       "supports_progress": false,
       "writes_logs": true
@@ -52063,7 +52005,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 367,
+      "source_line": 415,
       "summary": "Read source lines from a file by path",
       "supports_progress": false,
       "writes_logs": true
@@ -52092,38 +52034,9 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 288,
+      "source_line": 336,
       "summary": "Get the implementation source code for a class, function, or struct. If a source file path is supplied via path, delegates to source.read_file.",
       "supports_progress": false,
-      "writes_logs": true
-    },
-    {
-      "action": "rebuild_crg_graph",
-      "available_offline": true,
-      "full_name": "source.rebuild_crg_graph",
-      "implementation_status": "offline_query_implemented",
-      "long_running": true,
-      "mutates_assets": true,
-      "namespace": "source",
-      "next_actions_status": "availability_required",
-      "output_contract_status": "snapshot_only",
-      "outputs": [],
-      "planning_signals": [
-        "skill:source",
-        "source",
-        "source_scanned_candidate",
-        "mutating"
-      ],
-      "preconditions": [],
-      "preconditions_status": "snapshot_only",
-      "proof_anchor": "",
-      "requires_live_editor": false,
-      "skill": "source",
-      "source": "cpp_registry_scan",
-      "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 447,
-      "summary": "Alias of build_crg_graph for explicit graph.db rebuilds",
-      "supports_progress": true,
       "writes_logs": true
     },
     {
@@ -52150,7 +52063,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 430,
+      "source_line": 478,
       "summary": "Rebuild derived EngineSource CRG projection/cache tables. Dry-run unless execute=true",
       "supports_progress": false,
       "writes_logs": true
@@ -52179,8 +52092,8 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 422,
-      "summary": "Rebuild symbols_fts (external-content). source_fts is plain fts5 -> reindex guidance. Dry-run unless execute=true",
+      "source_line": 470,
+      "summary": "Rebuild external-content symbols, console, or graph-node FTS. source_fts is plain fts5 -> reindex guidance. Dry-run unless execute=true",
       "supports_progress": false,
       "writes_logs": true
     },
@@ -52208,7 +52121,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 542,
+      "source_line": 564,
       "summary": "Token-efficient review package: seed + impact + risk reasons + next actions (minimal|standard)",
       "supports_progress": false,
       "writes_logs": true
@@ -52237,7 +52150,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 532,
+      "source_line": 554,
       "summary": "Rank global source review hotspots by fan-in, fan-out, risk, LOC size, override fanout, or all signals",
       "supports_progress": false,
       "writes_logs": true
@@ -52266,7 +52179,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 473,
+      "source_line": 495,
       "summary": "Score symbol change risk (caller fan-in, descendants, UE macro, sensitivity, boundary crossing) with reasons",
       "supports_progress": false,
       "writes_logs": true
@@ -52295,8 +52208,8 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 456,
-      "summary": "Search the CRG-compatible Saved/graph.db nodes FTS index",
+      "source_line": 486,
+      "summary": "Search the EngineSource-backed canonical File/Symbol graph-node FTS index",
       "supports_progress": false,
       "writes_logs": true
     },
@@ -52324,7 +52237,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 327,
+      "source_line": 375,
       "summary": "Full-text search across Unreal Engine source code and shaders. Supports cursor pagination \u2014 pass `cursor` from a prior response's `next_cursor` to fetch the next page.",
       "supports_progress": false,
       "writes_logs": true
@@ -52353,7 +52266,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 515,
+      "source_line": 537,
       "summary": "Capture current EngineSource CRG projection manifest. Dry-run unless execute=true",
       "supports_progress": false,
       "writes_logs": true
@@ -52411,7 +52324,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 383,
+      "source_line": 431,
       "summary": "Trigger incremental project-only C++ source indexing (loads existing engine symbols, indexes project Source/ and Plugins/)",
       "supports_progress": false,
       "writes_logs": true
@@ -52440,7 +52353,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 378,
+      "source_line": 426,
       "summary": "Trigger C++ indexer to rebuild the engine source DB (full clean build: engine + shaders + project)",
       "supports_progress": false,
       "writes_logs": true
@@ -52469,7 +52382,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 573,
+      "source_line": 595,
       "summary": "Batch pre-flight verdict for a list of symbols. Per symbol composes include path, declaration signature, deprecation status, and existence into one record. `exists` for a Class::Method is decided by the owning class row + a source-line declaration hit (engine class-body methods are not indexed as symbols), NOT by symbols-table presence; a missing symbol reports exists:false with no error.",
       "supports_progress": false,
       "writes_logs": true
@@ -53107,7 +53020,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIAnimationActions.cpp",
-      "source_line": 1552,
+      "source_line": 1559,
       "summary": "[DEPRECATED -- use ui::create_animation_v2 (multi-key authoring) or ui::add_bezier_eased_segment instead] Add a single keyframe to an existing animation track. Scheduled for removal one major release out (Phase L marker, 2026-04-26). Response payload is tagged {deprecated: true, use_action: \"ui::create_animation_v2\"}; the v2 surface authors entire tracks at once and supports the cubic / weighted-tangent shapes that v1 cannot express.",
       "supports_progress": false,
       "writes_logs": true
@@ -53165,7 +53078,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIActions.cpp",
-      "source_line": 2091,
+      "source_line": 2095,
       "summary": "Add or update a UIExtensionPointWidget-compatible widget in a Widget Blueprint, assign the requested GameplayTag on its ExtensionPointTag property, and attach it to the requested parent with deterministic slot layout. Resolves UIExtensionPointWidget by class path/reflection so MonolithUI does not hard-link the optional UIExtension plugin.",
       "supports_progress": false,
       "writes_logs": true
@@ -53223,7 +53136,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIActions.cpp",
-      "source_line": 2127,
+      "source_line": 2131,
       "summary": "Add or update a CommonActivatableWidgetContainerBase-compatible layer widget inside a PrimaryGameLayout Widget Blueprint. The action edits only the Widget Blueprint tree and returns the RegisterLayer tag/widget pair that the layout graph should use.",
       "supports_progress": false,
       "writes_logs": true
@@ -53252,7 +53165,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIActions.cpp",
-      "source_line": 2071,
+      "source_line": 2075,
       "summary": "Add a widget to a parent panel in a Widget Blueprint",
       "supports_progress": false,
       "writes_logs": true
@@ -53310,7 +53223,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIAnimationActions.cpp",
-      "source_line": 1524,
+      "source_line": 1531,
       "summary": "Confirm-gated delta edit for existing UMG animations. Supports scalar float-key upsert/delete without resetting sections, including canonical opacity plus transform/color component paths; writes require dry_run=false and confirm=true, deletes additionally require confirm_delete=true.",
       "supports_progress": false,
       "writes_logs": true
@@ -53339,7 +53252,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/Actions/Hoisted/ShadowActions.cpp",
-      "source_line": 604,
+      "source_line": 627,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -53368,7 +53281,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/Actions/MonolithUISpecActions.cpp",
-      "source_line": 10092,
+      "source_line": 10109,
       "summary": "Apply a high-level CommonUI/Lyra menu transform spec. Composes existing actions for PrimaryGameLayout layer widgets, UIExtension points, widget properties/removal, Blueprint variable defaults, initial focus, navigation bulk writes, WBP subtree copy repair, Blueprint function/macro graph clone, Slate font repair, and frontend menu validation. Dry-run is the default; mutating calls require confirm=true.",
       "supports_progress": false,
       "writes_logs": true
@@ -53513,7 +53426,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/Actions/MonolithUISpecActions.cpp",
-      "source_line": 9950,
+      "source_line": 9967,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -53600,7 +53513,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/CommonUI/MonolithCommonUINavigationActions.cpp",
-      "source_line": 980,
+      "source_line": 984,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -53629,7 +53542,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/Actions/MonolithUISpecActions.cpp",
-      "source_line": 10017,
+      "source_line": 10034,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -53658,7 +53571,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/Actions/MonolithUISpecActions.cpp",
-      "source_line": 10046,
+      "source_line": 10063,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -53861,7 +53774,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/Actions/MonolithUISpecActions.cpp",
-      "source_line": 10144,
+      "source_line": 10161,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -53890,7 +53803,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/Actions/MonolithUISpecActions.cpp",
-      "source_line": 9887,
+      "source_line": 9904,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -54006,7 +53919,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIActions.cpp",
-      "source_line": 2247,
+      "source_line": 2251,
       "summary": "Compile a Widget Blueprint. Response includes errors[] and warnings[] arrays populated when status=BS_Error (added v0.14.11).",
       "supports_progress": false,
       "writes_logs": true
@@ -54035,7 +53948,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/Actions/MonolithUISpecActions.cpp",
-      "source_line": 9992,
+      "source_line": 10009,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -54354,7 +54267,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/Actions/MonolithUISpecActions.cpp",
-      "source_line": 9915,
+      "source_line": 9932,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -54412,7 +54325,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIWidgetCopyActions.cpp",
-      "source_line": 1343,
+      "source_line": 1344,
       "summary": "Copy one or more source Widget Blueprint subtrees into a destination Widget Blueprint while remapping widget classes and object/package references. Dry-run is the default; mutating calls require confirm=true.",
       "supports_progress": false,
       "writes_logs": true
@@ -54528,7 +54441,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIAnimationActions.cpp",
-      "source_line": 1540,
+      "source_line": 1547,
       "summary": "[DEPRECATED -- use ui::create_animation_v2 instead] Create a new UWidgetAnimation with tracks and keyframes on a Widget Blueprint. Scheduled for removal one major release out (Phase L marker, 2026-04-26). Response payload is tagged {deprecated: true, use_action: \"ui::create_animation_v2\"}; the v2 surface supports multi-track + cubic / weighted-tangent interpolation that v1 cannot express.",
       "supports_progress": false,
       "writes_logs": true
@@ -55137,7 +55050,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIActions.cpp",
-      "source_line": 2050,
+      "source_line": 2054,
       "summary": "Create a UWidgetBlueprint at save_path. parent_class accepts /Script/Module.Class form OR short name ('TokenforgeActivatableWidget', 'CommonActivatableWidget', 'UserWidget') \u2014 short name resolves via UClass::FindClassByName.",
       "supports_progress": false,
       "writes_logs": true
@@ -55195,7 +55108,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIActions.cpp",
-      "source_line": 2164,
+      "source_line": 2168,
       "summary": "Describe the CommonGame messaging flow without runtime edits: CommonMessagingSubsystem class/config, CommonGame dialog classes, modal layer tag, DefaultUIPolicyClass, and reflected messaging subclasses.",
       "supports_progress": false,
       "writes_logs": true
@@ -55224,7 +55137,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIActions.cpp",
-      "source_line": 2151,
+      "source_line": 2155,
       "summary": "Inspect a Widget Blueprint for Lyra Common UI semantics: PrimaryGameLayout parentage, UIExtensionPointWidget tags, and CommonActivatableWidgetContainerBase layer candidates.",
       "supports_progress": false,
       "writes_logs": true
@@ -55282,7 +55195,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/Actions/MonolithUISpecActions.cpp",
-      "source_line": 9934,
+      "source_line": 9951,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -55340,7 +55253,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIActions.cpp",
-      "source_line": 2288,
+      "source_line": 2292,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -55427,7 +55340,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/Actions/MonolithUISpecActions.cpp",
-      "source_line": 9974,
+      "source_line": 9991,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -55456,7 +55369,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/Actions/MonolithUISpecActions.cpp",
-      "source_line": 9907,
+      "source_line": 9924,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -55485,7 +55398,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/CommonUI/MonolithCommonUINavigationActions.cpp",
-      "source_line": 926,
+      "source_line": 930,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -55572,7 +55485,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/CommonUI/MonolithCommonUINavigationActions.cpp",
-      "source_line": 948,
+      "source_line": 952,
       "summary": "[RUNTIME] Call SetFocus on a named widget in the live PIE viewport",
       "supports_progress": false,
       "writes_logs": true
@@ -55659,7 +55572,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIAnimationActions.cpp",
-      "source_line": 1474,
+      "source_line": 1481,
       "summary": "Get tracks and keyframes for a specific animation on a Widget Blueprint",
       "supports_progress": false,
       "writes_logs": true
@@ -55688,7 +55601,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIAnimationActions.cpp",
-      "source_line": 1484,
+      "source_line": 1491,
       "summary": "Read-only compact UMG animation inventory: timing, bindings, tracks, key counts, event tracks, and delegate binding rows",
       "supports_progress": false,
       "writes_logs": true
@@ -55717,7 +55630,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIAnimationActions.cpp",
-      "source_line": 1509,
+      "source_line": 1516,
       "summary": "Read-only sampled values for continuous float tracks at time/times plus exact-frame event matches",
       "supports_progress": false,
       "writes_logs": true
@@ -55746,7 +55659,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIAnimationActions.cpp",
-      "source_line": 1495,
+      "source_line": 1502,
       "summary": "Read-only sorted key/event timeline for a UMG animation, filtered by widget or property path",
       "supports_progress": false,
       "writes_logs": true
@@ -55775,7 +55688,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIActions.cpp",
-      "source_line": 2114,
+      "source_line": 2118,
       "summary": "Describe optional Lyra Common framework availability for CommonUI, CommonGame, UIExtension, CommonUser, CommonLoadingScreen, GameSettings, GameplayMessageRouter, ModularGameplayActors, and GameSubtitles without hard-linking those plugins.",
       "supports_progress": false,
       "writes_logs": true
@@ -55804,7 +55717,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/CommonUI/MonolithCommonUINavigationActions.cpp",
-      "source_line": 957,
+      "source_line": 961,
       "summary": "[RUNTIME] Return the Slate focus chain leaf\u2192root for diagnosing 'why is input eaten' bugs",
       "supports_progress": false,
       "writes_logs": true
@@ -55891,7 +55804,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIActions.cpp",
-      "source_line": 2062,
+      "source_line": 2066,
       "summary": "Get the full widget hierarchy of a Widget Blueprint as JSON",
       "supports_progress": false,
       "writes_logs": true
@@ -55949,7 +55862,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIAnimationActions.cpp",
-      "source_line": 1465,
+      "source_line": 1472,
       "summary": "List all UWidgetAnimation assets on a Widget Blueprint",
       "supports_progress": false,
       "writes_logs": true
@@ -56123,7 +56036,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIActions.cpp",
-      "source_line": 2256,
+      "source_line": 2260,
       "summary": "List all available widget class types that can be added",
       "supports_progress": false,
       "writes_logs": true
@@ -56152,7 +56065,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/Actions/MonolithUISpecActions.cpp",
-      "source_line": 10071,
+      "source_line": 10088,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -56297,7 +56210,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIAnimationActions.cpp",
-      "source_line": 1567,
+      "source_line": 1574,
       "summary": "Remove a UWidgetAnimation from a Widget Blueprint",
       "supports_progress": false,
       "writes_logs": true
@@ -56326,7 +56239,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIActions.cpp",
-      "source_line": 2222,
+      "source_line": 2226,
       "summary": "Remove a widget from a Widget Blueprint",
       "supports_progress": false,
       "writes_logs": true
@@ -56355,7 +56268,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIActions.cpp",
-      "source_line": 2269,
+      "source_line": 2273,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -56442,7 +56355,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/CommonUI/MonolithCommonUINavigationActions.cpp",
-      "source_line": 964,
+      "source_line": 968,
       "summary": "[RUNTIME] Call RequestRefreshFocus on an active UCommonActivatableWidget (after dynamic content swap)",
       "supports_progress": false,
       "writes_logs": true
@@ -57225,7 +57138,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/CommonUI/MonolithCommonUINavigationActions.cpp",
-      "source_line": 938,
+      "source_line": 942,
       "summary": "Store DesiredFocusTargetName FName UPROPERTY on a UCommonActivatableWidget CDO. WBP must expose this UPROPERTY and override NativeGetDesiredFocusTarget. Satisfying parent classes: UTokenforgeActivatableWidget, UMonolithReduceMotionAwareWidget. If parent doesn't expose the UPROPERTY, use ui::add_widget_variable to add it first.",
       "supports_progress": false,
       "writes_logs": true
@@ -57515,7 +57428,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/CommonUI/MonolithCommonUINavigationActions.cpp",
-      "source_line": 900,
+      "source_line": 904,
       "summary": "Set a UWidget's navigation rule for a direction (Up/Down/Left/Right/Next/Previous)",
       "supports_progress": false,
       "writes_logs": true
@@ -57544,7 +57457,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/CommonUI/MonolithCommonUINavigationActions.cpp",
-      "source_line": 913,
+      "source_line": 917,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -57573,7 +57486,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIActions.cpp",
-      "source_line": 2233,
+      "source_line": 2237,
       "summary": "Set a property on a widget (text, color, opacity, visibility, etc.). Default mode gates writes through the per-type curated allowlist; pass raw_mode=true to bypass the gate (legacy compat). The new value can be supplied as `value` OR the alias `property_value` (Bug #6 fix). `IsVariable`/`bIsVariable` routes to the first-class variable-flag path.",
       "supports_progress": false,
       "writes_logs": true
@@ -57718,7 +57631,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIActions.cpp",
-      "source_line": 2178,
+      "source_line": 2182,
       "summary": "Validate CommonGame dialog class configuration for a CommonMessagingSubsystem subclass. Reads config or explicit dialog class paths and checks CommonGameDialog compatibility.",
       "supports_progress": false,
       "writes_logs": true
@@ -57747,7 +57660,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIActions.cpp",
-      "source_line": 2191,
+      "source_line": 2195,
       "summary": "Validate the CommonGame modal layer push contract without changing PrimaryGameLayout: tag registration, optional layout WBP layer candidates, dialog class compatibility, and RegisterLayer evidence limits.",
       "supports_progress": false,
       "writes_logs": true
@@ -57776,7 +57689,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIActions.cpp",
-      "source_line": 2205,
+      "source_line": 2209,
       "summary": "Validate a Lyra/CommonUI front-end menu flow without runtime edits: PrimaryGameLayout layer candidates, dialog push contract, activatable screen widgets, expected/forbidden widgets, variable defaults, and optional graph text evidence.",
       "supports_progress": false,
       "writes_logs": true
@@ -57805,7 +57718,7 @@
       "skill": "ui",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithUI/Private/MonolithUIActions.cpp",
-      "source_line": 2301,
+      "source_line": 2305,
       "summary": "Verify widget preview PNG artifacts and, when a baseline is supplied, run an alpha-aware linear-sRGB pixel comparison with global and named-region thresholds. Capture/global and region-local exclusion rects are rasterized by a shared scanline; only capture exclusions mask the global heatmap. Comparisons reserve one cumulative 134217728-work-unit action budget and fail closed before metric/heatmap work when exceeded. A fully excluded comparison also fails closed. Produces deterministic diff heatmaps with dim-blue global-exclusion markers and a provenance-bearing manifest.",
       "supports_progress": false,
       "writes_logs": true
@@ -60283,7 +60196,7 @@
       "writes_logs": true
     }
   ],
-  "generated_at": "2026-07-19T12:14:56Z",
+  "generated_at": "2026-07-21T17:01:37Z",
   "generator": "Tools/MonolithQuery/generate_monolith_catalog_snapshot.py",
   "partial": false,
   "proof_anchors": {
@@ -60450,7 +60363,7 @@
   },
   "schema_version": 1,
   "source": "cpp_registry_scan",
-  "source_hash": "20e1291e10ad38566f68c29ae5a2da6cf041016bc69ef991961ae628449d58fd",
+  "source_hash": "9e820c5a2844dcad7e8aaa5f62051724a7c74313197d3a44676f5489d9d3dea9",
   "source_hash_kind": "action_semantics_v1",
   "source_root": "Source"
 }

@@ -185,14 +185,13 @@ class BenchmarkInputFingerprintTests(unittest.TestCase):
             saved = root / "Saved"
             saved.mkdir()
             (saved / "EngineSource.db").write_bytes(b"source")
-            (saved / "graph.db").write_bytes(b"graph")
             (saved / "ProjectIndex.db").write_bytes(b"project")
 
             guidance = build_benchmark_inputs("ActionGuidance", plugin_root=root)
             source = build_benchmark_inputs("SourceIndex", plugin_root=root)
             asset = build_benchmark_inputs("AssetEditing", plugin_root=root)
-            (saved / "graph.db").write_bytes(b"unrelated-graph-churn")
-            source_after_graph_churn = build_benchmark_inputs("SourceIndex", plugin_root=root)
+            (saved / "ProjectIndex.db").write_bytes(b"unrelated-project-churn")
+            source_after_project_churn = build_benchmark_inputs("SourceIndex", plugin_root=root)
 
         self.assertEqual(guidance["database_files"], [])
         self.assertEqual(
@@ -205,7 +204,7 @@ class BenchmarkInputFingerprintTests(unittest.TestCase):
         )
         self.assertEqual(
             source["fingerprint_sha256"],
-            source_after_graph_churn["fingerprint_sha256"],
+            source_after_project_churn["fingerprint_sha256"],
         )
         self.assertEqual(
             [row["path"] for row in asset["database_files"]],

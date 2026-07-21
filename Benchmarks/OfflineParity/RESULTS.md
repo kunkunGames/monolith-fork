@@ -1,5 +1,23 @@
 # Offline Parity Benchmark Results
 
+## 2026-07-21 graph-retirement-20260721-08
+
+| Item | Value |
+| --- | ---: |
+| `offline_parity_score` | **1.0** |
+| Actions | 317 total; 311 comparable; 6 decision-chain skips |
+| MATCH / DIFF / real ERROR | 311 / 0 / 0 |
+| Expected-error cases | 5 (0 problems) |
+| `version_parity_score` | 1.0 (`2026-05-29.1` on both implementations) |
+| Input fingerprint | `f2acf3584953af0c3cf89414467ec57c81f31fc1c2768bf93dcf65558e5fb9d6` |
+| Accepted evidence | `Benchmarks\OfflineParity\accepted\graph-retirement-20260721-08` |
+
+This full run followed the EngineSource Schema v4 migration and health-directed
+CRG cache repair and the final portable Query rebuild. Native Query and Python
+matched every comparable action after the separate `graph.db` input was
+removed; the accepted bundle fingerprints the 4.66 GB `EngineSource.db` plus
+the final `monolith_query.exe` and contains no graph-export dependency.
+
 ## 2026-07-11 run-20260711-final — post-CRG-repair final
 
 | Item | Value |

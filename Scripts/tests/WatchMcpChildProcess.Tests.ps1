@@ -676,3 +676,51 @@ Describe 'watch_mcp recovery availability ordering' {
         $script:postRecoverRetryAll | Should Be $true
     }
 }
+
+Describe 'watch_mcp graph export retirement contract' {
+    It 'keeps daily and restart maintenance targets bounded to assets and source' {
+        foreach ($parameterName in @('DailyReindexTargets', 'RestartReindexTargets')) {
+            $parameter = $Ast.ParamBlock.Parameters | Where-Object {
+                $_.Name.VariablePath.UserPath -eq $parameterName
+            }
+            $parameter | Should Not BeNullOrEmpty
+
+            $validateSet = $parameter.Attributes | Where-Object {
+                $_.TypeName.Name -eq 'ValidateSet'
+            }
+            $validateSet | Should Not BeNullOrEmpty
+            $allowed = @($validateSet.PositionalArguments | ForEach-Object {
+                    [string]$_.SafeGetValue()
+                })
+            ($allowed -join ',') | Should Be 'assets,source'
+
+            $defaultText = $parameter.DefaultValue.Extent.Text
+            $defaultText | Should Match "'assets'"
+            $defaultText | Should Match "'source'"
+            $defaultText | Should Not Match "'graph'"
+        }
+    }
+
+    It 'contains no retired graph builder, target, or cooldown path' {
+        $retiredParameters = @($Ast.ParamBlock.Parameters | Where-Object {
+                $_.Name.VariablePath.UserPath -eq 'DailyGraphCooldownSeconds'
+            })
+        $retiredParameters.Count | Should Be 0
+
+        $retiredFunctions = @($Ast.FindAll({
+                    param($node)
+                    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                    $node.Name -eq 'Invoke-GraphIndex'
+                }, $true))
+        $retiredFunctions.Count | Should Be 0
+
+        $scriptText = [System.IO.File]::ReadAllText($WatchdogPath)
+        foreach ($retiredToken in @(
+                'build_crg_graph',
+                "Test-IndexTarget -Targets `$Targets -Target 'graph'",
+                "Test-IndexTarget -Targets `$RestartReindexTargets -Target 'graph'"
+            )) {
+            $scriptText.Contains($retiredToken) | Should Be $false
+        }
+    }
+}

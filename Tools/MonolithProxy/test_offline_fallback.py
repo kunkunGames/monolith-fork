@@ -1083,6 +1083,24 @@ def main() -> int:
         source_body_sentinel = "MonolithActionExecutionGuard.h"
         source_fixture = temp_root / "source-fixture.db"
         create_source_fixture(source_fixture, indexed_source)
+        for fixture_repair_target in ("symbols", "graph_nodes"):
+            fixture_fts_repair = subprocess.run(
+                [
+                    str(bundle_query),
+                    "source",
+                    "repair_fts",
+                    f"--source-db={source_fixture}",
+                    f"--target={fixture_repair_target}",
+                    "--execute",
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="strict",
+                timeout=30,
+                check=False,
+            )
+            assert fixture_fts_repair.returncode == 0, fixture_fts_repair
         project_fixture = temp_root / "project-fixture.db"
         backup_readonly_database(
             PLUGIN_ROOT / "Saved" / "ProjectIndex.db", project_fixture
@@ -1497,7 +1515,7 @@ def main() -> int:
             )
             assert generic_source_health["result"]["structuredContent"][
                 "status"
-            ] == "ok"
+            ] == "ok", generic_source_health
 
             source_health = call_tool(
                 session,

@@ -34,8 +34,10 @@ public:
 	/** Is indexing currently running? */
 	bool IsIndexing() const { return bIsIndexing; }
 
-private:
+	/** Absolute path of the authoritative EngineSource database, including any configured override. */
 	FString GetDatabasePath() const;
+
+private:
 	FString GetEngineSourcePath() const;
 	FString GetEngineShaderPath() const;
 	FString GetProjectPath() const;

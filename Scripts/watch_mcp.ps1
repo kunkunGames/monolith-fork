@@ -19,8 +19,7 @@ delegates the launch/wait/reconnect sequence to Scripts/recover_mcp.ps1.
 When the endpoint is healthy, the same long-running process can perform one
 daily Monolith index maintenance pass. By default this runs at 05:00 Korea
 Standard Time, starts incremental asset/source indexing through the bridge
-namespace, waits for those indexes to go idle, then refreshes the derived
-Saved/graph.db export through monolith_query.exe with its cooldown gate intact.
+namespace, and waits for those indexes to go idle.
 
 This script does not replace recover_mcp.ps1. It is a supervisor for the common
 Codex/direct-client pain point where the endpoint dies between agent calls.
@@ -85,7 +84,7 @@ RESULT=RECOVER_TIMEOUT. Default 300.
 Run one probe/recover cycle and exit.
 
 .PARAMETER DisableDailyReindex
-Disable the daily asset/source/graph maintenance pass.
+Disable the daily asset/source maintenance pass.
 
 .PARAMETER DailyReindexTime
 Daily maintenance start time in HH:mm, interpreted in DailyReindexTimeZone
@@ -98,11 +97,10 @@ Windows time-zone id for DailyReindexTime (default Korea Standard Time).
 Indexing mode: incremental (default) or full.
 
 .PARAMETER DailyReindexTargets
-Maintenance targets: assets, source, graph. Default is all three.
+Maintenance targets: assets and source. Default is both.
 
 .PARAMETER DailyReindexWaitTimeoutSec
-Maximum seconds to wait for asset/source indexing to become idle before graph
-maintenance (default 1800).
+Maximum seconds to wait for asset/source indexing to become idle (default 1800).
 
 .PARAMETER DailyReindexWaitPollSec
 Seconds between bridge.get_index_status polls while waiting (default 10).
@@ -110,17 +108,13 @@ Seconds between bridge.get_index_status polls while waiting (default 10).
 .PARAMETER DailyReindexActionTimeoutSec
 HTTP timeout for a single MCP action call (default 120).
 
-.PARAMETER DailyGraphCooldownSeconds
-Cooldown passed to source build_crg_graph for graph.db maintenance (default
-1800). Use 0 only for intentional diagnostics.
-
 .PARAMETER RunDailyReindexNow
 Run one maintenance pass as soon as the MCP endpoint is healthy, ignoring the
 daily schedule. Combine with -Once for a smoke test.
 
 .PARAMETER SkipRestartReindex
-Skip the restart recovery indexing pass. Normal restart recovery runs source and
-graph maintenance before launch and asset maintenance after MCP health returns.
+Skip the restart recovery indexing pass. Normal restart recovery runs source
+maintenance before launch and asset maintenance after MCP health returns.
 Pre-launch maintenance failure does not prevent endpoint recovery; requested
 targets are retried after health returns.
 
@@ -128,7 +122,7 @@ targets are retried after health returns.
 Indexing mode for restart-triggered maintenance: incremental (default) or full.
 
 .PARAMETER RestartReindexTargets
-Restart-triggered maintenance targets. Default is assets, source, graph.
+Restart-triggered maintenance targets. Default is assets and source.
 
 .PARAMETER ProjectRoot
 Explicit host checkout root containing the .uproject (skips upward search).
@@ -210,18 +204,17 @@ param(
     [string]$DailyReindexTimeZone = 'Korea Standard Time',
     [ValidateSet('incremental', 'full')]
     [string]$DailyReindexMode = 'incremental',
-    [ValidateSet('assets', 'source', 'graph')]
-    [string[]]$DailyReindexTargets = @('assets', 'source', 'graph'),
+    [ValidateSet('assets', 'source')]
+    [string[]]$DailyReindexTargets = @('assets', 'source'),
     [int]$DailyReindexWaitTimeoutSec = 1800,
     [int]$DailyReindexWaitPollSec = 10,
     [int]$DailyReindexActionTimeoutSec = 120,
-    [int]$DailyGraphCooldownSeconds = 1800,
     [switch]$RunDailyReindexNow,
     [switch]$SkipRestartReindex,
     [ValidateSet('incremental', 'full')]
     [string]$RestartReindexMode = 'incremental',
-    [ValidateSet('assets', 'source', 'graph')]
-    [string[]]$RestartReindexTargets = @('assets', 'source', 'graph'),
+    [ValidateSet('assets', 'source')]
+    [string[]]$RestartReindexTargets = @('assets', 'source'),
     [string]$ProjectRoot
 )
 
@@ -758,59 +751,12 @@ function Wait-BridgeIndexIdle {
     }
 }
 
-function Invoke-GraphIndex {
-    param(
-        [string]$Root,
-        [bool]$Full,
-        [int]$CooldownSeconds = $DailyGraphCooldownSeconds,
-        [string]$Prefix = 'daily_reindex'
-    )
-
-    $pluginRoot = Split-Path -Parent $PSScriptRoot
-    $queryExe = Join-Path $pluginRoot 'Binaries\monolith_query.exe'
-    if (-not (Test-Path -LiteralPath $queryExe -PathType Leaf)) {
-        Write-Watchdog ("{0}_graph_failed reason=query_exe_missing path={1}" -f $Prefix, $queryExe)
-        return $false
-    }
-
-    $args = @(
-        'source',
-        'build_crg_graph',
-        '--execute',
-        ("--cooldown_seconds={0}" -f $CooldownSeconds)
-    )
-    if ($Full) {
-        $args += '--force'
-    }
-
-    Write-Watchdog ("{0}_graph_start mode={1} root={2} query={3}" -f `
-            $Prefix, $(if ($Full) { 'full' } else { 'incremental' }), $Root, $queryExe)
-    Push-Location -LiteralPath $pluginRoot
-    try {
-        $output = & $queryExe @args 2>&1
-        $exitCode = $LASTEXITCODE
-    }
-    finally {
-        Pop-Location
-    }
-
-    $detail = Format-WatchdogValue (($output | Out-String).Trim())
-    if ($exitCode -ne 0) {
-        Write-Watchdog ("{0}_graph_failed exit_code={1} detail={2}" -f $Prefix, $exitCode, $detail)
-        return $false
-    }
-
-    Write-Watchdog ("{0}_graph_done exit_code={1} detail={2}" -f $Prefix, $exitCode, $detail)
-    return $true
-}
-
 function Invoke-DailyReindex {
     param(
         [string]$Root,
         [string]$Reason,
         [string]$Mode = $DailyReindexMode,
         [string[]]$Targets = $DailyReindexTargets,
-        [int]$GraphCooldownSeconds = $DailyGraphCooldownSeconds,
         [string]$Prefix = 'daily_reindex',
         [string]$ResultToken = 'DAILY_REINDEX'
     )
@@ -820,7 +766,6 @@ function Invoke-DailyReindex {
             $Prefix, $Reason, $DailyReindexTime, $DailyReindexTimeZone, $Mode, $targetsText)
 
     $ok = $true
-    $bridgeOk = $true
     $scope = Get-BridgeIndexScope -Targets $Targets
     if ($scope) {
         $start = Invoke-MonolithAction -Namespace 'bridge' -Action 'start_indexing' -Params @{
@@ -829,20 +774,8 @@ function Invoke-DailyReindex {
         }
         if (-not $start.Succeeded) {
             $ok = $false
-            $bridgeOk = $false
         }
         elseif (-not (Wait-BridgeIndexIdle -Scope $scope)) {
-            $ok = $false
-            $bridgeOk = $false
-        }
-    }
-
-    if (Test-IndexTarget -Targets $Targets -Target 'graph') {
-        if ($scope -and -not $bridgeOk) {
-            Write-Watchdog ("{0}_graph_skipped reason=asset_or_source_index_not_verified_idle" -f $Prefix)
-            $ok = $false
-        }
-        elseif (-not (Invoke-GraphIndex -Root $Root -Full ($Mode -eq 'full') -CooldownSeconds $GraphCooldownSeconds -Prefix $Prefix)) {
             $ok = $false
         }
     }
@@ -1497,12 +1430,6 @@ function Invoke-PreRestartReindex {
         }
     }
 
-    if (Test-IndexTarget -Targets $RestartReindexTargets -Target 'graph') {
-        if (-not (Invoke-GraphIndex -Root $Root -Full ($RestartReindexMode -eq 'full') -CooldownSeconds $DailyGraphCooldownSeconds -Prefix 'pre_restart_reindex')) {
-            $ok = $false
-        }
-    }
-
     if ($ok) {
         Write-Watchdog ("pre_restart_reindex_done mode={0} targets={1}" -f $RestartReindexMode, $targetsText)
         if (-not (Test-IndexTarget -Targets $RestartReindexTargets -Target 'assets')) {
@@ -1537,7 +1464,7 @@ function Invoke-PostRecoverReindex {
     if ($targets.Count -eq 0) { return $true }
 
     $ok = Invoke-DailyReindex -Root $Root -Reason $phase `
-        -Mode $RestartReindexMode -Targets $targets -GraphCooldownSeconds $DailyGraphCooldownSeconds -Prefix 'restart_reindex' -ResultToken 'RESTART_REINDEX'
+        -Mode $RestartReindexMode -Targets $targets -Prefix 'restart_reindex' -ResultToken 'RESTART_REINDEX'
     $targetsText = $targets -join ','
     if ($ok) {
         Write-Watchdog ("RESULT=RESTART_REINDEX_OK phase={0} mode={1} targets={2}" -f $phase, $RestartReindexMode, $targetsText)
@@ -1786,11 +1713,11 @@ $script:runDailyReindexNowConsumed = $false
 
 if (-not $DisableDailyReindex -and -not $ProbeOnly -and -not $ProbeBuildLocksOnly) {
     if ($DailyReindexWaitTimeoutSec -lt 0 -or $DailyReindexWaitPollSec -le 0 -or
-        $DailyReindexActionTimeoutSec -le 0 -or $DailyGraphCooldownSeconds -lt 0 -or
+        $DailyReindexActionTimeoutSec -le 0 -or
         @($DailyReindexTargets).Count -eq 0 -or
         (-not $SkipRestartReindex -and @($RestartReindexTargets).Count -eq 0)) {
-        Write-Watchdog ("RESULT=BLOCKED reason=invalid_reindex_arguments wait_timeout={0} wait_poll={1} action_timeout={2} graph_cooldown={3} daily_target_count={4} restart_target_count={5}" -f `
-                $DailyReindexWaitTimeoutSec, $DailyReindexWaitPollSec, $DailyReindexActionTimeoutSec, $DailyGraphCooldownSeconds, @($DailyReindexTargets).Count, @($RestartReindexTargets).Count)
+        Write-Watchdog ("RESULT=BLOCKED reason=invalid_reindex_arguments wait_timeout={0} wait_poll={1} action_timeout={2} daily_target_count={3} restart_target_count={4}" -f `
+                $DailyReindexWaitTimeoutSec, $DailyReindexWaitPollSec, $DailyReindexActionTimeoutSec, @($DailyReindexTargets).Count, @($RestartReindexTargets).Count)
         exit 3
     }
 

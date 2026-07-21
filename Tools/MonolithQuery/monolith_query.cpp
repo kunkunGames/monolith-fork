@@ -48,6 +48,11 @@
 
 #include "sqlite3.h"
 #include <nlohmann/json.hpp>
+#include "../../Source/MonolithSource/Public/MonolithSourceConsoleSchema.h"
+#undef MONOLITH_SOURCE_CONSOLE_TRIGGER_NAMES
+#include "../../Source/MonolithSource/Public/MonolithSourceGraphSearchSchema.h"
+#undef MONOLITH_SOURCE_GRAPH_SEARCH_TRIGGER_NAMES
+#include "../../Source/MonolithSource/Public/MonolithSourceSymbolSearchSchema.h"
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
@@ -537,6 +542,7 @@ static bool query_rows_ok(Database& db, const std::string& sql,
                           const std::vector<std::string>& params,
                           Rows& rows, std::string& error) {
     rows.clear();
+    error.clear();
     sqlite3_stmt* stmt = nullptr;
     int rc = sqlite3_prepare_v2(db.db, sql.c_str(), -1, &stmt, nullptr);
     if (rc != SQLITE_OK) {
@@ -552,8 +558,11 @@ static bool query_rows_ok(Database& db, const std::string& sql,
         Row row;
         for (int c = 0; c < ncols; ++c) {
             const char* name = sqlite3_column_name(stmt, c);
+            const std::string key = name ? name : "";
+            if (sqlite3_column_type(stmt, c) == SQLITE_FLOAT)
+                row.doubles[key] = sqlite3_column_double(stmt, c);
             const char* val = (const char*)sqlite3_column_text(stmt, c);
-            row.cols[name ? name : ""] = val ? val : "";
+            row.cols[key] = val ? val : "";
         }
         rows.push_back(std::move(row));
     }
@@ -610,30 +619,6 @@ static std::string lower_copy(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return value;
-}
-
-static std::string sql_quote(std::string value) {
-    for (size_t pos = 0; (pos = value.find('\'', pos)) != std::string::npos; pos += 2)
-        value.replace(pos, 1, "''");
-    return "'" + value + "'";
-}
-
-static std::string sqlite_readonly_uri(const std::string& path) {
-    const std::string normalized = fs::absolute(fs::path(path)).lexically_normal().generic_string();
-    std::ostringstream encoded;
-    encoded << "file://";
-    if (normalized.empty() || normalized.front() != '/') encoded << '/';
-    encoded << std::uppercase << std::hex;
-    for (const unsigned char ch : normalized) {
-        if (std::isalnum(ch) || ch == '-' || ch == '.' || ch == '_' || ch == '~' ||
-            ch == '/' || ch == ':') {
-            encoded << static_cast<char>(ch);
-        } else {
-            encoded << '%' << std::setw(2) << std::setfill('0') << static_cast<int>(ch);
-        }
-    }
-    encoded << "?mode=ro&cache=private";
-    return encoded.str();
 }
 
 static std::string trim_copy(std::string value) {
@@ -1580,7 +1565,8 @@ static bool looks_like_source_file_path(const std::string& value) {
 class SourceActions {
     Database db;
     std::string source_db_path;
-    static constexpr const char* kSourceSchemaVersion = "3";
+    static constexpr const char* kSourceSchemaVersion =
+        MonolithSourceGraphSearchSchema::SchemaVersionText;
 
     Rows resolve_function_symbol_rows(const std::string& symbol) {
         std::string lookup = symbol;
@@ -1619,15 +1605,6 @@ public:
     void open(const std::string& path, bool query_only = true) {
         source_db_path = path;
         db.open(path, query_only);
-    }
-
-    std::string graph_db_path(const Args& args) const {
-        std::string explicit_graph = args.opt("graph_db");
-        if (!explicit_graph.empty()) return explicit_graph;
-        fs::path source_path(source_db_path);
-        fs::path dir = source_path.parent_path();
-        if (dir.empty()) dir = ".";
-        return (dir / "graph.db").string();
     }
 
     std::string get_file_path(int file_id) {
@@ -2452,6 +2429,8 @@ LIMIT ?
         bool run_expensive_checks = include_counts || include_deep_checks;
         bool needs_reindex = false;
         bool needs_fts_repair = false;
+        bool needs_symbols_fts_repair = false;
+        bool needs_graph_node_fts_repair = false;
         bool needs_crg_repair = false;
         bool needs_override_repair = false;
         json root = {
@@ -2468,32 +2447,259 @@ LIMIT ?
         auto info = [&](const std::string& name, const std::string& detail) {
             root["checks"].push_back({{"check", name}, {"result", "info"}, {"detail", detail}});
         };
+        auto graph_object_probe = [&](const std::string& type,
+                                      const std::string& name,
+                                      bool& exists,
+                                      std::string& error) {
+            Rows rows;
+            const bool ok = query_rows_ok(
+                db,
+                "SELECT 1 FROM sqlite_master WHERE type = ? AND name = ?;",
+                {type, name},
+                rows,
+                error);
+            exists = ok && !rows.empty();
+            return ok;
+        };
 
+        bool has_files_table = false;
+        bool has_symbols_table = false;
         for (const char* t : {"modules", "files", "symbols", "inheritance", "references", "includes", "meta"}) {
             bool has = object_exists(db, "table", t);
+            if (std::strcmp(t, "files") == 0) has_files_table = has;
+            if (std::strcmp(t, "symbols") == 0) has_symbols_table = has;
             if (!has) needs_reindex = true;
             check(std::string("table:") + t, has, has ? std::string("table ") + t + " present" : std::string("missing table ") + t);
         }
         for (const char* f : {"symbols_fts", "source_fts"}) {
             bool has = object_exists(db, "table", f);
             if (!has) {
-                if (std::string(f) == "symbols_fts") needs_fts_repair = true;
+                if (std::string(f) == "symbols_fts") {
+                    needs_fts_repair = true;
+                    needs_symbols_fts_repair = true;
+                }
                 else needs_reindex = true;
             }
             check(std::string("fts:") + f, has, has ? std::string("FTS table ") + f + " present" : std::string("missing FTS table ") + f);
         }
-        for (const char* tr : {"symbols_ai", "symbols_ad"}) {
+        bool has_graph_node_view = false;
+        std::string graph_view_error;
+        const bool graph_view_probe_ok = graph_object_probe(
+            "view", "source_graph_nodes", has_graph_node_view, graph_view_error);
+        if (!graph_view_probe_ok || !has_graph_node_view) {
+            needs_fts_repair = true;
+            needs_graph_node_fts_repair = true;
+        }
+        check(
+            "fts:graph_nodes_view",
+            graph_view_probe_ok && has_graph_node_view,
+            !graph_view_probe_ok
+                ? "source_graph_nodes VIEW readiness probe failed: " + graph_view_error
+                : (has_graph_node_view
+                    ? "canonical source_graph_nodes view present"
+                    : "missing source_graph_nodes view (run source.repair_fts target=graph_nodes)"));
+        bool has_graph_node_fts = false;
+        std::string graph_fts_error;
+        const bool graph_fts_probe_ok = graph_object_probe(
+            "table", "source_graph_nodes_fts", has_graph_node_fts, graph_fts_error);
+        if (!graph_fts_probe_ok || !has_graph_node_fts) {
+            needs_fts_repair = true;
+            needs_graph_node_fts_repair = true;
+        }
+        check(
+            "fts:graph_nodes_table",
+            graph_fts_probe_ok && has_graph_node_fts,
+            !graph_fts_probe_ok
+                ? "source_graph_nodes_fts readiness probe failed: " + graph_fts_error
+                : (has_graph_node_fts
+                    ? "external-content FTS table source_graph_nodes_fts present"
+                    : "missing source_graph_nodes_fts (run source.repair_fts target=graph_nodes)"));
+        for (const char* tr : MonolithSourceGraphSearchSchema::TriggerNames) {
+            bool has = false;
+            std::string trigger_error;
+            const bool trigger_probe_ok = graph_object_probe(
+                "trigger", tr, has, trigger_error);
+            if (!trigger_probe_ok || !has) {
+                needs_fts_repair = true;
+                needs_graph_node_fts_repair = true;
+            }
+            check(
+                std::string("trigger:") + tr,
+                trigger_probe_ok && has,
+                !trigger_probe_ok
+                    ? std::string("trigger readiness probe failed for ") + tr + ": " + trigger_error
+                    : (has
+                        ? std::string("trigger ") + tr + " present"
+                        : std::string("missing trigger ") + tr
+                            + " (source_graph_nodes_fts may drift; run source.repair_fts target=graph_nodes)"));
+        }
+        for (const char* tr : MonolithSourceSymbolSearchSchema::TriggerNames) {
             bool has = object_exists(db, "trigger", tr);
-            if (!has) needs_fts_repair = true;
+            if (!has) {
+                needs_fts_repair = true;
+                needs_symbols_fts_repair = true;
+            }
             check(std::string("trigger:") + tr, has, has ? std::string("trigger ") + tr + " present" : std::string("missing trigger ") + tr + " (symbols_fts may drift)");
         }
 
         std::string schema_ver = scalar_str(db, "SELECT value FROM meta WHERE key = 'schema_version';");
         if (schema_ver != kSourceSchemaVersion) needs_reindex = true;
         check("meta:schema_version", schema_ver == kSourceSchemaVersion, schema_ver.empty() ? "meta.schema_version missing" : "schema_version=" + schema_ver + " (expected " + std::string(kSourceSchemaVersion) + ")");
+        std::string graph_node_fts_version;
+        std::string graph_version_error;
+        Rows graph_version_rows;
+        const bool graph_version_probe_ok = query_rows_ok(
+            db,
+            "SELECT value FROM meta WHERE key = 'source_graph_nodes_fts_version';",
+            {},
+            graph_version_rows,
+            graph_version_error);
+        if (graph_version_probe_ok && !graph_version_rows.empty()) {
+            graph_node_fts_version = graph_version_rows.front().get("value");
+        }
+        if (!graph_version_probe_ok
+            || graph_node_fts_version != MonolithSourceGraphSearchSchema::FtsVersion) {
+            needs_fts_repair = true;
+            needs_graph_node_fts_repair = true;
+        }
+        check(
+            "meta:source_graph_nodes_fts_version",
+            graph_version_probe_ok
+                && graph_node_fts_version == MonolithSourceGraphSearchSchema::FtsVersion,
+            !graph_version_probe_ok
+                ? "source_graph_nodes_fts_version probe failed: " + graph_version_error
+                : (graph_node_fts_version.empty()
+                ? "source_graph_nodes_fts_version missing (run source.repair_fts target=graph_nodes)"
+                : "source_graph_nodes_fts_version=" + graph_node_fts_version
+                    + " (expected " + MonolithSourceGraphSearchSchema::FtsVersion
+                    + "; run source.repair_fts target=graph_nodes)"));
+
+        // Shallow readiness must exercise real index-owned rows. External-
+        // content SELECT COUNT(*) can read through to the content VIEW and hide
+        // drift, so probe one deterministic File and one Symbol via MATCH+rowid.
+        if (has_graph_node_view && has_graph_node_fts) {
+            auto first_probe_token = [](const std::string& text) {
+                std::string best;
+                std::string current;
+                for (unsigned char ch : text) {
+                    if (std::isalnum(ch) || ch == '_') {
+                        current.push_back(static_cast<char>(ch));
+                    } else {
+                        if (current.size() > best.size()) best = current;
+                        current.clear();
+                    }
+                }
+                if (current.size() > best.size()) best = current;
+                return best;
+            };
+            auto base_family_has_rows = [&](const char* table, bool table_exists,
+                                            bool& has_rows, std::string& error) {
+                has_rows = false;
+                if (!table_exists) return true;
+                Rows rows;
+                const std::string sql = "SELECT 1 FROM " + std::string(table) + " LIMIT 1;";
+                if (!query_rows_ok(db, sql, {}, rows, error)) return false;
+                has_rows = !rows.empty();
+                return true;
+            };
+            bool has_base_files = false;
+            bool has_base_symbols = false;
+            std::string base_probe_error;
+            const bool base_probe_ok = base_family_has_rows(
+                "files", has_files_table, has_base_files, base_probe_error)
+                && base_family_has_rows(
+                    "symbols", has_symbols_table, has_base_symbols, base_probe_error);
+
+            int probe_rows = 0;
+            int probe_failures = base_probe_ok ? 0 : 1;
+            std::string probe_error;
+            if (!base_probe_ok) probe_error = base_probe_error;
+            auto probe_sample = [&](const char* family,
+                                    bool family_required,
+                                    const char* sample_sql) {
+                Rows samples;
+                std::string error;
+                if (!query_rows_ok(db, sample_sql, {}, samples, error)) {
+                    probe_error = std::string(family) + " sample query failed: " + error;
+                    ++probe_failures;
+                    return false;
+                }
+                if (samples.empty()) {
+                    if (family_required) {
+                        probe_error = std::string(family)
+                            + " base rows exist but the graph VIEW returned no sample";
+                        ++probe_failures;
+                    }
+                    return true;
+                }
+                const std::string token = first_probe_token(samples.front().get("name"));
+                if (token.empty()) {
+                    if (family_required) {
+                        probe_error = std::string(family)
+                            + " graph sample has no searchable token";
+                        ++probe_failures;
+                    }
+                    return true;
+                }
+                ++probe_rows;
+                Rows hits;
+                if (!query_rows_ok(
+                        db,
+                        "SELECT 1 FROM source_graph_nodes_fts "
+                        "WHERE source_graph_nodes_fts MATCH ? AND rowid = ? LIMIT 1;",
+                        {escape_fts(token), samples.front().get("id")},
+                        hits,
+                        error)) {
+                    probe_error = std::string(family) + " MATCH probe failed: " + error;
+                    ++probe_failures;
+                    return false;
+                }
+                if (hits.empty()) {
+                    probe_error = std::string(family)
+                        + " graph sample is absent from index-owned MATCH rows";
+                    ++probe_failures;
+                }
+                return true;
+            };
+            const bool probe_executed = base_probe_ok && probe_sample(
+                "File",
+                has_base_files,
+                "SELECT id,name FROM source_graph_nodes "
+                "WHERE id = (SELECT -MIN(id) FROM files) LIMIT 1;")
+                && probe_sample(
+                    "Symbol",
+                    has_base_symbols,
+                    "SELECT id,name FROM source_graph_nodes "
+                    "WHERE id = (SELECT MIN(id) FROM symbols) LIMIT 1;");
+            const bool probe_ok = probe_executed && probe_failures == 0;
+            if (!probe_ok) {
+                needs_fts_repair = true;
+                needs_graph_node_fts_repair = true;
+            }
+            check(
+                "fts:graph_nodes_readiness",
+                probe_ok,
+                probe_ok
+                    ? "bounded required-family File/Symbol MATCH readiness probe passed ("
+                        + std::to_string(probe_rows) + " row(s); base File="
+                        + (has_base_files ? "present" : "empty") + ", Symbol="
+                        + (has_base_symbols ? "present" : "empty") + ")"
+                    : "bounded graph-node FTS probe failed ("
+                        + std::to_string(probe_failures)
+                        + " failure(s))"
+                        + (probe_error.empty() ? "" : ": " + probe_error)
+                        + "; run source.repair_fts target=graph_nodes");
+        } else {
+            info(
+                "fts:graph_nodes_readiness",
+                "skipped because graph-node VIEW/FTS is missing");
+        }
 
         int64_t sym_cnt = -1;
+        int64_t file_cnt = -1;
         int64_t source_fts_cnt = -1;
+        int64_t graph_node_cnt = -1;
+        int64_t graph_node_fts_cnt = -1;
         if (run_expensive_checks) {
             int64_t orphan_symbols = count_rows(db,
                 "SELECT COUNT(*) FROM symbols s "
@@ -2513,19 +2719,102 @@ LIMIT ?
 
             sym_cnt = count_rows(db, "SELECT COUNT(*) FROM symbols;");
             int64_t sym_fts_cnt = count_rows(db, "SELECT COUNT(*) FROM symbols_fts;");
-            if (sym_cnt != sym_fts_cnt) needs_fts_repair = true;
+            if (sym_cnt != sym_fts_cnt) {
+                needs_fts_repair = true;
+                needs_symbols_fts_repair = true;
+            }
             check("fts:symbols_row_parity", sym_cnt == sym_fts_cnt,
                 "symbols=" + std::to_string(sym_cnt) + " symbols_fts=" + std::to_string(sym_fts_cnt) + (sym_cnt == sym_fts_cnt ? "" : " (mismatch -> source.repair_fts target=symbols)"));
             source_fts_cnt = count_rows(db, "SELECT COUNT(*) FROM source_fts;");
             info("fts:source_fts_info", "source_fts rows=" + std::to_string(source_fts_cnt) + " (plain fts5; not rebuildable; reindex to repair)");
+            if (has_graph_node_view && has_graph_node_fts) {
+                auto graph_count = [&](const char* sql, int64_t& value, std::string& error) {
+                    Rows rows;
+                    if (!query_rows_ok(db, sql, {}, rows, error)) return false;
+                    if (rows.empty() || rows.front().get("count").empty()) {
+                        error = "count query returned no scalar row";
+                        return false;
+                    }
+                    value = rows.front().get_int64("count", -1);
+                    return value >= 0;
+                };
+                std::string graph_count_error;
+                std::string graph_fts_count_error;
+                file_cnt = count_rows(db, "SELECT COUNT(*) FROM files;");
+                const bool graph_count_ok = graph_count(
+                    "SELECT COUNT(*) AS count FROM source_graph_nodes;",
+                    graph_node_cnt,
+                    graph_count_error);
+                // docsize is the index-owned row manifest. COUNT(*) on an
+                // external-content FTS table can read through to its VIEW.
+                const bool graph_fts_count_ok = graph_count(
+                    "SELECT COUNT(*) AS count FROM source_graph_nodes_fts_docsize;",
+                    graph_node_fts_cnt,
+                    graph_fts_count_error);
+                const int64_t expected_graph_node_cnt =
+                    (file_cnt >= 0 && sym_cnt >= 0) ? file_cnt + sym_cnt : -1;
+                const bool graph_projection_parity_ok = graph_count_ok
+                    && expected_graph_node_cnt >= 0
+                    && expected_graph_node_cnt == graph_node_cnt;
+                if (!graph_projection_parity_ok) {
+                    needs_fts_repair = true;
+                    needs_graph_node_fts_repair = true;
+                }
+                check(
+                    "fts:graph_nodes_projection_parity",
+                    graph_projection_parity_ok,
+                    "files+symbols=" + std::to_string(expected_graph_node_cnt)
+                        + " source_graph_nodes=" + std::to_string(graph_node_cnt)
+                        + (graph_projection_parity_ok
+                            ? ""
+                            : " (projection mismatch -> source.repair_fts target=graph_nodes)"));
+
+                const bool graph_index_parity_ok = graph_count_ok && graph_fts_count_ok
+                    && graph_node_cnt == graph_node_fts_cnt;
+                if (!graph_index_parity_ok) {
+                    needs_fts_repair = true;
+                    needs_graph_node_fts_repair = true;
+                }
+                std::string parity_detail =
+                    "source_graph_nodes=" + std::to_string(graph_node_cnt)
+                    + " indexed_docs=" + std::to_string(graph_node_fts_cnt);
+                if (!graph_count_error.empty()) {
+                    parity_detail += " content_count_error=" + graph_count_error;
+                }
+                if (!graph_fts_count_error.empty()) {
+                    parity_detail += " docsize_count_error=" + graph_fts_count_error;
+                }
+                if (!graph_index_parity_ok) {
+                    parity_detail += " (mismatch -> source.repair_fts target=graph_nodes)";
+                }
+                check(
+                    "fts:graph_nodes_row_parity",
+                    graph_index_parity_ok,
+                    parity_detail);
+            } else {
+                check(
+                    "fts:graph_nodes_projection_parity",
+                    false,
+                    "graph-node VIEW/FTS missing; run source.repair_fts target=graph_nodes");
+                check(
+                    "fts:graph_nodes_row_parity",
+                    false,
+                    "graph-node VIEW/FTS missing; run source.repair_fts target=graph_nodes");
+            }
         } else {
             info("integrity:orphan_symbols", "skipped; pass --include-deep-checks=true or --include-counts=true");
             info("integrity:orphan_references", "skipped; pass --include-deep-checks=true or --include-counts=true");
             info("fts:symbols_row_parity", "skipped; pass --include-deep-checks=true or --include-counts=true");
             info("fts:source_fts_info", "source_fts row count skipped; pass --include-deep-checks=true or --include-counts=true");
+            info("fts:graph_nodes_projection_parity", "skipped; pass --include-deep-checks=true or --include-counts=true");
+            info("fts:graph_nodes_row_parity", "skipped; pass --include-deep-checks=true or --include-counts=true");
         }
         std::string journal_mode = scalar_str(db, "PRAGMA journal_mode;");
-        root["schema"] = {{"schema_version", schema_ver}, {"journal_mode", journal_mode}};
+        root["schema"] = {
+            {"schema_version", schema_ver},
+            {"source_graph_nodes_fts_version", graph_node_fts_version},
+            {"journal_mode", journal_mode},
+        };
         if (lower_copy(journal_mode) == "wal") {
             auto file_size = [](const std::string& path) -> uintmax_t {
                 std::error_code ec;
@@ -2558,6 +2847,8 @@ LIMIT ?
                 {"references", count_rows(db, "SELECT COUNT(*) FROM \"references\";")},
                 {"inheritance", count_rows(db, "SELECT COUNT(*) FROM inheritance;")},
                 {"source_fts", source_fts_cnt},
+                {"source_graph_nodes", graph_node_cnt},
+                {"source_graph_nodes_fts", graph_node_fts_cnt},
             };
         }
         const size_t warnings_before_crg = root["warnings"].size();
@@ -2595,13 +2886,14 @@ LIMIT ?
         root["check_depth"] = run_expensive_checks ? "deep" : "shallow";
         root["summary"] = root["warnings"].empty()
             ? (run_expensive_checks
-                ? "EngineSource schema, triggers, symbols_fts parity, CRG cache and integrity OK"
+                ? "EngineSource schema, source FTS parity, graph-node FTS parity, CRG cache and integrity OK"
                 : "EngineSource schema, required tables/triggers, and CRG structure OK; deep parity checks skipped")
             : std::to_string(root["warnings"].size()) + " health warning(s)";
 
         json reason_codes = json::array();
         if (needs_reindex) reason_codes.push_back("reindex_required");
         if (needs_fts_repair) reason_codes.push_back("fts_repair_required");
+        if (needs_graph_node_fts_repair) reason_codes.push_back("graph_node_fts_repair_required");
         if (needs_crg_repair) reason_codes.push_back("crg_cache_repair_required");
         if (needs_override_repair) reason_codes.push_back("override_edges_repair_required");
         if (reason_codes.empty()) {
@@ -2609,12 +2901,14 @@ LIMIT ?
                 ? "deep_health_clean"
                 : "shallow_health_clean_deep_check_optional");
         }
-        bool maintenance_required = needs_reindex || needs_fts_repair || needs_crg_repair || needs_override_repair;
+        bool maintenance_required = needs_reindex || needs_fts_repair
+            || needs_graph_node_fts_repair || needs_crg_repair || needs_override_repair;
         json maintenance = {
             {"maintenance_required", maintenance_required},
             {"expensive_maintenance_required", maintenance_required},
             {"reindex_required", needs_reindex},
-            {"repair_fts_required", needs_fts_repair},
+            {"repair_fts_required", needs_fts_repair || needs_graph_node_fts_repair},
+            {"repair_graph_nodes_fts_required", needs_graph_node_fts_repair},
             {"repair_crg_cache_required", needs_crg_repair},
             {"repair_override_edges_required", needs_override_repair},
             {"deep_health_ran", run_expensive_checks},
@@ -2638,7 +2932,8 @@ LIMIT ?
         };
         if (needs_crg_repair) add_next_unique("source.repair_crg_cache");
         if (needs_override_repair) add_next_unique("source.repair_crg_cache --scope=override_edges");
-        if (needs_fts_repair) add_next_unique("source.repair_fts --target=symbols");
+        if (needs_symbols_fts_repair) add_next_unique("source.repair_fts --target=symbols");
+        if (needs_graph_node_fts_repair) add_next_unique("source.repair_fts --target=graph_nodes");
         if (needs_reindex) {
             add_next_unique("source.trigger_project_reindex");
             add_next_unique("source.trigger_reindex");
@@ -2684,7 +2979,7 @@ LIMIT ?
     }
 
     json source_repair_fts_json(const std::string& target, bool execute) {
-        std::string t = target.empty() ? "all" : target;
+        std::string t = lower_copy(target.empty() ? "all" : target);
         json root = {
             {"input", {{"target", t}, {"execute", execute}}},
             {"limits", {{"target", t}, {"execute", execute}}},
@@ -2692,37 +2987,238 @@ LIMIT ?
             {"plan", json::array()},
             {"truncated", false},
         };
-        if (t != "all" && t != "symbols" && t != "source") {
+        if (t != "all" && t != "symbols" && t != "graph_nodes"
+            && t != "console_objects" && t != "source") {
             root["status"] = "error";
-            root["summary"] = "Unknown target '" + t + "' (expected all|symbols|source)";
+            root["summary"] = "Unknown target '" + t
+                + "' (expected all|symbols|graph_nodes|console_objects|source)";
             add_next(root, {"source.repair_fts", "source.health"});
             return root;
         }
         bool do_symbols = (t == "all" || t == "symbols");
+        bool do_console = (t == "all" || t == "console_objects");
+        bool do_graph_nodes = (t == "all" || t == "graph_nodes");
         bool asked_source = (t == "all" || t == "source");
+        const bool graph_nodes_ready = object_exists(db, "view", "source_graph_nodes")
+            && object_exists(db, "table", "source_graph_nodes_fts");
+        auto try_count = [&](const char* sql, int64_t& value) {
+            Rows rows;
+            std::string error;
+            if (!query_rows_ok(db, sql, {}, rows, error)
+                || rows.empty()
+                || rows.front().get("count").empty()) {
+                return false;
+            }
+            value = rows.front().get_int64("count", -1);
+            return value >= 0;
+        };
         json before = json::object();
-        if (do_symbols) before["symbols_fts"] = count_rows(db, "SELECT COUNT(*) FROM symbols_fts;");
+        if (do_symbols && object_exists(db, "table", "symbols_fts")) {
+            int64_t count = -1;
+            if (try_count("SELECT COUNT(*) AS count FROM symbols_fts;", count)) {
+                before["symbols_fts"] = count;
+            }
+        }
+        if (do_console && object_exists(db, "table", "console_objects_fts")) {
+            int64_t count = -1;
+            if (try_count("SELECT COUNT(*) AS count FROM console_objects_fts;", count)) {
+                before["console_objects_fts"] = count;
+            }
+        }
+        if (do_graph_nodes) {
+            int64_t count = -1;
+            if (object_exists(db, "view", "source_graph_nodes")
+                && try_count("SELECT COUNT(*) AS count FROM source_graph_nodes;", count)) {
+                before["source_graph_nodes"] = count;
+            }
+            if (object_exists(db, "table", "source_graph_nodes_fts_docsize")
+                && try_count("SELECT COUNT(*) AS count FROM source_graph_nodes_fts_docsize;", count)) {
+                before["source_graph_nodes_fts"] = count;
+            }
+        }
         root["before"] = before;
-        if (do_symbols) root["plan"].push_back("INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild');");
+        if (do_symbols) {
+            root["plan"].push_back("CREATE missing canonical symbols/source FTS tables and symbols maintenance triggers");
+            root["plan"].push_back("INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild');");
+        }
+        if (do_console) {
+            root["plan"].push_back("CREATE missing canonical console snapshot tables/FTS/triggers");
+            root["plan"].push_back("INSERT INTO console_objects_fts(console_objects_fts) VALUES('rebuild');");
+        }
+        if (do_graph_nodes) {
+            root["plan"].push_back("DROP and recreate canonical source_graph_nodes VIEW");
+            root["plan"].push_back("DROP and recreate source_graph_nodes_fts plus 9 maintenance triggers");
+            root["plan"].push_back("REBUILD and integrity-check source_graph_nodes_fts");
+            root["plan"].push_back(
+                "STAMP source_graph_nodes_fts_version="
+                + std::string(MonolithSourceGraphSearchSchema::FtsVersion)
+                + " and schema_version="
+                + MonolithSourceGraphSearchSchema::SchemaVersionText);
+        }
         if (asked_source) root["warnings"].push_back("source_fts is a plain fts5 table (no backing content); run source.trigger_reindex / trigger_project_reindex to repopulate source line search.");
         if (!execute) {
             root["status"] = "ok";
-            root["summary"] = do_symbols ? "Dry-run: symbols_fts would be rebuilt. Pass --execute to apply." : "Dry-run: nothing rebuildable for this target.";
+            root["summary"] = (do_symbols || do_console || do_graph_nodes)
+                ? "Dry-run: FTS table(s) would be rebuilt. Pass execute=true to apply."
+                : "Dry-run: nothing rebuildable for this target.";
             root["after"] = json::object();
             add_next(root, {"source.repair_fts", "source.health"});
             return root;
         }
-        if (do_symbols) {
-            db.exec("BEGIN;");
-            db.exec("INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild');");
-            db.exec("COMMIT;");
+        root["integrity"] = json::object();
+        auto run_graph_node_integrity_check = [&](const char* phase) {
+            try {
+                db.exec(
+                    "INSERT INTO source_graph_nodes_fts(source_graph_nodes_fts,rank) "
+                    "VALUES('integrity-check',1);");
+                root["integrity"][phase] = {
+                    {"status", "ok"},
+                    {"detail", "FTS index matches external content"},
+                };
+                return true;
+            } catch (const std::exception& e) {
+                root["integrity"][phase] = {
+                    {"status", "warning"},
+                    {"detail", e.what()},
+                };
+                return false;
+            }
+        };
+        if (do_graph_nodes && graph_nodes_ready
+            && !run_graph_node_integrity_check("before")) {
+            root["warnings"].push_back(
+                "source_graph_nodes_fts failed pre-repair integrity-check; recreating the canonical graph-node search schema");
+        } else if (do_graph_nodes && !graph_nodes_ready) {
+            root["integrity"]["before"] = {
+                {"status", "info"},
+                {"detail", "skipped because the canonical VIEW/FTS objects are missing"},
+            };
+        }
+        auto drop_graph_search_object_by_actual_type = [&](const char* name) {
+            const bool is_graph_view = std::strcmp(name, "source_graph_nodes") == 0;
+            const bool is_graph_fts = std::strcmp(name, "source_graph_nodes_fts") == 0;
+            if (!is_graph_view && !is_graph_fts) {
+                die("Refusing to drop a non-canonical graph-search object");
+            }
+
+            Rows rows;
+            std::string error;
+            if (!query_rows_ok(
+                    db,
+                    "SELECT type FROM sqlite_master WHERE name = ? LIMIT 1;",
+                    {name},
+                    rows,
+                    error)) {
+                die("Could not inspect graph-search object '" + std::string(name)
+                    + "': " + error);
+            }
+            if (rows.empty()) return;
+
+            const std::string actual_type = lower_copy(rows.front().get("type"));
+            const char* drop_sql = nullptr;
+            if (is_graph_view && actual_type == "view") {
+                drop_sql = "DROP VIEW source_graph_nodes;";
+            } else if (is_graph_view && actual_type == "table") {
+                drop_sql = "DROP TABLE source_graph_nodes;";
+            } else if (is_graph_fts && actual_type == "view") {
+                drop_sql = "DROP VIEW source_graph_nodes_fts;";
+            } else if (is_graph_fts && actual_type == "table") {
+                drop_sql = "DROP TABLE source_graph_nodes_fts;";
+            } else {
+                die("Cannot repair graph-search object '" + std::string(name)
+                    + "' with unexpected sqlite_master type '" + actual_type + "'");
+            }
+            db.exec(drop_sql);
+        };
+
+        if (do_symbols || do_console || do_graph_nodes) {
+            try {
+                db.exec("BEGIN;");
+                if (do_symbols) {
+                    db.exec(MonolithSourceSymbolSearchSchema::TablesSql);
+                    db.exec(MonolithSourceSymbolSearchSchema::TriggersSql);
+                    db.exec("INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild');");
+                }
+                if (do_console) {
+                    db.exec(MonolithSourceConsoleSchema::TablesSql);
+                    db.exec(MonolithSourceConsoleSchema::FtsSql);
+                    db.exec(MonolithSourceConsoleSchema::TriggersSql);
+                    db.exec("INSERT INTO console_objects_fts(console_objects_fts) VALUES('rebuild');");
+                }
+                if (do_graph_nodes) {
+                    // A partially migrated/corrupt database can hold these
+                    // canonical names with the opposite SQLite object type.
+                    // DROP ... IF EXISTS is still type-sensitive, so normalize
+                    // both fixed allowlisted names before applying shared DDL.
+                    drop_graph_search_object_by_actual_type("source_graph_nodes_fts");
+                    drop_graph_search_object_by_actual_type("source_graph_nodes");
+                    db.exec(MonolithSourceGraphSearchSchema::DropSql);
+                    db.exec(MonolithSourceGraphSearchSchema::ViewSql);
+                    db.exec(MonolithSourceGraphSearchSchema::FtsSql);
+                    db.exec(MonolithSourceGraphSearchSchema::TriggersSql);
+                    db.exec("INSERT INTO source_graph_nodes_fts(source_graph_nodes_fts) VALUES('rebuild');");
+                    db.exec(
+                        "INSERT INTO source_graph_nodes_fts(source_graph_nodes_fts,rank) "
+                        "VALUES('integrity-check',1);");
+                    root["integrity"]["after"] = {
+                        {"status", "ok"},
+                        {"detail", "FTS index matches external content"},
+                    };
+                    const std::string graph_version_stamp =
+                        "INSERT OR REPLACE INTO meta(key,value) "
+                        "VALUES('source_graph_nodes_fts_version','"
+                        + std::string(MonolithSourceGraphSearchSchema::FtsVersion)
+                        + "');";
+                    db.exec(graph_version_stamp.c_str());
+                    const std::string schema_version_stamp =
+                        "INSERT OR REPLACE INTO meta(key,value) "
+                        "VALUES('schema_version','"
+                        + std::string(MonolithSourceGraphSearchSchema::SchemaVersionText)
+                        + "');";
+                    db.exec(schema_version_stamp.c_str());
+                }
+                db.exec("COMMIT;");
+            } catch (const std::exception& e) {
+                try {
+                    db.exec("ROLLBACK;");
+                } catch (...) {
+                }
+                root["status"] = "error";
+                root["summary"] = "FTS rebuild failed; rolled back";
+                root["warnings"].push_back(e.what());
+                root["after"] = json::object();
+                add_next(root, {"source.health", "source.trigger_reindex"});
+                return root;
+            }
         }
         json after = json::object();
-        if (do_symbols) after["symbols_fts"] = count_rows(db, "SELECT COUNT(*) FROM symbols_fts;");
+        if (do_symbols && object_exists(db, "table", "symbols_fts")) {
+            int64_t count = -1;
+            if (try_count("SELECT COUNT(*) AS count FROM symbols_fts;", count)) {
+                after["symbols_fts"] = count;
+            }
+        }
+        if (do_console && object_exists(db, "table", "console_objects_fts")) {
+            int64_t count = -1;
+            if (try_count("SELECT COUNT(*) AS count FROM console_objects_fts;", count)) {
+                after["console_objects_fts"] = count;
+            }
+        }
+        if (do_graph_nodes) {
+            int64_t count = -1;
+            if (try_count("SELECT COUNT(*) AS count FROM source_graph_nodes;", count)) {
+                after["source_graph_nodes"] = count;
+            }
+            if (try_count("SELECT COUNT(*) AS count FROM source_graph_nodes_fts_docsize;", count)) {
+                after["source_graph_nodes_fts"] = count;
+            }
+        }
         root["after"] = after;
         root["status"] = "ok";
-        root["summary"] = do_symbols ? "Rebuilt symbols_fts" : "Nothing rebuilt; see warnings for source_fts reindex guidance";
-        add_next(root, {"source.health", "source.search_symbols"});
+        root["summary"] = (do_symbols || do_console || do_graph_nodes)
+            ? "Rebuilt FTS tables"
+            : "Nothing rebuilt; see warnings for source_fts reindex guidance";
+        add_next(root, {"source.health", "source.search_source", "source.search_crg_graph"});
         return root;
     }
 
@@ -2734,338 +3230,295 @@ LIMIT ?
         print_json(crg_repair_cache_json(db, "source", args.opt("scope", "all"), args.opt_bool("execute", false)));
     }
 
-    json build_crg_graph_json(const Args& args) {
-        const std::string graph_path = graph_db_path(args);
-        const bool execute = args.opt_bool("execute", false);
-        const bool force = args.opt_bool("force", false);
-        // Cooldown window for the graph.db export rebuild. Default 1800s (30 min):
-        // collapses a chained/bursty repair_crg_cache + build_crg_graph loop into
-        // at most one graph rebuild per window unless --force. 0 disables the gate.
-        const int cooldown_seconds = args.opt_int("cooldown_seconds", 1800);
-        const json source_counts = source_graph_build_counts(db);
-        json root = {
-            {"input", {{"execute", execute}, {"force", force}, {"cooldown_seconds", cooldown_seconds}, {"source_db", source_db_path}, {"graph_db", graph_path}}},
-            {"limits", {{"execute", execute}, {"force", force}, {"cooldown_seconds", cooldown_seconds}}},
-            {"graph_db", graph_path},
-            {"source_db", source_db_path},
-            {"build_mode", "atomic_temp_replace"},
-            {"plan", json::array({
-                "BUILD CRG-compatible nodes/edges/metadata/FTS schema into a same-directory temp graph DB",
-                "REPLACE graph nodes from EngineSource files + symbols",
-                "REPLACE graph edges from file containment, references and inheritance",
-                "REBUILD nodes_fts from nodes",
-                "VALIDATE temp graph counts, FTS parity, schema_version=9 and source signature metadata",
-                "Atomically replace Saved/graph.db only after validation"
-            })},
-            {"source_counts", source_counts},
-            {"warnings", json::array()},
-            {"truncated", false},
-        };
-
-        if (!execute) {
-            if (fs::exists(graph_path)) {
-                Database graph;
-                std::string open_error;
-                if (!try_open_readonly_database(graph, graph_path, open_error)) {
-                    json busy = graph_busy_json("source.build_crg_graph", graph_path, open_error);
-                    busy["input"] = root["input"];
-                    busy["source_db"] = source_db_path;
-                    busy["source_counts"] = source_counts;
-                    busy["build_mode"] = root["build_mode"];
-                    busy["summary"] = "Dry-run: CRG graph database is busy; no writes were attempted";
-                    return busy;
-                }
-                root["before"] = crg_graph_counts(graph);
-            } else {
-                root["before"] = json::object();
-                root["warnings"].push_back("graph database does not exist yet");
-            }
-            root["after"] = json::object();
-            root["status"] = "ok";
-            root["summary"] = "Dry-run: Saved/graph.db would be rebuilt from EngineSource.db. Pass --execute to apply.";
-            root["next_actions"] = json::array({"source.build_crg_graph --execute", "source.crg_graph_health", "source.search_source"});
-            return root;
-        }
-
-        const std::string lock_path = graph_path + ".rebuild.lock";
-        root["lock_path"] = lock_path;
-        GraphRebuildLock rebuild_lock(lock_path);
-        json busy;
-        if (!rebuild_lock.acquire(busy)) {
-            busy["input"] = root["input"];
-            busy["graph_db"] = graph_path;
-            busy["source_db"] = source_db_path;
-            busy["build_mode"] = root["build_mode"];
-            return busy;
-        }
-
-        json existing_metadata = json::object();
-        if (fs::exists(graph_path)) {
-            Database existing_graph;
-            std::string open_error;
-            if (!try_open_readonly_database(existing_graph, graph_path, open_error)) {
-                json busy_graph = graph_busy_json("source.build_crg_graph", graph_path, open_error);
-                busy_graph["input"] = root["input"];
-                busy_graph["source_db"] = source_db_path;
-                busy_graph["lock_path"] = lock_path;
-                busy_graph["build_mode"] = root["build_mode"];
-                return busy_graph;
-            }
-            root["before"] = crg_graph_counts(existing_graph);
-            if (!force && graph_metadata_matches_source(existing_graph, source_counts, existing_metadata)) {
-                root["after"] = root["before"];
-                root["metadata"] = existing_metadata;
-                root["status"] = "ok";
-                root["summary"] = "Saved/graph.db is already current for the EngineSource source signature";
-                root["skipped"] = true;
-                root["replaced"] = false;
-                root["skip_reason"] = "parity_fresh";
-                root["next_actions"] = json::array({"source.search_crg_graph", "source.crg_graph_health", "source.review_context"});
-                return root;
-            }
-            root["metadata_before"] = existing_metadata;
-
-            // Cooldown gate (CLAUDE.md §12; SPEC_MonolithToolCallReliabilityBacklog
-            // §5.1). graph.db is an export/search cache, NOT the source of truth for
-            // risk_score/review_context, so when an immediately preceding
-            // repair_crg_cache churns the EngineSource signature we must not rebuild
-            // it more than once per cooldown window unless --force. This caps the
-            // daily repair+build maintenance-loop wall-time without masking a real
-            // change: the first build after the window still rebuilds, and the
-            // existing signature check above still fast-skips an unchanged source.
-            if (!force && cooldown_seconds > 0) {
-                const std::string last_epoch_str =
-                    scalar_str(existing_graph, "SELECT value FROM metadata WHERE key = 'last_build_epoch';");
-                long long last_epoch = 0;
-                if (!last_epoch_str.empty()) {
-                    try { last_epoch = std::stoll(last_epoch_str); } catch (...) { last_epoch = 0; }
-                }
-                const long long now_epoch = static_cast<long long>(std::time(nullptr));
-                const long long age = now_epoch - last_epoch;
-                if (last_epoch > 0 && age >= 0 && age < static_cast<long long>(cooldown_seconds)) {
-                    root["after"] = root["before"];
-                    root["metadata"] = existing_metadata;
-                    root["status"] = "ok";
-                    root["skipped"] = true;
-                    root["replaced"] = false;
-                    root["skip_reason"] = "cooldown";
-                    root["seconds_since_last_build"] = age;
-                    root["summary"] = "Saved/graph.db rebuild skipped: last build was "
-                        + std::to_string(age) + "s ago, within the " + std::to_string(cooldown_seconds)
-                        + "s cooldown (EngineSource signature likely churned via repair_crg_cache). Pass --force to rebuild now.";
-                    root["next_actions"] = json::array({"source.search_crg_graph", "source.crg_graph_health", "source.review_context"});
-                    return root;
-                }
-            }
-        } else {
-            root["before"] = json::object();
-            root["warnings"].push_back("graph database does not exist yet");
-        }
-
-        bool ok = true;
-        std::string error;
-        Database graph;
-        const std::string temp_path = graph_path + ".rebuild." + std::to_string(current_process_id()) + ".tmp";
-        root["temp_graph_db"] = temp_path;
-        root["replaced"] = false;
-        root["skipped"] = false;
-
-        remove_file_best_effort(temp_path);
-        remove_sqlite_sidecars_best_effort(temp_path);
-
-        auto fail = [&](const std::string& label, const std::string& err) {
-            ok = false;
-            root["warnings"].push_back("CRG graph rebuild failed at " + label + (err.empty() ? "" : ": " + err));
-        };
-
-        graph.open_or_create(temp_path);
-        if (!exec_sql_ok(graph, "PRAGMA foreign_keys=OFF;", error)) fail("pragma foreign_keys", error);
-        // The graph export is a read-only consumer of EngineSource.db. Attaching a plain
-        // pathname makes SQLite enlist the authoritative source DB in the graph write
-        // transaction, which can create/recover a source rollback journal and race live
-        // index readers. A mode=ro private URI enforces the ownership boundary at SQLite.
-        if (ok && !exec_sql_ok(graph,
-                "ATTACH DATABASE " + sql_quote(sqlite_readonly_uri(source_db_path)) + " AS src;", error)) {
-            fail("attach read-only source", error);
-        }
-        if (ok && !exec_sql_ok(graph, "DROP TABLE IF EXISTS nodes_fts;", error)) fail("drop stale nodes_fts", error);
-        if (ok && !ensure_crg_graph_base_tables(graph, error)) fail("create base schema", error);
-        if (ok && !exec_sql_ok(graph, "BEGIN;", error)) fail("begin transaction", error);
-        if (ok) {
-            for (const auto& step : crg_graph_build_sql(source_db_path, source_counts)) {
-                if (!exec_sql_ok(graph, step.second, error)) {
-                    fail(step.first, error);
-                    break;
-                }
-            }
-        }
-        if (ok) {
-            // Stamp the build time so the cooldown gate above can short-circuit
-            // rapid repeat rebuilds (SPEC_MonolithToolCallReliabilityBacklog §5.1).
-            const std::string now_epoch = std::to_string(static_cast<long long>(std::time(nullptr)));
-            if (!exec_sql_ok(graph,
-                    "INSERT OR REPLACE INTO metadata(key,value) VALUES('last_build_epoch'," + sql_quote(now_epoch) + ");",
-                    error)) {
-                fail("metadata last_build_epoch", error);
-            }
-        }
-        if (ok && !ensure_crg_graph_indexes(graph, error)) fail("create indexes", error);
-        if (ok) {
-            if (!exec_sql_ok(graph, "COMMIT;", error)) {
-                fail("commit", error);
-                std::string rollback_error;
-                exec_sql_ok(graph, "ROLLBACK;", rollback_error);
-            }
-        } else {
-            std::string rollback_error;
-            exec_sql_ok(graph, "ROLLBACK;", rollback_error);
-        }
-        std::string detach_error;
-        exec_sql_ok(graph, "DETACH DATABASE src;", detach_error);
-
-        json temp_counts = ok ? crg_graph_counts(graph) : json::object();
-        const std::string schema_version = ok ? scalar_str(graph, "SELECT value FROM metadata WHERE key = 'schema_version';") : "";
-        json validation = {
-            {"nodes_gt_zero", ok && temp_counts.value("nodes", static_cast<int64_t>(-1)) > 0},
-            {"edges_gt_zero", ok && temp_counts.value("edges", static_cast<int64_t>(-1)) > 0},
-            {"fts_row_parity", ok && temp_counts.value("nodes", static_cast<int64_t>(-1)) == temp_counts.value("fts_rows", static_cast<int64_t>(-2))},
-            {"schema_version", schema_version},
-            {"schema_version_ok", ok && schema_version == "9"},
-        };
-        validation["passed"] = validation["nodes_gt_zero"].get<bool>()
-            && validation["edges_gt_zero"].get<bool>()
-            && validation["fts_row_parity"].get<bool>()
-            && validation["schema_version_ok"].get<bool>();
-        root["validation"] = validation;
-        root["after"] = temp_counts;
-
-        if (ok && !validation["passed"].get<bool>()) {
-            fail("validate temp graph", validation.dump());
-        }
-
-        graph.close();
-        if (ok) {
-            std::string replace_error;
-            if (!atomic_replace_file(temp_path, graph_path, replace_error)) {
-                fail("atomic replace", replace_error);
-            } else {
-                root["replaced"] = true;
-            }
-        }
-
-        if (!ok) {
-            remove_file_best_effort(temp_path);
-            remove_sqlite_sidecars_best_effort(temp_path);
-        }
-
-        root["status"] = ok ? "ok" : "error";
-        root["summary"] = ok
-            ? "Rebuilt Saved/graph.db atomically from EngineSource files, symbols, references and inheritance"
-            : "Saved/graph.db atomic rebuild failed; existing graph database was left untouched";
-        root["next_actions"] = ok
-            ? json::array({"source.search_crg_graph", "source.crg_graph_health", "source.review_context"})
-            : json::array({"source.crg_graph_health", "source.health", "source.search_source"});
-        return root;
-    }
-
-    void build_crg_graph(const Args& args) {
-        print_json(build_crg_graph_json(args));
-    }
-
-    void rebuild_crg_graph(const Args& args) {
-        print_json(build_crg_graph_json(args));
-    }
-
-    void crg_graph_health(const Args& args) {
-        print_json(crg_graph_health_json(graph_db_path(args)));
-    }
-
     void search_crg_graph(const Args& args) {
         std::string q = args.opt("query", args.opt("q"));
         if (q.empty() && !args.positional.empty()) q = args.positional[0];
         if (q.empty()) die("search_crg_graph requires a query argument (positional or --query)");
         int cap = clamp_int(args.opt_int("limit", 20), 1, 200);
         std::string kind = args.opt("kind");
-        std::string graph_path = graph_db_path(args);
 
         json root = {
-            {"input", {{"query", q}, {"kind", kind}, {"graph_db", graph_path}}},
+            {"backend", "engine_source_fts"},
+            {"input", {{"query", q}, {"kind", kind}}},
             {"limits", {{"limit", cap}}},
-            {"graph_db", graph_path},
             {"results", json::array()},
             {"warnings", json::array()},
+            {"count", 0},
+            {"used_fts", false},
             {"truncated", false},
         };
 
-        if (!fs::exists(graph_path)) {
+        auto print_unavailable = [&](const std::string& detail) {
             root["status"] = "warning";
-            root["summary"] = "CRG graph database is missing";
-            root["warnings"].push_back("Saved/graph.db is missing; run source.build_crg_graph --execute");
-            root["next_actions"] = json::array({"source.build_crg_graph --execute"});
+            root["summary"] = "EngineSource CRG graph-node search is unavailable";
+            root["warnings"].push_back(detail);
+            root["next_actions"] = json::array({
+                "source.health",
+                "source.repair_fts --target=graph_nodes --execute",
+                "source.trigger_reindex",
+            });
             print_json(root);
+        };
+
+        if (!object_exists(db, "view", "source_graph_nodes")
+            || !object_exists(db, "table", "source_graph_nodes_fts")) {
+            print_unavailable(
+                "EngineSource graph-node VIEW/FTS is missing; inspect source.health and repair or reindex EngineSource.db");
             return;
         }
 
-        Database graph;
-        std::string open_error;
-        if (!try_open_readonly_database(graph, graph_path, open_error)) {
-            json busy = graph_busy_json("source.search_crg_graph", graph_path, open_error);
-            busy["input"] = root["input"];
-            busy["limits"] = root["limits"];
-            busy["results"] = json::array();
-            busy["count"] = 0;
-            if (!looks_like_graph_busy_error(open_error)) busy["status"] = "warning";
-            print_json(busy);
-            return;
-        }
         bool used_fts = false;
         Rows rows;
-        if (object_exists(graph, "table", "nodes_fts")) {
-            std::string sql =
-                "SELECT n.id,n.kind,n.name,n.qualified_name,n.file_path,n.line_start,n.line_end,"
-                "n.language,n.signature,bm25(nodes_fts) AS rank "
-                "FROM nodes_fts f JOIN nodes n ON n.id = f.rowid "
-                "WHERE nodes_fts MATCH ?";
-            std::vector<std::string> params = {escape_fts(q)};
-            if (!kind.empty()) {
-                sql += " AND lower(n.kind) = lower(?)";
-                params.push_back(kind);
+        std::string query_error;
+        const std::string escaped_query = escape_fts(q);
+
+        // FTS5 can satisfy ORDER BY its hidden rank column as a bounded top-K
+        // scan. Joining the unbounded match set to the UNION-backed canonical
+        // VIEW before applying known-path priority forces SQLite to materialize
+        // and sort every hit; broad identifiers such as UObject then take
+        // minutes on a full EngineSource DB. Resolve a deliberately generous
+        // ranked rowid pool through the canonical VIEW instead. If that pool
+        // cannot prove the requested known-path/kind result boundary, expand
+        // it geometrically before using the original unbounded statement as a
+        // final correctness fallback. This keeps equal-rank boundary cases
+        // exact without making the common broad-query path pay the full join.
+        const int initial_fts_candidate_limit = std::max(4096, (cap + 1) * 64);
+        const int max_fts_candidate_limit = std::max(initial_fts_candidate_limit, 65536);
+        int fts_candidate_limit = initial_fts_candidate_limit;
+        int fts_candidate_expansions = 0;
+        root["limits"]["fts_candidate_limit_initial"] = initial_fts_candidate_limit;
+        root["limits"]["fts_candidate_limit"] = fts_candidate_limit;
+        root["limits"]["fts_candidate_expansions"] = fts_candidate_expansions;
+        root["limits"]["fts_full_rank_fallback"] = false;
+        root["limits"]["fts_candidate_pool_truncated"] = false;
+
+        Rows ranked_rows;
+        bool needs_full_rank_fallback = false;
+        while (true) {
+            ranked_rows.clear();
+            const std::string ranked_sql =
+                "SELECT rowid AS id, rank FROM source_graph_nodes_fts "
+                "WHERE source_graph_nodes_fts MATCH ? AND rank MATCH 'bm25()' "
+                "ORDER BY rank LIMIT "
+                + std::to_string(fts_candidate_limit + 1);
+            if (!query_rows_ok(db, ranked_sql, {escaped_query}, ranked_rows, query_error)) {
+                print_unavailable(
+                    "EngineSource graph-node FTS query failed; LIKE fallback was not run: "
+                    + query_error);
+                return;
             }
-            sql += " ORDER BY CASE WHEN n.file_path IS NULL OR n.file_path = '' OR n.file_path = '<unknown>' THEN 1 ELSE 0 END, rank LIMIT " + std::to_string(cap + 1);
-            rows = query(graph, sql, params);
-            used_fts = !rows.empty();
+
+            const bool candidate_pool_may_be_truncated =
+                ranked_rows.size() > static_cast<size_t>(fts_candidate_limit);
+            double first_omitted_rank = 0.0;
+            if (candidate_pool_may_be_truncated) {
+                first_omitted_rank = ranked_rows.back().get_double("rank");
+                ranked_rows.pop_back();
+            }
+            root["limits"]["fts_candidate_pool_truncated"] = candidate_pool_may_be_truncated;
+
+            if (ranked_rows.empty()) break;
+
+            std::map<int64_t, double> ranks;
+            std::map<int64_t, std::string> rank_text;
+            std::string node_sql =
+                "SELECT id,kind,name,qualified_name,file_path,line_start,line_end,language,signature "
+                "FROM source_graph_nodes WHERE id IN (";
+            for (size_t index = 0; index < ranked_rows.size(); ++index) {
+                if (index > 0) node_sql += ',';
+                const int64_t id = ranked_rows[index].get_int64("id");
+                // VIEW.id has no SQLite affinity because it comes from a UNION
+                // expression. Binding the database-owned integer rowid as TEXT
+                // makes `id IN (?)` miss otherwise equal numeric values. The
+                // value is already parsed as int64, so an integer literal is
+                // both injection-safe and preserves the intended comparison.
+                node_sql += std::to_string(id);
+                ranks[id] = ranked_rows[index].get_double("rank");
+                rank_text[id] = ranked_rows[index].get("rank");
+            }
+            node_sql += ')';
+            std::vector<std::string> node_params;
+            if (!kind.empty()) {
+                node_sql += " AND lower(kind) = lower(?)";
+                node_params.push_back(kind);
+            }
+            node_sql += ';';
+
+            Rows candidate_rows;
+            if (!query_rows_ok(db, node_sql, node_params, candidate_rows, query_error)) {
+                print_unavailable(
+                    "EngineSource graph-node candidate projection failed; LIKE fallback was not run: "
+                    + query_error);
+                return;
+            }
+
+            Rows filtered_rows;
+            filtered_rows.reserve(candidate_rows.size());
+            for (Row& candidate : candidate_rows) {
+                const auto rank_it = ranks.find(candidate.get_int64("id"));
+                if (rank_it == ranks.end()) continue;
+                candidate.doubles["rank"] = rank_it->second;
+                candidate.cols["rank"] = rank_text[candidate.get_int64("id")];
+                filtered_rows.push_back(std::move(candidate));
+            }
+
+            std::sort(filtered_rows.begin(), filtered_rows.end(), [](const Row& left, const Row& right) {
+                const bool left_known = known_source_path(left.get("file_path"));
+                const bool right_known = known_source_path(right.get("file_path"));
+                if (left_known != right_known) return left_known;
+                const double left_rank = left.get_double("rank");
+                const double right_rank = right.get_double("rank");
+                if (left_rank != right_rank) return left_rank < right_rank;
+                if (left.get("kind") != right.get("kind")) return left.get("kind") < right.get("kind");
+                if (left.get("qualified_name") != right.get("qualified_name"))
+                    return left.get("qualified_name") < right.get("qualified_name");
+                return left.get_int64("id") < right.get_int64("id");
+            });
+
+            const size_t known_count = static_cast<size_t>(std::count_if(
+                filtered_rows.begin(), filtered_rows.end(),
+                [](const Row& row) { return known_source_path(row.get("file_path")); }));
+            bool candidate_pool_proves_boundary = !candidate_pool_may_be_truncated;
+            if (!candidate_pool_proves_boundary
+                && known_count >= static_cast<size_t>(cap + 1)) {
+                // An omitted equal-rank row can still win the legacy
+                // kind/qualified_name/id tie-break. Only a strictly better
+                // (cap+1)th known-path rank proves that no omitted candidate
+                // can enter the observable result/truncation boundary.
+                const double observable_boundary_rank =
+                    filtered_rows[static_cast<size_t>(cap)].get_double("rank");
+                candidate_pool_proves_boundary = observable_boundary_rank < first_omitted_rank;
+            }
+
+            if (candidate_pool_proves_boundary) {
+                if (filtered_rows.size() > static_cast<size_t>(cap + 1))
+                    filtered_rows.resize(static_cast<size_t>(cap + 1));
+                rows = std::move(filtered_rows);
+                break;
+            }
+
+            if (fts_candidate_limit < max_fts_candidate_limit) {
+                fts_candidate_limit = std::min(max_fts_candidate_limit, fts_candidate_limit * 2);
+                ++fts_candidate_expansions;
+                root["limits"]["fts_candidate_limit"] = fts_candidate_limit;
+                root["limits"]["fts_candidate_expansions"] = fts_candidate_expansions;
+                continue;
+            }
+
+            needs_full_rank_fallback = true;
+            break;
         }
 
+        if (needs_full_rank_fallback) {
+            root["limits"]["fts_full_rank_fallback"] = true;
+            root["warnings"].push_back(
+                "Broad FTS candidates exceeded the bounded rank expansion while preserving known-path and kind ordering; "
+                "use a more specific query when low latency is required");
+
+            std::string full_sql =
+                "SELECT n.id,n.kind,n.name,n.qualified_name,n.file_path,n.line_start,n.line_end,"
+                "n.language,n.signature,bm25(source_graph_nodes_fts) AS rank "
+                "FROM source_graph_nodes_fts f JOIN source_graph_nodes n ON n.id = f.rowid "
+                "WHERE source_graph_nodes_fts MATCH ?";
+            std::vector<std::string> full_params = {escaped_query};
+            if (!kind.empty()) {
+                full_sql += " AND lower(n.kind) = lower(?)";
+                full_params.push_back(kind);
+            }
+            full_sql +=
+                " ORDER BY CASE WHEN n.file_path IS NULL OR n.file_path = '' OR n.file_path = '<unknown>'"
+                " THEN 1 ELSE 0 END, rank, n.kind, n.qualified_name, n.id LIMIT "
+                + std::to_string(cap + 1);
+            if (!query_rows_ok(db, full_sql, full_params, rows, query_error)) {
+                print_unavailable(
+                    "EngineSource graph-node full-rank FTS fallback failed; LIKE fallback was not run: "
+                    + query_error);
+                return;
+            }
+        }
+        root["limits"]["fts_candidates"] = ranked_rows.size();
+        used_fts = !rows.empty();
+
+        // Preserve the legacy boundary: LIKE is a zero-hit fallback, not a
+        // second candidate source merged into successful FTS results. SQL
+        // failures are not zero hits and must never be hidden by fallback.
         if (rows.empty()) {
             std::string sql =
                 "SELECT id,kind,name,qualified_name,file_path,line_start,line_end,language,signature,0 AS rank "
-                "FROM nodes WHERE (lower(name) LIKE ? OR lower(qualified_name) LIKE ? OR lower(file_path) LIKE ?)";
-            std::vector<std::string> params = {"%" + lower_copy(q) + "%", "%" + lower_copy(q) + "%", "%" + lower_copy(q) + "%"};
+                "FROM source_graph_nodes "
+                "WHERE (lower(name) LIKE ? OR lower(qualified_name) LIKE ? OR lower(file_path) LIKE ?)";
+            std::vector<std::string> params = {
+                "%" + lower_copy(q) + "%",
+                "%" + lower_copy(q) + "%",
+                "%" + lower_copy(q) + "%",
+            };
             if (!kind.empty()) {
                 sql += " AND lower(kind) = lower(?)";
                 params.push_back(kind);
             }
-            sql += " ORDER BY CASE WHEN file_path IS NULL OR file_path = '' OR file_path = '<unknown>' THEN 1 ELSE 0 END, CASE WHEN lower(name)=lower(?) THEN 0 WHEN lower(name) LIKE lower(?) THEN 1 ELSE 2 END, name LIMIT " + std::to_string(cap + 1);
+            sql +=
+                " ORDER BY CASE WHEN file_path IS NULL OR file_path = '' OR file_path = '<unknown>'"
+                " THEN 1 ELSE 0 END,"
+                " CASE WHEN lower(name)=lower(?) THEN 0 WHEN lower(name) LIKE lower(?) THEN 1 ELSE 2 END,"
+                " name,kind,qualified_name,id LIMIT "
+                + std::to_string(cap + 1);
             params.push_back(q);
             params.push_back(q + "%");
-            rows = query(graph, sql, params);
+            if (!query_rows_ok(db, sql, params, rows, query_error)) {
+                print_unavailable(
+                    "EngineSource graph-node LIKE fallback query failed: " + query_error);
+                return;
+            }
         }
 
-        bool truncated = (int)rows.size() > cap;
+        bool truncated = static_cast<int>(rows.size()) > cap;
         if (truncated) rows.pop_back();
 
         json results = json::array();
-        std::set<std::string> seen;
+        std::set<std::string> seen_exact;
+        std::set<std::string> seen_known_identities;
+        std::set<std::string> seen_missing_identities;
+        auto stable_identity_qualified_name = [](std::string qualified_name) {
+            // The canonical VIEW appends #<rowid> so qualified names remain
+            // unique FTS documents. Strip only that numeric storage suffix
+            // when comparing semantic symbol identity across duplicate rows.
+            const size_t marker = qualified_name.rfind('#');
+            if (marker == std::string::npos || marker + 1 >= qualified_name.size())
+                return qualified_name;
+            const bool numeric_suffix = std::all_of(
+                qualified_name.begin() + static_cast<std::ptrdiff_t>(marker + 1),
+                qualified_name.end(),
+                [](unsigned char ch) { return std::isdigit(ch) != 0; });
+            if (numeric_suffix) qualified_name.resize(marker);
+            return qualified_name;
+        };
         for (const auto& row : rows) {
             double rank = row.get_double("rank", 0.0);
             std::string file_path = row.get("file_path");
-            std::string key = row.get("qualified_name") + "|" + row.get("kind") + "|" + file_path;
-            if (!seen.insert(key).second) continue;
+            const std::string kind_value = row.get("kind");
+            const std::string qualified_name = row.get("qualified_name");
+            const std::string exact_key = qualified_name + "|" + kind_value + "|" + file_path;
+            if (!seen_exact.insert(exact_key).second) continue;
+
+            // Preserve distinct known-path definitions (including overloads),
+            // but suppress missing-path copies of the same semantic symbol.
+            // SQL ordering is known-path-first, so a trusted row always wins.
+            const std::string semantic_key =
+                stable_identity_qualified_name(qualified_name)
+                + "|" + kind_value
+                + "|" + row.get("name")
+                + "|" + row.get("signature");
+            if (known_source_path(file_path)) {
+                seen_known_identities.insert(semantic_key);
+            } else {
+                if (seen_known_identities.count(semantic_key) != 0) continue;
+                if (!seen_missing_identities.insert(semantic_key).second) continue;
+            }
             results.push_back({
                 {"id", row.get_int64("id")},
-                {"kind", row.get("kind")},
+                {"kind", kind_value},
                 {"name", row.get("name")},
-                {"qualified_name", row.get("qualified_name")},
+                {"qualified_name", qualified_name},
                 {"file_path", short_path(file_path)},
                 {"path_status", source_path_status(file_path)},
                 {"line_start", row.get_int("line_start")},
@@ -3082,7 +3535,11 @@ LIMIT ?
         root["count"] = results.size();
         root["used_fts"] = used_fts;
         root["truncated"] = truncated;
-        root["next_actions"] = json::array({"source.review_context", "source.impact_radius", "source.crg_graph_health"});
+        root["next_actions"] = json::array({
+            "source.review_context",
+            "source.impact_radius",
+            "source.health",
+        });
         print_json(root);
     }
 
@@ -10522,11 +10979,36 @@ public:
 // Main
 // ============================================================
 
+static bool argv_has_normalized_option(
+    int argc,
+    char* argv[],
+    const std::string& expected_key) {
+    for (int index = 1; index < argc; ++index) {
+        const std::string token = argv[index] ? argv[index] : "";
+        if (token.rfind("--", 0) != 0) continue;
+        const size_t equals = token.find('=');
+        const std::string raw_key = token.substr(
+            2,
+            equals == std::string::npos ? std::string::npos : equals - 2);
+        if (normalize_option_key(raw_key) == expected_key) return true;
+    }
+    return false;
+}
+
 int main(int argc, char* argv[]) {
     CliInvocation cli = normalize_global_cli_options(argc, argv);
     g_immutable_readonly = cli.globals.readonly;
     const int effective_argc = cli.argc();
     char** effective_argv = cli.argv_data();
+
+    // Help/catalog routing occurs before Args parsing. Reject the retired
+    // backend selector from raw argv first so `source health --help
+    // --graph-db=...` and bare help cannot bypass the global contract.
+    if (argv_has_normalized_option(argc, argv, "graph_db")) {
+        std::cerr << "--graph-db was removed with the graph.db backend; "
+                     "use --source-db or --db to select EngineSource.db\n";
+        return 2;
+    }
 
     // Version is a top-level command only. Treating it as an action (or action
     // option) would bypass namespace routing and the readonly fallback guard.
@@ -10583,6 +11065,14 @@ int main(int argc, char* argv[]) {
         args = parse_args(effective_argc, effective_argv);
         parsed_args = true;
         parse_args_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
+
+        // graph_db/--graph-db was retired with Saved/graph.db. Reject the
+        // normalized option globally, before catalog validation, path
+        // resolution, or any namespace database open, so no action can silently
+        // accept the obsolete backend selector.
+        if (args.options.count("graph_db")) {
+            die("--graph-db was removed with the graph.db backend; use --source-db or --db to select EngineSource.db");
+        }
 
         // The fixed-name executable is only a compatibility view of the
         // current immutable generation. Windows may keep an older fixed image
@@ -10641,11 +11131,7 @@ int main(int argc, char* argv[]) {
                 {"trigger_project_reindex", [](SourceActions& s, const Args& a) { s.trigger_project_reindex(a); }},
                 {"repair_fts",          [](SourceActions& s, const Args& a) { s.repair_fts(a); }},
                 {"repair_crg_cache",    [](SourceActions& s, const Args& a) { s.repair_crg_cache(a); }},
-                {"build_crg_graph",     [](SourceActions& s, const Args& a) { s.build_crg_graph(a); }},
-                {"rebuild_crg_graph",   [](SourceActions& s, const Args& a) { s.rebuild_crg_graph(a); }},
-                {"repair_crg_graph",    [](SourceActions& s, const Args& a) { s.rebuild_crg_graph(a); }},
                 {"search_crg_graph",    [](SourceActions& s, const Args& a) { s.search_crg_graph(a); }},
-                {"crg_graph_health",    [](SourceActions& s, const Args& a) { s.crg_graph_health(a); }},
                 {"risk_score",          [](SourceActions& s, const Args& a) { s.risk_score(a); }},
                 {"review_hotspots",     [](SourceActions& s, const Args& a) { s.review_hotspots(a); }},
                 {"review_context",      [](SourceActions& s, const Args& a) { s.review_context(a); }},

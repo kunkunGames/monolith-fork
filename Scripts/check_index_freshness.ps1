@@ -5,11 +5,13 @@ Deterministic source/project index freshness chain: health -> stale detection
 
 .DESCRIPTION
 Wraps Binaries/monolith_query.exe health checks for EngineSource.db and
-ProjectIndex.db, extracts the repair action each health warning itself
-indicates (the "... -> repair_crg_cache" hint format), and prints exact
-offline and live-MCP repair commands. With -Execute it runs only those
-warning-indicated repairs (repair_crg_cache / repair_fts) through the offline
-CLI and re-runs health to confirm the result.
+ProjectIndex.db, extracts source repairs from the structured
+maintenance_recommendation / next_actions contract, and prints exact offline
+and live-MCP repair commands. Source FTS repairs must name one bounded target;
+the script never widens a graph_nodes, symbols, console_objects, or source
+recommendation to target=all. With -Execute it runs only those health-indicated
+repairs (repair_crg_cache / repair_fts) through the offline CLI and re-runs
+health to confirm the result.
 
 Writing to the on-disk DBs while the editor's Monolith MCP server is up is
 refused by default; pass -AllowLiveEditor to override, or run the matching
@@ -84,17 +86,111 @@ function Test-McpUp {
     catch { return $false }
 }
 
-# Map a "... -> repair_xxx" hint from a health warning to the exact offline repair argv.
-function Get-RepairArguments {
+# Map a legacy project "... -> repair_xxx" warning to exact offline argv.
+# Source repairs deliberately do not use this text parser: source health owns a
+# structured, target-bearing next_actions contract and must fail closed if it
+# is missing or malformed.
+function Get-LegacyProjectRepairArguments {
     param([string]$Namespace, [string]$Hint)
+    if ($Namespace -ne 'project') { return $null }
     switch ($Hint) {
-        'repair_crg_cache' { return @($Namespace, 'repair_crg_cache', '--execute') }
-        'repair_fts' {
-            if ($Namespace -eq 'project') { return @('project', 'repair_fts', '--target=all', '--execute') }
-            return @('source', 'repair_fts', '--execute')
-        }
+        'repair_crg_cache' { return @('project', 'repair_crg_cache', '--execute') }
+        'repair_fts' { return @('project', 'repair_fts', '--target=all', '--execute') }
         default { return $null }
     }
+}
+
+function Convert-SourceRepairAction {
+    param([AllowNull()][object]$ActionValue)
+
+    $result = [PSCustomObject]@{
+        IsRepair = $false
+        Valid = $true
+        Arguments = @()
+        Reason = ''
+    }
+
+    if ($ActionValue -isnot [string]) {
+        $result.IsRepair = $true
+        $result.Valid = $false
+        $result.Reason = 'source next_actions contains a non-string entry'
+        return $result
+    }
+
+    $actionText = $ActionValue.Trim()
+    if ($actionText -notmatch '(^|\.)repair_[a-z_]+') {
+        return $result
+    }
+
+    $result.IsRepair = $true
+    if ($actionText -match '^source\.repair_fts(?<tail>.*)$') {
+        $tail = $Matches['tail']
+        if ($tail -notmatch '^\s+target=(?<target>[a-z_]+)\s*$') {
+            $result.Valid = $false
+            $result.Reason = "malformed source.repair_fts next_action '$actionText'; exactly one target=<name> argument is required"
+            return $result
+        }
+
+        $target = $Matches['target']
+        $allowedTargets = @('graph_nodes', 'symbols', 'console_objects', 'source')
+        if ($target -notin $allowedTargets) {
+            $result.Valid = $false
+            $result.Reason = "unsupported or over-broad source.repair_fts target '$target'; expected graph_nodes|symbols|console_objects|source"
+            return $result
+        }
+
+        $result.Arguments = @('source', 'repair_fts', "--target=$target", '--execute')
+        return $result
+    }
+
+    if ($actionText -match '^source\.repair_crg_cache(?<tail>.*)$') {
+        $tail = $Matches['tail']
+        if ([string]::IsNullOrWhiteSpace($tail)) {
+            $result.Arguments = @('source', 'repair_crg_cache', '--execute')
+            return $result
+        }
+        if ($tail -match '^\s+scope=(?<scope>all|override_edges)\s*$') {
+            $result.Arguments = @('source', 'repair_crg_cache', "--scope=$($Matches['scope'])", '--execute')
+            return $result
+        }
+
+        $result.Valid = $false
+        $result.Reason = "malformed source.repair_crg_cache next_action '$actionText'"
+        return $result
+    }
+
+    $result.Valid = $false
+    $result.Reason = "unknown source repair next_action '$actionText'"
+    return $result
+}
+
+function Get-BooleanPropertyState {
+    param([AllowNull()][object]$Object, [string]$Name)
+    if (-not $Object) {
+        return [PSCustomObject]@{ Present = $false; Valid = $false; Value = $false }
+    }
+    $property = $Object.PSObject.Properties[$Name]
+    if (-not $property) {
+        return [PSCustomObject]@{ Present = $false; Valid = $true; Value = $false }
+    }
+    $isBoolean = $property.Value -is [bool]
+    return [PSCustomObject]@{
+        Present = $true
+        Valid = $isBoolean
+        Value = $(if ($isBoolean) { [bool]$property.Value } else { $false })
+    }
+}
+
+function Format-LiveRepairRecommendation {
+    param([string[]]$Arguments)
+    $params = [ordered]@{ execute = $true }
+    foreach ($argument in @($Arguments | Select-Object -Skip 2)) {
+        if ($argument -match '^--(?<name>target|scope)=(?<value>[a-z_]+)$') {
+            $params[$Matches['name']] = $Matches['value']
+        }
+    }
+    $paramsJson = $params | ConvertTo-Json -Compress
+    return ('{0}_query("{1}", {2})' -f $Arguments[0], $Arguments[1], $paramsJson)
 }
 
 function Get-HealthState {
@@ -106,6 +202,7 @@ function Get-HealthState {
         Summary   = ''
         Warnings  = @()
         Repairs   = @()
+        RepairErrors = @()
         Error     = $null
     }
     if ($result.ExitCode -ne 0 -or -not $result.Json) {
@@ -116,11 +213,79 @@ function Get-HealthState {
     $state.Status = [string]$result.Json.status
     $state.Summary = [string]$result.Json.summary
     $state.Warnings = @($result.Json.warnings)
-    foreach ($warning in $state.Warnings) {
-        if ($warning -match '->\s*(repair_[a-z_]+)') {
-            $arguments = Get-RepairArguments -Namespace $Namespace -Hint $Matches[1]
-            if ($arguments) { $state.Repairs += , $arguments }
-            else { $state.Repairs += , @() } # unknown hint: counted, never auto-run
+
+    if ($Namespace -eq 'source') {
+        $maintenanceProperty = $result.Json.PSObject.Properties['maintenance_recommendation']
+        $nextActionsProperty = $result.Json.PSObject.Properties['next_actions']
+        $maintenance = if ($maintenanceProperty) { $maintenanceProperty.Value } else { $null }
+        $maintenanceRequiredState = Get-BooleanPropertyState -Object $maintenance -Name 'maintenance_required'
+
+        if (-not $maintenanceProperty -or -not $maintenanceRequiredState.Present -or -not $maintenanceRequiredState.Valid) {
+            if ($state.Status -ne 'ok') {
+                $state.RepairErrors += 'source health warning lacks a valid maintenance_recommendation.maintenance_required boolean'
+            }
+        }
+        elseif ($maintenanceRequiredState.Value) {
+            if (-not $nextActionsProperty -or $null -eq $nextActionsProperty.Value) {
+                $state.RepairErrors += 'source maintenance is required but next_actions is missing'
+            }
+            else {
+                foreach ($nextAction in @($nextActionsProperty.Value)) {
+                    $parsed = Convert-SourceRepairAction -ActionValue $nextAction
+                    if (-not $parsed.IsRepair) { continue }
+                    if (-not $parsed.Valid) {
+                        $state.RepairErrors += $parsed.Reason
+                        continue
+                    }
+                    $state.Repairs += , $parsed.Arguments
+                }
+            }
+
+            $requiredChecks = @(
+                @{ Flag = 'repair_graph_nodes_fts_required'; Action = 'repair_fts'; Option = '--target=graph_nodes' },
+                @{ Flag = 'repair_symbols_fts_required'; Action = 'repair_fts'; Option = '--target=symbols' },
+                @{ Flag = 'repair_crg_cache_required'; Action = 'repair_crg_cache'; Option = $null },
+                @{ Flag = 'repair_override_edges_required'; Action = 'repair_crg_cache'; Option = '--scope=override_edges' }
+            )
+            foreach ($required in $requiredChecks) {
+                $flag = Get-BooleanPropertyState -Object $maintenance -Name $required.Flag
+                if (-not $flag.Valid) {
+                    $state.RepairErrors += "source maintenance flag '$($required.Flag)' is not boolean"
+                    continue
+                }
+                if (-not $flag.Value) { continue }
+                $matching = @($state.Repairs | Where-Object {
+                    $_.Count -ge 2 -and $_[1] -eq $required.Action -and
+                    (-not $required.Option -or $_ -contains $required.Option)
+                })
+                if ($matching.Count -eq 0) {
+                    $expected = if ($required.Option) { "$($required.Action) $($required.Option)" } else { $required.Action }
+                    $state.RepairErrors += "source maintenance flag '$($required.Flag)' lacks exact next_action '$expected'"
+                }
+            }
+
+            $ftsRequired = Get-BooleanPropertyState -Object $maintenance -Name 'repair_fts_required'
+            if (-not $ftsRequired.Valid) {
+                $state.RepairErrors += "source maintenance flag 'repair_fts_required' is not boolean"
+            }
+            elseif ($ftsRequired.Value -and @($state.Repairs | Where-Object { $_.Count -ge 2 -and $_[1] -eq 'repair_fts' }).Count -eq 0) {
+                $state.RepairErrors += 'source maintenance requires FTS repair but no exact target-bearing repair_fts next_action exists'
+            }
+
+            if ($state.RepairErrors.Count -gt 0) {
+                # One malformed structured repair invalidates the whole source
+                # repair plan. Never execute a valid-looking subset.
+                $state.Repairs = @()
+            }
+        }
+    }
+    else {
+        foreach ($warning in $state.Warnings) {
+            if ($warning -match '->\s*(repair_[a-z_]+)') {
+                $arguments = Get-LegacyProjectRepairArguments -Namespace $Namespace -Hint $Matches[1]
+                if ($arguments) { $state.Repairs += , $arguments }
+                else { $state.RepairErrors += "unknown project repair hint '$($Matches[1])'" }
+            }
         }
     }
     return $state
@@ -136,6 +301,9 @@ function Write-HealthReport {
     foreach ($warning in $State.Warnings) {
         Write-Output ("  WARNING {0}" -f $warning)
     }
+    foreach ($repairError in $State.RepairErrors) {
+        Write-Output ("  REPAIR_REJECTED {0}" -f $repairError)
+    }
     $seen = @{}
     foreach ($arguments in $State.Repairs) {
         if ($arguments.Count -eq 0) { continue }
@@ -143,7 +311,7 @@ function Write-HealthReport {
         if ($seen.ContainsKey($key)) { continue }
         $seen[$key] = $true
         Write-Output ("  RECOMMEND offline: {0} {1}" -f $QueryExe, $key)
-        Write-Output ('  RECOMMEND live: {0}_query("{1}", {{ "execute": true }})' -f $State.Namespace, $arguments[1])
+        Write-Output ("  RECOMMEND live: {0}" -f (Format-LiveRepairRecommendation -Arguments $arguments))
     }
 }
 

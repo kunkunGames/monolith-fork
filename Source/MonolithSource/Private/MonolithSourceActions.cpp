@@ -1,6 +1,7 @@
 #include "MonolithSourceActions.h"
 #include "MonolithSourceDatabase.h"
 #include "MonolithSourceReview.h"
+#include "MonolithSourceQueryProcessArgs.h"
 #include "MonolithSourceSubsystem.h"
 #include "MonolithToolInvocationLogger.h"
 #include "MonolithToolRegistry.h"
@@ -18,6 +19,69 @@
 #include "Internationalization/Regex.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+
+namespace MonolithSourceQueryProcessArgs
+{
+	FString Quote(const FString& Arg)
+	{
+		// Match CommandLineToArgvW/MSVC parsing: backslashes are literal except
+		// before a quote, and trailing backslashes must be doubled before the
+		// closing quote. This preserves paths, spaces, and embedded quotes.
+		FString Quoted;
+		Quoted.Reserve(Arg.Len() + 2);
+		Quoted.AppendChar(TEXT('"'));
+		int32 PendingBackslashes = 0;
+		auto AppendBackslashes = [&Quoted](int32 Count)
+		{
+			for (int32 Index = 0; Index < Count; ++Index)
+			{
+				Quoted.AppendChar(TEXT('\\'));
+			}
+		};
+
+		for (const TCHAR Ch : Arg)
+		{
+			if (Ch == TEXT('\\'))
+			{
+				++PendingBackslashes;
+				continue;
+			}
+			if (Ch == TEXT('"'))
+			{
+				AppendBackslashes(PendingBackslashes * 2 + 1);
+				Quoted.AppendChar(Ch);
+				PendingBackslashes = 0;
+				continue;
+			}
+
+			AppendBackslashes(PendingBackslashes);
+			PendingBackslashes = 0;
+			Quoted.AppendChar(Ch);
+		}
+		AppendBackslashes(PendingBackslashes * 2);
+		Quoted.AppendChar(TEXT('"'));
+		return Quoted;
+	}
+
+	FString BuildSearchCrgGraph(
+		const FString& Query,
+		const FString& SourceDbPath,
+		const FString& Kind,
+		int32 Limit)
+	{
+		// Query is deliberately an explicit --query value. A positional value
+		// beginning with "--" would otherwise be parsed as an option (and a
+		// legitimate "--graph-db" search would hit the retired-option gate).
+		FString Args = TEXT("source search_crg_graph --query=") + Quote(Query);
+		Args += TEXT(" --source-db=") + Quote(SourceDbPath);
+		if (!Kind.IsEmpty())
+		{
+			Args += TEXT(" --kind=") + Quote(Kind);
+		}
+		Args += FString::Printf(TEXT(" --limit=%d"), Limit);
+		return Args;
+	}
+}
 
 namespace
 {
@@ -177,13 +241,6 @@ namespace
 		return Ranges;
 	}
 
-	FString QuoteProcessArg(const FString& Arg)
-	{
-		FString Escaped = Arg;
-		Escaped.ReplaceInline(TEXT("\""), TEXT("\\\""));
-		return FString::Printf(TEXT("\"%s\""), *Escaped);
-	}
-
 	FString GetMonolithQueryExePath()
 	{
 		TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("Monolith"));
@@ -244,15 +301,6 @@ namespace
 		return FMonolithActionResult::Success(Parsed);
 	}
 
-	FString OptionalGraphDbArg(const TSharedPtr<FJsonObject>& Params)
-	{
-		FString GraphDb;
-		if (Params.IsValid() && Params->TryGetStringField(TEXT("graph_db"), GraphDb) && !GraphDb.TrimStartAndEnd().IsEmpty())
-		{
-			return TEXT(" --graph-db=") + QuoteProcessArg(GraphDb);
-		}
-		return FString();
-	}
 }
 
 // ============================================================================
@@ -412,7 +460,7 @@ void FMonolithSourceActions::RegisterAll()
 			.Build());
 
 	Registry.RegisterAction(TEXT("source"), TEXT("health"),
-		TEXT("Read-only EngineSource diagnostics: schema v1, symbols_ai/ad triggers, symbols_fts parity, orphans"),
+		TEXT("Read-only EngineSource diagnostics: schema v4, source graph-node FTS readiness, native FTS/CRG parity, and orphans"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleHealth),
 		FParamSchemaBuilder()
 			.Optional(TEXT("include_counts"), TEXT("bool"), TEXT("Include row-count summary and deep parity checks"), TEXT("false"))
@@ -420,10 +468,10 @@ void FMonolithSourceActions::RegisterAll()
 			.Build());
 
 	Registry.RegisterAction(TEXT("source"), TEXT("repair_fts"),
-		TEXT("Rebuild symbols_fts (external-content). source_fts is plain fts5 -> reindex guidance. Dry-run unless execute=true"),
+		TEXT("Rebuild external-content symbols, console, or graph-node FTS. source_fts is plain fts5 -> reindex guidance. Dry-run unless execute=true"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleRepairFts),
 		FParamSchemaBuilder()
-			.Optional(TEXT("target"), TEXT("string"), TEXT("all|symbols|source"), TEXT("all"))
+			.Optional(TEXT("target"), TEXT("string"), TEXT("all|symbols|graph_nodes|console_objects|source"), TEXT("all"))
 			.Optional(TEXT("execute"), TEXT("bool"), TEXT("Apply rebuild (sole write gate). Default dry-run"), TEXT("false"))
 			.Build());
 
@@ -435,39 +483,13 @@ void FMonolithSourceActions::RegisterAll()
 			.Optional(TEXT("execute"), TEXT("bool"), TEXT("Apply rebuild (sole write gate). Default dry-run"), TEXT("false"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("source"), TEXT("build_crg_graph"),
-		TEXT("Build Saved/graph.db from EngineSource symbols, references and inheritance via atomic temp replacement. Dry-run unless execute=true"),
-		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleBuildCrgGraph),
-		FParamSchemaBuilder()
-			.Optional(TEXT("execute"), TEXT("bool"), TEXT("Apply graph.db rebuild (sole write gate). Default dry-run"), TEXT("false"))
-			.Optional(TEXT("force"), TEXT("bool"), TEXT("Force rebuild even when graph.db metadata matches the current source signature"), TEXT("false"))
-			.Optional(TEXT("graph_db"), TEXT("string"), TEXT("Optional non-default graph DB path"))
-			.Build());
-
-	Registry.RegisterAction(TEXT("source"), TEXT("rebuild_crg_graph"),
-		TEXT("Alias of build_crg_graph for explicit graph.db rebuilds"),
-		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleRebuildCrgGraph),
-		FParamSchemaBuilder()
-			.Optional(TEXT("execute"), TEXT("bool"), TEXT("Apply graph.db rebuild (sole write gate). Default dry-run"), TEXT("false"))
-			.Optional(TEXT("force"), TEXT("bool"), TEXT("Force rebuild even when graph.db metadata matches the current source signature"), TEXT("false"))
-			.Optional(TEXT("graph_db"), TEXT("string"), TEXT("Optional non-default graph DB path"))
-			.Build());
-
 	Registry.RegisterAction(TEXT("source"), TEXT("search_crg_graph"),
-		TEXT("Search the CRG-compatible Saved/graph.db nodes FTS index"),
+		TEXT("Search the EngineSource-backed canonical File/Symbol graph-node FTS index"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleSearchCrgGraph),
 		FParamSchemaBuilder()
 			.Required(TEXT("query"), TEXT("string"), TEXT("Graph node search query"))
 			.Optional(TEXT("kind"), TEXT("string"), TEXT("Optional node kind filter"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max graph node matches"), TEXT("20"))
-			.Optional(TEXT("graph_db"), TEXT("string"), TEXT("Optional non-default graph DB path"))
-			.Build());
-
-	Registry.RegisterAction(TEXT("source"), TEXT("crg_graph_health"),
-		TEXT("Read-only health check for Saved/graph.db schema, FTS parity and metadata"),
-		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleCrgGraphHealth),
-		FParamSchemaBuilder()
-			.Optional(TEXT("graph_db"), TEXT("string"), TEXT("Optional non-default graph DB path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("source"), TEXT("risk_score"),
@@ -825,92 +847,6 @@ FMonolithActionResult FMonolithSourceActions::HandleRepairCrgCache(const TShared
 	return FMonolithActionResult::Success(DB->RepairCrgCache(Scope, bExecute));
 }
 
-FMonolithActionResult FMonolithSourceActions::HandleBuildCrgGraph(const TSharedPtr<FJsonObject>& Params)
-{
-	const bool bExecute = FMonolithSourceReview::PBool(Params, TEXT("execute"), false);
-	if (bExecute && GEditor)
-	{
-		UMonolithSourceSubsystem* Sub = Cast<UMonolithSourceSubsystem>(
-			GEditor->GetEditorSubsystemBase(UMonolithSourceSubsystem::StaticClass()));
-		if (Sub && Sub->IsIndexing())
-		{
-			return FMonolithActionResult::Error(
-				TEXT("Source indexing is in progress; retry build_crg_graph(execute=true) once it completes"), -32000)
-				.WithHint(TEXT("Use source.build_crg_graph (dry-run) meanwhile, or source.crg_graph_health"));
-		}
-	}
-
-	FString Args = TEXT("source build_crg_graph");
-	if (bExecute)
-	{
-		Args += TEXT(" --execute");
-	}
-	if (FMonolithSourceReview::PBool(Params, TEXT("force"), false))
-	{
-		Args += TEXT(" --force");
-	}
-	Args += OptionalGraphDbArg(Params);
-	if (bExecute)
-	{
-		const FString ExePath = GetMonolithQueryExePath();
-		if (!FPaths::FileExists(ExePath))
-		{
-			return FMonolithActionResult::Error(
-				FString::Printf(TEXT("monolith_query.exe not found: %s"), *ExePath), -32000);
-		}
-
-		uint32 ProcessId = 0;
-		FProcHandle Proc = FPlatformProcess::CreateProc(
-			*ExePath,
-			*Args,
-			true,
-			true,
-			true,
-			&ProcessId,
-			0,
-			*FPaths::GetPath(ExePath),
-			nullptr,
-			nullptr);
-		if (!Proc.IsValid())
-		{
-			return FMonolithActionResult::Error(TEXT("Failed to start async graph.db rebuild process"), -32000);
-		}
-		FPlatformProcess::CloseProc(Proc);
-
-		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-		Result->SetStringField(TEXT("status"), TEXT("started"));
-		Result->SetStringField(TEXT("summary"), TEXT("Started async source.build_crg_graph process"));
-		Result->SetStringField(TEXT("job_id"), FString::Printf(TEXT("source-build-crg-graph-%u"), ProcessId));
-		Result->SetStringField(TEXT("poll_action"), TEXT("source.crg_graph_health"));
-		Result->SetBoolField(TEXT("supports_progress"), true);
-		Result->SetBoolField(TEXT("cancellable"), false);
-		Result->SetNumberField(TEXT("child_pid"), ProcessId);
-		TSharedPtr<FJsonObject> Progress = MakeShared<FJsonObject>();
-		Progress->SetStringField(TEXT("stage"), TEXT("started"));
-		Progress->SetNumberField(TEXT("percent"), 0.0);
-		Progress->SetStringField(TEXT("message"), TEXT("Poll source.crg_graph_health for graph export progress and completion."));
-		Result->SetObjectField(TEXT("progress"), Progress);
-		const FString GraphDb = FMonolithSourceReview::PStr(Params, TEXT("graph_db"));
-		if (!GraphDb.IsEmpty())
-		{
-			Result->SetStringField(TEXT("graph_db"), GraphDb);
-		}
-		Result->SetStringField(TEXT("command"), Args);
-		TArray<TSharedPtr<FJsonValue>> Next;
-		Next.Add(MakeShared<FJsonValueString>(TEXT("source.crg_graph_health")));
-		Next.Add(MakeShared<FJsonValueString>(TEXT("source.search_source")));
-		Next.Add(MakeShared<FJsonValueString>(TEXT("source.review_context")));
-		Result->SetArrayField(TEXT("next_actions"), Next);
-		return FMonolithActionResult::Success(Result);
-	}
-	return RunMonolithQueryJson(Args);
-}
-
-FMonolithActionResult FMonolithSourceActions::HandleRebuildCrgGraph(const TSharedPtr<FJsonObject>& Params)
-{
-	return HandleBuildCrgGraph(Params);
-}
-
 FMonolithActionResult FMonolithSourceActions::HandleSearchCrgGraph(const TSharedPtr<FJsonObject>& Params)
 {
 	const FString Query = FMonolithSourceReview::PStr(Params, TEXT("query"));
@@ -918,22 +854,37 @@ FMonolithActionResult FMonolithSourceActions::HandleSearchCrgGraph(const TShared
 	{
 		return FMonolithActionResult::Error(TEXT("'query' parameter is required"), -32602);
 	}
-
-	FString Args = TEXT("source search_crg_graph ") + QuoteProcessArg(Query);
-	const FString Kind = FMonolithSourceReview::PStr(Params, TEXT("kind"));
-	if (!Kind.IsEmpty())
+	if (!GEditor)
 	{
-		Args += TEXT(" --kind=") + QuoteProcessArg(Kind);
+		return FMonolithActionResult::Error(TEXT("Source index subsystem is not available"), -32000);
 	}
-	Args += FString::Printf(TEXT(" --limit=%d"), FMonolithSourceReview::PInt(Params, TEXT("limit"), 20));
-	Args += OptionalGraphDbArg(Params);
-	return RunMonolithQueryJson(Args);
-}
 
-FMonolithActionResult FMonolithSourceActions::HandleCrgGraphHealth(const TSharedPtr<FJsonObject>& Params)
-{
-	FString Args = TEXT("source crg_graph_health");
-	Args += OptionalGraphDbArg(Params);
+	UMonolithSourceSubsystem* Subsystem = Cast<UMonolithSourceSubsystem>(
+		GEditor->GetEditorSubsystemBase(UMonolithSourceSubsystem::StaticClass()));
+	if (!Subsystem)
+	{
+		return FMonolithActionResult::Error(TEXT("Source index subsystem is not available"), -32000);
+	}
+	if (Subsystem->IsIndexing())
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Source indexing is in progress; retry search_crg_graph once it completes"), -32000)
+			.WithHint(TEXT("Use source.health after indexing completes before retrying the search."))
+			.WithRelatedAction(TEXT("source.health"));
+	}
+	if (!Subsystem->GetDatabase())
+	{
+		return FMonolithActionResult::Error(TEXT("Source index database not available"), -32000)
+			.WithHint(TEXT("Run source.health, then source.trigger_reindex if the database is missing."))
+			.WithRelatedAction(TEXT("source.health"));
+	}
+
+	const FString Kind = FMonolithSourceReview::PStr(Params, TEXT("kind"));
+	const FString Args = MonolithSourceQueryProcessArgs::BuildSearchCrgGraph(
+		Query,
+		Subsystem->GetDatabasePath(),
+		Kind,
+		FMonolithSourceReview::PInt(Params, TEXT("limit"), 20));
 	return RunMonolithQueryJson(Args);
 }
 

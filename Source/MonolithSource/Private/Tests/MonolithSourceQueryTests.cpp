@@ -2,6 +2,7 @@
 #include "MonolithSourceBridgeHelpers.h"
 #include "MonolithSourceDatabase.h"
 #include "MonolithSourceIndexer.h"
+#include "MonolithSourceQueryProcessArgs.h"
 #include "MonolithReindexCommandlet.h"
 #include "MonolithSourceReview.h"
 #include "MonolithSourceSchema.h"
@@ -47,6 +48,104 @@ namespace
 			Stmt.GetColumnValueByIndex(0, Count);
 		}
 		return Count;
+	}
+
+	bool ExecuteSourceSql(FMonolithSourceDatabase& Db, const FString& Sql)
+	{
+		FScopeLock Lock(&Db.GetLock());
+		FSQLiteDatabase* Raw = Db.GetRawHandle();
+		return Raw && Raw->Execute(*Sql);
+	}
+
+	bool SourceObjectExists(FMonolithSourceDatabase& Db, const FString& Type, const FString& Name)
+	{
+		FScopeLock Lock(&Db.GetLock());
+		FSQLiteDatabase* Raw = Db.GetRawHandle();
+		if (!Raw) return false;
+		FSQLitePreparedStatement Stmt;
+		if (!Stmt.Create(*Raw, TEXT("SELECT 1 FROM sqlite_master WHERE type=? AND name=?;"))) return false;
+		Stmt.SetBindingValueByIndex(1, Type);
+		Stmt.SetBindingValueByIndex(2, Name);
+		return Stmt.Step() == ESQLitePreparedStatementStepResult::Row;
+	}
+
+	int64 CountGraphFtsMatches(FMonolithSourceDatabase& Db, const FString& Query)
+	{
+		FScopeLock Lock(&Db.GetLock());
+		FSQLiteDatabase* Raw = Db.GetRawHandle();
+		if (!Raw) return -1;
+		FSQLitePreparedStatement Stmt;
+		if (!Stmt.Create(*Raw,
+			TEXT("SELECT COUNT(*) FROM source_graph_nodes_fts WHERE source_graph_nodes_fts MATCH ?;")))
+		{
+			return -1;
+		}
+		Stmt.SetBindingValueByIndex(1, FMonolithSourceDatabase::EscapeFTS(Query));
+		int64 Count = -1;
+		if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			Stmt.GetColumnValueByIndex(0, Count);
+		}
+		return Count;
+	}
+
+	bool ReadGraphNodeProjection(FMonolithSourceDatabase& Db, int64 Id,
+		FString& OutKind, FString& OutName, FString& OutQualifiedName,
+		FString& OutPath, FString& OutLanguage, FString& OutSignature)
+	{
+		FScopeLock Lock(&Db.GetLock());
+		FSQLiteDatabase* Raw = Db.GetRawHandle();
+		if (!Raw) return false;
+		FSQLitePreparedStatement Stmt;
+		if (!Stmt.Create(*Raw,
+			TEXT("SELECT kind,name,qualified_name,file_path,language,COALESCE(signature,'') ")
+			TEXT("FROM source_graph_nodes WHERE id=?;")))
+		{
+			return false;
+		}
+		Stmt.SetBindingValueByIndex(1, Id);
+		if (Stmt.Step() != ESQLitePreparedStatementStepResult::Row) return false;
+		Stmt.GetColumnValueByIndex(0, OutKind);
+		Stmt.GetColumnValueByIndex(1, OutName);
+		Stmt.GetColumnValueByIndex(2, OutQualifiedName);
+		Stmt.GetColumnValueByIndex(3, OutPath);
+		Stmt.GetColumnValueByIndex(4, OutLanguage);
+		Stmt.GetColumnValueByIndex(5, OutSignature);
+		return true;
+	}
+
+	bool JsonStringArrayContains(const TSharedPtr<FJsonObject>& Object, const FString& Field, const FString& Expected)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (!Object.IsValid() || !Object->TryGetArrayField(Field, Values) || !Values) return false;
+		for (const TSharedPtr<FJsonValue>& Value : *Values)
+		{
+			FString Actual;
+			if (Value.IsValid() && Value->TryGetString(Actual) && Actual == Expected) return true;
+		}
+		return false;
+	}
+
+	bool JsonCheckHasResult(const TSharedPtr<FJsonObject>& Object,
+		const FString& CheckName, const FString& ExpectedResult)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Checks = nullptr;
+		if (!Object.IsValid() || !Object->TryGetArrayField(TEXT("checks"), Checks) || !Checks) return false;
+		for (const TSharedPtr<FJsonValue>& Value : *Checks)
+		{
+			const TSharedPtr<FJsonObject>* Check = nullptr;
+			if (!Value.IsValid() || !Value->TryGetObject(Check) || !Check || !Check->IsValid()) continue;
+			FString ActualName;
+			FString ActualResult;
+			if ((*Check)->TryGetStringField(TEXT("check"), ActualName)
+				&& (*Check)->TryGetStringField(TEXT("result"), ActualResult)
+				&& ActualName == CheckName
+				&& ActualResult == ExpectedResult)
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	FString NormalizeTestPath(FString Path)
@@ -142,6 +241,372 @@ bool FSourceSearchCrgGraphHandlesEmptyQueryTest::RunTest(const FString& Paramete
 	TestFalse(TEXT("Search action should reject empty query"), Result.bSuccess);
 	TestEqual(TEXT("Error code should be invalid params"), Result.ErrorCode, -32602);
 
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceSearchCrgGraphProcessArgsTest,
+	"Monolith.IndexGuard.Source.SearchCrgGraphProcessArgs",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSourceSearchCrgGraphProcessArgsTest::RunTest(const FString& Parameters)
+{
+	const FString LeadingDashArgs = MonolithSourceQueryProcessArgs::BuildSearchCrgGraph(
+		TEXT("--graph-db=Legacy Graph.db"),
+		TEXT("D:\\Project With Spaces\\Saved\\EngineSource.db"),
+		TEXT("Function"),
+		7);
+	TestTrue(TEXT("leading-dash query is an explicit value, never a positional option"),
+		LeadingDashArgs.StartsWith(
+			TEXT("source search_crg_graph --query=\"--graph-db=Legacy Graph.db\"")));
+	TestTrue(TEXT("source DB path with spaces remains one quoted option value"),
+		LeadingDashArgs.Contains(
+			TEXT("--source-db=\"D:\\Project With Spaces\\Saved\\EngineSource.db\"")));
+	TestTrue(TEXT("kind and limit remain explicit options"),
+		LeadingDashArgs.EndsWith(TEXT("--kind=\"Function\" --limit=7")));
+
+	const FString QuotedQueryArgs = MonolithSourceQueryProcessArgs::BuildSearchCrgGraph(
+		TEXT("Find \"Quoted\" Symbol"), TEXT("D:\\Saved\\EngineSource.db"), TEXT(""), 20);
+	TestTrue(TEXT("embedded query quotes survive command-line serialization"),
+		QuotedQueryArgs.Contains(TEXT("--query=\"Find \\\"Quoted\\\" Symbol\"")));
+	TestEqual(TEXT("trailing path backslash is doubled before the closing quote"),
+		MonolithSourceQueryProcessArgs::Quote(TEXT("D:\\Source\\Tail\\")),
+		FString(TEXT("\"D:\\Source\\Tail\\\\\"")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceGraphSearchSchemaAndTriggersTest,
+	"Monolith.IndexGuard.Source.GraphSearchSchemaAndTriggers",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSourceGraphSearchSchemaAndTriggersTest::RunTest(const FString& Parameters)
+{
+	const FString DbPath = FPaths::CreateTempFilename(
+		*FPaths::ProjectIntermediateDir(), TEXT("MonolithSourceGraphSearch"), TEXT(".sqlite"));
+	FMonolithSourceDatabase DB;
+	ON_SCOPE_EXIT
+	{
+		DB.Close();
+		DeleteSourceTestDb(DbPath);
+	};
+
+	TestTrue(TEXT("temporary DB opens for writing"), DB.OpenForWriting(DbPath));
+	TestTrue(TEXT("v4 schema creates"), DB.CreateTablesIfNeeded());
+	TestEqual(TEXT("schema version is v4"), DB.GetMeta(TEXT("schema_version")), FString(TEXT("4")));
+	TestEqual(TEXT("graph search FTS version is stamped once"),
+		DB.GetMeta(TEXT("source_graph_nodes_fts_version")), FString(TEXT("1")));
+	TestTrue(TEXT("canonical graph-node view exists"),
+		SourceObjectExists(DB, TEXT("view"), TEXT("source_graph_nodes")));
+	TestTrue(TEXT("external-content graph-node FTS exists"),
+		SourceObjectExists(DB, TEXT("table"), TEXT("source_graph_nodes_fts")));
+
+	for (const TCHAR* Trigger : MonolithSourceSchema::GraphSearchTriggerNames)
+	{
+		TestTrue(FString::Printf(TEXT("trigger %s exists"), Trigger),
+			SourceObjectExists(DB, TEXT("trigger"), Trigger));
+	}
+
+	const int64 ModuleId = DB.InsertModule(TEXT("GraphModule"), TEXT("/tmp/GraphModule"), TEXT("Runtime"));
+	const int64 FileId = DB.InsertFile(
+		TEXT("/tmp/GraphModule/OldPathNeedle/UnitTest.cpp"), ModuleId, TEXT("cpp"), 80, 0.0);
+	const int64 SymbolId = DB.InsertSymbol(
+		TEXT("Execute"), TEXT("GraphModule::Execute"), TEXT("function"), FileId, 10, 20, 0,
+		TEXT("public"), TEXT("void SignatureNeedle()"), TEXT(""), false);
+	TestTrue(TEXT("graph search fixture inserted"), ModuleId > 0 && FileId > 0 && SymbolId > 0);
+
+	FString Kind, Name, QualifiedName, Path, Language, Signature;
+	TestTrue(TEXT("negative-id File projection exists"),
+		ReadGraphNodeProjection(DB, -FileId, Kind, Name, QualifiedName, Path, Language, Signature));
+	TestEqual(TEXT("File kind preserved"), Kind, FString(TEXT("File")));
+	TestEqual(TEXT("File name is path"), Name, FString(TEXT("/tmp/GraphModule/OldPathNeedle/UnitTest.cpp")));
+	TestEqual(TEXT("File qualified name is path"), QualifiedName, Name);
+	TestEqual(TEXT("cpp file language preserved"), Language, FString(TEXT("cpp")));
+
+	TestTrue(TEXT("symbol projection exists"),
+		ReadGraphNodeProjection(DB, SymbolId, Kind, Name, QualifiedName, Path, Language, Signature));
+	TestEqual(TEXT("test path normalizes function to Test"), Kind, FString(TEXT("Test")));
+	TestEqual(TEXT("symbol name preserved"), Name, FString(TEXT("Execute")));
+	TestEqual(TEXT("symbol qualified name has stable id suffix"),
+		QualifiedName, FString::Printf(TEXT("GraphModule::Execute#%lld"), SymbolId));
+	TestEqual(TEXT("signature preserved"), Signature, FString(TEXT("void SignatureNeedle()")));
+	TestEqual(TEXT("File and Symbol docs are incrementally indexed"),
+		CountSourceRows(DB, TEXT("SELECT COUNT(*) FROM source_graph_nodes_fts_docsize;")), static_cast<int64>(2));
+	TestEqual(TEXT("path token reaches File and child Symbol FTS rows"),
+		CountGraphFtsMatches(DB, TEXT("OldPathNeedle")), static_cast<int64>(2));
+	TestEqual(TEXT("signature-only search reaches Symbol"),
+		CountGraphFtsMatches(DB, TEXT("SignatureNeedle")), static_cast<int64>(1));
+
+	TestTrue(TEXT("file path update succeeds"), ExecuteSourceSql(DB,
+		FString::Printf(TEXT("UPDATE files SET path='/tmp/GraphModule/NewPathNeedle/Unit.cpp' WHERE id=%lld;"), FileId)));
+	TestEqual(TEXT("old path token removed from File and child Symbol"),
+		CountGraphFtsMatches(DB, TEXT("OldPathNeedle")), static_cast<int64>(0));
+	TestEqual(TEXT("new path token added to File and child Symbol"),
+		CountGraphFtsMatches(DB, TEXT("NewPathNeedle")), static_cast<int64>(2));
+	TestTrue(TEXT("renamed symbol projection reads"),
+		ReadGraphNodeProjection(DB, SymbolId, Kind, Name, QualifiedName, Path, Language, Signature));
+	TestEqual(TEXT("path rename also refreshes Test kind"), Kind, FString(TEXT("Function")));
+	TestEqual(TEXT("renamed child symbol path"), Path, FString(TEXT("/tmp/GraphModule/NewPathNeedle/Unit.cpp")));
+
+	TestTrue(TEXT("signature update succeeds"), ExecuteSourceSql(DB,
+		FString::Printf(TEXT("UPDATE symbols SET signature='void UpdatedSignatureNeedle()' WHERE id=%lld;"), SymbolId)));
+	TestEqual(TEXT("old signature token removed"),
+		CountGraphFtsMatches(DB, TEXT("SignatureNeedle")), static_cast<int64>(0));
+	TestEqual(TEXT("updated signature token indexed"),
+		CountGraphFtsMatches(DB, TEXT("UpdatedSignatureNeedle")), static_cast<int64>(1));
+
+	TestTrue(TEXT("file delete succeeds"), ExecuteSourceSql(DB,
+		FString::Printf(TEXT("DELETE FROM files WHERE id=%lld;"), FileId)));
+	TestEqual(TEXT("file delete removes path from File and surviving child Symbol"),
+		CountGraphFtsMatches(DB, TEXT("NewPathNeedle")), static_cast<int64>(0));
+	TestEqual(TEXT("orphaned child Symbol remains searchable by signature"),
+		CountGraphFtsMatches(DB, TEXT("UpdatedSignatureNeedle")), static_cast<int64>(1));
+	TestTrue(TEXT("orphaned symbol projection reads"),
+		ReadGraphNodeProjection(DB, SymbolId, Kind, Name, QualifiedName, Path, Language, Signature));
+	TestTrue(TEXT("orphaned child Symbol path becomes empty"), Path.IsEmpty());
+	TestTrue(TEXT("symbol delete succeeds"), ExecuteSourceSql(DB,
+		FString::Printf(TEXT("DELETE FROM symbols WHERE id=%lld;"), SymbolId)));
+	TestEqual(TEXT("symbol delete removes final signature FTS row"),
+		CountGraphFtsMatches(DB, TEXT("UpdatedSignatureNeedle")), static_cast<int64>(0));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceGraphSearchMigrationAndRepairTest,
+	"Monolith.IndexGuard.Source.GraphSearchMigrationAndRepair",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSourceGraphSearchMigrationAndRepairTest::RunTest(const FString& Parameters)
+{
+	const FString DbPath = FPaths::CreateTempFilename(
+		*FPaths::ProjectIntermediateDir(), TEXT("MonolithSourceGraphMigration"), TEXT(".sqlite"));
+	FMonolithSourceDatabase DB;
+	ON_SCOPE_EXIT
+	{
+		DB.Close();
+		DeleteSourceTestDb(DbPath);
+	};
+
+	TestTrue(TEXT("temporary DB opens for writing"), DB.OpenForWriting(DbPath));
+	TestTrue(TEXT("base schema creates"), DB.CreateTablesIfNeeded());
+	const int64 ModuleId = DB.InsertModule(TEXT("MigrationModule"), TEXT("/tmp/MigrationModule"), TEXT("Runtime"));
+	const int64 FileId = DB.InsertFile(TEXT("/tmp/MigrationModule/MigrationPathNeedle.cpp"),
+		ModuleId, TEXT("cpp"), 20, 0.0);
+	const int64 SymbolId = DB.InsertSymbol(TEXT("MigrationSymbolNeedle"), TEXT("MigrationModule::MigrationSymbolNeedle"),
+		TEXT("class"), FileId, 1, 10, 0, TEXT("public"), TEXT("class MigrationSymbolNeedle"), TEXT(""), false);
+	TestTrue(TEXT("migration fixture inserted"), ModuleId > 0 && FileId > 0 && SymbolId > 0);
+
+	const TArray<FString> DropSql = {
+		TEXT("DROP TRIGGER IF EXISTS source_graph_nodes_symbols_au;"),
+		TEXT("DROP TRIGGER IF EXISTS source_graph_nodes_symbols_bu;"),
+		TEXT("DROP TRIGGER IF EXISTS source_graph_nodes_symbols_bd;"),
+		TEXT("DROP TRIGGER IF EXISTS source_graph_nodes_symbols_ai;"),
+		TEXT("DROP TRIGGER IF EXISTS source_graph_nodes_files_au;"),
+		TEXT("DROP TRIGGER IF EXISTS source_graph_nodes_files_bu;"),
+		TEXT("DROP TRIGGER IF EXISTS source_graph_nodes_files_ad;"),
+		TEXT("DROP TRIGGER IF EXISTS source_graph_nodes_files_bd;"),
+		TEXT("DROP TRIGGER IF EXISTS source_graph_nodes_files_ai;"),
+		TEXT("DROP TABLE IF EXISTS source_graph_nodes_fts;"),
+		TEXT("DROP VIEW IF EXISTS source_graph_nodes;")
+	};
+	for (const FString& Sql : DropSql)
+	{
+		TestTrue(FString::Printf(TEXT("v3 simulation executes: %s"), *Sql), ExecuteSourceSql(DB, Sql));
+	}
+	DB.SetMeta(TEXT("schema_version"), TEXT("3"));
+	TestTrue(TEXT("v3 simulation clears graph FTS marker"), ExecuteSourceSql(DB,
+		TEXT("DELETE FROM meta WHERE key='source_graph_nodes_fts_version';")));
+
+	DB.Close();
+	TestTrue(TEXT("editor-startup Open migrates v3 to v4"), DB.Open(DbPath));
+	TestTrue(TEXT("successful startup migration keeps DB handle open"), DB.IsOpen());
+	TestEqual(TEXT("migration stamps schema v4"), DB.GetMeta(TEXT("schema_version")), FString(TEXT("4")));
+	TestEqual(TEXT("migration stamps graph FTS version"),
+		DB.GetMeta(TEXT("source_graph_nodes_fts_version")), FString(TEXT("1")));
+	TestEqual(TEXT("one-shot migration rebuilt pre-existing File and Symbol rows"),
+		CountSourceRows(DB, TEXT("SELECT COUNT(*) FROM source_graph_nodes_fts_docsize;")), static_cast<int64>(2));
+	TestEqual(TEXT("migrated signature/name is searchable"),
+		CountGraphFtsMatches(DB, TEXT("MigrationSymbolNeedle")), static_cast<int64>(1));
+	TestTrue(TEXT("idempotent schema ensure succeeds without a second migration failure"), DB.CreateTablesIfNeeded());
+	TestTrue(TEXT("Open can reopen an already-open DB without lock recursion"), DB.Open(DbPath));
+	TestTrue(TEXT("same-instance reopen preserves the DB handle"), DB.IsOpen());
+	DB.Close();
+	TestTrue(TEXT("idempotent startup reopen keeps v4 schema"), DB.Open(DbPath));
+	TestTrue(TEXT("idempotent startup reopen keeps DB handle open"), DB.IsOpen());
+	TestEqual(TEXT("idempotent reopen preserves rebuilt graph-node documents"),
+		CountSourceRows(DB, TEXT("SELECT COUNT(*) FROM source_graph_nodes_fts_docsize;")), static_cast<int64>(2));
+
+	for (const FString& Sql : DropSql)
+	{
+		TestTrue(FString::Printf(TEXT("repair fixture executes: %s"), *Sql), ExecuteSourceSql(DB, Sql));
+	}
+	TSharedPtr<FJsonObject> Health = DB.ComputeHealth(true, true);
+	TestEqual(TEXT("missing graph FTS makes health warning"),
+		Health->GetStringField(TEXT("status")), FString(TEXT("warning")));
+	const TSharedPtr<FJsonObject>* Maintenance = nullptr;
+	TestTrue(TEXT("health returns maintenance recommendation"),
+		Health->TryGetObjectField(TEXT("maintenance_recommendation"), Maintenance) && Maintenance && Maintenance->IsValid());
+	if (Maintenance && Maintenance->IsValid())
+	{
+		TestTrue(TEXT("health owns graph-node FTS repair readiness"),
+			(*Maintenance)->GetBoolField(TEXT("repair_graph_nodes_fts_required")));
+	}
+	TestTrue(TEXT("health points to focused graph-node repair"),
+		JsonStringArrayContains(Health, TEXT("next_actions"), TEXT("source.repair_fts target=graph_nodes")));
+
+	TSharedPtr<FJsonObject> DryRun = DB.RepairFts(TEXT("graph_nodes"), false);
+	TestEqual(TEXT("graph-node repair dry-run succeeds"), DryRun->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestFalse(TEXT("dry-run does not create graph FTS"),
+		SourceObjectExists(DB, TEXT("table"), TEXT("source_graph_nodes_fts")));
+	TSharedPtr<FJsonObject> Repair = DB.RepairFts(TEXT("graph_nodes"), true);
+	TestEqual(TEXT("graph-node repair execute succeeds"), Repair->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestTrue(TEXT("repair recreates graph FTS"),
+		SourceObjectExists(DB, TEXT("table"), TEXT("source_graph_nodes_fts")));
+	TestEqual(TEXT("repair rebuilds all graph-node documents"),
+		CountSourceRows(DB, TEXT("SELECT COUNT(*) FROM source_graph_nodes_fts_docsize;")), static_cast<int64>(2));
+	TestEqual(TEXT("repaired graph-node FTS is searchable"),
+		CountGraphFtsMatches(DB, TEXT("MigrationPathNeedle")), static_cast<int64>(2));
+	TestEqual(TEXT("repaired graph FTS version is stamped"),
+		DB.GetMeta(TEXT("source_graph_nodes_fts_version")), FString(TEXT("1")));
+
+	// A VIEW that projects only Symbols can look self-consistent when its FTS
+	// docsize is rebuilt from the same incomplete VIEW. Shallow health must
+	// require a File family MATCH when files exist; deep health must separately
+	// compare files+symbols against the VIEW before checking VIEW-to-index parity.
+	TestTrue(TEXT("symbols-only fixture drops graph FTS"), ExecuteSourceSql(DB,
+		TEXT("DROP TABLE source_graph_nodes_fts;")));
+	TestTrue(TEXT("symbols-only fixture drops canonical graph VIEW"), ExecuteSourceSql(DB,
+		TEXT("DROP VIEW source_graph_nodes;")));
+	TestTrue(TEXT("symbols-only fixture creates incomplete graph VIEW"), ExecuteSourceSql(DB,
+		TEXT("CREATE VIEW source_graph_nodes AS ")
+		TEXT("SELECT s.id AS id,'Symbol' AS kind,")
+		TEXT("COALESCE(NULLIF(s.name,''),'symbol#' || s.id) AS name,")
+		TEXT("COALESCE(NULLIF(s.qualified_name,''),COALESCE(f.path,'') || '::' || COALESCE(s.name,'symbol')) || '#' || s.id AS qualified_name,")
+		TEXT("COALESCE(f.path,'') AS file_path,COALESCE(s.line_start,0) AS line_start,")
+		TEXT("COALESCE(s.line_end,0) AS line_end,'cpp' AS language,s.signature AS signature ")
+		TEXT("FROM symbols s LEFT JOIN files f ON f.id=s.file_id;")));
+	TestTrue(TEXT("symbols-only fixture recreates external-content FTS"), ExecuteSourceSql(DB,
+		TEXT("CREATE VIRTUAL TABLE source_graph_nodes_fts USING fts5(")
+		TEXT("name,qualified_name,file_path,signature,content='source_graph_nodes',")
+		TEXT("content_rowid='id',tokenize='porter unicode61');")));
+	TestTrue(TEXT("symbols-only fixture rebuilds matching but incomplete FTS"), ExecuteSourceSql(DB,
+		TEXT("INSERT INTO source_graph_nodes_fts(source_graph_nodes_fts) VALUES('rebuild');")));
+
+	TSharedPtr<FJsonObject> ShallowWrongViewHealth = DB.ComputeHealth(false, false);
+	TestTrue(TEXT("shallow health rejects a graph VIEW missing required File rows"),
+		JsonCheckHasResult(ShallowWrongViewHealth,
+			TEXT("fts:graph_nodes_readiness"), TEXT("warning")));
+	TestTrue(TEXT("shallow wrong-VIEW health recommends graph-node repair"),
+		JsonStringArrayContains(ShallowWrongViewHealth, TEXT("next_actions"),
+			TEXT("source.repair_fts target=graph_nodes")));
+
+	TSharedPtr<FJsonObject> DeepWrongViewHealth = DB.ComputeHealth(false, true);
+	TestTrue(TEXT("deep health rejects files+symbols to VIEW projection drift"),
+		JsonCheckHasResult(DeepWrongViewHealth,
+			TEXT("fts:graph_nodes_projection_parity"), TEXT("warning")));
+	TestTrue(TEXT("deep health keeps VIEW-to-docsize parity distinct"),
+		JsonCheckHasResult(DeepWrongViewHealth,
+			TEXT("fts:graph_nodes_row_parity"), TEXT("ok")));
+
+	TSharedPtr<FJsonObject> WrongViewRepair = DB.RepairFts(TEXT("graph_nodes"), true);
+	TestEqual(TEXT("repair restores canonical projection after wrong VIEW"),
+		WrongViewRepair->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestEqual(TEXT("canonical repair restores File and Symbol documents"),
+		CountSourceRows(DB, TEXT("SELECT COUNT(*) FROM source_graph_nodes_fts_docsize;")), static_cast<int64>(2));
+
+	// DROP ... IF EXISTS is still object-type-sensitive in SQLite. Exercise a
+	// partially migrated database where both canonical names have the opposite
+	// type, and prove repair restores the shared VIEW/FTS contract.
+	for (const FString& Sql : DropSql)
+	{
+		TestTrue(FString::Printf(TEXT("wrong-type fixture executes: %s"), *Sql), ExecuteSourceSql(DB, Sql));
+	}
+	TestTrue(TEXT("wrong-type fixture creates source_graph_nodes as TABLE"), ExecuteSourceSql(DB,
+		TEXT("CREATE TABLE source_graph_nodes(id INTEGER PRIMARY KEY,name TEXT);")));
+	TestTrue(TEXT("wrong-type fixture creates source_graph_nodes_fts as VIEW"), ExecuteSourceSql(DB,
+		TEXT("CREATE VIEW source_graph_nodes_fts AS SELECT id AS rowid,name FROM source_graph_nodes;")));
+
+	TSharedPtr<FJsonObject> WrongTypeRepair = DB.RepairFts(TEXT("graph_nodes"), true);
+	TestEqual(TEXT("wrong-type graph repair succeeds"),
+		WrongTypeRepair->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestTrue(TEXT("wrong-type graph name is restored as VIEW"),
+		SourceObjectExists(DB, TEXT("view"), TEXT("source_graph_nodes")));
+	TestTrue(TEXT("wrong-type graph FTS name is restored as TABLE"),
+		SourceObjectExists(DB, TEXT("table"), TEXT("source_graph_nodes_fts")));
+	for (const TCHAR* Trigger : MonolithSourceSchema::GraphSearchTriggerNames)
+	{
+		TestTrue(FString::Printf(TEXT("wrong-type repair restores trigger %s"), Trigger),
+			SourceObjectExists(DB, TEXT("trigger"), Trigger));
+	}
+	TestEqual(TEXT("wrong-type repair rebuilds canonical documents"),
+		CountSourceRows(DB, TEXT("SELECT COUNT(*) FROM source_graph_nodes_fts_docsize;")), static_cast<int64>(2));
+	TestEqual(TEXT("wrong-type repair restores searchability"),
+		CountGraphFtsMatches(DB, TEXT("MigrationPathNeedle")), static_cast<int64>(2));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceGraphSearchActionInventoryTest,
+	"Monolith.IndexGuard.Source.GraphSearchActionInventory",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSourceGraphSearchActionInventoryTest::RunTest(const FString& Parameters)
+{
+	EnsureSourceActionsRegistered();
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	TestTrue(TEXT("public source.search_crg_graph action remains"),
+		Registry.HasAction(TEXT("source"), TEXT("search_crg_graph")));
+	TestFalse(TEXT("source.build_crg_graph action is retired"),
+		Registry.HasAction(TEXT("source"), TEXT("build_crg_graph")));
+	TestFalse(TEXT("source.rebuild_crg_graph action is retired"),
+		Registry.HasAction(TEXT("source"), TEXT("rebuild_crg_graph")));
+	TestFalse(TEXT("source.repair_crg_graph action is retired"),
+		Registry.HasAction(TEXT("source"), TEXT("repair_crg_graph")));
+	TestFalse(TEXT("source.crg_graph_health action is retired"),
+		Registry.HasAction(TEXT("source"), TEXT("crg_graph_health")));
+	for (const FMonolithActionInfo& Info : Registry.GetActions(TEXT("source")))
+	{
+		if (Info.Action == TEXT("search_crg_graph") && Info.ParamSchema.IsValid())
+		{
+			TestFalse(TEXT("search_crg_graph no longer exposes graph_db"),
+				Info.ParamSchema->HasField(TEXT("graph_db")));
+			TestTrue(TEXT("search_crg_graph still exposes query"),
+				Info.ParamSchema->HasField(TEXT("query")));
+			break;
+		}
+	}
+
+	// Discover policy must match the standalone Query dispatch. This action is
+	// the supported graph-node FTS repair path after retiring graph.db, so a
+	// live-only hint would send callers away from the exact offline recovery.
+	TSharedPtr<FJsonObject> DiscoverParams = MakeShared<FJsonObject>();
+	DiscoverParams->SetStringField(TEXT("namespace"), TEXT("source"));
+	DiscoverParams->SetStringField(TEXT("filter"), TEXT("repair_fts"));
+	DiscoverParams->SetNumberField(TEXT("limit"), 200);
+	const FMonolithActionResult Discover = Registry.ExecuteAction(
+		TEXT("monolith"), TEXT("discover"), DiscoverParams);
+	TestTrue(TEXT("source repair_fts discover succeeds"), Discover.bSuccess);
+	const TArray<TSharedPtr<FJsonValue>>* DiscoveredActions = nullptr;
+	TestTrue(TEXT("source repair_fts discover returns actions"),
+		Discover.bSuccess && Discover.Result.IsValid()
+		&& Discover.Result->TryGetArrayField(TEXT("actions"), DiscoveredActions)
+		&& DiscoveredActions != nullptr);
+	bool bFoundRepairFts = false;
+	if (DiscoveredActions)
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *DiscoveredActions)
+		{
+			const TSharedPtr<FJsonObject>* Row = nullptr;
+			if (!Value.IsValid() || !Value->TryGetObject(Row) || !Row || !Row->IsValid()
+				|| (*Row)->GetStringField(TEXT("action")) != TEXT("repair_fts"))
+			{
+				continue;
+			}
+			bFoundRepairFts = true;
+			TestTrue(TEXT("source.repair_fts is advertised offline"),
+				(*Row)->GetBoolField(TEXT("available_offline")));
+			TestFalse(TEXT("source.repair_fts does not require a live editor"),
+				(*Row)->GetBoolField(TEXT("requires_live_editor")));
+			break;
+		}
+	}
+	TestTrue(TEXT("source.repair_fts appears in filtered discover"), bFoundRepairFts);
 	return true;
 }
 

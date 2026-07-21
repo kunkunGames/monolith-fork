@@ -767,8 +767,8 @@ def build_offline_parity_inputs(
     """Fingerprint only databases read by the declared parity namespaces.
 
     cppreflect, network, decision, risk, and the selected source actions all
-    read EngineSource.db. The corpus contains no project, bridge, or source CRG
-    graph action, so ProjectIndex.db and graph.db are deliberately excluded.
+    read EngineSource.db. The corpus contains no project or bridge action, so
+    ProjectIndex.db is deliberately excluded.
     """
     return build_benchmark_inputs(
         "OfflineParity",

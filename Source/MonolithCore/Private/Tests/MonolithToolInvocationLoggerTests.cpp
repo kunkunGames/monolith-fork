@@ -272,7 +272,9 @@ bool FMonolithToolInvocationLoggerDualSurfaceTest::RunTest(const FString& Parame
 	Settings->bEnableDailyLog = true;
 
 	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
-	FMonolithToolRegistry::Get().ExecuteAction(TEXT("source"), TEXT("crg_graph_health"), Params);
+	Params->SetStringField(TEXT("query"), TEXT("UObject"));
+	Params->SetNumberField(TEXT("limit"), 1);
+	FMonolithToolRegistry::Get().ExecuteAction(TEXT("source"), TEXT("search_crg_graph"), Params);
 
 	const FString DailyFolder = FPaths::Combine(TempLogDir, FDateTime::Now().ToString(TEXT("%Y%m%d")));
 	const FString ActionLogPath = FPaths::Combine(DailyFolder, TEXT("action.jsonl"));
@@ -300,7 +302,7 @@ bool FMonolithToolInvocationLoggerDualSurfaceTest::RunTest(const FString& Parame
 			if (TestTrue(TEXT("Action call object exists"), ActionRecord->TryGetObjectField(TEXT("call"), Call)) && Call && Call->IsValid())
 			{
 				TestEqual(TEXT("Action namespace"), (*Call)->GetStringField(TEXT("namespace")), TEXT("source"));
-				TestEqual(TEXT("Action name"), (*Call)->GetStringField(TEXT("action")), TEXT("crg_graph_health"));
+				TestEqual(TEXT("Action name"), (*Call)->GetStringField(TEXT("action")), TEXT("search_crg_graph"));
 			}
 		}
 	}
@@ -322,7 +324,7 @@ bool FMonolithToolInvocationLoggerDualSurfaceTest::RunTest(const FString& Parame
 			if (TestTrue(TEXT("Query call object exists"), QueryRecord->TryGetObjectField(TEXT("call"), Call)) && Call && Call->IsValid())
 			{
 				TestEqual(TEXT("Query namespace"), (*Call)->GetStringField(TEXT("namespace")), TEXT("source"));
-				TestEqual(TEXT("Query action"), (*Call)->GetStringField(TEXT("action")), TEXT("crg_graph_health"));
+				TestEqual(TEXT("Query action"), (*Call)->GetStringField(TEXT("action")), TEXT("search_crg_graph"));
 			}
 		}
 	}

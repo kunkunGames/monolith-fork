@@ -77,7 +77,7 @@
 1. **워치독 terminal-state 결함 (신규, P0-0으로 승격).** `Saved\Monolith\Watchdog\watch_mcp-20260703_221538.out.log` 기준: 23:30~23:33에 `RESULT=RESTART_LIMIT`를 약 18초 간격으로 스핀(attempts 9→20), 23:33:50 `mcp_down editor_processes_detected pids=32736 action=recover_without_build` → `recover_start` 직후 로그가 소멸하며 무음 사망. 스케줄드 태스크 `Monolith MCP Watchdog - Speed`는 등록돼 있으나(AtLogOn 트리거) `Ready` 상태로 재무장하지 않았고, 07-04 오전까지 9316이 다운된 채 방치됐다(같은 날 Claude 세션에서 ConnectionRefused 재현).
    **(같은 날 추가 실증 — P0-1의 non-headless flicker 한 클래스 규명)** 07-04의 두 다운 이벤트 모두 에디터 로그가 `Engine exit requested (reason: ConsoleCtrl RequestExit)`로 끝난다(08:32:53, 11:40:41 KST) — 눈에 보이는 워치독/RunHeadlessEditor 콘솔 창이 닫히는 순간 콘솔 컨트롤 신호가 복구된 에디터까지 전파되어 에디터+워치독이 동시 종료된다. "정체불명 flicker"가 아니라 사용자 콘솔 창 닫기가 원인인 다운 클래스가 존재한다. 후속: `Docs/TODO.md`의 console-close propagation 항목(에디터를 닫힘 가능한 콘솔 프로세스 그룹 밖으로 분리).
 2. **P0-2 “전달 검증”은 의심이 아니라 사실.** `monolith.discover` 평균 result_bytes: 20260701 700콜/평균 75.6KB → 20260703 93콜/평균 76.4KB·총 7.1MB(max 562KB) → compact projection이 07-03 랜딩했는데 payload 불변. 20260704 00:12 `source.find_callees`가 `query` 파라미터로 `Missing required param(s): [symbol]` 실패 — alias는 소스에 실재(`MonolithSourceActions.cpp:314,322`)하므로 **실행 중 에디터 바이너리가 HEAD보다 구버전**이라는 클래스 문제다. 대응: 로그 environment에 binary build 스탬프를 넣어 analyzer가 old-binary 오류를 자동 분리(PR A로 편입).
-3. **maintenance loop는 재승격 불필요 — 단, analyzer 해석 결함 발견.** fresh 2일 recency 랭킹 1위가 `query:source.build_crg_graph` still_open(2일 18콜)이지만, 개별 duration 실측 결과 1.7~2.6초 호출(= cooldown/parity skip)과 43~47초 실빌드(30분+ 간격)로 나뉜다. **cooldown 게이트는 정상 작동 중이다.** 랭킹이 높게 나온 것은 analyzer가 skip 호출을 실빌드와 같은 평균 duration(71.5초, 역사적 평균)으로 집계하기 때문 — analyzer가 `skip_reason` 결과를 별도 분류(cheap-skip)하면 이 finding은 사라진다. P3 유지가 맞고, 남는 것은 analyzer 분류 개선(소품)뿐이다.
+3. **maintenance loop는 재승격 불필요 — 2026-07-21에 제거 완료.** 당시 fresh 2일 recency 랭킹 1위였던 `query:source.build_crg_graph` 18콜은 별도 `graph.db` export/cache의 유지 비용이었다. EngineSource Schema v4의 canonical graph VIEW/FTS가 동일 검색 계약을 직접 제공하면서 export action과 watchdog 유지 루프를 제거했고, analyzer는 과거 로그의 호출을 `retired_action`으로 분류한다. 이 단락의 수치는 제거 결정을 뒷받침하는 역사적 근거이며 현재 운영 지침이 아니다.
 4. **세션 분석기 측정 맹점.** post-watchdog 창(since 20260703): 213 results/41 sessions, transport 1건 — 그러나 Codex 호출이 2건뿐(베이스라인 2,221건)이고, 연결 자체가 거부되면 tool result가 안 남아 transport로 집계되지 않는다(claude transport=0의 착시). P0-1 재측정 게이트에 이 보정(connection-refused 언더카운트 명시)을 포함해야 한다.
 5. **오류 payload 실측.** missing-param 검증 실패 1건의 result_bytes = 1,932 bytes — P0-4 compact 목표(≤1.5KB) 초과를 로컬에서도 확인.
 
@@ -537,11 +537,10 @@ UI에는 `ui.set_widget_context`류 패턴이 있지만, core task context는 �
 
 **상태:** foundation done, producer adoption open.
 
-TODO는 cancellation/progress transport가 들어갔지만, long-running actions가 직접 poll/report해야 효과가 있다고 명시한다. `IsKnownLongRunningAction()`은 `monolith.reindex`, `source.build_crg_graph`, `source.rebuild_crg_graph`, `ai.rebuild_zone_graph`를 long-running으로 분류한다. 이 범위를 실제 producer loop까지 확장해야 한다.
+TODO는 cancellation/progress transport가 들어갔지만, long-running actions가 직접 poll/report해야 효과가 있다고 명시한다. `IsKnownLongRunningAction()`의 현행 producer 범위를 실제 producer loop까지 확장해야 한다. 별도 graph export actions는 2026-07-21에 제거되었으므로 대상이 아니다.
 
 **후보 producer**
 
-- `source.build_crg_graph` / `source.rebuild_crg_graph`
 - `ai.rebuild_zone_graph`
 - deep index / batch import / batch retarget / heavy image/audio generation
 - workflow visual/runtime proof chain

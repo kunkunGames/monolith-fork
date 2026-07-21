@@ -599,7 +599,6 @@ namespace
                 "db",
                 "source_db",
                 "project_db",
-                "graph_db",
                 "snapshot",
             };
             if (ReservedProxyOptions.count(key) > 0)
@@ -687,10 +686,6 @@ namespace
         if (uses_project_db
             && !append_trusted_database(
                 "MONOLITH_OFFLINE_PROJECT_DB", "project_db"))
-            return false;
-        if (query_namespace == "source"
-            && !append_trusted_database(
-                "MONOLITH_OFFLINE_GRAPH_DB", "graph_db"))
             return false;
         parameter_types_json = parameter_types.dump(-1);
         return true;

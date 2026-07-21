@@ -21,10 +21,10 @@ The MCP and index scripts are Windows-host helpers (they drive `RunHeadlessEdito
 |---|---|---|
 | `Scripts/mcp_host_role.ps1` | Shared pure command-line helpers for exact-project durable-host vs planned-exit automation classification; dot-sourced by recovery and watchdog scripts | No |
 | `Scripts/recover_mcp.ps1` | Probe MCP `/health`; when down, launch the host project's headless editor wrapper with headless-safe editor settings and wait for the endpoint | No repo/DB writes; launches an editor process |
-| `Scripts/watch_mcp.ps1` | Long-running MCP availability watchdog; when `/health` is down and the editor process is gone or a headless editor stays unhealthy, run the primary editor UBT build, restart-triggered index maintenance, and recover the endpoint; when healthy, run scheduled asset/source/graph maintenance | Writes UBT/source commandlet logs under `Saved/Monolith/Watchdog/`; launches or restarts a headless editor process; maintenance writes `Saved/ProjectIndex.db`, `Saved/EngineSource.db`, and/or `Saved/graph.db` |
+| `Scripts/watch_mcp.ps1` | Long-running MCP availability watchdog; when `/health` is down and the editor process is gone or a headless editor stays unhealthy, run the primary editor UBT build, restart-triggered index maintenance, and recover the endpoint; when healthy, run scheduled asset/source maintenance | Writes UBT/source commandlet logs under `Saved/Monolith/Watchdog/`; launches or restarts a headless editor process; maintenance writes `Saved/ProjectIndex.db` and/or `Saved/EngineSource.db` |
 | `Scripts/monolith_watchdog.py` / `Binaries/monolith_watchdog.exe` | Recognizable console wrapper for `watch_mcp.ps1`; accepts an absolute project root argument and stays alive so Task Manager shows `monolith_watchdog.exe` | No repo/DB writes; launches a child PowerShell watchdog process |
 | `Scripts/build_monolith_watchdog.ps1` | Build `Binaries/monolith_watchdog.exe` from the Python wrapper through an isolated PyInstaller venv under `Saved/Build/MonolithWatchdog` | Writes build scratch files under `Saved/Build/MonolithWatchdog/` and overwrites `Binaries/monolith_watchdog.exe` |
-| `Scripts/check_index_freshness.ps1` | `source`/`project` health -> stale detection -> repair recommendation; `-Execute` runs warning-indicated repairs and re-verifies | `-Execute` writes `Saved/EngineSource.db` / `Saved/ProjectIndex.db` through `monolith_query.exe` |
+| `Scripts/check_index_freshness.ps1` | `source`/`project` health -> stale detection -> repair recommendation; `-Execute` runs validated health-indicated repairs and re-verifies | `-Execute` writes `Saved/EngineSource.db` / `Saved/ProjectIndex.db` through `monolith_query.exe` |
 | `Scripts/prune_invocation_logs.ps1` | Retention pruning for `Logs/yyyyMMdd` folders (age and/or total-size rules); dry-run by default | `-Execute` deletes pruned date folders |
 | `Scripts/report_stale_branches.ps1` | Non-destructive report for remote branch cleanup review candidates: merged into base, stale by date, no-op-like, numeric suffix/id token, protected prefix | No; delete commands are printed as suggestions only |
 | `Analyzer/analyze_invocation_logs.py` | Offline reader for daily invocation logs (contract: [SPEC_MonolithInvocationLogAnalyzer.md](SPEC_MonolithInvocationLogAnalyzer.md)) | Writes reports under `Saved/Monolith/LogAnalysis/` only |
@@ -83,7 +83,7 @@ An excluded automation or test process is never killed and never overwritten by 
 
 ## 4. `watch_mcp.ps1` Contract
 
-Sequence: resolve the expected checkout once, then repeat GET `<McpUrl with /health>` with the independently bounded `-HealthTimeoutSec` and apply the same complete JSON/PID/project identity and durable-host role contract as `recover_mcp.ps1` (section 3.1). If valid, print `[pid:<mcp-pid>][yyyy-MM-dd HH:mm:ss][McpUp] uptime=<days>D/<hh>:<mm>:<ss>`, reset any trusted-busy streak, run the daily maintenance pass if due, and sleep. If a transport failure leaves one exclusive listener PID whose live executable and readable command line prove the exact current-project durable editor identity, print `TrustedEditorBusy`, perform no build/recover/launch/stop mutation, and retry with exponential sleep capped by `-TrustedBusyBackoffMaxSec`. If exact-project `-TestExit` or Automation `RunTests`/`RunAll` process candidates exist, print `EphemeralAutomationActive`, perform no mutation, and wait for their planned exit even when the port is clear. Otherwise, if down, inspect only current-project durable editor-server candidates. When none remain, run the primary editor UBT build derived from the host `.uproject`, attempt restart-triggered source/graph maintenance, then call `recover_mcp.ps1 -ForceLaunch` to relaunch and wait. A pre-restart maintenance failure is logged but cannot prevent availability recovery; after health returns the watchdog retries all requested restart-maintenance targets through the live path. A post-recovery maintenance failure remains explicit but does not turn a successful endpoint recovery into a restart failure. When a current-project durable editor-server candidate still exists, do not run UBT first; delegate to `recover_mcp.ps1` without `-ForceLaunch`. If that recovery fails and the remaining candidate is a current-project headless editor (`-NullRHI`, `Saved\HeadlessMcp`, or `HeadlessEditor-*` command line), stop only that unhealthy headless process and run the restart sequence. Dedicated-server, commandlet, planned-exit automation, other-project, and user-facing editor processes are never stopped by this branch.
+Sequence: resolve the expected checkout once, then repeat GET `<McpUrl with /health>` with the independently bounded `-HealthTimeoutSec` and apply the same complete JSON/PID/project identity and durable-host role contract as `recover_mcp.ps1` (section 3.1). If valid, print `[pid:<mcp-pid>][yyyy-MM-dd HH:mm:ss][McpUp] uptime=<days>D/<hh>:<mm>:<ss>`, reset any trusted-busy streak, run the daily maintenance pass if due, and sleep. If a transport failure leaves one exclusive listener PID whose live executable and readable command line prove the exact current-project durable editor identity, print `TrustedEditorBusy`, perform no build/recover/launch/stop mutation, and retry with exponential sleep capped by `-TrustedBusyBackoffMaxSec`. If exact-project `-TestExit` or Automation `RunTests`/`RunAll` process candidates exist, print `EphemeralAutomationActive`, perform no mutation, and wait for their planned exit even when the port is clear. Otherwise, if down, inspect only current-project durable editor-server candidates. When none remain, run the primary editor UBT build derived from the host `.uproject`, attempt restart-triggered source maintenance, then call `recover_mcp.ps1 -ForceLaunch` to relaunch and wait. Source index completion maintains the EngineSource CRG projection and graph-node FTS in the same database; the watchdog never runs a separate graph export. A pre-restart maintenance failure is logged but cannot prevent availability recovery; after health returns the watchdog retries all requested restart-maintenance targets through the live path. A post-recovery maintenance failure remains explicit but does not turn a successful endpoint recovery into a restart failure. When a current-project durable editor-server candidate still exists, do not run UBT first; delegate to `recover_mcp.ps1` without `-ForceLaunch`. If that recovery fails and the remaining candidate is a current-project headless editor (`-NullRHI`, `Saved\HeadlessMcp`, or `HeadlessEditor-*` command line), stop only that unhealthy headless process and run the restart sequence. Dedicated-server, commandlet, planned-exit automation, other-project, and user-facing editor processes are never stopped by this branch.
 
 | Parameter | Default | Notes |
 |---|---|---|
@@ -101,25 +101,24 @@ Sequence: resolve the expected checkout once, then repeat GET `<McpUrl with /hea
 | `-BuildFailureBackoffMaxSec` | 600 | Upper bound for the escalated probe sleep after consecutive pre-restart build failures or locked-DLL build blocks; the streak doubles the sleep from `-PollIntervalSec` and resets on a successful build or healthy probe |
 | `-RecoverInvokeGraceSec` | 300 | One `recover_mcp.ps1` child invocation is killed after `-RecoverTimeoutSec + -RecoverInvokeGraceSec` seconds and reported as `[RecoverTimeout]` with recover exit code 124; the watchdog itself keeps running |
 | `-Once` | off | Run one probe/recover cycle and exit, suitable for smoke checks |
-| `-DisableDailyReindex` | off | Disable scheduled asset/source/graph maintenance |
+| `-DisableDailyReindex` | off | Disable scheduled asset/source maintenance |
 | `-DailyReindexTime` | `05:00` | HH:mm start time interpreted in `-DailyReindexTimeZone` |
 | `-DailyReindexTimeZone` | `Korea Standard Time` | Windows time-zone id; default is KST |
 | `-DailyReindexMode` | `incremental` | `incremental` or `full` |
-| `-DailyReindexTargets` | `assets,source,graph` | Any subset of `assets`, `source`, `graph` |
-| `-DailyReindexWaitTimeoutSec` | 1800 | Maximum wait for asset/source indexing to become idle before graph maintenance |
+| `-DailyReindexTargets` | `assets,source` | Any subset of `assets`, `source` |
+| `-DailyReindexWaitTimeoutSec` | 1800 | Maximum wait for asset/source indexing to become idle before completing maintenance |
 | `-DailyReindexWaitPollSec` | 10 | Poll interval for `bridge.get_index_status` while waiting |
 | `-DailyReindexActionTimeoutSec` | 120 | HTTP timeout for one MCP action call |
-| `-DailyGraphCooldownSeconds` | 1800 | Passed to `source build_crg_graph --execute`; `0` disables the graph cooldown only for diagnostics |
 | `-RunDailyReindexNow` | off | Run one maintenance pass as soon as the endpoint is healthy, ignoring the daily schedule; combine with `-Once` for a smoke test |
 | `-SkipRestartReindex` | off | Skip restart-triggered maintenance |
 | `-RestartReindexMode` | `incremental` | `incremental` or `full` for restart-triggered maintenance |
-| `-RestartReindexTargets` | `assets,source,graph` | Any subset of `assets`, `source`, `graph` for restart-triggered maintenance |
+| `-RestartReindexTargets` | `assets,source` | Any subset of `assets`, `source` for restart-triggered maintenance |
 | `-ProjectRoot` | upward search | Explicit host checkout root |
 
 Build behavior:
 
 - Watchdog console output starts with `[pid:<mcp-pid>][yyyy-MM-dd HH:mm:ss][EventType]`. `RESULT=` selects the event name and is not repeated as a field; exact `pid=` becomes the prefix; `uptime_seconds=` is rendered as `uptime=<days>D/<hh>:<mm>:<ss>`; `McpUp` omits duplicated version/tool-count fields. Example: `[pid:50844][2026-07-04 00:27:20][McpUp] uptime=0D/00:04:32`.
-- Long watchdog payloads are split after the header when the payload is over 240 characters or already contains line breaks. Example:
+- Long watchdog payloads are split after the header when the payload is over 240 characters or already contains line breaks. The following retained example is historical evidence from the retired graph-export phase; it illustrates formatting only and is not a current event contract:
 
 ```text
 [pid:45652][2026-07-04 00:27:48][PreRestartReindexGraphDone]
@@ -140,15 +139,13 @@ exitCode=0 detail="{ \"after\": { \"edges\": 1125252, \"files\": 89551 }, \"grap
 - DLL-lock preflight (pending CL 1086, 2026-07-10 hardening): before every pre-restart UBT invocation the watchdog write-probes the bounded link-output set (`Binaries\Win64\UnrealEditor-*.dll` at the project root, plus one- and two-level plugin `Binaries\Win64` globs). If any output is held by another process — including `-game`/`-server` clients that are deliberately not editor-server candidates — the build is skipped with `[BlockedDllLocked] lockedCount=<n> readonlyCount=<n> consecutiveBuildFailures=<n> backoffSeconds=<s> holderPidsBestEffort=<pids> lockedFiles=<first-8>` (exit 10 in `-Once` mode) instead of burning a UBT run into LNK1104. Read-only/access-denied files are reported in `readonlyCount` but are not treated as process locks. Any other per-file exception is retained in the `ProbeErrors` collection; a non-empty collection produces `[BuildLockProbeFailed] probeErrorCount=<n> probeErrors=<bounded-first-8>` and exit 11, with no UBT invocation. The current 2026-07-06..10 logs contain 446 `BuildFailed` records: 290 `LNK1104`, 100 `UnauthorizedAccessException`, 20 `LNK1181`, and 36 other compile/link failures. The preflight directly closes the DLL-lock retry class; the backoff only bounds the other classes.
 - Consecutive build-failure backoff (2026-07-10 hardening): each `BUILD_FAILED` or `BLOCKED_DLL_LOCKED` outcome increments a streak that doubles the next probe sleep from `-PollIntervalSec` up to `-BuildFailureBackoffMaxSec`. A successful build or a healthy probe resets the streak (the healthy-probe reset shares the `[RestartAttemptsReset]` event).
 - If a current-project editor-server candidate is alive but `/health` still cannot recover before `-RecoverTimeoutSec`, the watchdog checks for current-project headless-only candidates, stops those `-NullRHI`/`Saved\HeadlessMcp` processes, and only then runs the normal restart sequence. Non-headless user editors, `-game`/`-server` clients, commandlets, and every process for another project are not killed.
-- Restart-triggered source maintenance runs before relaunch through `UnrealEditor-Cmd.exe <uproject> -run=MonolithReindex -mode=project -unattended -nopause -nosplash -nullrhi`, writing `Saved\Monolith\Watchdog\MonolithReindex-<timestamp>.log`. `-RestartReindexMode full` maps to `-mode=full`.
-- Restart-triggered graph maintenance also runs before relaunch through `Binaries\monolith_query.exe source build_crg_graph --execute --cooldown_seconds=<N>`; full mode adds `--force`.
-- Restart-triggered asset maintenance cannot run before a non-commandlet editor exists because `UMonolithIndexSubsystem` intentionally skips DB open in commandlet mode. The watchdog normally defers that asset portion, relaunches the headless editor, waits for validated health, then runs live `bridge.start_indexing(scope="assets", full=<RestartReindexMode>)`. If offline source/graph maintenance failed before launch, endpoint recovery still proceeds and the post-health pass retries all requested restart targets; maintenance failure stays visible but never causes the recovered editor to be killed or reported as unavailable.
+- Restart-triggered source maintenance runs before relaunch through `UnrealEditor-Cmd.exe <uproject> -run=MonolithReindex -mode=project -unattended -nopause -nosplash -nullrhi`, writing `Saved\Monolith\Watchdog\MonolithReindex-<timestamp>.log`. `-RestartReindexMode full` maps to `-mode=full`. Completion refreshes EngineSource native rows, CRG projection/cache, and `source_graph_nodes_fts`; there is no second graph-maintenance command.
+- Restart-triggered asset maintenance cannot run before a non-commandlet editor exists because `UMonolithIndexSubsystem` intentionally skips DB open in commandlet mode. The watchdog normally defers that asset portion, relaunches the headless editor, waits for validated health, then runs live `bridge.start_indexing(scope="assets", full=<RestartReindexMode>)`. If offline source maintenance failed before launch, endpoint recovery still proceeds and the post-health pass retries all requested restart targets; maintenance failure stays visible but never causes the recovered editor to be killed or reported as unavailable.
 
 Daily maintenance behavior:
 
 - The default schedule is once per selected time-zone date at `05:00` KST. If the watchdog starts after the scheduled time, the first healthy probe on that date runs the pass; failed attempts are not retried in a tight loop.
-- Asset/source maintenance uses the live Monolith action path first: `bridge.start_indexing({ scope: "all|assets|source", full })`, then `bridge.get_index_status` until the requested indexes are idle or `-DailyReindexWaitTimeoutSec` expires. The JSON-RPC helper reads `structuredContent` first and falls back to JSON `content.text` for older tool responses.
-- Graph maintenance uses the local Monolith checkout's `Binaries\monolith_query.exe source build_crg_graph --execute --cooldown_seconds=<N>` after asset/source indexing is idle. `full` mode adds `--force`; incremental mode preserves the cooldown and parity-skip gates so `Saved\graph.db` stays a derived export cache instead of a repeated rebuild sink.
+- Asset/source maintenance uses the live Monolith action path first: `bridge.start_indexing({ scope: "all|assets|source", full })`, then `bridge.get_index_status` until the requested indexes are idle or `-DailyReindexWaitTimeoutSec` expires. The JSON-RPC helper reads `structuredContent` first and falls back to JSON `content.text` for older tool responses. Source indexing owns EngineSource CRG and graph-node FTS refresh, so a completed source target ends the source-maintenance portion of the pass.
 - `-ProbeOnly` never runs maintenance. `-Once -RunDailyReindexNow` runs recovery if needed, then performs one maintenance pass and returns exit 8 on maintenance failure.
 
 Interactive Task Scheduler startup:
@@ -205,21 +202,22 @@ Unregister-ScheduledTask -TaskName 'Monolith MCP Watchdog - Speed' -Confirm:$fal
 
 ## 5. `check_index_freshness.ps1` Contract
 
-Sequence per namespace (`-Target source|project|all`, default all): `monolith_query.exe <ns> health --include-counts=true` -> parse `status` / `warnings` -> extract the repair hint each warning itself carries (`... -> repair_crg_cache` format) -> print exact offline and live repair commands. With `-Execute`: run the deduplicated warning-indicated repairs (`repair_crg_cache`, `repair_fts` only) through the offline CLI, then re-run health and print `VERIFY db=<ns> before=<status> after=<status>`.
+Sequence per namespace (`-Target source|project|all`, default all): `monolith_query.exe <ns> health --include-counts=true` -> parse `status` / `warnings` plus structured `maintenance_recommendation` and `next_actions` -> validate one bounded repair plan -> print exact offline and live repair commands. With `-Execute`: run only the deduplicated health-indicated repairs (`repair_crg_cache`, `repair_fts` only) through the offline CLI, then re-run health and print `VERIFY db=<ns> before=<status> after=<status>`.
 
 | Parameter | Default | Notes |
 |---|---|---|
 | `-Target` | `all` | `source`, `project`, or `all` |
-| `-Execute` | off | Run warning-indicated repairs instead of only reporting |
+| `-Execute` | off | Run validated health-indicated repairs instead of only reporting |
 | `-AllowLiveEditor` | off | Permit `-Execute` while the MCP `/health` endpoint answers |
 | `-QueryExe` | `<plugin>/Binaries/monolith_query.exe` | Override for copied binaries |
 | `-McpUrl` | `MONOLITH_URL` env var, else `http://localhost:9316/mcp` | Used only to detect a live editor |
 
 Behavior notes:
 
-- Only the repair the health warning itself names is ever auto-run. Health problems without a `repair_*` hint (missing DBs, schema errors) are reported and left to indexing/bootstrap paths — the script does not mask missing data with substitutes.
-- `-Execute` against a live editor endpoint is refused (`RESULT=REFUSED`, exit 6) unless `-AllowLiveEditor` is passed; the printed live alternative (`<ns>_query("repair_crg_cache", { "execute": true })`) is the preferred path while the editor is up.
-- `repair_fts` maps to `project repair_fts --target=all --execute` for project and `source repair_fts --execute` for source.
+- Only the repair plan named consistently by health is ever auto-run. Health problems without a supported structured plan (missing DBs, schema errors) are reported and left to indexing/bootstrap paths — the script does not mask missing data with substitutes.
+- Source FTS plans preserve the exact bounded target from `next_actions`: `graph_nodes`, `symbols`, `console_objects`, or `source`. A missing/unknown target, over-broad `target=all`, retired or unknown repair action, or disagreement between `maintenance_recommendation` flags and `next_actions` emits `REPAIR_REJECTED` and leaves the source plan non-runnable.
+- `-Execute` against a live editor endpoint is refused (`RESULT=REFUSED`, exit 6) unless `-AllowLiveEditor` is passed; the printed live alternative preserves `target`/`scope` in its JSON arguments and is the preferred path while the editor is up.
+- Project `repair_fts` remains `project repair_fts --target=all --execute`; source repair is always `source repair_fts --target=<bounded-target> --execute`.
 
 | Exit code | Meaning |
 |---|---|
@@ -314,7 +312,9 @@ Confidence labels are review priority, not authorization:
 | Non-destructive report | `powershell -NoProfile -ExecutionPolicy Bypass -File Scripts\report_stale_branches.ps1 -Limit 5` read `origin` remote-tracking refs, printed five candidate suggestions plus a protected `origin/master` line, and exited 0. |
 | Candidate classification sample | The report classified 203 `origin` branches: 201 candidates, one protected, one keep; candidate reasons included `stale_*d`, `no_op_diff`, `no_op_name`, `no_op_subject`, and `numeric_suffix`. |
 
-2026-07-03 watchdog verification:
+2026-07-03 watchdog verification (historical, before graph-export retirement):
+
+The graph-refresh cells below are retained verbatim as evidence of what the watchdog previously executed. Current watchdog operation has no graph target or `Saved\graph.db` step.
 
 | Gate | Result |
 |---|---|
@@ -330,7 +330,7 @@ Confidence labels are review priority, not authorization:
 | `monolith_watchdog.exe` build | `Scripts\build_monolith_watchdog.ps1` created an isolated PyInstaller venv under `Saved\Build\MonolithWatchdog` and built `Binaries\monolith_watchdog.exe`. |
 | Task Manager-visible watchdog | The scheduled task action was updated to execute `D:\P4\speed\Plugins\Monolith\Binaries\monolith_watchdog.exe` with argument `"D:\P4\speed"`. Starting the task produced searchable `monolith_watchdog.exe` processes (PyInstaller one-file parent/child) and a child `powershell.exe` running `watch_mcp.ps1 -ProjectRoot D:\P4\speed`. |
 
-2026-07-04 recovery probe diagnostics follow-up:
+2026-07-04 recovery probe diagnostics follow-up (historical formatting evidence; graph-named sample events are retired):
 
 | Gate | Result |
 |---|---|

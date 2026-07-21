@@ -4,7 +4,7 @@
 **Status:** Implemented, Windows onboarding automation and filesystem validation added
 **Scope:** `Skills/` audit, Agent Skills entrypoint normalization, Codex and Claude local skill distribution
 **Created:** 2026-06-05
-**Doc reconciled with checkout:** 2026-07-11
+**Doc reconciled with checkout:** 2026-07-21
 
 ---
 
@@ -59,6 +59,10 @@ Implementation result:
 - Four missing P1 surfaces were accepted and added: `unreal-asset`, `monolith-schema`, `unreal-reflection-intel`, and `unreal-sprite`.
 - The repository now has 50 Monolith skill directories using the Agent Skills entrypoint shape.
 - In-repo references now point at `Skills/<skill-name>/SKILL.md`.
+- The 2026-07-21 `unreal-cpp` and `monolith-mcp` routing update moved
+  `source.search_crg_graph` guidance to the `EngineSource.db` graph-node FTS and
+  removed separate graph-export maintenance guidance. Linked installs receive
+  this contract immediately; copied installs are stale and fail hash validation.
 
 Two files are large enough to require close review before adding more inline material:
 

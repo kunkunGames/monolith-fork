@@ -1,5 +1,9 @@
 #pragma once
 
+#include "MonolithSourceConsoleSchema.h"
+#include "MonolithSourceGraphSearchSchema.h"
+#include "MonolithSourceSymbolSearchSchema.h"
+
 /**
  * DDL constants for the Monolith engine source SQLite database.
  *
@@ -15,7 +19,16 @@
  */
 namespace MonolithSourceSchema
 {
-	static const int32 SchemaVersion = 3;
+	static const int32 SchemaVersion = MonolithSourceGraphSearchSchema::SchemaVersion;
+	static const FString GraphSearchFtsVersionStorage(
+		UTF8_TO_TCHAR(MonolithSourceGraphSearchSchema::FtsVersion));
+	static const TCHAR* GraphSearchFtsVersion = *GraphSearchFtsVersionStorage;
+	static const TCHAR* const GraphSearchTriggerNames[] = {
+#define MONOLITH_SOURCE_GRAPH_SEARCH_NAME_TCHAR(Name) TEXT(Name),
+		MONOLITH_SOURCE_GRAPH_SEARCH_TRIGGER_NAMES(MONOLITH_SOURCE_GRAPH_SEARCH_NAME_TCHAR)
+#undef MONOLITH_SOURCE_GRAPH_SEARCH_NAME_TCHAR
+	};
+#undef MONOLITH_SOURCE_GRAPH_SEARCH_TRIGGER_NAMES
 
 	// ----------------------------------------------------------------
 	// Core tables + indexes
@@ -117,15 +130,27 @@ namespace MonolithSourceSchema
 	// ----------------------------------------------------------------
 	// FTS5 virtual tables
 	// ----------------------------------------------------------------
-	static const TCHAR* DDL_FTS =
-		TEXT("CREATE VIRTUAL TABLE IF NOT EXISTS symbols_fts USING fts5(")
-		TEXT("    name, qualified_name, docstring,")
-		TEXT("    content=symbols, content_rowid=id")
-		TEXT(");")
+	static const FString DDL_FTSStorage(
+		UTF8_TO_TCHAR(MonolithSourceSymbolSearchSchema::TablesSql));
+	static const TCHAR* DDL_FTS = *DDL_FTSStorage;
 
-		TEXT("CREATE VIRTUAL TABLE IF NOT EXISTS source_fts USING fts5(")
-		TEXT("    file_id UNINDEXED, line_number UNINDEXED, text")
-		TEXT(");");
+	// ----------------------------------------------------------------
+	// Canonical source graph-node projection + search index (schema v4).
+	// UTF-8 SQL lives in the portable public header shared with Query; these
+	// stable FString owners provide the TCHAR pointers expected by SQLiteCore.
+	// ----------------------------------------------------------------
+	static const FString DDL_GraphSearchViewStorage(
+		UTF8_TO_TCHAR(MonolithSourceGraphSearchSchema::ViewSql));
+	static const TCHAR* DDL_GraphSearchView = *DDL_GraphSearchViewStorage;
+	static const FString DDL_GraphSearchFTSStorage(
+		UTF8_TO_TCHAR(MonolithSourceGraphSearchSchema::FtsSql));
+	static const TCHAR* DDL_GraphSearchFTS = *DDL_GraphSearchFTSStorage;
+	static const FString DDL_GraphSearchTriggersStorage(
+		UTF8_TO_TCHAR(MonolithSourceGraphSearchSchema::TriggersSql));
+	static const TCHAR* DDL_GraphSearchTriggers = *DDL_GraphSearchTriggersStorage;
+	static const FString DDL_GraphSearchDropStorage(
+		UTF8_TO_TCHAR(MonolithSourceGraphSearchSchema::DropSql));
+	static const TCHAR* DDL_GraphSearchDrop = *DDL_GraphSearchDropStorage;
 
 	// ----------------------------------------------------------------
 	// Live console-object snapshot tables.
@@ -133,103 +158,22 @@ namespace MonolithSourceSchema
 	// console namespace. They intentionally live in EngineSource.db so live MCP
 	// and offline monolith_query.exe share one searchable console surface.
 	// ----------------------------------------------------------------
-	static const TCHAR* DDL_ConsoleTables =
-		TEXT("CREATE TABLE IF NOT EXISTS console_objects (")
-		TEXT("    name          TEXT PRIMARY KEY,")
-		TEXT("    object_type   TEXT NOT NULL,")
-		TEXT("    help          TEXT,")
-		TEXT("    flags         INTEGER NOT NULL DEFAULT 0,")
-		TEXT("    is_enabled    INTEGER NOT NULL DEFAULT 0,")
-		TEXT("    is_deprecated INTEGER NOT NULL DEFAULT 0,")
-		TEXT("    value         TEXT,")
-		TEXT("    default_value TEXT,")
-		TEXT("    variable_type TEXT,")
-		TEXT("    set_by        TEXT,")
-		TEXT("    read_only     INTEGER NOT NULL DEFAULT 0,")
-		TEXT("    cheat         INTEGER NOT NULL DEFAULT 0,")
-		TEXT("    source        TEXT,")
-		TEXT("    captured_at   TEXT NOT NULL")
-		TEXT(");")
-		TEXT("CREATE INDEX IF NOT EXISTS idx_console_objects_type ON console_objects(object_type);")
-		TEXT("CREATE INDEX IF NOT EXISTS idx_console_objects_flags ON console_objects(flags);")
-		TEXT("CREATE TABLE IF NOT EXISTS console_snapshot_meta (")
-		TEXT("    key   TEXT PRIMARY KEY,")
-		TEXT("    value TEXT")
-		TEXT(");");
-
-	static const TCHAR* DDL_ConsoleFTS =
-		TEXT("CREATE VIRTUAL TABLE IF NOT EXISTS console_objects_fts USING fts5(")
-		TEXT("    name, object_type, help, value, default_value, variable_type, set_by,")
-		TEXT("    content=console_objects, content_rowid=rowid")
-		TEXT(");");
-
-	static const TCHAR* DDL_ConsoleTriggers =
-		TEXT("CREATE TRIGGER IF NOT EXISTS console_objects_ai AFTER INSERT ON console_objects BEGIN")
-		TEXT("    INSERT INTO console_objects_fts(rowid, name, object_type, help, value, default_value, variable_type, set_by)")
-		TEXT("    VALUES (new.rowid, new.name, new.object_type, new.help, new.value, new.default_value, new.variable_type, new.set_by);")
-		TEXT("END;")
-
-		TEXT("CREATE TRIGGER IF NOT EXISTS console_objects_ad AFTER DELETE ON console_objects BEGIN")
-		TEXT("    INSERT INTO console_objects_fts(console_objects_fts, rowid, name, object_type, help, value, default_value, variable_type, set_by)")
-		TEXT("    VALUES ('delete', old.rowid, old.name, old.object_type, old.help, old.value, old.default_value, old.variable_type, old.set_by);")
-		TEXT("END;")
-
-		TEXT("CREATE TRIGGER IF NOT EXISTS console_objects_au AFTER UPDATE ON console_objects BEGIN")
-		TEXT("    INSERT INTO console_objects_fts(console_objects_fts, rowid, name, object_type, help, value, default_value, variable_type, set_by)")
-		TEXT("    VALUES ('delete', old.rowid, old.name, old.object_type, old.help, old.value, old.default_value, old.variable_type, old.set_by);")
-		TEXT("    INSERT INTO console_objects_fts(rowid, name, object_type, help, value, default_value, variable_type, set_by)")
-		TEXT("    VALUES (new.rowid, new.name, new.object_type, new.help, new.value, new.default_value, new.variable_type, new.set_by);")
-		TEXT("END;");
+	static const FString DDL_ConsoleTablesStorage(
+		UTF8_TO_TCHAR(MonolithSourceConsoleSchema::TablesSql));
+	static const TCHAR* DDL_ConsoleTables = *DDL_ConsoleTablesStorage;
+	static const FString DDL_ConsoleFTSStorage(
+		UTF8_TO_TCHAR(MonolithSourceConsoleSchema::FtsSql));
+	static const TCHAR* DDL_ConsoleFTS = *DDL_ConsoleFTSStorage;
+	static const FString DDL_ConsoleTriggersStorage(
+		UTF8_TO_TCHAR(MonolithSourceConsoleSchema::TriggersSql));
+	static const TCHAR* DDL_ConsoleTriggers = *DDL_ConsoleTriggersStorage;
+#undef MONOLITH_SOURCE_CONSOLE_TRIGGER_NAMES
 
 	// ----------------------------------------------------------------
 	// Triggers to keep symbols_fts in sync with symbols
 	// ----------------------------------------------------------------
-	static const TCHAR* DDL_Triggers =
-		TEXT("CREATE TRIGGER IF NOT EXISTS symbols_ai AFTER INSERT ON symbols BEGIN")
-		TEXT("    INSERT INTO symbols_fts(rowid, name, qualified_name, docstring)")
-		TEXT("    VALUES (new.id, new.name, new.qualified_name, new.docstring);")
-		TEXT("END;")
-
-		TEXT("CREATE TRIGGER IF NOT EXISTS symbols_ad AFTER DELETE ON symbols BEGIN")
-		TEXT("    INSERT INTO symbols_fts(symbols_fts, rowid, name, qualified_name, docstring)")
-		TEXT("    VALUES ('delete', old.id, old.name, old.qualified_name, old.docstring);")
-			TEXT("END;")
-
-			TEXT("CREATE TRIGGER IF NOT EXISTS symbols_au AFTER UPDATE ON symbols BEGIN")
-			TEXT("    INSERT INTO symbols_fts(symbols_fts, rowid, name, qualified_name, docstring)")
-			TEXT("    VALUES ('delete', old.id, old.name, old.qualified_name, old.docstring);")
-			TEXT("    INSERT INTO symbols_fts(rowid, name, qualified_name, docstring)")
-			TEXT("    VALUES (new.id, new.name, new.qualified_name, new.docstring);")
-		TEXT("END;");
-
-	// ----------------------------------------------------------------
-	// DROP statements for ResetDatabase()
-	// ----------------------------------------------------------------
-	static const TCHAR* DDL_Drop =
-		TEXT("DROP TRIGGER IF EXISTS console_objects_au;")
-		TEXT("DROP TRIGGER IF EXISTS console_objects_ad;")
-		TEXT("DROP TRIGGER IF EXISTS console_objects_ai;")
-		TEXT("DROP TABLE IF EXISTS console_objects_fts;")
-		TEXT("DROP TABLE IF EXISTS console_snapshot_meta;")
-		TEXT("DROP TABLE IF EXISTS console_objects;")
-			TEXT("DROP TRIGGER IF EXISTS symbols_au;")
-		TEXT("DROP TRIGGER IF EXISTS symbols_ad;")
-		TEXT("DROP TRIGGER IF EXISTS symbols_ai;")
-		TEXT("DROP TABLE IF EXISTS symbols_fts;")
-		TEXT("DROP TABLE IF EXISTS source_fts;")
-		TEXT("DROP TABLE IF EXISTS symbol_deprecations;")
-		TEXT("DROP TABLE IF EXISTS includes;")
-		TEXT("DROP TABLE IF EXISTS \"references\";")
-		TEXT("DROP TABLE IF EXISTS inheritance;")
-		TEXT("DROP TABLE IF EXISTS symbols;")
-		TEXT("DROP TABLE IF EXISTS files;")
-		TEXT("DROP TABLE IF EXISTS modules;")
-		TEXT("DROP TABLE IF EXISTS crg_nodes;")
-		TEXT("DROP TABLE IF EXISTS crg_edges;")
-		TEXT("DROP TABLE IF EXISTS crg_node_metrics;")
-		TEXT("DROP TABLE IF EXISTS crg_meta;")
-		TEXT("DROP TABLE IF EXISTS crg_snapshots;")
-		TEXT("DROP TABLE IF EXISTS source_override_edges;")
-		TEXT("DROP TABLE IF EXISTS meta;");
+	static const FString DDL_TriggersStorage(
+		UTF8_TO_TCHAR(MonolithSourceSymbolSearchSchema::TriggersSql));
+	static const TCHAR* DDL_Triggers = *DDL_TriggersStorage;
 
 } // namespace MonolithSourceSchema

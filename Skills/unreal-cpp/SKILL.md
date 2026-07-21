@@ -64,25 +64,22 @@ All `risk_score`/`impact_radius`/`pre_merge_check`/`snapshot` calls wrap a trans
 
 `detect_changes` has NO `diff_file`/`diff_stdin` params — pass a unified diff via `diff_text`, paths via `changed_paths`, or line-precise edits via `changed_ranges` (`[{path, ranges:[[start,end]]}]`).
 
-## CRG graph & index maintenance
+## CRG node search & index maintenance
 
 | Action | Params (req* opt? =default) | Purpose |
 |--------|------------------------------|---------|
-| `search_crg_graph` | `query*`, `kind?`, `graph_db?`, `limit=20` | Search the CRG-compatible graph node export (FTS5, LIKE fallback) |
-| `[w] build_crg_graph` / `[w] rebuild_crg_graph` | `execute=false`, `force=false`, `graph_db?` | Build/rebuild `Saved\graph.db` from `EngineSource.db`; temp-DB validate + atomic replace, skips when source signature is current unless forced |
-| `[w] crg_graph_health` | `graph_db?` | CRG graph schema/FTS/export health; reserved flow/community/risk tables are not populated health criteria |
+| `search_crg_graph` | `query*`, `kind?`, `limit=20` | Search the CRG-compatible file/symbol node projection in `EngineSource.db` (FTS5, zero-hit LIKE fallback) |
 | `health` | `include_counts=false`, `include_deep_checks=false` | Source index health |
-| `[w] repair_fts` | `execute=false`, `target=all` (all/symbols/source) | Rebuild FTS when search looks stale (dry-run unless execute) |
+| `[w] repair_fts` | `execute=false`, `target=all` (all/symbols/graph_nodes/console_objects/source) | Rebuild FTS when search looks stale (dry-run unless execute) |
 | `[w] repair_crg_cache` | `execute=false`, `scope=all` (all/override_edges) | Rebuild CRG projection/cache plus signature-aware override edge cache (dry-run unless execute) |
 
-`execute` is the sole write gate on `repair_fts`/`repair_crg_cache`/`build_crg_graph`/`snapshot`; omit it (default `false`) for a safe dry-run preview.
+`execute` is the sole write gate on `repair_fts`/`repair_crg_cache`/`snapshot`; omit it (default `false`) for a safe dry-run preview.
 
-Default C++ lookup/review work should use `search_source`, `risk_score`, `review_context`, and `health`. `build_crg_graph --execute` is graph export/search maintenance, not routine setup; live editor/MCP execute returns `status=started` plus `poll_action=source.crg_graph_health`, while offline CLI execute remains synchronous. `risk_score` and `review_context` read the EngineSource `crg_*` projection/cache, not `Saved\graph.db`.
-Never run `repair_crg_cache` + `build_crg_graph` as an unconditional post-build routine: reindex completion auto-rebuilds the CRG cache, so health-gate the repair (`source health` first) and run `build_crg_graph` only when you actually query `search_crg_graph`/`graph.db`.
+Default C++ lookup/review work should use `search_source`, `risk_score`, `review_context`, and `health`. `search_crg_graph` reads the CRG-compatible file/symbol projection and FTS index directly from `EngineSource.db`; it requires no export build or second database. `risk_score` and `review_context` continue to read the EngineSource `crg_*` projection/cache.
 `impact_radius` defaults to `call|type|inheritance`. For virtual method edits, call `find_overrides` with a qualified symbol such as `UActorComponent::BeginPlay`, or explicitly pass `edge_kinds=call|type|inheritance|override` when override traversal should be mixed into the broader blast radius; unqualified method names can match several same-name class methods and are useful only when that broad fan-out is intentional.
 `find_overrides`, `impact_radius`, `risk_score`, `review_context`, and `review_hotspots kind=override` use the `source_override_edges` cache when `source.health` shows `source_override_edges_version=2`; otherwise they fall back to query-time signature matching. If only the override cache/version is stale, run `source repair_crg_cache --scope=override_edges --execute`; use full `source repair_crg_cache --execute` for stale `crg_nodes`, `crg_edges`, or `crg_node_metrics` parity.
-Offline, `Plugins\Monolith\Scripts\check_index_freshness.ps1` runs the whole health -> repair -> re-verify chain for both `EngineSource.db` and `ProjectIndex.db` (`-Execute` runs only the warning-indicated repairs; contract: `Docs\specs\SPEC_MonolithAgentOpsScripts.md`).
-Use `review_hotspots kind=override` to find high-fanout virtual/override methods before broad API changes. `Saved\graph.db` flow/community/risk auxiliary tables are reserved placeholders and are not source-risk inputs.
+Offline, `Plugins\Monolith\Scripts\check_index_freshness.ps1` runs the whole health -> repair -> re-verify chain for both `EngineSource.db` and `ProjectIndex.db` (`-Execute` runs only validated health-indicated repairs; contract: `Docs\specs\SPEC_MonolithAgentOpsScripts.md`).
+Use `review_hotspots kind=override` to find high-fanout virtual/override methods before broad API changes. Run `source repair_fts --target=graph_nodes --execute` only when `source health` reports stale graph-node FTS parity.
 
 ## Common Workflows
 
@@ -148,4 +145,4 @@ Call `list_class_specifiers` first to learn what `find_class_specifier` can matc
 - `cppreflect_query` for the structural reflected view; `source_query` for symbol-level source
 - `cppreflect` `source_line` is `0` (UHT drops it) — round-trip through `source_query("search_source")` for real line numbers
 - Use `config_query("explain_setting")` before changing unfamiliar CVars
-- Non-existent actions: `get_include_path`, `get_function_signature`, `get_deprecation_warnings`
+- Non-existent actions: `get_function_signature`, `get_deprecation_warnings`
