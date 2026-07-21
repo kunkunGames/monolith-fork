@@ -3718,6 +3718,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureAnimFrames(
 	const TArray<TSharedPtr<FJsonValue>>* SamplesArr = nullptr;
 	if (Params->TryGetArrayField(TEXT("time_samples"), SamplesArr) && SamplesArr && SamplesArr->Num() > 0)
 	{
+		TimeSamples.Reserve(SamplesArr->Num());
 		for (const TSharedPtr<FJsonValue>& V : *SamplesArr)
 		{
 			if (V.IsValid()) { TimeSamples.Add((float)V->AsNumber()); }
@@ -4319,6 +4320,7 @@ FMonolithActionResult FMonolithEditorActions::HandleStitchFlipbook(
 	}
 
 	TArray<FString> FramePaths;
+	FramePaths.Reserve(FramePathsArray->Num());
 	for (const auto& Val : *FramePathsArray)
 	{
 		FString Path;
@@ -5722,6 +5724,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSystemGif(
 
 	// Generate timestamps
 	TArray<float> Timestamps;
+	Timestamps.Reserve(FrameCount);
 	for (int32 i = 0; i < FrameCount; i++)
 	{
 		Timestamps.Add(static_cast<float>(i) / static_cast<float>(FPS));
@@ -5729,6 +5732,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSystemGif(
 
 	// Build params for capture_sequence_frames (persistent mode)
 	TArray<TSharedPtr<FJsonValue>> TimestampValues;
+	TimestampValues.Reserve(Timestamps.Num());
 	for (float T : Timestamps)
 	{
 		TimestampValues.Add(MakeShared<FJsonValueNumber>(T));
