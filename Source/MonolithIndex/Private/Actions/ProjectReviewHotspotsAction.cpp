@@ -22,6 +22,7 @@ FMonolithActionResult FProjectReviewHotspotsAction::Execute(const TSharedPtr<FJs
 		}
 		Limit = static_cast<int32>(LimitValue);
 	}
+	Limit = FMath::Clamp(Limit, 1, 1000);
 
 	int32 MinLines = 100;
 	if (Params->HasField(TEXT("min_lines")))
@@ -33,6 +34,7 @@ FMonolithActionResult FProjectReviewHotspotsAction::Execute(const TSharedPtr<FJs
 		}
 		MinLines = static_cast<int32>(MinLinesValue);
 	}
+	MinLines = FMath::Max(MinLines, 0);
 
 	bool bIncludeQuestions = true;
 	if (Params->HasField(TEXT("include_questions")))
