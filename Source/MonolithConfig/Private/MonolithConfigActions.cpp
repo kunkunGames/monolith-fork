@@ -992,10 +992,10 @@ FMonolithActionResult FMonolithConfigActions::GetConfigFiles(const TSharedPtr<FJ
 	}
 
 	FString FilterCategory;
-	const TSharedPtr<FJsonValue> FilterCategoryField = Params->TryGetField(TEXT("category"));
-	if (FilterCategoryField.IsValid() && !FilterCategoryField->IsNull() && !FilterCategoryField->TryGetString(FilterCategory))
+	FString ParamError;
+	if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("category"), FilterCategory, ParamError))
 	{
-		return FMonolithActionResult::Error(TEXT("Malformed parameter: category must be a string"));
+		return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
 	}
 	if (FilterCategory.Contains(TEXT("..")))
 	{
@@ -1059,26 +1059,21 @@ FMonolithActionResult FMonolithConfigActions::ListPlugins(const TSharedPtr<FJson
 	int32 Limit = 200;
 	if (Params.IsValid())
 	{
-			const TSharedPtr<FJsonValue> NameContainsField = Params->TryGetField(TEXT("name_contains"));
-			if (NameContainsField.IsValid() && !NameContainsField->IsNull() && !NameContainsField->TryGetString(NameContains))
+		FString ParamError;
+		if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("name_contains"), NameContains, ParamError))
 		{
-			return FMonolithActionResult::Error(TEXT("Malformed parameter: name_contains must be a string"));
+			return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
 		}
-			const TSharedPtr<FJsonValue> EnabledOnlyField = Params->TryGetField(TEXT("enabled_only"));
-			if (EnabledOnlyField.IsValid() && !EnabledOnlyField->IsNull() && !EnabledOnlyField->TryGetBool(bEnabledOnly))
+		if (!MonolithParamUtils::GetOptionalBoolParam(Params, TEXT("enabled_only"), bEnabledOnly, ParamError, false))
 		{
-			return FMonolithActionResult::Error(TEXT("Malformed parameter: enabled_only must be a boolean"));
+			return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
 		}
-			const TSharedPtr<FJsonValue> LimitField = Params->TryGetField(TEXT("limit"));
-			if (LimitField.IsValid() && !LimitField->IsNull())
+		double LimitDouble = 0.0;
+		if (!MonolithParamUtils::GetOptionalClampedDoubleParam(Params, TEXT("limit"), LimitDouble, ParamError, 200.0, 1.0, 1000.0))
 		{
-			double LimitValue = 0.0;
-				if (!LimitField->TryGetNumber(LimitValue))
-			{
-				return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), -32602);
-			}
-			Limit = FMath::Clamp((int32)LimitValue, 1, 1000);
+			return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
 		}
+		Limit = static_cast<int32>(LimitDouble);
 	}
 
 	const FString Needle = NameContains.ToLower();
@@ -1127,10 +1122,10 @@ FMonolithActionResult FMonolithConfigActions::GetPlugin(const TSharedPtr<FJsonOb
 	}
 
 	FString Name;
-	const TSharedPtr<FJsonValue> NameField = Params->TryGetField(TEXT("name"));
-	if (!NameField.IsValid() || NameField->IsNull() || !NameField->TryGetString(Name) || Name.IsEmpty())
+	FString ParamError;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("name"), Name, ParamError))
 	{
-		return FMonolithActionResult::Error(TEXT("Required parameter: name"));
+		return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(Name);
@@ -1152,10 +1147,10 @@ FMonolithActionResult FMonolithConfigActions::GetCVar(const TSharedPtr<FJsonObje
 	}
 
 	FString Name;
-	const TSharedPtr<FJsonValue> NameField = Params->TryGetField(TEXT("name"));
-	if (!NameField.IsValid() || NameField->IsNull() || !NameField->TryGetString(Name) || Name.IsEmpty())
+	FString ParamError;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("name"), Name, ParamError))
 	{
-		return FMonolithActionResult::Error(TEXT("Required parameter: name"));
+		return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(*Name);
@@ -1169,26 +1164,21 @@ FMonolithActionResult FMonolithConfigActions::FindCVars(const TSharedPtr<FJsonOb
 	int32 Limit = 100;
 	if (Params.IsValid())
 	{
-			const TSharedPtr<FJsonValue> QueryField = Params->TryGetField(TEXT("query"));
-			if (QueryField.IsValid() && !QueryField->IsNull() && !QueryField->TryGetString(Query))
+		FString ParamError;
+		if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("query"), Query, ParamError))
 		{
-			return FMonolithActionResult::Error(TEXT("Malformed parameter: query must be a string"));
+			return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
 		}
-			const TSharedPtr<FJsonValue> ModeField = Params->TryGetField(TEXT("mode"));
-			if (ModeField.IsValid() && !ModeField->IsNull() && !ModeField->TryGetString(Mode))
+		if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("mode"), Mode, ParamError, TEXT("prefix")))
 		{
-			return FMonolithActionResult::Error(TEXT("Malformed parameter: mode must be a string"));
+			return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
 		}
-			const TSharedPtr<FJsonValue> LimitField = Params->TryGetField(TEXT("limit"));
-			if (LimitField.IsValid() && !LimitField->IsNull())
+		double LimitDouble = 0.0;
+		if (!MonolithParamUtils::GetOptionalClampedDoubleParam(Params, TEXT("limit"), LimitDouble, ParamError, 100.0, 1.0, 1000.0))
 		{
-			double LimitValue = 0.0;
-				if (!LimitField->TryGetNumber(LimitValue))
-			{
-				return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), -32602);
-			}
-			Limit = FMath::Clamp((int32)LimitValue, 1, 1000);
+			return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
 		}
+		Limit = static_cast<int32>(LimitDouble);
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
@@ -1289,10 +1279,9 @@ FMonolithActionResult FMonolithConfigActions::SetDeveloperSetting(const TSharedP
 	}
 
 	bool bSaveConfig = false;
-	const TSharedPtr<FJsonValue> SaveConfigField = Params->TryGetField(TEXT("save_config"));
-	if (SaveConfigField.IsValid() && !SaveConfigField->IsNull() && !SaveConfigField->TryGetBool(bSaveConfig))
+	if (!MonolithParamUtils::GetOptionalBoolParam(Params, TEXT("save_config"), bSaveConfig, ParamError, false))
 	{
-		return FMonolithActionResult::Error(TEXT("set_developer_setting: 'save_config' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		return FMonolithActionResult::Error(FString::Printf(TEXT("set_developer_setting: %s"), *ParamError), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	// 1) Resolve class. Try full-path first (works for '/Script/Module.Class'),
