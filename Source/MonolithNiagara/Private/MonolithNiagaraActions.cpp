@@ -9562,6 +9562,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureDataInterface(cons
 	if (PropsSet.IsEmpty() && (!PropsNotFound.IsEmpty() || !PropsFailed.IsEmpty()))
 	{
 		TArray<FString> AvailNames;
+		AvailNames.Reserve(AvailableProps.Num());
 		for (const auto& V : AvailableProps) AvailNames.Add(V->AsString());
 		return FMonolithActionResult::Error(FString::Printf(
 			TEXT("No properties were set on DI '%s'. Not found: [%s]. Available: [%s]"),
@@ -9576,11 +9577,13 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureDataInterface(cons
 	R->SetBoolField(TEXT("success"), true);
 	R->SetStringField(TEXT("di_class"), DI->GetClass()->GetName());
 	TArray<TSharedPtr<FJsonValue>> SetArr;
+	SetArr.Reserve(PropsSet.Num());
 	for (const FString& S : PropsSet) SetArr.Add(MakeShared<FJsonValueString>(S));
 	R->SetArrayField(TEXT("properties_set"), SetArr);
 	if (!PropsNotFound.IsEmpty())
 	{
 		TArray<TSharedPtr<FJsonValue>> NotFoundArr;
+		NotFoundArr.Reserve(PropsNotFound.Num());
 		for (const FString& S : PropsNotFound) NotFoundArr.Add(MakeShared<FJsonValueString>(S));
 		R->SetArrayField(TEXT("properties_not_found"), NotFoundArr);
 		R->SetArrayField(TEXT("available_properties"), AvailableProps);
