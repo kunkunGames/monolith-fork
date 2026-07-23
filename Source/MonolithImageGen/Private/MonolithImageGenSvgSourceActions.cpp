@@ -3459,7 +3459,10 @@ namespace MonolithImageGen::SvgSource
 		if (Params->HasField(TEXT("return_sanitized_svg")))
 		{
 			bool bReturnSanitizedSvg = false;
-			Params->TryGetBoolField(TEXT("return_sanitized_svg"), bReturnSanitizedSvg);
+			if (!Params->TryGetBoolField(TEXT("return_sanitized_svg"), bReturnSanitizedSvg))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid parameter type: return_sanitized_svg must be a boolean"), -32602);
+			}
 			EffectiveParams->SetBoolField(TEXT("return_svg"), bReturnSanitizedSvg);
 		}
 
@@ -3502,7 +3505,10 @@ namespace MonolithImageGen::SvgSource
 		Params->TryGetBoolField(TEXT("save"), MsdfOptions.bSave);
 		if (Params->HasField(TEXT("save_source_png")))
 		{
-			Params->TryGetBoolField(TEXT("save_source_png"), MsdfOptions.bSaveSourcePng);
+			if (!Params->TryGetBoolField(TEXT("save_source_png"), MsdfOptions.bSaveSourcePng))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid parameter type: save_source_png must be a boolean"), -32602);
+			}
 		}
 		else
 		{
