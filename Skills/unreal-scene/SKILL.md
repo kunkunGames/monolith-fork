@@ -41,7 +41,7 @@ Use a different skill for:
 | `get_actor_info` | `actor_name*` | Get comprehensive info for an actor in the editor world (class, transform, mesh, materials, tags, components, bounds) |
 | `[w] group_actors` | `actor_names* group_name*` | Move actors into an outliner folder (creates folder hierarchy automatically) |
 | `[w] manage_folders` | `sub_action*(list/delete/rename/move) folder? new_folder? include_subfolders=true` | Manage World Outliner folders: list, delete (move actors to root), rename, or move folders. |
-| `[w] move_actor` | `actor_name* location? rotation? scale? relative=false` | Move/rotate/scale an actor. Set relative=true to offset from current transform. |
+| `[w] move_actor` | `actor_name* location? rotation? scale? relative=false` | Persistently move/rotate/scale a non-transient editor actor. Set relative=true to offset from current transform. Fails closed before mutation if the actor has no root component, if the actor/root/owning package is transient, or if the owning package cannot be dirtied. An effective no-op succeeds without opening a transaction and leaves the package clean. |
 | `[w] set_actor_properties` | `actor_name* mobility?(Static/Stationary/Movable) simulate_physics? collision_preset? cast_shadow? tags? mass_kg?` | Set properties on an actor (mobility, physics, collision, shadows, tags, mass) |
 | `[w] snap_to_floor` | `actor_names* trace_distance=10000` | Snap actors to the floor by tracing downward. Places the bottom of each actor on the hit surface. |
 | `[w] spawn_actor` | `class_or_mesh* location* rotation=[0,0,0] scale=[1,1,1] name? folder?` | Spawn an actor in the editor world. Path starting with '/' spawns StaticMeshActor with that mesh; otherwise spawns by class name. |
@@ -207,6 +207,7 @@ Use a different skill for:
 - `query_radial_sweep`: `ray_count * vertical_angles <= 512`.
 - `register_building` / `register_room` must run before spatial-registry queries return results.
 - Editor actor edits are not autosaved: after spawn/move/delete/property changes, save the open level explicitly (the scene namespace has no save action — use the editor/asset save path or save in-editor before relying on persistence).
+- `move_actor` mutates only after `MarkPackageDirty()` succeeds; it never auto-saves. Persist the owning map or external-actor package with `editor.save_packages`. Inside `batch_execute`, the move joins the outer Undo transaction instead of opening its own.
 - Actor object paths are `/Game/Maps/Map.Map:PersistentLevel.ActorName`. Most singular `actor_name` params take an outliner label/internal name; `delete_actors.actor_names` additionally accepts and prefers exact object paths for destructive work.
 
 ## Notes

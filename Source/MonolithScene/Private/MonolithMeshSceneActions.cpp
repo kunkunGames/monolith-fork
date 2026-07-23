@@ -12,6 +12,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
+#include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Dom/JsonObject.h"
@@ -288,7 +289,7 @@ void FMonolithMeshSceneActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Build());
 
 	Registry.RegisterAction(TEXT("scene"), TEXT("move_actor"),
-		TEXT("Move/rotate/scale an actor. Set relative=true to offset from current transform."),
+		TEXT("Persistently move/rotate/scale a non-transient editor actor. Set relative=true to offset from current transform."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSceneActions::MoveActor),
 		FParamSchemaBuilder()
 			.Required(TEXT("actor_name"), TEXT("string"), TEXT("Actor name or label"))
@@ -611,48 +612,134 @@ FMonolithActionResult FMonolithMeshSceneActions::MoveActor(const TSharedPtr<FJso
 		return FMonolithActionResult::Error(Error);
 	}
 
+	USceneComponent* const RootComponent = Actor->GetRootComponent();
+	UPackage* const OwningPackage = Actor->GetPackage();
+	if (!RootComponent)
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Actor '%s' has no root component and cannot persist a transform."), *ActorName));
+	}
+	if (Actor->HasAnyFlags(RF_Transient) || RootComponent->HasAnyFlags(RF_Transient) ||
+		!OwningPackage || OwningPackage == GetTransientPackage())
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Actor '%s' is transient and cannot be edited by the persistent move_actor action."), *ActorName));
+	}
+
 	bool bRelative = false;
 	Params->TryGetBoolField(TEXT("relative"), bRelative);
 
-	SceneActionHelpers::FScopedMeshTransaction Transaction(FText::FromString(TEXT("Monolith: Move Actor")));
-
 	FVector Location;
-	if (MonolithMeshUtils::ParseVector(Params, TEXT("location"), Location))
-	{
-		if (bRelative)
-		{
-			Actor->SetActorLocation(Actor->GetActorLocation() + Location);
-		}
-		else
-		{
-			Actor->SetActorLocation(Location);
-		}
-	}
-
+	const bool bHasLocation = MonolithMeshUtils::ParseVector(Params, TEXT("location"), Location);
 	FRotator Rotation;
-	if (MonolithMeshUtils::ParseRotator(Params, TEXT("rotation"), Rotation))
+	const bool bHasRotation = MonolithMeshUtils::ParseRotator(Params, TEXT("rotation"), Rotation);
+	FVector Scale;
+	const bool bHasScale = MonolithMeshUtils::ParseVector(Params, TEXT("scale"), Scale);
+	const FVector PreviousLocation = Actor->GetActorLocation();
+	const FRotator PreviousRotation = Actor->GetActorRotation();
+	const FVector PreviousScale = Actor->GetActorScale3D();
+
+	const FVector TargetLocation = bHasLocation
+		? (bRelative ? PreviousLocation + Location : Location)
+		: PreviousLocation;
+	const FRotator TargetRotation = bHasRotation
+		? (bRelative ? PreviousRotation + Rotation : Rotation)
+		: PreviousRotation;
+	const FVector TargetScale = bHasScale
+		? (bRelative ? PreviousScale + Scale : Scale)
+		: PreviousScale;
+
+	// Mirror the component setters' world-to-relative conversion before deciding
+	// whether the requested fields can produce an effective edit. This matters
+	// for attached actors: a world-space delta that is below tolerance can still
+	// be a meaningful relative-space delta under a scaled parent (and vice versa).
+	FVector EffectiveTargetLocation = TargetLocation;
+	FQuat EffectiveTargetRotationQuat = TargetRotation.Quaternion();
+	FVector EffectiveTargetScale = TargetScale;
+	if (USceneComponent* const AttachParent = RootComponent->GetAttachParent())
 	{
-		if (bRelative)
+		const FTransform ParentToWorld = AttachParent->GetSocketTransform(RootComponent->GetAttachSocketName());
+		if (FTransform::AnyHasNegativeScale(RootComponent->GetRelativeScale3D(), ParentToWorld.GetScale3D()))
 		{
-			Actor->SetActorRotation(Actor->GetActorRotation() + Rotation);
+			const FTransform TargetWorldTransform(
+				EffectiveTargetRotationQuat,
+				TargetLocation,
+				RootComponent->GetRelativeScale3D() * ParentToWorld.GetScale3D());
+			const FTransform TargetRelativeTransform = TargetWorldTransform.GetRelativeTransform(ParentToWorld);
+			if (!RootComponent->IsUsingAbsoluteLocation())
+			{
+				EffectiveTargetLocation = TargetRelativeTransform.GetLocation();
+			}
+			if (!RootComponent->IsUsingAbsoluteRotation())
+			{
+				EffectiveTargetRotationQuat = TargetRelativeTransform.GetRotation();
+			}
 		}
 		else
 		{
-			Actor->SetActorRotation(Rotation);
+			if (!RootComponent->IsUsingAbsoluteLocation())
+			{
+				EffectiveTargetLocation = ParentToWorld.InverseTransformPosition(TargetLocation);
+			}
+			if (!RootComponent->IsUsingAbsoluteRotation())
+			{
+				EffectiveTargetRotationQuat = ParentToWorld.GetRotation().Inverse() * EffectiveTargetRotationQuat;
+			}
+		}
+
+		if (!RootComponent->IsUsingAbsoluteScale())
+		{
+			EffectiveTargetScale = TargetScale * ParentToWorld.GetSafeScaleReciprocal(ParentToWorld.GetScale3D());
 		}
 	}
+	const FRotator EffectiveTargetRotation = EffectiveTargetRotationQuat.Rotator();
 
-	FVector Scale;
-	if (MonolithMeshUtils::ParseVector(Params, TEXT("scale"), Scale))
+	// Test only fields the caller asked to mutate. Match each transform setter's
+	// effective-change semantics so an edit it would suppress is also a clean
+	// no-op here instead of needlessly dirtying the actor's owning package.
+	// Location/rotation setters use tolerant Equals checks; scale is applied by
+	// SetRelativeScale3D using exact vector inequality. FRotator::Equals also
+	// treats angle-equivalent values such as 0 and 360 degrees as the same pose.
+	const bool bLocationChanged = bHasLocation && !EffectiveTargetLocation.Equals(RootComponent->GetRelativeLocation());
+	const bool bRotationChanged = bHasRotation && !EffectiveTargetRotation.Equals(RootComponent->GetRelativeRotation());
+	const bool bScaleChanged = bHasScale && EffectiveTargetScale != RootComponent->GetRelativeScale3D();
+	const bool bTransformChanged = bLocationChanged || bRotationChanged || bScaleChanged;
+
+	if (bTransformChanged)
 	{
-		if (bRelative)
+		// Establish the persistence postcondition before mutating the live actor.
+		// MarkPackageDirty can be suppressed by the editor (for example during
+		// loading); fail closed while the transform is still untouched in that case.
+		if (!Actor->MarkPackageDirty() || !OwningPackage->IsDirty())
 		{
-			Actor->SetActorScale3D(Actor->GetActorScale3D() + Scale);
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("Unable to dirty owning package '%s'; actor '%s' was not moved."),
+					*OwningPackage->GetName(), *ActorName));
 		}
-		else
+
+		SceneActionHelpers::FScopedMeshTransaction Transaction(FText::FromString(TEXT("Monolith: Move Actor")));
+		Actor->Modify(/*bAlwaysMarkDirty=*/false);
+		RootComponent->Modify(/*bAlwaysMarkDirty=*/false);
+
+		if (bHasLocation)
 		{
-			Actor->SetActorScale3D(Scale);
+			Actor->SetActorLocation(TargetLocation);
 		}
+
+		if (bHasRotation)
+		{
+			Actor->SetActorRotation(TargetRotation);
+		}
+
+		if (bHasScale)
+		{
+			Actor->SetActorScale3D(TargetScale);
+		}
+
+		// Match a normal editor transform edit: construction/editor listeners receive
+		// the completed move, Undo owns both the actor and its root component state,
+		// and the owning map or external-actor package becomes persistently savable.
+		Actor->PostEditMove(/*bFinished=*/true);
 	}
 
 	auto Result = MakeShared<FJsonObject>();

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Persistent `scene.move_actor` transform contract** — The action now fails closed before mutation for actors without a root component and for transient or non-dirtyable actor/root/package state. Effective edits verify package dirtiness, participate in Undo, and issue the editor move notification; clean no-ops open no transaction and do not manufacture dirtiness. The action still does not auto-save. Covered by `Monolith.Scene.MoveActor.TransformDirtyPersistence`.
+
 ### Removed
 
 - **Separate CRG graph export (`Saved/graph.db`)** — `source.search_crg_graph` now preserves the File/Symbol graph-node search contract directly over the canonical `source_graph_nodes` VIEW and `source_graph_nodes_fts` inside `EngineSource.db` (`backend=engine_source_fts`). Removed `source.build_crg_graph`, `source.rebuild_crg_graph`, `source.crg_graph_health`, the offline `repair_crg_graph` alias, `graph_db` / `--graph-db`, and watchdog/export maintenance; graph-node health and repair now use `source.health` and `source.repair_fts --target=graph_nodes --execute`.
