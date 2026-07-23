@@ -7,6 +7,11 @@
 #include "MonolithAudioBatchActions.h"
 #include "MonolithAudioPerceptionActions.h"
 #include "MonolithToolRegistry.h"
+
+#if WITH_METASOUND
+#include "MonolithAudioMetaSoundIntrospectionActions.h"
+#endif
+
 #include "Dom/JsonObject.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -399,6 +404,101 @@ FMonolithActionResult ExecuteListAvailableMetaSoundNodes(const TSharedPtr<FJsonO
 	return FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("list_available_metasound_nodes"), Params);
 }
 }
+
+
+#if WITH_METASOUND
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioListMetaSoundsLimitTest, "Monolith.LimitGuard.Audio.ListMetaSoundsClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithAudioListMetaSoundsLimitTest::RunTest(const FString& Parameters)
+{
+	// Test malformed limit type
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("limit"), TEXT("not_a_number"));
+
+		FMonolithAudioMetaSoundIntrospectionActions::RegisterActions(FMonolithToolRegistry::Get());
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("list_metasounds"), Params);
+
+		TestFalse(TEXT("String limit should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should mention limit"), Result.ErrorMessage.Contains(TEXT("limit")));
+	}
+
+	// Test omitted value uses existing default
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("list_metasounds"), Params);
+		if (!Result.bSuccess || !Result.Result.IsValid())
+		{
+			AddError(TEXT("Action failed without limit"));
+		}
+		else
+		{
+			const TArray<TSharedPtr<FJsonValue>>* AssetsArray = nullptr;
+			if (Result.Result->TryGetArrayField(TEXT("assets"), AssetsArray))
+			{
+				if (AssetsArray->Num() > 1000)
+				{
+					AddError(FString::Printf(TEXT("Default limit of 1000 was not respected. Count was %d"), AssetsArray->Num()));
+				}
+			}
+		}
+	}
+
+	// Test normal value is preserved
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("limit"), 5.0);
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("list_metasounds"), Params);
+		if (Result.bSuccess && Result.Result.IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* AssetsArray = nullptr;
+			if (Result.Result->TryGetArrayField(TEXT("assets"), AssetsArray))
+			{
+				if (AssetsArray->Num() > 5)
+				{
+					AddError(FString::Printf(TEXT("Explicit limit of 5 was not respected. Count was %d"), AssetsArray->Num()));
+				}
+			}
+		}
+	}
+
+	// Test negative value is handled (clamped to 0)
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("limit"), -10.0);
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("list_metasounds"), Params);
+		if (Result.bSuccess && Result.Result.IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* AssetsArray = nullptr;
+			if (Result.Result->TryGetArrayField(TEXT("assets"), AssetsArray))
+			{
+				if (AssetsArray->Num() > 0)
+				{
+					AddError(FString::Printf(TEXT("Negative limit was not clamped to 0. Count was %d"), AssetsArray->Num()));
+				}
+			}
+		}
+	}
+
+	// Test extreme value is clamped (to 1000)
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("limit"), 1000000.0);
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("list_metasounds"), Params);
+		if (Result.bSuccess && Result.Result.IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* AssetsArray = nullptr;
+			if (Result.Result->TryGetArrayField(TEXT("assets"), AssetsArray))
+			{
+				if (AssetsArray->Num() > 1000)
+				{
+					AddError(FString::Printf(TEXT("Huge limit was not clamped to 1000. Count was %d"), AssetsArray->Num()));
+				}
+			}
+		}
+	}
+	return true;
+}
+#endif // WITH_METASOUND
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioListAvailableMetaSoundNodesLimitTest, "Monolith.LimitGuard.Audio.ListAvailableMetaSoundNodesClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithAudioListAvailableMetaSoundNodesLimitTest::RunTest(const FString& Parameters)

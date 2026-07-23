@@ -8,6 +8,7 @@
 
 #if WITH_METASOUND
 #include "MonolithAudioMetaSoundActions.h"
+#include "MonolithAudioMetaSoundIntrospectionActions.h"
 #endif
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -20,6 +21,7 @@ namespace
 		FMonolithAudioSoundCueActions::RegisterActions(Registry);
 #if WITH_METASOUND
 		FMonolithAudioMetaSoundActions::RegisterActions(Registry);
+		FMonolithAudioMetaSoundIntrospectionActions::RegisterActions(Registry);
 #endif
 	}
 
@@ -469,6 +471,23 @@ bool FMonolithParamGuardAudioGetSoundCueDurationRejectsMalformedParamsTest::RunT
 
 	return true;
 }
+
+
+#if WITH_METASOUND
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioListMetaSoundsRejectsMalformedParamsTest, "Monolith.ParamGuard.Audio.ListMetaSoundsRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardAudioListMetaSoundsRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("limit"), TEXT("invalid_limit")); // Should be number
+
+	FMonolithActionResult Result = ExecuteAudioAction(TEXT("list_metasounds"), Params);
+	TestTrue(TEXT("ListMetaSounds with malformed limit should return Error"), !Result.bSuccess);
+	TestTrue(TEXT("ListMetaSounds reports malformed limit"), Result.ErrorMessage.Contains(TEXT("must be a number")));
+
+	return true;
+}
+
+#endif // WITH_METASOUND
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioListPerceptionBoundSoundsRejectsMalformedParamsTest, "Monolith.ParamGuard.Audio.ListPerceptionBoundSoundsRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithParamGuardAudioListPerceptionBoundSoundsRejectsMalformedParamsTest::RunTest(const FString& Parameters)
