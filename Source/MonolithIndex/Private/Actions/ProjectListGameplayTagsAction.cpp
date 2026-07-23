@@ -7,7 +7,7 @@
 FMonolithActionResult FProjectListGameplayTagsAction::Execute(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Prefix;
-	if (Params->HasField(TEXT("prefix")) && !Params->TryGetStringField(TEXT("prefix"), Prefix))
+	if (Params->HasField(TEXT("prefix")) && (!Params->HasTypedField(TEXT("prefix"), EJson::String) || !Params->TryGetStringField(TEXT("prefix"), Prefix)))
 	{
 		return FMonolithActionResult::Error(TEXT("'prefix' parameter must be a string"), -32602);
 	}
@@ -16,7 +16,7 @@ FMonolithActionResult FProjectListGameplayTagsAction::Execute(const TSharedPtr<F
 	if (Params->HasField(TEXT("limit")))
 	{
 		double LimitValue = 0.0;
-		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		if (!Params->HasTypedField(TEXT("limit"), EJson::Number) || !Params->TryGetNumberField(TEXT("limit"), LimitValue))
 		{
 			return FMonolithActionResult::Error(TEXT("'limit' parameter must be a number"), -32602);
 		}
@@ -26,7 +26,7 @@ FMonolithActionResult FProjectListGameplayTagsAction::Execute(const TSharedPtr<F
 	if (Params->HasField(TEXT("offset")))
 	{
 		double OffsetValue = 0.0;
-		if (!Params->TryGetNumberField(TEXT("offset"), OffsetValue))
+		if (!Params->HasTypedField(TEXT("offset"), EJson::Number) || !Params->TryGetNumberField(TEXT("offset"), OffsetValue))
 		{
 			return FMonolithActionResult::Error(TEXT("'offset' parameter must be a number"), -32602);
 		}
