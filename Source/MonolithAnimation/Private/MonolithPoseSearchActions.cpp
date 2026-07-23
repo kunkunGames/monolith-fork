@@ -1014,8 +1014,15 @@ static UClass* ResolveChannelClass(const FString& TypeStr)
 
 FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSequenceProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	int32 SeqIndex = static_cast<int32>(Params->GetNumberField(TEXT("sequence_index")));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+		return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"));
+
+	int32 SeqIndex = 0;
+	if (double TempVal; Params->TryGetNumberField(TEXT("sequence_index"), TempVal))
+		SeqIndex = static_cast<int32>(TempVal);
+	else
+		return FMonolithActionResult::Error(TEXT("Parameter 'sequence_index' must be a number"));
 
 	UPoseSearchDatabase* Database = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchDatabase>(AssetPath);
 	if (!Database)
@@ -1217,8 +1224,15 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleAddSchemaChannel(const T
 
 FMonolithActionResult FMonolithPoseSearchActions::HandleRemoveSchemaChannel(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	int32 ChannelIndex = static_cast<int32>(Params->GetNumberField(TEXT("channel_index")));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+		return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"));
+
+	int32 ChannelIndex = 0;
+	if (double TempVal; Params->TryGetNumberField(TEXT("channel_index"), TempVal))
+		ChannelIndex = static_cast<int32>(TempVal);
+	else
+		return FMonolithActionResult::Error(TEXT("Parameter 'channel_index' must be a number"));
 
 	UPoseSearchSchema* Schema = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchSchema>(AssetPath);
 	if (!Schema)
@@ -1261,9 +1275,21 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleRemoveSchemaChannel(cons
 
 FMonolithActionResult FMonolithPoseSearchActions::HandleSetChannelWeight(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	int32 ChannelIndex = static_cast<int32>(Params->GetNumberField(TEXT("channel_index")));
-	float NewWeight = static_cast<float>(Params->GetNumberField(TEXT("weight")));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+		return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"));
+
+	int32 ChannelIndex = 0;
+	if (double TempVal; Params->TryGetNumberField(TEXT("channel_index"), TempVal))
+		ChannelIndex = static_cast<int32>(TempVal);
+	else
+		return FMonolithActionResult::Error(TEXT("Parameter 'channel_index' must be a number"));
+
+	float NewWeight = 0.0f;
+	if (double TempVal; Params->TryGetNumberField(TEXT("weight"), TempVal))
+		NewWeight = static_cast<float>(TempVal);
+	else
+		return FMonolithActionResult::Error(TEXT("Parameter 'weight' must be a number"));
 
 	UPoseSearchSchema* Schema = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchSchema>(AssetPath);
 	if (!Schema)
@@ -1629,8 +1655,15 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleAddDatabaseToNormalizati
 
 FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseEntryTags(const TSharedPtr<FJsonObject>& Params)
 {
-	FString DatabasePath = Params->GetStringField(TEXT("database_path"));
-	int32 EntryIndex = static_cast<int32>(Params->GetNumberField(TEXT("entry_index")));
+	FString DatabasePath;
+	if (!Params->TryGetStringField(TEXT("database_path"), DatabasePath))
+		return FMonolithActionResult::Error(TEXT("Parameter 'database_path' must be a string"));
+
+	int32 EntryIndex = 0;
+	if (double TempVal; Params->TryGetNumberField(TEXT("entry_index"), TempVal))
+		EntryIndex = static_cast<int32>(TempVal);
+	else
+		return FMonolithActionResult::Error(TEXT("Parameter 'entry_index' must be a number"));
 
 	UPoseSearchDatabase* Database = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchDatabase>(DatabasePath);
 	if (!Database)
@@ -1833,8 +1866,15 @@ static FMonolithActionResult HandleAddDatabaseEntry(const TSharedPtr<FJsonObject
 static FMonolithActionResult HandleConfigureSchemaChannel(const TSharedPtr<FJsonObject>& Params)
 {
 #if WITH_EDITORONLY_DATA
-	FString SchemaPath = Params->GetStringField(TEXT("schema_path"));
-	int32 ChannelIndex = static_cast<int32>(Params->GetNumberField(TEXT("channel_index")));
+	FString SchemaPath;
+	if (!Params->TryGetStringField(TEXT("schema_path"), SchemaPath))
+		return FMonolithActionResult::Error(TEXT("Parameter 'schema_path' must be a string"));
+
+	int32 ChannelIndex = 0;
+	if (double TempVal; Params->TryGetNumberField(TEXT("channel_index"), TempVal))
+		ChannelIndex = static_cast<int32>(TempVal);
+	else
+		return FMonolithActionResult::Error(TEXT("Parameter 'channel_index' must be a number"));
 
 	UPoseSearchSchema* Schema = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchSchema>(SchemaPath);
 	if (!Schema)
