@@ -69,11 +69,11 @@ void FMonolithBlueprintActions::RegisterActions()
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("search_nodes"),
-		TEXT("Search for nodes in a Blueprint by title or function name"),
+		TEXT("Search for nodes in a Blueprint by title, function name, or input-pin default value (finds string-bound callers like SetTimerByFunctionName targets). Searches ALL graphs recursively, including collapsed-graph composites, macro internals, and interface-implementation graphs."),
 		FMonolithActionHandler::CreateStatic(&HandleSearchNodes),
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
-			.Required(TEXT("query"), TEXT("string"), TEXT("Search string to match against node titles and function names"))
+			.Required(TEXT("query"), TEXT("string"), TEXT("Search string matched (case-insensitive contains) against node titles, function names, and input-pin default values"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("get_components"),
@@ -193,7 +193,7 @@ void FMonolithBlueprintActions::RegisterActions()
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"),     TEXT("Blueprint asset path"))
 			.Required(TEXT("variable_name"),  TEXT("string"),  TEXT("Name of the member variable to find references to (e.g. 'Health', 'TargetActor')"))
-			.Optional(TEXT("include_inherited"), TEXT("boolean"), TEXT("Also match the variable where it is scoped to a parent class, not just this Blueprint's own class (default: false)"))
+			.Optional(TEXT("include_inherited"), TEXT("boolean"), TEXT("Also match the variable where it is scoped to a parent class (default: true — a deletion audit must over-report; pass false to restrict to references scoped strictly to this Blueprint's own class)"))
 			.Build());
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("blueprint"), TEXT("search_nodes"),
 		{ TEXT("find node in blueprint"), TEXT("locate node by title"), TEXT("where is this function called in the graph"), TEXT("grep blueprint graph"), TEXT("find function call node") },
@@ -401,6 +401,49 @@ FMonolithActionResult FMonolithBlueprintActions::HandleListGraphs(const TSharedP
 		const FString IfaceName = Iface.Interface ? Iface.Interface->GetName() : FString();
 		MonolithBlueprintInternal::AddGraphArray(GraphsArr, Iface.Graphs, TEXT("interface"), IfaceName);
 	}
+
+	// Nested graphs (collapsed-graph composites, macro-instance internals) live
+	// in SubGraphs, not the top-level arrays. Without them, "graph not listed"
+	// reads as "does not exist" and reference audits go blind to everything
+	// inside a collapsed graph. Append the ones not already listed.
+	{
+		TSet<const UEdGraph*> Listed;
+		auto Collect = [&Listed](const TArray<TObjectPtr<UEdGraph>>& Arr)
+		{
+			for (const auto& G : Arr) { if (G) { Listed.Add(G); } }
+		};
+		Collect(BP->UbergraphPages);
+		Collect(BP->FunctionGraphs);
+		Collect(BP->MacroGraphs);
+		Collect(BP->DelegateSignatureGraphs);
+		for (const FBPInterfaceDescription& Iface : BP->ImplementedInterfaces)
+		{
+			Collect(Iface.Graphs);
+		}
+
+		TArray<UEdGraph*> AllGraphs;
+		BP->GetAllGraphs(AllGraphs);
+		for (UEdGraph* G : AllGraphs)
+		{
+			if (!G || Listed.Contains(G)) continue;
+			Listed.Add(G); // GetAllGraphs can surface a graph more than once
+			TSharedPtr<FJsonObject> GObj = MakeShared<FJsonObject>();
+			GObj->SetStringField(TEXT("name"), G->GetName());
+			GObj->SetStringField(TEXT("type"), TEXT("subgraph"));
+			GObj->SetNumberField(TEXT("node_count"), G->Nodes.Num());
+			// Walk the full outer chain: a composite's BoundGraph is outered to
+			// the K2Node_Composite NODE, not the parent graph directly.
+			for (const UObject* Outer = G->GetOuter(); Outer; Outer = Outer->GetOuter())
+			{
+				if (const UEdGraph* ParentGraph = Cast<UEdGraph>(Outer))
+				{
+					GObj->SetStringField(TEXT("parent_graph"), ParentGraph->GetName());
+					break;
+				}
+			}
+			GraphsArr.Add(MakeShared<FJsonValueObject>(GObj));
+		}
+	}
 	Root->SetArrayField(TEXT("graphs"), GraphsArr);
 
 	return FMonolithActionResult::Success(Root);
@@ -430,28 +473,19 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetGraphData(const TShare
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("graph_name"), Graph->GetName());
 
-	FString GraphType = TEXT("unknown");
-	if (BP->UbergraphPages.Contains(Graph)) GraphType = TEXT("event_graph");
-	else if (BP->FunctionGraphs.Contains(Graph)) GraphType = TEXT("function");
-	else if (BP->MacroGraphs.Contains(Graph)) GraphType = TEXT("macro");
-	else if (BP->DelegateSignatureGraphs.Contains(Graph)) GraphType = TEXT("delegate_signature");
-	else
-	{
-		// Interface-implementation function graphs live on a separate array (Gap 7).
-		for (const FBPInterfaceDescription& Iface : BP->ImplementedInterfaces)
-		{
-			if (Iface.Graphs.Contains(Graph))
-			{
-				GraphType = TEXT("interface");
-				if (Iface.Interface)
-				{
-					Root->SetStringField(TEXT("interface"), Iface.Interface->GetName());
-				}
-				break;
-			}
-		}
-	}
+	FString InterfaceName;
+	FString ParentGraph;
+	const FString GraphType = MonolithBlueprintInternal::ClassifyGraphType(
+		BP, Graph, InterfaceName, &ParentGraph);
 	Root->SetStringField(TEXT("graph_type"), GraphType);
+	if (!InterfaceName.IsEmpty())
+	{
+		Root->SetStringField(TEXT("interface"), InterfaceName);
+	}
+	if (!ParentGraph.IsEmpty())
+	{
+		Root->SetStringField(TEXT("parent_graph"), ParentGraph);
+	}
 
 	TArray<TSharedPtr<FJsonValue>> NodesArr;
 	NodesArr.Reserve(Graph->Nodes.Num());
@@ -832,49 +866,90 @@ FMonolithActionResult FMonolithBlueprintActions::HandleSearchNodes(const TShared
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> Results;
 
-	auto SearchGraphs = [&](const TArray<TObjectPtr<UEdGraph>>& Graphs, const FString& Type)
+	// Full recursive enumeration (GetAllGraphs) so nodes inside collapsed-graph
+	// composites, macro internals, and interface-implementation graphs are all
+	// searchable — the old top-level walk was blind to composites AND interface
+	// graphs, which turned "no matches" into a false deletion-safety signal.
+	TArray<UEdGraph*> AllGraphs;
+	BP->GetAllGraphs(AllGraphs);
+	TSet<const UEdGraph*> Visited; // GetAllGraphs can surface a graph twice
+
+	for (UEdGraph* Graph : AllGraphs)
 	{
-		for (const auto& Graph : Graphs)
+		if (!Graph || Visited.Contains(Graph)) continue;
+		Visited.Add(Graph);
+
+		FString InterfaceName;
+		FString ParentGraph;
+		const FString Type = MonolithBlueprintInternal::ClassifyGraphType(
+			BP, Graph, InterfaceName, &ParentGraph);
+
+		for (UEdGraphNode* Node : Graph->Nodes)
 		{
-			if (!Graph) continue;
-			for (UEdGraphNode* Node : Graph->Nodes)
+			if (!Node) continue;
+			FString Title = Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString();
+			FString ClassName = Node->GetClass()->GetName();
+			FString FuncName;
+
+			if (UK2Node_CallFunction* CallNode = Cast<UK2Node_CallFunction>(Node))
 			{
-				if (!Node) continue;
-				FString Title = Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString();
-				FString ClassName = Node->GetClass()->GetName();
-				FString FuncName;
+				FuncName = CallNode->FunctionReference.GetMemberName().ToString();
+			}
 
-				if (UK2Node_CallFunction* CallNode = Cast<UK2Node_CallFunction>(Node))
+			// String-typed pin defaults are how timer/delegate targets are bound
+			// (K2_SetTimer FunctionName="UpdateBossBar") — a caller that node
+			// search cannot see reads as "nobody calls this". Match input-pin
+			// defaults too and report which pin hit.
+			FString MatchedPin;
+			FString MatchedDefault;
+			for (UEdGraphPin* Pin : Node->Pins)
+			{
+				if (!Pin || Pin->Direction != EGPD_Input) continue;
+				const FString Default = !Pin->DefaultValue.IsEmpty()
+					? Pin->DefaultValue
+					: Pin->DefaultTextValue.ToString();
+				if (!Default.IsEmpty() && Default.ToLower().Contains(QueryLower))
 				{
-					FuncName = CallNode->FunctionReference.GetMemberName().ToString();
-				}
-
-				bool bMatch = Title.ToLower().Contains(QueryLower) ||
-							  ClassName.ToLower().Contains(QueryLower) ||
-							  FuncName.ToLower().Contains(QueryLower);
-
-				if (bMatch)
-				{
-					TSharedPtr<FJsonObject> RObj = MakeShared<FJsonObject>();
-					RObj->SetStringField(TEXT("graph"), Graph->GetName());
-					RObj->SetStringField(TEXT("graph_type"), Type);
-					RObj->SetStringField(TEXT("node_id"), Node->GetName());
-					RObj->SetStringField(TEXT("class"), ClassName);
-					RObj->SetStringField(TEXT("title"), Title);
-					if (!FuncName.IsEmpty())
-					{
-						RObj->SetStringField(TEXT("function"), FuncName);
-					}
-					Results.Add(MakeShared<FJsonValueObject>(RObj));
+					MatchedPin = Pin->PinName.ToString();
+					MatchedDefault = Default;
+					break;
 				}
 			}
-		}
-	};
 
-	SearchGraphs(BP->UbergraphPages, TEXT("event_graph"));
-	SearchGraphs(BP->FunctionGraphs, TEXT("function"));
-	SearchGraphs(BP->MacroGraphs, TEXT("macro"));
-	SearchGraphs(BP->DelegateSignatureGraphs, TEXT("delegate_signature"));
+			bool bMatch = Title.ToLower().Contains(QueryLower) ||
+						  ClassName.ToLower().Contains(QueryLower) ||
+						  FuncName.ToLower().Contains(QueryLower) ||
+						  !MatchedPin.IsEmpty();
+
+			if (bMatch)
+			{
+				TSharedPtr<FJsonObject> RObj = MakeShared<FJsonObject>();
+				RObj->SetStringField(TEXT("graph"), Graph->GetName());
+				RObj->SetStringField(TEXT("graph_type"), Type);
+				if (!InterfaceName.IsEmpty())
+				{
+					RObj->SetStringField(TEXT("interface"), InterfaceName);
+				}
+				if (!ParentGraph.IsEmpty())
+				{
+					RObj->SetStringField(TEXT("parent_graph"), ParentGraph);
+				}
+				RObj->SetStringField(TEXT("node_id"), Node->GetName());
+				RObj->SetStringField(TEXT("class"), ClassName);
+				RObj->SetStringField(TEXT("title"), Title);
+				if (!FuncName.IsEmpty())
+				{
+					RObj->SetStringField(TEXT("function"), FuncName);
+				}
+				if (!MatchedPin.IsEmpty())
+				{
+					RObj->SetStringField(TEXT("matched_pin"), MatchedPin);
+					RObj->SetStringField(TEXT("matched_pin_default"), MatchedDefault);
+				}
+				Results.Add(MakeShared<FJsonValueObject>(RObj));
+			}
+		}
+	}
 
 	Root->SetStringField(TEXT("query"), Query);
 	Root->SetNumberField(TEXT("match_count"), Results.Num());
@@ -2551,36 +2626,18 @@ FMonolithActionResult FMonolithBlueprintActions::HandleFindVariableReferences(co
 	}
 	const FName VarName(*VarNameStr);
 
-	bool bIncludeInherited = false;
+	// Default TRUE: a deletion audit must over-report, not under-report. The old
+	// default (false) returned a FALSE ZERO for variables declared on a parent
+	// class with live references in this Blueprint — the single most dangerous
+	// wrong answer this action can give. Pass false explicitly to restrict to
+	// references scoped strictly to this Blueprint's own class.
+	bool bIncludeInherited = true;
 	Params->TryGetBoolField(TEXT("include_inherited"), bIncludeInherited);
 
 	// include_inherited: nullptr scope skips ReferencesVariable's scope check
 	// (name-only match, so parent-class-scoped references qualify). Otherwise
 	// restrict to references scoped to this Blueprint's own generated class.
 	const UStruct* Scope = bIncludeInherited ? nullptr : Cast<UStruct>(BP->GeneratedClass);
-
-	// graph_type label for a graph, mirroring HandleGetGraphData's classification.
-	// Sets an "interface" field on the match object for interface-graph hits.
-	auto ClassifyGraph = [&](UEdGraph* Graph, FString& OutInterfaceName) -> FString
-	{
-		OutInterfaceName.Reset();
-		if (BP->UbergraphPages.Contains(Graph))         return TEXT("event_graph");
-		if (BP->FunctionGraphs.Contains(Graph))         return TEXT("function");
-		if (BP->MacroGraphs.Contains(Graph))            return TEXT("macro");
-		if (BP->DelegateSignatureGraphs.Contains(Graph)) return TEXT("delegate_signature");
-		for (const FBPInterfaceDescription& Iface : BP->ImplementedInterfaces)
-		{
-			if (Iface.Graphs.Contains(Graph))
-			{
-				if (Iface.Interface)
-				{
-					OutInterfaceName = Iface.Interface->GetName();
-				}
-				return TEXT("interface");
-			}
-		}
-		return TEXT("unknown");
-	};
 
 	TArray<UEdGraph*> AllGraphs;
 	BP->GetAllGraphs(AllGraphs);
@@ -2597,7 +2654,9 @@ FMonolithActionResult FMonolithBlueprintActions::HandleFindVariableReferences(co
 		// GetAllChildrenGraphs can surface a graph more than once across the
 		// parent arrays; classify against the source graph directly each time.
 		FString InterfaceName;
-		const FString GraphType = ClassifyGraph(Graph, InterfaceName);
+		FString ParentGraph;
+		const FString GraphType = MonolithBlueprintInternal::ClassifyGraphType(
+			BP, Graph, InterfaceName, &ParentGraph);
 
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
@@ -2638,6 +2697,10 @@ FMonolithActionResult FMonolithBlueprintActions::HandleFindVariableReferences(co
 			if (!InterfaceName.IsEmpty())
 			{
 				MObj->SetStringField(TEXT("interface"), InterfaceName);
+			}
+			if (!ParentGraph.IsEmpty())
+			{
+				MObj->SetStringField(TEXT("parent_graph"), ParentGraph);
 			}
 			MObj->SetStringField(TEXT("node_id"), K2Node->GetName());
 			MObj->SetStringField(TEXT("node_title"),

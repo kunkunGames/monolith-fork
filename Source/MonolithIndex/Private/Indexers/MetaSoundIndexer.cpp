@@ -162,6 +162,8 @@ bool FMetaSoundIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedA
 			const int64 ThisAssetId = DB.GetAssetId(MetaSoundAssetData.PackageName.ToString());
 			if (ThisAssetId < 0) continue;
 
+			// Capture residency BEFORE GetAsset() may load it (issue #81).
+			const bool bWasLoaded = MetaSoundAssetData.IsAssetLoaded();
 			UObject* Loaded = MetaSoundAssetData.GetAsset();
 			if (!Loaded) continue;
 
@@ -180,7 +182,7 @@ bool FMetaSoundIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedA
 			AssetsIndexed++;
 
 			// Mark for unloading
-			FMonolithMemoryHelper::TryUnloadPackage(Loaded);
+			FMonolithMemoryHelper::TryUnloadPackage(Loaded, bWasLoaded);
 		}
 
 		BatchNumber++;

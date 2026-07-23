@@ -3,6 +3,8 @@
 #include "MonolithUIInternal.h"
 #include "MonolithUIMoveWidgetTransaction.h"
 #include "MonolithParamSchema.h"
+#include "Components/UniformGridSlot.h"
+#include "Components/GridSlot.h"
 
 #include "Components/CanvasPanelSlot.h"
 #include "Components/HorizontalBoxSlot.h"
@@ -239,6 +241,10 @@ void FMonolithUISlotActions::RegisterActions(FMonolithToolRegistry& Registry)
             .Optional(TEXT("size_rule"), TEXT("string"), TEXT("VerticalBoxSlot/HorizontalBoxSlot size rule: Automatic or Fill")).Enum(TEXT("size_rule"), { TEXT("Automatic"), TEXT("Fill") })
             .Optional(TEXT("fill_weight"), TEXT("number"), TEXT("VerticalBoxSlot/HorizontalBoxSlot fill weight; must be finite and >= 0")).Minimum(TEXT("fill_weight"), 0.0)
             .Optional(TEXT("padding"), TEXT("object"), TEXT("Slot padding: {\"left\":0, \"top\":0, \"right\":0, \"bottom\":0}"))
+            .Optional(TEXT("row"), TEXT("integer"), TEXT("Grid slot row index (UniformGrid/Grid slots)"))
+            .Optional(TEXT("column"), TEXT("integer"), TEXT("Grid slot column index (UniformGrid/Grid slots)"))
+            .Optional(TEXT("row_span"), TEXT("integer"), TEXT("Grid slot row span (Grid slots only)"))
+            .Optional(TEXT("column_span"), TEXT("integer"), TEXT("Grid slot column span (Grid slots only)"))
             .Optional(TEXT("compile"), TEXT("boolean"), TEXT("Compile after setting"), TEXT("false"))
             .Build()
     );
@@ -506,6 +512,39 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
         }
     }
 
+    // Grid slots (UniformGridPanel / GridPanel). Mirrors the Canvas branch: one
+    // Cast per slot type, HasField-gated writes, PropsSet++ per applied property.
+    // UniformGrid shares one cell size and has NO spans; Grid supports row/column
+    // spans plus per-slot padding. h_align/v_align reuse the parsers above.
+    if (UUniformGridSlot* UGS = Cast<UUniformGridSlot>(Slot))
+    {
+        if (Params->HasField(TEXT("row")))    { UGS->SetRow(static_cast<int32>(Params->GetNumberField(TEXT("row")))); PropsSet++; }
+        if (Params->HasField(TEXT("column"))) { UGS->SetColumn(static_cast<int32>(Params->GetNumberField(TEXT("column")))); PropsSet++; }
+        if (!HAlign.IsEmpty()) { UGS->SetHorizontalAlignment(ParseHAlign(HAlign)); PropsSet++; }
+        if (!VAlign.IsEmpty()) { UGS->SetVerticalAlignment(ParseVAlign(VAlign)); PropsSet++; }
+    }
+    else if (UGridSlot* GS = Cast<UGridSlot>(Slot))
+    {
+        if (Params->HasField(TEXT("row")))         { GS->SetRow(static_cast<int32>(Params->GetNumberField(TEXT("row")))); PropsSet++; }
+        if (Params->HasField(TEXT("column")))      { GS->SetColumn(static_cast<int32>(Params->GetNumberField(TEXT("column")))); PropsSet++; }
+        if (Params->HasField(TEXT("row_span")))    { GS->SetRowSpan(static_cast<int32>(Params->GetNumberField(TEXT("row_span")))); PropsSet++; }
+        if (Params->HasField(TEXT("column_span"))) { GS->SetColumnSpan(static_cast<int32>(Params->GetNumberField(TEXT("column_span")))); PropsSet++; }
+        if (!HAlign.IsEmpty()) { GS->SetHorizontalAlignment(ParseHAlign(HAlign)); PropsSet++; }
+        if (!VAlign.IsEmpty()) { GS->SetVerticalAlignment(ParseVAlign(VAlign)); PropsSet++; }
+
+        const TSharedPtr<FJsonObject>* GridPadObj = nullptr;
+        if (Params->TryGetObjectField(TEXT("padding"), GridPadObj))
+        {
+            GS->SetPadding(FMargin(
+                (*GridPadObj)->GetNumberField(TEXT("left")),
+                (*GridPadObj)->GetNumberField(TEXT("top")),
+                (*GridPadObj)->GetNumberField(TEXT("right")),
+                (*GridPadObj)->GetNumberField(TEXT("bottom"))
+            ));
+            PropsSet++;
+        }
+    }
+
     if (PropsSet == 0)
     {
         // Phase K — surface the legal property keys in valid_options so the
@@ -517,7 +556,8 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
             TEXT("Pass one or more of the listed parameter keys with the appropriate JSON shape."),
             { TEXT("anchors"), TEXT("offsets"), TEXT("position"), TEXT("size"), TEXT("alignment"),
               TEXT("z_order"), TEXT("auto_size"), TEXT("h_align"), TEXT("v_align"), TEXT("size_rule"),
-              TEXT("fill_weight"), TEXT("padding") }));
+              TEXT("fill_weight"), TEXT("padding"),
+              TEXT("row"), TEXT("column"), TEXT("row_span"), TEXT("column_span") }));
     }
 
     FBlueprintEditorUtils::MarkBlueprintAsModified(WBP);

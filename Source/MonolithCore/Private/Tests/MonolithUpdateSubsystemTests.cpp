@@ -58,7 +58,8 @@ bool FMonolithParseSha256Test::RunTest(const FString& Parameters)
 #elif PLATFORM_LINUX
 	const FString ExpectedPrefix = TEXT("Monolith-Linux-SHA256: ");
 #else
-	const FString ExpectedPrefix = TEXT("Monolith-SHA256: ");
+	// v2 generation (Issues #90/#94) — the pre-v2 "Monolith-SHA256:" name is retired.
+	const FString ExpectedPrefix = TEXT("Monolith-SHA256-v2: ");
 #endif
 
 	TestEqual(TEXT("Parses valid hash"), UMonolithUpdateSubsystem::ParseSha256FromReleaseNotes(ExpectedPrefix + ValidHash), ValidHash);

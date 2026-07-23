@@ -22,6 +22,8 @@
 #include "UObject/UObjectGlobals.h"
 
 // PART C — passive modal watcher.
+#include "Misc/CoreDelegates.h"
+#include "Misc/EngineVersionComparison.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Widgets/SWindow.h"
 
@@ -204,6 +206,29 @@ private:
 
 FMonolithHeadlessLayoutSaveGuard GMonolithHeadlessLayoutSaveGuard;
 
+// Best-effort title + message harvest of the active (or about-to-be-active) modal
+// window. The window may not yet be on the modal stack at PRE broadcast time, so
+// fall back to the active top-level window. Text extraction is delegated to
+// MonolithEditorModalDiagnostics::HarvestWidgetTree, which bounds the walk by depth,
+// widget count, and text length and reports truncation explicitly.
+void HarvestActiveModalWindow(FString& OutTitle, FMonolithModalWidgetSnapshot& OutSnapshot)
+{
+	if (!FSlateApplication::IsInitialized())
+	{
+		return;
+	}
+	FSlateApplication& Slate = FSlateApplication::Get();
+	TSharedPtr<SWindow> Window = Slate.GetActiveModalWindow();
+	if (!Window.IsValid())
+	{
+		Window = Slate.GetActiveTopLevelWindow();
+	}
+	if (Window.IsValid())
+	{
+		OutTitle = Window->GetTitle().ToString();
+		MonolithEditorModalDiagnostics::HarvestWidgetTree(Window->GetContent(), OutSnapshot);
+	}
+}
 }
 
 void FMonolithEditorModule::StartupModule()
@@ -253,58 +278,121 @@ void FMonolithEditorModule::StartupModule()
 	const int32 EditorActionCount = Registry.GetNamespaceActionCount(TEXT("editor"));
 	UE_LOG(LogMonolith, Log, TEXT("Monolith — Editor module loaded (%d editor actions)"), EditorActionCount);
 
-	// PART C — subscribe to the pre-Slate-modal broadcast so we can log modal context
-	// just before the blocking nested loop starves the in-process MCP server.
+	// PART C — subscribe to the paired pre/post Slate-modal broadcasts so an external
+	// consumer tailing the log can pair MODAL_OPEN with MODAL_CLOSE: an unmatched OPEN
+	// past a grace period means the game thread is still inside the blocking nested
+	// loop (and the in-process MCP server is starved).
 #if WITH_EDITOR
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
 	PreSlateModalHandle = FCoreDelegates::PreSlateModalWithContext.AddRaw(this, &FMonolithEditorModule::OnPreSlateModal);
+	PostSlateModalHandle = FCoreDelegates::PostSlateModalWithContext.AddRaw(this, &FMonolithEditorModule::OnPostSlateModal);
+#else
+	PreSlateModalHandle = FCoreDelegates::PreSlateModal.AddRaw(this, &FMonolithEditorModule::OnPreSlateModal);
+	PostSlateModalHandle = FCoreDelegates::PostSlateModal.AddRaw(this, &FMonolithEditorModule::OnPostSlateModal);
+#endif
 #endif
 }
 
+#if WITH_EDITOR
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+
 void FMonolithEditorModule::OnPreSlateModal(const FCoreDelegates::FModalWindowContext& Context)
 {
-	// PreSlateModalWithContext fires before Slate pushes the window onto its active-modal
-	// stack. Use the supplied stable identifier instead of harvesting the unrelated active
-	// top-level window, which can report background dock-hint text as the modal message.
+	// Always emit at least a timestamped record — text extraction is best-effort
+	// (the window may not yet be on the modal stack at broadcast time).
 	FString Title;
 	FMonolithModalWidgetSnapshot Snapshot;
-	bool bContextWindowAvailable = false;
+	HarvestActiveModalWindow(Title, Snapshot);
 
-	if (FSlateApplication::IsInitialized())
-	{
-		SWindow* ContextWindow = reinterpret_cast<SWindow*>(Context.WindowIdentifier);
-		if (ContextWindow)
-		{
-			bContextWindowAvailable = true;
-			Title = ContextWindow->GetTitle().ToString();
-			MonolithEditorModalDiagnostics::HarvestWidgetTree(ContextWindow->GetContent(), Snapshot);
-		}
-	}
+	FOpenModalRecord Record;
+	Record.Title = Title;
+	Record.SlowTask = Context.bIsSlowTaskWindow.IsSet()
+		? (Context.bIsSlowTaskWindow.GetValue() ? TEXT("true") : TEXT("false"))
+		: TEXT("unknown");
+	Record.OpenedAt = FDateTime::Now();
 
-	const FString Timestamp = FDateTime::Now().ToString(TEXT("%Y-%m-%dT%H:%M:%S"));
+	const int64 Id = static_cast<int64>(Context.WindowIdentifier);
+	OpenModals.Add(Id, Record);
+
+	// Same verbosity split as the CLOSE record: an engine-classified auto-dismiss
+	// progress window is routine and must not drown the log, while a modal that will
+	// actually block the game thread (and therefore the in-process MCP server) warns.
 	if (MonolithEditorModalDiagnostics::IsAutoDismissProgressModal(Context.bIsSlowTaskWindow))
 	{
 		UE_LOG(LogMonolith, Log,
-			TEXT("MODAL_PROGRESS ts='%s' context_valid=%s classification_valid=%s widgets=%d truncated=%s title='%s' text='%s' — auto-dismiss progress window; the current editor action remains synchronous until it closes."),
-			*Timestamp,
-			bContextWindowAvailable ? TEXT("true") : TEXT("false"),
-			Context.bIsSlowTaskWindow.IsSet() ? TEXT("true") : TEXT("false"),
-			Snapshot.VisitedWidgetCount,
-			Snapshot.bTruncated ? TEXT("true") : TEXT("false"),
-			*Title,
-			*Snapshot.Text);
+			TEXT("MODAL_OPEN ts='%s' id=%lld slow_task=%s widgets=%d truncated=%s title='%s' text='%s' — auto-dismiss progress window; the current editor action stays synchronous until it closes."),
+			*Record.OpenedAt.ToString(TEXT("%Y-%m-%dT%H:%M:%S")), Id, *Record.SlowTask,
+			Snapshot.VisitedWidgetCount, Snapshot.bTruncated ? TEXT("true") : TEXT("false"),
+			*Title, *Snapshot.Text);
 		return;
 	}
 
 	UE_LOG(LogMonolith, Warning,
-		TEXT("MODAL_OPEN ts='%s' context_valid=%s classification_valid=%s widgets=%d truncated=%s title='%s' text='%s' — game thread is about to enter a blocking modal loop; MCP will be unresponsive until dismissed."),
-		*Timestamp,
-		bContextWindowAvailable ? TEXT("true") : TEXT("false"),
-		Context.bIsSlowTaskWindow.IsSet() ? TEXT("true") : TEXT("false"),
-		Snapshot.VisitedWidgetCount,
-		Snapshot.bTruncated ? TEXT("true") : TEXT("false"),
-		*Title,
-		*Snapshot.Text);
+		TEXT("MODAL_OPEN ts='%s' id=%lld slow_task=%s widgets=%d truncated=%s title='%s' text='%s' — game thread is about to enter a blocking modal loop; MCP will be unresponsive until dismissed."),
+		*Record.OpenedAt.ToString(TEXT("%Y-%m-%dT%H:%M:%S")), Id, *Record.SlowTask,
+		Snapshot.VisitedWidgetCount, Snapshot.bTruncated ? TEXT("true") : TEXT("false"),
+		*Title, *Snapshot.Text);
 }
+
+void FMonolithEditorModule::OnPostSlateModal(const FCoreDelegates::FModalWindowContext& Context)
+{
+	const int64 Id = static_cast<int64>(Context.WindowIdentifier);
+
+	// Echo the cached open-record fields; an unmatched close (subscribed mid-modal,
+	// or an open we never saw) still emits a parseable record.
+	FString Title;
+	FString SlowTask = TEXT("unknown");
+	FString OpenAge = TEXT("unknown");
+	if (const FOpenModalRecord* Record = OpenModals.Find(Id))
+	{
+		Title = Record->Title;
+		SlowTask = Record->SlowTask;
+		OpenAge = FString::Printf(TEXT("%.1f"), (FDateTime::Now() - Record->OpenedAt).GetTotalSeconds());
+		OpenModals.Remove(Id);
+	}
+
+	// Auto-dismiss progress windows are expected and self-clearing, so they stay at Log
+	// while a genuinely blocking modal warns. Verbosity is picked from the cached open
+	// record because bIsSlowTaskWindow is only supplied on the PRE broadcast. The record
+	// itself is still emitted either way, so OPEN/CLOSE pairing is never broken.
+	const FString Timestamp = FDateTime::Now().ToString(TEXT("%Y-%m-%dT%H:%M:%S"));
+	if (SlowTask == TEXT("true"))
+	{
+		UE_LOG(LogMonolith, Log,
+			TEXT("MODAL_CLOSE ts='%s' id=%lld slow_task=%s title='%s' open_age_s=%s — auto-dismiss progress window closed; game thread resumed."),
+			*Timestamp, Id, *SlowTask, *Title, *OpenAge);
+		return;
+	}
+
+	UE_LOG(LogMonolith, Warning,
+		TEXT("MODAL_CLOSE ts='%s' id=%lld slow_task=%s title='%s' open_age_s=%s — modal dismissed; game thread resumed."),
+		*Timestamp, Id, *SlowTask, *Title, *OpenAge);
+}
+
+#else // pre-5.8: no WithContext delegates — paired records without id/slow-task.
+
+void FMonolithEditorModule::OnPreSlateModal()
+{
+	FString Title;
+	FMonolithModalWidgetSnapshot Snapshot;
+	HarvestActiveModalWindow(Title, Snapshot);
+
+	UE_LOG(LogMonolith, Warning,
+		TEXT("MODAL_OPEN ts='%s' id=0 slow_task=unknown widgets=%d truncated=%s title='%s' text='%s' — game thread is about to enter a blocking modal loop; MCP will be unresponsive until dismissed."),
+		*FDateTime::Now().ToString(TEXT("%Y-%m-%dT%H:%M:%S")),
+		Snapshot.VisitedWidgetCount, Snapshot.bTruncated ? TEXT("true") : TEXT("false"),
+		*Title, *Snapshot.Text);
+}
+
+void FMonolithEditorModule::OnPostSlateModal()
+{
+	UE_LOG(LogMonolith, Warning,
+		TEXT("MODAL_CLOSE ts='%s' id=0 slow_task=unknown title='' open_age_s=unknown — modal dismissed; game thread resumed."),
+		*FDateTime::Now().ToString(TEXT("%Y-%m-%dT%H:%M:%S")));
+}
+
+#endif // engine version
+#endif // WITH_EDITOR
 
 void FMonolithEditorModule::ShutdownModule()
 {
@@ -318,11 +406,30 @@ void FMonolithEditorModule::ShutdownModule()
 
 	FMonolithToolRegistry::Get().UnregisterOwner(TEXT("MonolithEditor"));
 #if WITH_EDITOR
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
 	if (PreSlateModalHandle.IsValid())
 	{
 		FCoreDelegates::PreSlateModalWithContext.Remove(PreSlateModalHandle);
 		PreSlateModalHandle.Reset();
 	}
+	if (PostSlateModalHandle.IsValid())
+	{
+		FCoreDelegates::PostSlateModalWithContext.Remove(PostSlateModalHandle);
+		PostSlateModalHandle.Reset();
+	}
+	OpenModals.Empty();
+#else
+	if (PreSlateModalHandle.IsValid())
+	{
+		FCoreDelegates::PreSlateModalWithContext.Remove(PreSlateModalHandle);
+		PreSlateModalHandle.Reset();
+	}
+	if (PostSlateModalHandle.IsValid())
+	{
+		FCoreDelegates::PostSlateModal.Remove(PostSlateModalHandle);
+		PostSlateModalHandle.Reset();
+	}
+#endif
 #endif
 
 	if (FModuleManager::Get().IsModuleLoaded("PropertyEditor"))

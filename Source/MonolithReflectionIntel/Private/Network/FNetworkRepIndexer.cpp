@@ -329,6 +329,17 @@ void FNetworkRepIndexer::ScanArtefact(
 	TArray<FNetPropHarvest> NetProps;
 	TSet<FString> NetPropKeysSeen; // dedupe harvest on "Class|Prop"
 
+	// UE 5.8 codegen change: the statics class is emitted through a per-block
+	// `#define UHT_STATICS Z_Construct_UClass_<C>_Statics` alias, so property
+	// declarations read `UHT_STATICS::NewProp_<X> = { "<X>", ..., (EPropertyFlags)0x... }`
+	// instead of the fully-expanded 5.7 form ClassPropertyFlagsPattern matches.
+	// Same capture groups minus the leading class (1=PropSym, 2=PropStr, 3=Hex);
+	// the owning class is the current `// Begin Class <C>` banner. Function-param
+	// NewProps that share the alias are filtered out by the CPF_Net gate below
+	// (parameters never carry CPF_Net). Built once per artefact.
+	const FRegexPattern AliasedClassPropertyFlagsPattern(
+		TEXT("UHT_STATICS::NewProp_([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*\\{\\s*\"([^\"]+)\"\\s*,\\s*[^,]*,\\s*\\(EPropertyFlags\\)0x([0-9A-Fa-f]+)"));
+
 	for (int32 LineIdx = 0; LineIdx < Lines.Num(); ++LineIdx)
 	{
 		const FString& Line = Lines[LineIdx];
@@ -377,6 +388,34 @@ void FNetworkRepIndexer::ScanArtefact(
 				if (bAlreadySeen) { continue; }
 				FNetPropHarvest H;
 				H.OwningClass = DeclaringClass;
+				H.PropertyName = PropStr;
+				H.bRepNotify = (PropFlags & kCPF_RepNotify) != 0;
+				NetProps.Add(MoveTemp(H));
+			}
+		}
+
+		// ------ CPF_Net harvest, UE 5.8 aliased form (`UHT_STATICS::NewProp_...`).
+		// Owning class = the current Begin-Class banner; the CPF_Net gate rejects
+		// the function-parameter NewProps that also flow through the alias.
+		{
+			FRegexMatcher AliasM(AliasedClassPropertyFlagsPattern, Line);
+			while (AliasM.FindNext())
+			{
+				const FString PropSym = AliasM.GetCaptureGroup(1);
+				const FString PropStr = AliasM.GetCaptureGroup(2);
+				const FString HexStr  = AliasM.GetCaptureGroup(3);
+				if (!PropStr.Equals(PropSym, ESearchCase::CaseSensitive)) { continue; }
+
+				const uint64 PropFlags = static_cast<uint64>(
+					FCString::Strtoui64(*HexStr, nullptr, /*Base=*/16));
+				if ((PropFlags & kCPF_Net) == 0) { continue; } // not replicated
+
+				const FString Key = CurrentClass + TEXT("|") + PropStr;
+				bool bAlreadySeen = false;
+				NetPropKeysSeen.Add(Key, &bAlreadySeen);
+				if (bAlreadySeen) { continue; }
+				FNetPropHarvest H;
+				H.OwningClass = CurrentClass;
 				H.PropertyName = PropStr;
 				H.bRepNotify = (PropFlags & kCPF_RepNotify) != 0;
 				NetProps.Add(MoveTemp(H));

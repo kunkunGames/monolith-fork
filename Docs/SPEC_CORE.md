@@ -1,6 +1,6 @@
 ﻿# Monolith — Technical Specification
 
-**Version:** v0.20.3
+**Version:** 0.21.2 (Beta)
 **Wiki:** https://github.com/tumourlove/monolith/wiki
 **Engine:** Unreal Engine 5.7+
 **Platform:** Windows, macOS, Linux
@@ -540,9 +540,10 @@ This folder is both the working copy and the git repo (`git@github.com:tumourlov
 
 1. On editor startup (5s delay), checks `api.github.com/repos/tumourlove/monolith/releases/latest`
 2. Compares `tag_name` semver against compiled `MONOLITH_VERSION`
-3. If newer: shows a dialog window with full release notes + "Install Update" / "Remind Me Later"
-4. Download stages to `Saved/Monolith/Staging/` (NOT Plugins/ — would cause UBT conflicts). If a matching `Monolith-SHA256-UE5.x:` marker is present in the release notes, the downloaded zip is verified against it before extraction; legacy `Monolith-SHA256:` remains accepted for compatibility. If no matching engine marker is present, it aborts (it warns and proceeds only for legacy assets).
-5. On editor exit, a detached swap script runs:
+3. Selects the release asset for the running engine (compile-time `ENGINE_MINOR_VERSION`; fail-closed if a per-engine release has no matching asset) and parses the matching `Monolith-SHA256-v2-UE5.<minor>:` integrity marker from the release notes (fail-closed if a per-engine asset has no matching v2 marker; legacy assets use `Monolith-SHA256-v2:`, absent = proceed unverified with a warning)
+4. If newer: shows a dialog window with full release notes + "Install Update" / "Remind Me Later"
+5. Download stages to `Saved/Monolith/Staging/` (NOT Plugins/ — would cause UBT conflicts); the downloaded zip's SHA-256 is computed with the plugin's portable `MonolithSha256::Compute` (FIPS 180-4, no engine platform hook — `FPlatformMisc::GetSHA256Signature` has no Windows impl and its generic fallback fatally asserts, Issues #90/#94) and must equal the parsed marker or the install refuses. The "v2" marker generation exists because v0.14.7–v0.21.0 updaters hard-assert on the old marker names — old names must never be emitted again
+6. On editor exit, a detached swap script runs:
    - Polls `tasklist` for `UnrealEditor.exe` until it's gone (120s timeout)
    - Asks for user confirmation (Y/N)
    - `move` command with retry loop (10 attempts × 3s) to handle Defender/Indexer file locks

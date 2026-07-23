@@ -9,6 +9,7 @@
 #include "K2Node_Event.h"
 #include "K2Node_CreateDelegate.h"
 #include "EdGraphSchema_K2.h"
+#include "UObject/UObjectIterator.h"
 
 namespace
 {
@@ -1131,15 +1132,26 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleAddEventDispatcher(c
 		}
 	}
 
+	// The multicast delegate member variable is what the Blueprint compiler turns into the
+	// FMulticastDelegateProperty on the generated class — without it the dispatcher exists only
+	// as a signature graph and CallDelegate/AddDelegate can never bind it. Mirrors
+	// FBlueprintEditor::OnAddNewDelegate (variable first, graph second, rollback on failure).
+	FEdGraphPinType DelegateType;
+	DelegateType.PinCategory = UEdGraphSchema_K2::PC_MCDelegate;
+	if (!FBlueprintEditorUtils::AddMemberVariable(BP, UniqueName, DelegateType))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to add delegate member variable: %s"), *DispatcherName));
+	}
+
 	UEdGraph* NewGraph = FBlueprintEditorUtils::CreateNewGraph(
 		BP, UniqueName, UEdGraph::StaticClass(), UEdGraphSchema_K2::StaticClass());
 
 	if (!NewGraph)
 	{
+		FBlueprintEditorUtils::RemoveMemberVariable(BP, UniqueName);
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create delegate signature graph: %s"), *DispatcherName));
 	}
 
-	BP->DelegateSignatureGraphs.Add(NewGraph);
 	NewGraph->bEditable = false;
 
 	const UEdGraphSchema_K2* K2Schema = GetDefault<UEdGraphSchema_K2>();
@@ -1148,6 +1160,7 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleAddEventDispatcher(c
 	K2Schema->AddExtraFunctionFlags(NewGraph, (FUNC_BlueprintCallable | FUNC_BlueprintEvent | FUNC_Public));
 	K2Schema->MarkFunctionEntryAsEditable(NewGraph, true);
 
+	BP->DelegateSignatureGraphs.Add(NewGraph);
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
 
 	// Compute display name (strip _Signature if UE added it)
@@ -1655,7 +1668,19 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRemoveEventDispatche
 		}
 	}
 
+	// Remove the delegate member variable alongside the graph, matching SMyBlueprint::OnDeleteDelegate.
+	// The variable exists for dispatchers created in-editor (and via add_event_dispatcher as of this
+	// fix); leaving it behind orphans a PC_MCDelegate variable on the Blueprint.
+	FBlueprintEditorUtils::RemoveMemberVariable(BP, SigGraph->GetFName());
 	FBlueprintEditorUtils::RemoveGraph(BP, SigGraph, EGraphRemoveFlags::Recompile);
+
+	for (TObjectIterator<UK2Node_CreateDelegate> It(RF_ClassDefaultObject, /*bIncludeDerivedClasses*/ true, /*InternalExcludeFlags*/ EInternalObjectFlags::Garbage); It; ++It)
+	{
+		if (IsValid(*It) && IsValid(It->GetGraph()))
+		{
+			It->HandleAnyChange();
+		}
+	}
 
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("asset_path"), AssetPath);

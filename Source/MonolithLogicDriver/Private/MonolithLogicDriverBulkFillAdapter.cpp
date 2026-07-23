@@ -27,6 +27,7 @@
 #include "MonolithBulkFillTypes.h"
 #include "Reflection/MonolithReflectionWalker.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithJsonUtils.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "ScopedTransaction.h"
@@ -122,7 +123,7 @@ namespace MonolithLogicDriverBulkFillInternal
 		// fanout to instanced state nodes is a v1.1 refinement.
 		for (const auto& StateKV : (*StatesObj)->Values)
 		{
-			const FString& StateName = StateKV.Key;
+			const FString StateName = MonolithKeyToString(StateKV.Key);
 			const TSharedPtr<FJsonObject>* StatePropsObj = nullptr;
 			if (!StateKV.Value->TryGetObject(StatePropsObj) || !StatePropsObj || !(*StatePropsObj).IsValid())
 			{

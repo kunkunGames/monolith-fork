@@ -1103,6 +1103,8 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 					// Load asset on game thread — the dispatcher guarantees the asset
 					// compiler is idle before this runs, so GetAsset() won't reenter
 					// the texture compiler's PostCompilation guard.
+					// Capture residency BEFORE GetAsset() may load it (issue #81).
+					const bool bWasLoaded = Entry.AssetData.IsAssetLoaded();
 					UObject* LoadedAsset = Entry.AssetData.GetAsset();
 					if (LoadedAsset)
 					{
@@ -1119,7 +1121,7 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 						}
 
 						// Mark asset for unloading to help GC
-						FMonolithMemoryHelper::TryUnloadPackage(LoadedAsset);
+						FMonolithMemoryHelper::TryUnloadPackage(LoadedAsset, bWasLoaded);
 					}
 					else
 					{

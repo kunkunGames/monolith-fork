@@ -87,10 +87,13 @@ private:
 	bool bUpdateInProgress = false;
 	FTSTicker::FDelegateHandle UpdateCheckTickerHandle;
 
-	/** SHA256 hash parsed from the GitHub release notes (Monolith-SHA256: <64-hex>
-	 *  marker added by make_release.ps1). Stashed during CheckForUpdate, consumed
-	 *  by OnDownloadComplete to verify the downloaded zip before extraction.
+	/** SHA256 hash parsed from the GitHub release notes (Monolith-SHA256-v2[-UE5.x]:
+	 *  <64-hex> marker added by make_release.ps1). Stashed during CheckForUpdate,
+	 *  consumed by OnDownloadComplete to verify the downloaded zip before extraction.
 	 *  Empty string means the release didn't include a marker — legacy releases
-	 *  log a warning and proceed without verification (no regression). Issue #38. */
+	 *  log a warning and proceed without verification (no regression). Issue #38.
+	 *  The "v2" marker generation exists because pre-v0.21.1 updaters fatally
+	 *  assert when they recognize a marker (Issues #90/#94) — they must never
+	 *  match a modern release's markers. */
 	FString PendingExpectedSha256;
 };

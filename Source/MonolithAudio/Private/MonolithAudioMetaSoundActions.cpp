@@ -2305,7 +2305,7 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::BuildMetaSoundFromSpec(con
 	{
 		for (const auto& Pair : (*InterfaceConns)->Values)
 		{
-			const FString InterfacePinName(Pair.Key.Len(), *Pair.Key);
+			const FString InterfacePinName = MonolithKeyToString(Pair.Key);
 			const TSharedPtr<FJsonObject>& ConnObj = Pair.Value->AsObject();
 			if (!ConnObj.IsValid())
 			{

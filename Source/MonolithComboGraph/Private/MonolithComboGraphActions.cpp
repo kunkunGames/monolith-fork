@@ -1490,7 +1490,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeEffects(cons
 
 	for (const auto& Pair : (*EffectsObj)->Values)
 	{
-		FString TagName = Pair.Key;
+		FString TagName = MonolithKeyToString(Pair.Key);
 		const TSharedPtr<FJsonObject>* ContainerObj = nullptr;
 
 		if (!Pair.Value.IsValid() || Pair.Value->Type != EJson::Object)
@@ -1649,7 +1649,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeCues(const T
 
 	for (const auto& Pair : (*CuesObj)->Values)
 	{
-		FString TagName = Pair.Key;
+		FString TagName = MonolithKeyToString(Pair.Key);
 		const TSharedPtr<FJsonObject>* ContainerObj = nullptr;
 
 		if (!Pair.Value.IsValid() || Pair.Value->Type != EJson::Object)

@@ -12,6 +12,10 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "K2Node_CallFunction.h"
+#include "K2Node_CallArrayFunction.h"
+#include "K2Node_CallDataTableFunction.h"
+#include "K2Node_CallMaterialParameterCollectionFunction.h"
+#include "K2Node_CommutativeAssociativeBinaryOperator.h"
 #include "K2Node_CustomEvent.h"
 #include "K2Node_VariableGet.h"
 #include "K2Node_VariableSet.h"
@@ -100,6 +104,11 @@ static const TMap<FString, FNodeAlias>& GetNodeAliases()
 		// SpawnActorFromClass aliases
 		Aliases.Add(TEXT("spawn_actor"),    {TEXT("SpawnActorFromClass"), {}});
 		Aliases.Add(TEXT("spawn"),          {TEXT("SpawnActorFromClass"), {}});
+		// Bare "SpawnActor" must NOT reach the generic fallback: it resolves to the LEGACY
+		// UK2Node_SpawnActor, whose GetNodeTitle() null-derefs on an unconfigured node
+		// (BlueprintPin->DefaultObject->GetName() with no null check, K2Node_SpawnActor.cpp:284)
+		// — an editor-killing EXCEPTION_ACCESS_VIOLATION at 0x18.
+		Aliases.Add(TEXT("spawnactor"),     {TEXT("SpawnActorFromClass"), {}});
 
 		// DynamicCast aliases
 		Aliases.Add(TEXT("cast"),           {TEXT("DynamicCast"), {}});
@@ -120,6 +129,10 @@ static const TMap<FString, FNodeAlias>& GetNodeAliases()
 		Aliases.Add(TEXT("switch_enum"),       {TEXT("SwitchOnEnum"), {}});
 		Aliases.Add(TEXT("switchonenum"),      {TEXT("SwitchOnEnum"), {}});
 		Aliases.Add(TEXT("switch_on_enum"),    {TEXT("SwitchOnEnum"), {}});
+		// Raw K2 class name: without this alias it falls to the generic UK2Node_
+		// fallback, which creates the node but never calls SetEnum → null Enum →
+		// "bad enum". Route it to the SwitchOnEnum branch so the enum is set.
+		Aliases.Add(TEXT("k2node_switchenum"), {TEXT("SwitchOnEnum"), {}});
 		Aliases.Add(TEXT("switch_int"),        {TEXT("SwitchOnInt"), {}});
 		Aliases.Add(TEXT("switchonint"),       {TEXT("SwitchOnInt"), {}});
 		Aliases.Add(TEXT("switch_on_int"),     {TEXT("SwitchOnInt"), {}});
@@ -746,6 +759,303 @@ static TSharedPtr<FJsonObject> MakeAddEventNodeErrorData(
 }
 
 // ============================================================
+//  Shared SwitchEnum / CallFunction resolution (add_node + resolve_node)
+// ============================================================
+//
+// One implementation of the FR7 enum lookup and the FR8 function-reference
+// resolution so the real write (HandleAddNode) and the dry-run preview
+// (HandleResolveNode) can never diverge.
+
+// Resolve the UEnum for a SwitchEnum node. Handles a bare/E-prefixed short name,
+// a /Script path (already-loaded types via TryFindTypeSlow), and an UNLOADED
+// UserDefinedEnum asset path (LoadObject — TryFindTypeSlow/FindFirstObject only
+// see already-loaded types). Returns nullptr when nothing resolves.
+static UEnum* ResolveSwitchEnumType(const FString& EnumType)
+{
+	if (EnumType.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	const bool bIsPath = EnumType.Contains(TEXT("/"));
+
+	UEnum* FoundEnum = UClass::TryFindTypeSlow<UEnum>(EnumType);
+	if (!FoundEnum && !bIsPath && !EnumType.StartsWith(TEXT("E")))
+	{
+		FoundEnum = UClass::TryFindTypeSlow<UEnum>(FString::Printf(TEXT("E%s"), *EnumType));
+	}
+	// Legacy short-name fallback (keeps prior behaviour for anything TryFindTypeSlow misses).
+	if (!FoundEnum && !bIsPath)
+	{
+		FoundEnum = FindFirstObject<UEnum>(*EnumType, EFindFirstObjectOptions::NativeFirst);
+		if (!FoundEnum && !EnumType.StartsWith(TEXT("E")))
+		{
+			FoundEnum = FindFirstObject<UEnum>(*FString::Printf(TEXT("E%s"), *EnumType), EFindFirstObjectOptions::NativeFirst);
+		}
+	}
+	// Asset-path fallback: load an unloaded UserDefinedEnum from its object path.
+	if (!FoundEnum && bIsPath)
+	{
+		FoundEnum = LoadObject<UEnum>(nullptr, *EnumType);
+	}
+	return FoundEnum;
+}
+
+// Stamp a CallFunction reference onto CallNode from FuncName + optional
+// TargetClassName, using SelfBP as the self-context Blueprint (may be null in a
+// dry-run without asset_path). A function authored ON a Blueprint is referenced by
+// MEMBER — SetSelfMember for the self BP (stores no class, survives skeleton
+// regeneration) or SetExternalMember with the AUTHORITATIVE GeneratedClass for
+// another BP (never SkeletonGeneratedClass, which is transient). Native C++
+// functions keep SetFromFunction. Does NOT AllocateDefaultPins — the caller does,
+// so add_node and the dry-run each control node placement. Returns true on
+// success; on failure fills OutError and returns false. On success,
+// OutResolvedFunction (if non-null) receives the resolved UFunction so callers
+// can pick the palette-correct node class from its metadata.
+static bool ResolveCallFunctionReference(UK2Node_CallFunction* CallNode, UBlueprint* SelfBP,
+	const FString& FuncName, const FString& TargetClassName, FString& OutError,
+	UFunction** OutResolvedFunction = nullptr)
+{
+	if (!CallNode)
+	{
+		OutError = TEXT("Internal error: null CallFunction node");
+		return false;
+	}
+
+	// Blueprint-callable wrappers use the K2_ prefix (GetActorLocation → K2_GetActorLocation).
+	TArray<FName> FuncNameCandidates;
+	FuncNameCandidates.Add(FName(*FuncName));
+	if (!FuncName.StartsWith(TEXT("K2_")))
+	{
+		FuncNameCandidates.Add(FName(*FString::Printf(TEXT("K2_%s"), *FuncName)));
+	}
+
+	// Find the first candidate name present on a class (walks the super chain).
+	auto FindCandidateOn = [&FuncNameCandidates](UClass* Cls) -> UFunction*
+	{
+		if (!Cls) return nullptr;
+		for (const FName& Candidate : FuncNameCandidates)
+		{
+			if (UFunction* F = Cls->FindFunctionByName(Candidate)) return F;
+		}
+		return nullptr;
+	};
+
+	if (!TargetClassName.IsEmpty())
+	{
+		// Resolve target_class. A Blueprint may arrive as an asset path, a '_C'
+		// generated-class path/name, or a bare BP name; a native class as a
+		// bare/prefixed C++ name. Try the Blueprint interpretation first.
+		UBlueprint* TargetBP = nullptr;
+		{
+			FString BpPath = TargetClassName;
+			// Normalize a generated-class ref to the BP asset path:
+			//   "/Game/Foo/BP_Bar.BP_Bar_C" → "/Game/Foo/BP_Bar"; "BP_Bar_C" → "BP_Bar".
+			if (BpPath.EndsWith(TEXT("_C")))
+			{
+				int32 DotIdx = INDEX_NONE;
+				if (BpPath.FindLastChar(TEXT('.'), DotIdx))
+				{
+					BpPath = BpPath.Left(DotIdx);
+				}
+				else
+				{
+					BpPath = BpPath.LeftChop(2);
+				}
+			}
+			if (BpPath.Contains(TEXT("/")))
+			{
+				TSharedPtr<FJsonObject> Synthetic = MakeShared<FJsonObject>();
+				Synthetic->SetStringField(TEXT("asset_path"), BpPath);
+				FString ResolvedPath;
+				TargetBP = MonolithBlueprintInternal::LoadBlueprintFromParams(Synthetic, ResolvedPath);
+			}
+		}
+
+		// Native / loaded-class resolution (also picks up a bare-name BP via its
+		// "_C" generated class, from which we recover the owning UBlueprint).
+		UClass* TargetClass = nullptr;
+		if (!TargetBP)
+		{
+			TargetClass = FindFirstObject<UClass>(*TargetClassName, EFindFirstObjectOptions::NativeFirst);
+			if (!TargetClass && !TargetClassName.StartsWith(TEXT("U")))
+				TargetClass = FindFirstObject<UClass>(*FString::Printf(TEXT("U%s"), *TargetClassName), EFindFirstObjectOptions::NativeFirst);
+			if (!TargetClass && TargetClassName.StartsWith(TEXT("U")))
+				TargetClass = FindFirstObject<UClass>(*TargetClassName.Mid(1), EFindFirstObjectOptions::NativeFirst);
+			if (!TargetClass && !TargetClassName.EndsWith(TEXT("_C")))
+				TargetClass = FindFirstObject<UClass>(*FString::Printf(TEXT("%s_C"), *TargetClassName), EFindFirstObjectOptions::NativeFirst);
+
+			if (TargetClass)
+			{
+				TargetBP = Cast<UBlueprint>(TargetClass->ClassGeneratedBy);
+			}
+		}
+
+		if (TargetBP)
+		{
+			// Blueprint function. Consult the skeleton class first (it carries
+			// just-added functions before the next full compile), then the
+			// generated class.
+			UClass* SkelClass = TargetBP->SkeletonGeneratedClass;
+			UClass* GenClass  = TargetBP->GeneratedClass;
+			UFunction* BpFunc = FindCandidateOn(SkelClass);
+			if (!BpFunc) BpFunc = FindCandidateOn(GenClass);
+			if (!BpFunc)
+			{
+				OutError = FString::Printf(
+					TEXT("Function '%s' not found on Blueprint '%s' (also tried K2_ prefix). Ensure the function exists and is BlueprintCallable."),
+					*FuncName, *TargetClassName);
+				return false;
+			}
+			const FName ResolvedName = BpFunc->GetFName();
+			if (OutResolvedFunction) *OutResolvedFunction = BpFunc;
+
+			if (SelfBP && TargetBP == SelfBP)
+			{
+				// Self-context call: store no class so it survives recompiles.
+				CallNode->FunctionReference.SetSelfMember(ResolvedName);
+			}
+			else
+			{
+				if (!GenClass)
+				{
+					OutError = FString::Printf(
+						TEXT("Target Blueprint '%s' has no GeneratedClass (needs compile). Compile it, then retry."),
+						*TargetClassName);
+					return false;
+				}
+				// External member: authoritative GeneratedClass, NOT the skeleton.
+				CallNode->FunctionReference.SetExternalMember(ResolvedName, GenClass);
+			}
+			return true;
+		}
+		else if (TargetClass)
+		{
+			// Native C++ class: SetFromFunction (computes self-context + parent).
+			UFunction* Func = FindCandidateOn(TargetClass);
+			if (!Func)
+			{
+				OutError = FString::Printf(
+					TEXT("Function '%s' not found on class '%s' (also tried K2_ prefix). Ensure the function is BlueprintCallable."),
+					*FuncName, *TargetClassName);
+				return false;
+			}
+			if (OutResolvedFunction) *OutResolvedFunction = Func;
+			CallNode->SetFromFunction(Func);
+			return true;
+		}
+
+		OutError = FString::Printf(
+			TEXT("Class '%s' not found for CallFunction (tried native, U-prefix, '_C' generated-class name, and Blueprint asset path)."),
+			*TargetClassName);
+		return false;
+	}
+
+	// No target_class. Check SelfBP's own class chain first so a BP-authored
+	// function binds as a self member instead of an arbitrary external match.
+	UClass* SkelClass = SelfBP ? SelfBP->SkeletonGeneratedClass : nullptr;
+	UClass* GenClass  = SelfBP ? SelfBP->GeneratedClass : nullptr;
+	UFunction* SelfFunc = FindCandidateOn(SkelClass);
+	if (!SelfFunc) SelfFunc = FindCandidateOn(GenClass);
+
+	// "Own" == declared on SelfBP's class (not inherited from a native super).
+	// Inherited native members (e.g. K2_GetActorLocation) keep the SetFromFunction
+	// path, which stamps the correct native parent class.
+	const bool bIsOwnBpFunction = SelfFunc &&
+		(SelfFunc->GetOwnerClass() == SkelClass || SelfFunc->GetOwnerClass() == GenClass);
+
+	if (SelfFunc && OutResolvedFunction)
+	{
+		*OutResolvedFunction = SelfFunc;
+	}
+	if (bIsOwnBpFunction)
+	{
+		CallNode->FunctionReference.SetSelfMember(SelfFunc->GetFName());
+		return true;
+	}
+	if (SelfFunc)
+	{
+		// Inherited member resolved on the self chain — deterministic owner.
+		CallNode->SetFromFunction(SelfFunc);
+		return true;
+	}
+
+	// Widget Blueprints bias toward UWidget-derived owners so name collisions
+	// (e.g. SetVisibility) resolve to the UMG widget the author meant rather than
+	// an arbitrary first-match engine class.
+	UFunction* Func = FindFunctionAcrossLoadedClasses(FuncNameCandidates, IsWidgetBlueprintContext(SelfBP));
+	if (!Func)
+	{
+		OutError = FString::Printf(
+			TEXT("Function '%s' not found in any loaded class (also tried K2_ prefix)"), *FuncName);
+		return false;
+	}
+	if (OutResolvedFunction) *OutResolvedFunction = Func;
+	CallNode->SetFromFunction(Func);
+	return true;
+}
+
+// Mirror UBlueprintFunctionNodeSpawner::Create's node-class choice so tool-created
+// call nodes get the same specialized UK2Node_CallFunction subclass the editor's
+// palette spawns. This is what makes wildcard array pins resolve on connect:
+// KismetArrayLibrary functions carry the ArrayParm metadata and the propagation
+// logic lives in UK2Node_CallArrayFunction::NotifyPinConnectionListChanged — a
+// base UK2Node_CallFunction node has no propagation machinery at all, so its
+// wildcard TargetArray/NewItem pins can never resolve, no matter how they are
+// wired. (The type-promotion branch — UK2Node_PromotableOperator — is
+// intentionally not mirrored: FTypePromotion is module-private, and a plain
+// CallFunction node remains correct for explicitly-typed operator functions.)
+static UClass* ChooseCallFunctionNodeClass(const UFunction* Function)
+{
+	if (!Function)
+	{
+		return UK2Node_CallFunction::StaticClass();
+	}
+
+	const bool bIsPure = Function->HasAllFunctionFlags(FUNC_BlueprintPure);
+	if (bIsPure && Function->HasMetaData(FBlueprintMetadata::MD_CommutativeAssociativeBinaryOperator))
+	{
+		return UK2Node_CommutativeAssociativeBinaryOperator::StaticClass();
+	}
+	if (Function->HasMetaData(FBlueprintMetadata::MD_MaterialParameterCollectionFunction))
+	{
+		return UK2Node_CallMaterialParameterCollectionFunction::StaticClass();
+	}
+	if (Function->HasMetaData(FBlueprintMetadata::MD_DataTablePin))
+	{
+		return UK2Node_CallDataTableFunction::StaticClass();
+	}
+	if (Function->HasMetaData(FBlueprintMetadata::MD_ArrayParam))
+	{
+		return UK2Node_CallArrayFunction::StaticClass();
+	}
+	return UK2Node_CallFunction::StaticClass();
+}
+
+// Bind a variable node's member reference. Local variables live on the function
+// entry node, not the class — a SetSelfMember bind for a local name resolves to
+// nothing and the node materializes with NO data pin. Mirror the editor's
+// binding (EdGraphSchema_K2.cpp: SetLocalMember(name, top-level graph name,
+// guid)) when the containing graph declares a matching local; locals shadow
+// same-named member variables, matching function-scope resolution.
+static void BindVariableNodeReference(UK2Node_Variable* VarNode, UBlueprint* BP,
+	UEdGraph* Graph, const FString& VarName)
+{
+	const FName VarFName(*VarName);
+	if (UEdGraph* TopGraph = FBlueprintEditorUtils::GetTopLevelGraph(Graph))
+	{
+		const FGuid LocalVarGuid =
+			FBlueprintEditorUtils::FindLocalVariableGuidByName(BP, TopGraph, VarFName);
+		if (LocalVarGuid.IsValid())
+		{
+			VarNode->VariableReference.SetLocalMember(VarFName, TopGraph->GetName(), LocalVarGuid);
+			return;
+		}
+	}
+	VarNode->VariableReference.SetSelfMember(VarFName);
+}
+
+// ============================================================
 //  MonolithBlueprintInternal helpers
 // ============================================================
 
@@ -783,7 +1093,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Optional(TEXT("graph_name"),        TEXT("string"),  TEXT("Graph name (defaults to EventGraph)"))
 			.Optional(TEXT("position"),          TEXT("array"),   TEXT("Node position as [x, y] (default: [0, 0])"), {TEXT("pos")})
 			.Optional(TEXT("function_name"),     TEXT("string"),  TEXT("Function name for CallFunction nodes (e.g. PrintString)"))
-			.Optional(TEXT("target_class"),      TEXT("string"),  TEXT("Name of the class to search for the function being called (CallFunction) or the multicast delegate being bound (AddDelegate / RemoveDelegate / ClearDelegate / CallDelegate). Accepts a bare class name (e.g. 'KismetSystemLibrary', 'MyPawn'). For delegate nodes, defaults to the BP's generated class (self-context) if omitted. For CallFunction, all loaded classes are searched if omitted."), {TEXT("function_class"), TEXT("member_class")})
+			.Optional(TEXT("target_class"),      TEXT("string"),  TEXT("Name of the class to search for the function being called (CallFunction) or the multicast delegate being bound (AddDelegate / RemoveDelegate / ClearDelegate / CallDelegate). Accepts a bare class name (e.g. 'KismetSystemLibrary', 'MyPawn'). For CallFunction it may also reference a Blueprint-defined function: pass a Blueprint asset path, a generated-class '_C' path/name, or a bare BP name (external member on the target BP's generated class), or this Blueprint itself for a self call. For delegate nodes, defaults to the BP's generated class (self-context) if omitted. For CallFunction, if omitted a function defined on this Blueprint binds as a self member; otherwise all loaded classes are searched."), {TEXT("function_class"), TEXT("member_class")})
 			.Optional(TEXT("variable_name"),     TEXT("string"),  TEXT("Variable name for VariableGet/VariableSet nodes"))
 			.Optional(TEXT("event_name"),        TEXT("string"),  TEXT("Custom event name for CustomEvent nodes"))
 			.Optional(TEXT("macro_name"),        TEXT("string"),  TEXT("Macro graph name for MacroInstance nodes"))
@@ -791,7 +1101,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Optional(TEXT("cast_class"),        TEXT("string"),  TEXT("Class name for DynamicCast nodes (e.g. 'MyPawn'). Accepts A/U prefix or bare name."))
 			.Optional(TEXT("actor_class"),       TEXT("string"),  TEXT("Actor class name for SpawnActorFromClass nodes"))
 			.Optional(TEXT("struct_type"),       TEXT("string"),  TEXT("Struct type for MakeStruct/BreakStruct nodes (e.g. 'Vector', 'Transform', 'FHitResult'). Accepts F prefix or bare name."))
-			.Optional(TEXT("enum_type"),         TEXT("string"),  TEXT("Enum type for SwitchOnEnum nodes (e.g. 'ECollisionChannel'). Accepts E prefix or bare name."))
+			.Optional(TEXT("enum_type"),         TEXT("string"),  TEXT("Enum type for SwitchOnEnum nodes. Accepts a bare/E-prefixed short name (e.g. 'ECollisionChannel'), a /Script path (e.g. '/Script/Engine.ECollisionChannel'), or a UserDefinedEnum asset path (e.g. '/Game/Enums/EMyEnum.EMyEnum' — loaded on demand). Aliases: enum, enum_path."), {TEXT("enum"), TEXT("enum_path")})
 			.Optional(TEXT("format"),            TEXT("string"),  TEXT("Format string for FormatText nodes (e.g. 'Hello {Name}, you have {Count} items'). Argument pins are auto-created from {ArgName} patterns."))
 			.Optional(TEXT("num_entries"),        TEXT("integer"), TEXT("Number of input entries for MakeArray nodes (default: 1)"))
 			.Optional(TEXT("replication"),        TEXT("string"),  TEXT("Replication mode for CustomEvent nodes: none, multicast, server, client (default: none)"))
@@ -862,9 +1172,10 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Dry-run node creation — returns resolved type, class, function, and all pins with types/defaults/direction without modifying any asset. Useful for discovering what pins a node will have before adding it."),
 		FMonolithActionHandler::CreateStatic(&HandleResolveNode),
 		FParamSchemaBuilder()
-			.Required(TEXT("node_type"),              TEXT("string"), TEXT("Node type: CallFunction, VariableGet, VariableSet, Branch, CustomEvent, ComponentBoundEvent, AddDelegate, RemoveDelegate, ClearDelegate, CallDelegate (same aliases as add_node)"))
+			.Required(TEXT("node_type"),              TEXT("string"), TEXT("Node type: CallFunction, VariableGet, VariableSet, Branch, CustomEvent, SwitchOnEnum, ComponentBoundEvent, AddDelegate, RemoveDelegate, ClearDelegate, CallDelegate (same aliases as add_node)"))
 			.Optional(TEXT("function_name"),          TEXT("string"), TEXT("Function name for CallFunction nodes"))
-			.Optional(TEXT("target_class"),           TEXT("string"), TEXT("Class to search for the function (CallFunction) or delegate (AddDelegate / RemoveDelegate / ClearDelegate / CallDelegate)"))
+			.Optional(TEXT("target_class"),           TEXT("string"), TEXT("Class to search for the function (CallFunction) or delegate (AddDelegate / RemoveDelegate / ClearDelegate / CallDelegate). For CallFunction may also be a Blueprint (asset path / '_C' / name) or this Blueprint (via asset_path) for a self / BP-defined function."))
+			.Optional(TEXT("enum_type"),              TEXT("string"), TEXT("Enum type for SwitchOnEnum dry-run. Accepts a bare/E-prefixed short name, a /Script path, or a UserDefinedEnum asset path (loaded on demand). Aliases: enum, enum_path."), {TEXT("enum"), TEXT("enum_path")})
 			.Optional(TEXT("variable_name"),          TEXT("string"), TEXT("Variable name hint for VariableGet/VariableSet (uses wildcard if omitted)"))
 			.Optional(TEXT("replication"),            TEXT("string"), TEXT("Replication mode for CustomEvent: none, multicast, server, client"))
 			.Optional(TEXT("reliable"),               TEXT("bool|string"), TEXT("Use reliable replication for CustomEvent; accepts boolean or true/false/1/0/yes/no string literal for dry-run compatibility"))
@@ -941,6 +1252,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Required(TEXT("operations"),          TEXT("array"),   TEXT("Array of operation objects: { op, ...params }"))
 			.Optional(TEXT("compile_on_complete"), TEXT("boolean"), TEXT("Compile the Blueprint after all operations complete (default: false)"))
 			.Optional(TEXT("stop_on_error"),       TEXT("boolean"), TEXT("Stop processing on first failed operation (default: false)"))
+			.Optional(TEXT("graph_name"),          TEXT("string"),  TEXT("Default graph for all operations; an op's own graph_name overrides it (default: the EventGraph)"))
 			.Build());
 
 	// ---- Wave 4 ----
@@ -1637,58 +1949,40 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 
 		UK2Node_CallFunction* CallNode = NewObject<UK2Node_CallFunction>(Graph);
 
-		// Build list of function name variants to try:
-		// Blueprint-callable wrappers use K2_ prefix (e.g. GetActorLocation → K2_GetActorLocation)
-		TArray<FName> FuncNameCandidates;
-		FuncNameCandidates.Add(FName(*FuncName));
-		if (!FuncName.StartsWith(TEXT("K2_")))
+		// Shared with resolve_node's dry-run: stamps a self / external-BP / native
+		// function reference. BP-defined self functions bind via SetSelfMember (no
+		// class stored); other BPs via SetExternalMember on the authoritative
+		// GeneratedClass (never the transient skeleton).
+		FString RefError;
+		UFunction* ResolvedFunction = nullptr;
+		if (!ResolveCallFunctionReference(CallNode, BP, FuncName, TargetClassName, RefError, &ResolvedFunction))
 		{
-			FuncNameCandidates.Add(FName(*FString::Printf(TEXT("K2_%s"), *FuncName)));
+			return FMonolithActionResult::Error(RefError);
 		}
 
-		UFunction* Func = nullptr;
-		if (!TargetClassName.IsEmpty())
+		// Palette parity: functions whose metadata demands a specialized subclass
+		// (array-parm, data-table, material-collection, commutative binary op) are
+		// re-created on that class — the base node lacks its pin machinery (e.g.
+		// wildcard array-pin propagation). The provisional base node was never
+		// added to the graph and is simply dropped. Re-resolving onto the new node
+		// (rather than copying FunctionReference) preserves SetFromFunction's side
+		// effects such as purity flags.
+		UClass* NodeClass = ChooseCallFunctionNodeClass(ResolvedFunction);
+		if (NodeClass != UK2Node_CallFunction::StaticClass())
 		{
-			// Resolve class name — try as-is, with U prefix, and without U prefix
-			UClass* TargetClass = FindFirstObject<UClass>(*TargetClassName, EFindFirstObjectOptions::NativeFirst);
-			if (!TargetClass && !TargetClassName.StartsWith(TEXT("U")))
-				TargetClass = FindFirstObject<UClass>(*FString::Printf(TEXT("U%s"), *TargetClassName), EFindFirstObjectOptions::NativeFirst);
-			if (!TargetClass && TargetClassName.StartsWith(TEXT("U")))
-				TargetClass = FindFirstObject<UClass>(*TargetClassName.Mid(1), EFindFirstObjectOptions::NativeFirst);
-
-			if (TargetClass)
+			UK2Node_CallFunction* SpecializedNode = NewObject<UK2Node_CallFunction>(Graph, NodeClass);
+			if (ResolveCallFunctionReference(SpecializedNode, BP, FuncName, TargetClassName, RefError))
 			{
-				// FindFunctionByName searches the full inheritance chain by default
-				for (const FName& Candidate : FuncNameCandidates)
-				{
-					Func = TargetClass->FindFunctionByName(Candidate);
-					if (Func) break;
-				}
-			}
-			if (!Func)
-			{
-				return FMonolithActionResult::Error(FString::Printf(
-					TEXT("Function '%s' not found on class '%s' (also tried K2_ prefix). Ensure the function is BlueprintCallable."),
-					*FuncName, *TargetClassName));
-			}
-		}
-		else
-		{
-			// Widget Blueprints bias toward UWidget-derived owners so name
-			// collisions (e.g. SetVisibility) resolve to the UMG widget the
-			// author meant rather than an arbitrary first-match engine class.
-			Func = FindFunctionAcrossLoadedClasses(FuncNameCandidates, IsWidgetBlueprintContext(BP));
-			if (!Func)
-			{
-				return FMonolithActionResult::Error(FString::Printf(
-					TEXT("Function '%s' not found in any loaded class (also tried K2_ prefix)"), *FuncName));
+				CallNode = SpecializedNode;
 			}
 		}
 
-		CallNode->SetFromFunction(Func);
 		CallNode->NodePosX = PosX;
 		CallNode->NodePosY = PosY;
 		Graph->AddNode(CallNode, /*bUserAction=*/true, /*bSelectNewNode=*/false);
+		// AllocateDefaultPins regenerates pins from the now-set FunctionReference
+		// (self / external / native) — a BP-defined function that previously bound
+		// as "None" now expands its real parameter/return pins.
 		CallNode->AllocateDefaultPins();
 		NewNode = CallNode;
 	}
@@ -1703,7 +1997,7 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 		}
 
 		UK2Node_VariableGet* VarNode = NewObject<UK2Node_VariableGet>(Graph);
-		VarNode->VariableReference.SetSelfMember(FName(*VarName));
+		BindVariableNodeReference(VarNode, BP, Graph, VarName);
 		VarNode->NodePosX = PosX;
 		VarNode->NodePosY = PosY;
 		Graph->AddNode(VarNode, true, false);
@@ -1721,7 +2015,7 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 		}
 
 		UK2Node_VariableSet* VarNode = NewObject<UK2Node_VariableSet>(Graph);
-		VarNode->VariableReference.SetSelfMember(FName(*VarName));
+		BindVariableNodeReference(VarNode, BP, Graph, VarName);
 		VarNode->NodePosX = PosX;
 		VarNode->NodePosY = PosY;
 		Graph->AddNode(VarNode, true, false);
@@ -1992,16 +2286,16 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 		Params->TryGetStringField(TEXT("enum_type"), EnumType);
 		if (EnumType.IsEmpty())
 		{
-			return FMonolithActionResult::Error(TEXT("SwitchOnEnum node requires 'enum_type' (e.g. enum_type=ECollisionChannel)"));
+			return FMonolithActionResult::Error(TEXT("SwitchOnEnum node requires 'enum_type' (e.g. enum_type=ECollisionChannel, or a /Script or /Game asset path for a UserDefinedEnum)"));
 		}
 
-		UEnum* FoundEnum = FindFirstObject<UEnum>(*EnumType, EFindFirstObjectOptions::NativeFirst);
-		if (!FoundEnum && !EnumType.StartsWith(TEXT("E")))
-			FoundEnum = FindFirstObject<UEnum>(*FString::Printf(TEXT("E%s"), *EnumType), EFindFirstObjectOptions::NativeFirst);
+		// Shared with resolve_node: short name / E-prefix / /Script path / unloaded
+		// UserDefinedEnum asset path.
+		UEnum* FoundEnum = ResolveSwitchEnumType(EnumType);
 		if (!FoundEnum)
 		{
 			return FMonolithActionResult::Error(FString::Printf(
-				TEXT("Enum not found for SwitchOnEnum: '%s' (also tried 'E%s')"), *EnumType, *EnumType));
+				TEXT("Enum not found for SwitchOnEnum: '%s' (tried short-name lookup, 'E%s', and asset-path load). For a UserDefinedEnum pass its full object path, e.g. /Game/Enums/EMyEnum.EMyEnum."), *EnumType, *EnumType));
 		}
 
 		UK2Node_SwitchEnum* SwitchNode = NewObject<UK2Node_SwitchEnum>(Graph);
@@ -2323,7 +2617,7 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 
 	FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
 
-	TSharedPtr<FJsonObject> Root = MonolithBlueprintInternal::SerializeNode(NewNode);
+	TSharedPtr<FJsonObject> Root = MonolithBlueprintInternal::SerializeNode(NewNode, bGenericFallback);
 	Root->SetStringField(TEXT("asset_path"), AssetPath);
 	Root->SetStringField(TEXT("graph"), Graph->GetName());
 	if (bGenericFallback)
@@ -2735,16 +3029,37 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleConnectPins(const TSh
 	FString GraphName;
 	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 
-	UEdGraphNode* SrcNode = MonolithBlueprintInternal::FindNodeById(BP, GraphName, SourceNodeId);
+	// A node ID is unique only WITHIN a graph. When graph_name is omitted, collect
+	// every graph the ID resolves in so a cross-graph collision surfaces as a clear
+	// "pass graph_name" error rather than silently connecting the wrong node.
+	const TCHAR* GraphNameHint = GraphName.IsEmpty()
+		? TEXT(" If this node ID exists in more than one graph, pass graph_name to target the intended node.")
+		: TEXT("");
+
+	TArray<FString> SrcMatchGraphs;
+	UEdGraphNode* SrcNode = MonolithBlueprintInternal::FindNodeById(BP, GraphName, SourceNodeId, &SrcMatchGraphs);
 	if (!SrcNode)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Source node not found: %s"), *SourceNodeId));
 	}
+	if (GraphName.IsEmpty() && SrcMatchGraphs.Num() > 1)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Source node ID '%s' exists in %d graphs (%s); pass graph_name to disambiguate."),
+			*SourceNodeId, SrcMatchGraphs.Num(), *FString::Join(SrcMatchGraphs, TEXT(", "))));
+	}
 
-	UEdGraphNode* TgtNode = MonolithBlueprintInternal::FindNodeById(BP, GraphName, TargetNodeId);
+	TArray<FString> TgtMatchGraphs;
+	UEdGraphNode* TgtNode = MonolithBlueprintInternal::FindNodeById(BP, GraphName, TargetNodeId, &TgtMatchGraphs);
 	if (!TgtNode)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Target node not found: %s"), *TargetNodeId));
+	}
+	if (GraphName.IsEmpty() && TgtMatchGraphs.Num() > 1)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Target node ID '%s' exists in %d graphs (%s); pass graph_name to disambiguate."),
+			*TargetNodeId, TgtMatchGraphs.Num(), *FString::Join(TgtMatchGraphs, TEXT(", "))));
 	}
 
 	FString SrcAvailPins;
@@ -2752,7 +3067,7 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleConnectPins(const TSh
 	if (!SrcPin)
 	{
 		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("Source pin '%s' not found on node '%s'. Available pins: %s"), *SourcePinName, *SourceNodeId, *SrcAvailPins));
+			TEXT("Source pin '%s' not found on node '%s'. Available pins: %s.%s"), *SourcePinName, *SourceNodeId, *SrcAvailPins, GraphNameHint));
 	}
 
 	FString TgtAvailPins;
@@ -2760,7 +3075,7 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleConnectPins(const TSh
 	if (!TgtPin)
 	{
 		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("Target pin '%s' not found on node '%s'. Available pins: %s"), *TargetPinName, *TargetNodeId, *TgtAvailPins));
+			TEXT("Target pin '%s' not found on node '%s'. Available pins: %s.%s"), *TargetPinName, *TargetNodeId, *TgtAvailPins, GraphNameHint));
 	}
 
 	const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
@@ -2858,10 +3173,19 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleDisconnectPins(const 
 	FString TargetPinName;
 	Params->TryGetStringField(TEXT("target_pin"), TargetPinName);
 
+	// Schema-mediated breaks, matching the editor's interactive path. The raw
+	// pin-level calls (BreakAllPinLinks / BreakLinkTo) notify only the FAR
+	// side's nodes (or nobody), so this node never heard the disconnect and
+	// type-dependent wildcard pins (e.g. UK2Node_CallArrayFunction, macro
+	// instances) stayed stuck on the old resolved type instead of reverting
+	// to wildcard. UEdGraphSchema::BreakPinLinks / BreakSinglePinLink fire
+	// PinConnectionListChanged on BOTH owning nodes.
+	const UEdGraphSchema* Schema = Node->GetGraph()->GetSchema();
+
 	if (TargetNodeId.IsEmpty())
 	{
 		// Break all connections on this pin
-		Pin->BreakAllPinLinks(true);
+		Schema->BreakPinLinks(*Pin, /*bSendsNodeNotification=*/true);
 	}
 	else
 	{
@@ -2884,7 +3208,7 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleDisconnectPins(const 
 				TEXT("Target pin '%s' not found on node '%s'. Available pins: %s"), *TargetPinName, *TargetNodeId, *TgtAvailPins2));
 		}
 
-		Pin->BreakLinkTo(TargetPin);
+		Schema->BreakSinglePinLink(Pin, TargetPin);
 	}
 
 	FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
@@ -3112,6 +3436,12 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleBatchExecute(const TS
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Too many operations (max 500), got %d"), Ops.Num()));
 	}
+	// A top-level graph_name applies to every op that doesn't specify its own.
+	// Previously it was silently dropped (unknown-param warning) while every graph op
+	// ran against the default EventGraph — which has severed function bodies whose
+	// author believed the ops were targeting the named function graph.
+	FString TopLevelGraphName;
+	Params->TryGetStringField(TEXT("graph_name"), TopLevelGraphName);
 
 	GEditor->BeginTransaction(NSLOCTEXT("Monolith", "BPBatchExec", "BP Batch Execute"));
 
@@ -3159,6 +3489,10 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleBatchExecute(const TS
 		for (const auto& Pair : FMonolithJsonUtils::GetFields(Op))
 		{
 			SubParams->SetField(Pair.Key, Pair.Value);
+		}
+		if (!TopLevelGraphName.IsEmpty() && !SubParams->HasField(TEXT("graph_name")))
+		{
+			SubParams->SetStringField(TEXT("graph_name"), TopLevelGraphName);
 		}
 
 		FMonolithActionResult SubResult = FMonolithActionResult::Error(FString::Printf(TEXT("Unknown op: %s"), *OpName));
@@ -3296,6 +3630,7 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 	}
 
 	TArray<FString> Warnings;
+	bool bGenericFallback = false;
 
 	// Create a transient Blueprint + graph so AllocateDefaultPins() can find an
 	// owning Blueprint via the outer chain.  Without this, nodes like
@@ -3321,63 +3656,67 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 		FString TargetClassName;
 		Params->TryGetStringField(TEXT("target_class"), TargetClassName);
 
-		TArray<FName> Candidates;
-		Candidates.Add(FName(*FuncName));
-		if (!FuncName.StartsWith(TEXT("K2_")))
+		// Load the context Blueprint (from asset_path) so a self / self-defined
+		// function resolves against the REAL class exactly as add_node would. Point
+		// the transient BP at the context's classes so self-scope pin resolution
+		// (SetSelfMember) finds a BP-authored function during the dry-run.
+		UBlueprint* ContextBP = nullptr;
+		if (!Params->GetStringField(TEXT("asset_path")).IsEmpty())
 		{
-			Candidates.Add(FName(*FString::Printf(TEXT("K2_%s"), *FuncName)));
+			FString ResolveAssetPath;
+			ContextBP = MonolithBlueprintInternal::LoadBlueprintFromParams(Params, ResolveAssetPath);
 		}
-
-		UFunction* Func = nullptr;
-		if (!TargetClassName.IsEmpty())
+		if (ContextBP)
 		{
-			UClass* TargetClass = FindFirstObject<UClass>(*TargetClassName, EFindFirstObjectOptions::NativeFirst);
-			if (!TargetClass && !TargetClassName.StartsWith(TEXT("U")))
-				TargetClass = FindFirstObject<UClass>(*FString::Printf(TEXT("U%s"), *TargetClassName), EFindFirstObjectOptions::NativeFirst);
-			if (!TargetClass && TargetClassName.StartsWith(TEXT("U")))
-				TargetClass = FindFirstObject<UClass>(*TargetClassName.Mid(1), EFindFirstObjectOptions::NativeFirst);
-
-			if (TargetClass)
-			{
-				for (const FName& C : Candidates)
-				{
-					Func = TargetClass->FindFunctionByName(C);
-					if (Func) break;
-				}
-			}
-			if (!Func)
-			{
-				return FMonolithActionResult::Error(FString::Printf(
-					TEXT("Function '%s' not found on class '%s'"), *FuncName, *TargetClassName));
-			}
-		}
-		else
-		{
-			// resolve_node is a dry-run with only an optional asset_path. When a
-			// Widget Blueprint path is supplied, apply the same UWidget-derived
-			// bias used by add_node so the resolved pin layout matches what the
-			// real write would produce. Without an asset_path the bias is off and
-			// behaviour is the unbiased first-match.
-			bool bPreferWidget = false;
-			FString ResolveAssetPathParam;
-			if (Params->TryGetStringField(TEXT("asset_path"), ResolveAssetPathParam) && !ResolveAssetPathParam.IsEmpty())
-			{
-				FString ResolveAssetPath;
-				UBlueprint* ContextBP = MonolithBlueprintInternal::LoadBlueprintFromParams(Params, ResolveAssetPath);
-				bPreferWidget = IsWidgetBlueprintContext(ContextBP);
-			}
-			Func = FindFunctionAcrossLoadedClasses(Candidates, bPreferWidget);
-			if (!Func)
-			{
-				return FMonolithActionResult::Error(FString::Printf(
-					TEXT("Function '%s' not found in any loaded class"), *FuncName));
-			}
+			if (ContextBP->ParentClass)            TempBP->ParentClass = ContextBP->ParentClass;
+			if (ContextBP->GeneratedClass)         TempBP->GeneratedClass = ContextBP->GeneratedClass;
+			if (ContextBP->SkeletonGeneratedClass) TempBP->SkeletonGeneratedClass = ContextBP->SkeletonGeneratedClass;
 		}
 
 		UK2Node_CallFunction* CallNode = NewObject<UK2Node_CallFunction>(TempGraph);
-		CallNode->SetFromFunction(Func);
+		// Same resolver add_node uses — self (SetSelfMember) / external-BP
+		// (GeneratedClass) / native — so the preview matches the real write.
+		FString RefError;
+		UFunction* ResolvedFunction = nullptr;
+		if (!ResolveCallFunctionReference(CallNode, ContextBP, FuncName, TargetClassName, RefError, &ResolvedFunction))
+		{
+			return FMonolithActionResult::Error(RefError);
+		}
+		// Palette parity with add_node: preview on the same specialized subclass
+		// the real write will use (see ChooseCallFunctionNodeClass).
+		UClass* NodeClass = ChooseCallFunctionNodeClass(ResolvedFunction);
+		if (NodeClass != UK2Node_CallFunction::StaticClass())
+		{
+			UK2Node_CallFunction* SpecializedNode = NewObject<UK2Node_CallFunction>(TempGraph, NodeClass);
+			if (ResolveCallFunctionReference(SpecializedNode, ContextBP, FuncName, TargetClassName, RefError))
+			{
+				CallNode = SpecializedNode;
+			}
+		}
 		CallNode->AllocateDefaultPins();
 		Node = CallNode;
+	}
+	else if (NodeType == TEXT("SwitchOnEnum"))
+	{
+		FString EnumType = Params->GetStringField(TEXT("enum_type"));
+		if (EnumType.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("SwitchOnEnum requires 'enum_type' (e.g. enum_type=ECollisionChannel, or a /Script or /Game asset path for a UserDefinedEnum)"));
+		}
+
+		// Same resolver add_node uses — short name / E-prefix / /Script path /
+		// unloaded UserDefinedEnum asset path — so a user UENUM previews correctly.
+		UEnum* FoundEnum = ResolveSwitchEnumType(EnumType);
+		if (!FoundEnum)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Enum not found for SwitchOnEnum: '%s' (tried short-name lookup, 'E%s', and asset-path load). For a UserDefinedEnum pass its full object path, e.g. /Game/Enums/EMyEnum.EMyEnum."), *EnumType, *EnumType));
+		}
+
+		UK2Node_SwitchEnum* SwitchNode = NewObject<UK2Node_SwitchEnum>(TempGraph);
+		SwitchNode->SetEnum(FoundEnum);
+		SwitchNode->AllocateDefaultPins();
+		Node = SwitchNode;
 	}
 	else if (NodeType == TEXT("VariableGet"))
 	{
@@ -3571,6 +3910,26 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 			OwnerClass, DelegateProp, bSelfContext);
 		if (!Resolved.bSuccess) return Resolved;
 
+		// Delegate-node pins are not built from DelegateProp directly: AllocateDefaultPins
+		// RE-resolves the member reference against the node's owning Blueprint class
+		// (UK2Node::GetBlueprintClassFromNode). Against the dummy Actor TempBP the
+		// self-context lookup finds no such delegate, so the node silently allocates
+		// only its base pins (execute/then/self) — every signature parameter is dropped
+		// and self types as plain Actor. Point the transient BP at the real owner so
+		// the dry-run resolves the same signature a real add_node would; prefer the
+		// owner's skeleton class so just-edited signature params are visible before
+		// a full compile, matching in-graph node behavior.
+		TempBP->ParentClass = OwnerClass;
+		TempBP->GeneratedClass = OwnerClass;
+		TempBP->SkeletonGeneratedClass = OwnerClass;
+		if (UBlueprint* OwnerBP = Cast<UBlueprint>(OwnerClass->ClassGeneratedBy))
+		{
+			if (OwnerBP->SkeletonGeneratedClass)
+			{
+				TempBP->SkeletonGeneratedClass = OwnerBP->SkeletonGeneratedClass;
+			}
+		}
+
 		if (NodeType == TEXT("AddDelegate"))
 		{
 			UK2Node_AddDelegate* N = NewObject<UK2Node_AddDelegate>(TempGraph);
@@ -3615,12 +3974,13 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 			UK2Node* GenericNode = NewObject<UK2Node>(TempGraph, NodeClass);
 			GenericNode->AllocateDefaultPins();
 			Node = GenericNode;
+			bGenericFallback = true;
 			Warnings.Add(TEXT("Resolved via generic K2Node fallback — pins may differ in actual Blueprint context"));
 		}
 		else
 		{
 			return FMonolithActionResult::Error(FString::Printf(
-				TEXT("Unsupported node_type for resolve_node: '%s'. Supported: CallFunction, VariableGet, VariableSet, Branch, CustomEvent, Sequence, Self, MacroInstance, Return, ComponentBoundEvent, AddDelegate, RemoveDelegate, ClearDelegate, CallDelegate, or any UK2Node_ class name"), *NodeType));
+				TEXT("Unsupported node_type for resolve_node: '%s'. Supported: CallFunction, VariableGet, VariableSet, Branch, CustomEvent, SwitchOnEnum, Sequence, Self, MacroInstance, Return, ComponentBoundEvent, AddDelegate, RemoveDelegate, ClearDelegate, CallDelegate, or any UK2Node_ class name"), *NodeType));
 		}
 	}
 
@@ -3679,7 +4039,12 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 	{
 		Root->SetStringField(TEXT("resolved_function_class"), ResolvedClass);
 	}
-	Root->SetStringField(TEXT("node_title"), Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
+	// Generic-fallback nodes are unconfigured; some legacy node classes crash in
+	// GetNodeTitle() on unconfigured state (UK2Node_SpawnActor null-derefs its
+	// Blueprint pin's DefaultObject). Report the class name for those instead.
+	Root->SetStringField(TEXT("node_title"), bGenericFallback
+		? Node->GetClass()->GetName()
+		: Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
 	Root->SetArrayField(TEXT("pins"), PinsArr);
 	Root->SetNumberField(TEXT("pin_count"), PinsArr.Num());
 
@@ -5359,9 +5724,13 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddTimelineTrack(cons
 	Template->Modify();
 
 	FString CreatedType;
+	FTTTrackId NewTrackId;
 
 	if (TrackTypeStr.Equals(TEXT("float"), ESearchCase::IgnoreCase))
 	{
+		NewTrackId.TrackType = FTTTrackBase::TT_FloatInterp;
+		NewTrackId.TrackIndex = Template->FloatTracks.Num();
+
 		FTTFloatTrack NewTrack;
 		NewTrack.SetTrackName(TrackName, Template);
 		NewTrack.CurveFloat = NewObject<UCurveFloat>(OwnerClass, NAME_None, RF_Public);
@@ -5370,6 +5739,9 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddTimelineTrack(cons
 	}
 	else if (TrackTypeStr.Equals(TEXT("vector"), ESearchCase::IgnoreCase))
 	{
+		NewTrackId.TrackType = FTTTrackBase::TT_VectorInterp;
+		NewTrackId.TrackIndex = Template->VectorTracks.Num();
+
 		FTTVectorTrack NewTrack;
 		NewTrack.SetTrackName(TrackName, Template);
 		NewTrack.CurveVector = NewObject<UCurveVector>(OwnerClass, NAME_None, RF_Public);
@@ -5378,6 +5750,9 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddTimelineTrack(cons
 	}
 	else if (TrackTypeStr.Equals(TEXT("event"), ESearchCase::IgnoreCase))
 	{
+		NewTrackId.TrackType = FTTTrackBase::TT_Event;
+		NewTrackId.TrackIndex = Template->EventTracks.Num();
+
 		FTTEventTrack NewTrack;
 		NewTrack.SetTrackName(TrackName, Template);
 		NewTrack.CurveKeys = NewObject<UCurveFloat>(OwnerClass, NAME_None, RF_Public);
@@ -5387,6 +5762,9 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddTimelineTrack(cons
 	}
 	else if (TrackTypeStr.Equals(TEXT("color"), ESearchCase::IgnoreCase))
 	{
+		NewTrackId.TrackType = FTTTrackBase::TT_LinearColorInterp;
+		NewTrackId.TrackIndex = Template->LinearColorTracks.Num();
+
 		FTTLinearColorTrack NewTrack;
 		NewTrack.SetTrackName(TrackName, Template);
 		NewTrack.CurveLinearColor = NewObject<UCurveLinearColor>(OwnerClass, NAME_None, RF_Public);
@@ -5399,12 +5777,40 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddTimelineTrack(cons
 			TEXT("Unknown track_type '%s'. Must be: float, vector, event, or color"), *TrackTypeStr));
 	}
 
-	FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
+	// K2Node_Timeline::AllocateDefaultPins creates track pins from the template's
+	// DISPLAY track list (GetNumDisplayTracks/GetDisplayTrackId), not the raw track
+	// arrays — a track that is never registered there produces no pin, ever.
+	// Mirrors STimelineEditor::CreateNewTrack.
+	Template->AddDisplayTrack(NewTrackId);
+
+	// The K2Node_Timeline in the event graph only surfaces the new track's output pin
+	// after ReconstructNode() — pins regenerate from the template's track arrays in
+	// AllocateDefaultPins. Without this the track data exists but the pin never appears,
+	// and connect_pins to it fails.
+	int32 NodesReconstructed = 0;
+	TArray<UEdGraph*> AllGraphs;
+	BP->GetAllGraphs(AllGraphs);
+	for (UEdGraph* G : AllGraphs)
+	{
+		if (!G) continue;
+		for (UEdGraphNode* GNode : G->Nodes)
+		{
+			UK2Node_Timeline* TLNode = Cast<UK2Node_Timeline>(GNode);
+			if (TLNode && TLNode->TimelineName.ToString() == TimelineName)
+			{
+				TLNode->ReconstructNode();
+				++NodesReconstructed;
+			}
+		}
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
 
 	TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("timeline_name"), TimelineName);
 	Root->SetStringField(TEXT("track_name"), TrackNameStr);
 	Root->SetStringField(TEXT("track_type"), CreatedType);
+	Root->SetNumberField(TEXT("nodes_reconstructed"), NodesReconstructed);
 	return FMonolithActionResult::Success(Root);
 }
 

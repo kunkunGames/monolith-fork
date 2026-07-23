@@ -11,6 +11,65 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **FullyLoad data-loss prevention** — Replaced unsafe `CreatePackage` logic with robust data-loss prevention wrappers across multiple domains (e.g., Blueprint, LogicDriver), preventing asset corruption when mutating live packages or packages without properly loaded content (e.g. #1042).
 - **Action parameter hardening** — Hardened JSON parameter extraction across multiple domains (ComboGraph, StateTree, ConfigKeeper, Material, Niagara, Water, Editor) to properly validate payloads, reject wrong-type optional parameters, and return explicit invalid-parameter errors before dereferencing missing or null fields (e.g. #1557).
 - **CL902 merge hardening** — Tightened several high-risk merge seams before release: `monolith.discover`'s registered schema now includes every implemented terse/pagination parameter and rejects `mode=schema` without an action, `blueprint.set_property_at_path` preflights missing-map-key writes on a transient duplicate before mutating the live CDO, animation mutators now reject invalid/no-op input before dirtying assets where practical, animation docs now reflect the current ~210-action surface, and the release smoke test now fails when an enabled plugin module is missing its shipped Win64 DLL.
+
+## [0.21.2] - 2026-07-22
+
+### Fixed
+
+- **`blueprint` wildcard array pins now resolve.** Tool-created `Array_*` nodes (`MakeArray`, `AddItem`, and friends) now spawn the palette-correct `UK2Node_CallFunction` subclass, so their wildcard pins take a concrete type from the connections you make; the schema-mediated disconnect path resets the wildcard pins back to their neutral state when you unhook them. Thanks **@Alexbeav** (#95).
+- **`blueprint` reference-audit blind spots closed.** `list_graphs`, `search_nodes`, `find_variable_references`, and `get_graph_data` now see inside collapsed-composite subgraphs, read input-pin default values, catch string-bound timer callers (`SetTimerByFunctionName` and friends), and account for inherited-scope variables. Nested graphs are classified through a shared helper so every audit action walks the same graph set. Thanks **@Alexbeav** (#96).
+- **`blueprint` local-variable data pins now materialize.** `VariableGet` / `VariableSet` nodes for local variables now bind via `SetLocalMember` when the target graph declares a matching local, so the node comes up with its data pin instead of a bare exec-only node. Thanks **@Alexbeav** (#97).
+- **`blueprint` enum member variables are now enum-typed.** `VariableGet` / `VariableSet` nodes for enum member variables now use the schema's byte + subobject convention, so their pins carry the enum type and connect to enum consumers (switches, comparisons) directly. Thanks **@Alexbeav** (#98).
+- **UE 5.8 / Linux source-build compatibility.** Build fixes for the 5.8 `FJsonObject` shared-string keys and the new `-Werror` sites, plus Reflection Intelligence support for the 5.8 UHT codegen format — replicated properties, RPCs, `OnRep` handlers, interfaces, and parent chains are all parsed again on 5.8. Thanks **@gregorygmwhite** (#99).
+- **MetaSound build error on UE 5.8.** Fixed the MetaSound-side 5.8 compile break, and hardened `FJsonObject` key iteration across versions more broadly — GAS, LogicDriver, and ComboGraph bulk-fill plus MetaSound now route key access through the `MonolithKeyToString` helper so the same source builds on 5.7 and 5.8. Reported by **@Matt-Makes** (#100).
+
+### Changed
+
+- **`blueprint` `find_variable_references` now defaults `include_inherited` to `true`** (was `false`). A deletion-safety audit should over-report rather than return a false zero for a variable declared on a parent class — with the old default, auditing a variable you inherited came back empty and made deletion look safe when it wasn't. Pass `include_inherited: false` for the strict own-class-only view. Thanks **@Alexbeav** (#96).
+
+## [0.21.1] - 2026-07-20
+
+### Fixed
+
+- **CRITICAL — auto-updater no longer crashes the editor on Install (Windows).** The integrity check added in v0.14.7 (Issue #38) called `FPlatformMisc::GetSHA256Signature`, which has **no Windows implementation** — the engine's generic fallback is a fatal `checkf` assert, so clicking **Install** on the update notification killed the editor whenever the target release's notes carried a SHA256 marker (#90, #94). The updater now uses a self-contained, portable FIPS 180-4 SHA-256 (`MonolithSha256::Compute`, verified against NIST test vectors), so the integrity check works on every platform. Thanks **@Alexbeav** for the root-cause report (#90) and the fix (#91), and **@SilkroadLabs** for the parallel report (#94).
+- **SHA256 release-note markers migrated to a "v2" generation** (`Monolith-SHA256-v2-UE5.7:` / `-v2-UE5.8:` / `Monolith-SHA256-v2:`). Updaters shipped in v0.14.7–v0.21.0 hard-crash on the *old* marker names (see above) — the v2 names are invisible to them, so pre-fix updaters fail safe (fail-closed abort or unverified install) instead of asserting, while fixed updaters verify normally. Release tooling (`make_release.ps1`) emits only the v2 names from now on; the old names must never appear in a release body again.
+- **`blueprint` `add_event_dispatcher`** now creates the multicast delegate **member variable** (mirroring the Blueprint editor's own flow), so `CallDelegate` / `AddDelegate` / `RemoveDelegate` can actually bind the dispatcher; `remove_event_dispatcher` removes the variable alongside the signature graph. Thanks **@Alexbeav** (#84).
+- **`blueprint` `add_node` / `resolve_node`** no longer crash the editor on `node_type: "SpawnActor"` — the bare name now aliases to `SpawnActorFromClass` instead of instantiating the legacy `UK2Node_SpawnActor` (whose `GetNodeTitle()` null-derefs unconfigured), and generic-fallback nodes report a safe title. Thanks **@Alexbeav** (#85).
+- **`blueprint` `add_timeline_track`** registers the new track in the timeline template's display-track list and reconstructs the owning `K2Node_Timeline`, so the track's output pin actually appears and is connectable. Thanks **@Alexbeav** (#86).
+- **`blueprint` `batch_execute`** honors a top-level `graph_name` as the default graph for all operations (per-op values still win) instead of silently running every op against the EventGraph. Thanks **@Alexbeav** (#87).
+- **`blueprint` `resolve_node`** dry-runs of delegate nodes (`CallDelegate` / `AddDelegate` / `RemoveDelegate` / `ClearDelegate`) now resolve the real delegate signature pins instead of reporting only base pins. Thanks **@Alexbeav** (#92).
+- **String-encoded array/object params are now recovered centrally** in the tool registry: MCP clients that serialize complex argument values to JSON strings (Claude Code among them) no longer hit "array is required" errors on actions like `delete_assets`, `save_packages`, `set_function_params`, `set_event_dispatcher_params`. Thanks **@Alexbeav** (#93).
+
+### Added
+
+- **`editor` `load_level` fail-closed guards**: refuses (with the dirty package list) when the current map has unsaved changes that the unattended `LoadLevel` would silently discard — override with `dirty_policy:"discard"`; and refuses (instead of tripping the fatal "World Memory Leaks" assert) when a stale rooted in-memory copy of the target world is resident. Thanks **@Alexbeav** (#89).
+- **Paired `MODAL_OPEN` / `MODAL_CLOSE` log telemetry** around blocking Slate modals, with window identity and slow-task flag on UE 5.8+ — log consumers can now distinguish a healthy open→close from a modal still blocking the game thread (and starving the in-process MCP server). Thanks **@Alexbeav** (#88).
+
+## [0.21.0] - 2026-07-19
+
+### Added
+
+Small ergonomics upgrades to the `ui` and `blueprint` action packs, driven by requests on the Ideas board (Discussion #74, thanks @k-s-s). No new actions — existing actions gained aliases, defaults, and smarter resolution.
+
+- **`ui` `add_widget`** — `parent` is now accepted as an alias for `parent_name`, so you can target a non-root panel directly.
+- **`ui` `set_widget_property`** — common `UWidget` properties (`Visibility`, `RenderOpacity`, `ToolTipText`, `bIsEnabled`, and `RenderTransform.Angle` / `.Scale` / `.Translation`) are now allowlisted by default, so setting them no longer needs `raw_mode=true`.
+- **`ui` `set_brush`** — `property_name` is now optional and auto-resolves the brush property from the widget type (Image → `Brush`, Border → `Background`); `color` is accepted as an alias for `tint_color`.
+- **`ui` `set_slot_property`** — grid-slot support: `row`, `column`, `row_span`, and `column_span` now work on `UUniformGridSlot` and `UGridSlot`.
+- **`blueprint` `describe_cdo_schema`** — now emits the correct **positional** `TMap` ImportText hint (the old hint implied a keyed form the importer rejects), including the struct literal for struct-valued maps.
+- **`blueprint` `add_variable` / `set_variable_type`** — map type strings now accept prefixed key **and** value types (e.g. `map:enum:ESlateVisibility:struct:LinearColor`), so enum-keyed and struct-valued maps are authorable; previously a compound key/value type after `map:` was split on the wrong colon and silently fell back to a `bool` key/value.
+- **`blueprint` `connect_pins`** — cross-graph node-ID disambiguation: when the same node ID exists in multiple graphs, the error now points you at `graph_name` instead of connecting the wrong node.
+- **`blueprint` `add_node` / `resolve_node` (`K2Node_SwitchEnum`)** — resolves user-defined `UENUM`s by short name, `/Script` path, or unloaded `UserDefinedEnum` asset; adds `enum` / `enum_path` aliases and accepts the `k2node_switchenum` node-class alias.
+- **`blueprint` `add_node` / `resolve_node` (`K2Node_CallFunction`)** — resolves Blueprint-defined functions (both `self` and external Blueprints), not just native/engine functions.
+
+> **Note (issue #82, deferred MCP context loading):** already delivered in v0.20.3 by terse-by-default `monolith_discover`, `describe_query` on-demand schemas, and host-side tool deferral — no new work needed. Thanks @aggitti for validating the direction.
+
+### Fixed
+
+- **BlueprintAssist bridge broke against BA 4.9.0+.** `MonolithBABridge` referenced `RequestFormatAll` and `GetNumberOfPendingNodesToCache`, which changed in BlueprintAssist 4.9.0, causing a C2039 for users on the newer BA. Fixed with `__has_include` version detection so both pre-4.9 and 4.9.0+ compile. PR #78 — thanks @tc-imba (parallel fix from @mewliks in #76).
+- **GeometryScripting delay-load DLLs now gated to Win64.** The delay-load entries weren't platform-gated, which broke `BuildEnvironment.Unique` and the macOS source link. PR #77 — thanks @itismyfield.
+- **UE 5.8 source builds (CL 55116800).** `FJsonObject` keys became `FSharedString` in 5.8; two `MonolithAnimation` call sites now route through a `MonolithKeyToString` shim so the same source compiles on both 5.7 and 5.8. Issue #80 — thanks @Baba-Ramsi (also reported by @dulanw in #79).
+- **Linux / clang source builds.** Nested `/*` inside doc comments tripped `-Werror,-Wcomment` at four `MonolithReflectionIntel` sites. Fixed. Issue #83 — thanks @daschatten-tb.
+- **Indexer no longer strips `RF_Standalone` from live assets (data-loss guard).** The source indexer could clear `RF_Standalone` on assets that were already loaded and referenced, risking a save that dropped data (guard flag `0x10000002`). Added a load-time residency gate across seven `TryUnloadPackage` sites plus the landscape `CleanupWorld` branch, so the indexer only unloads packages it actually brought in. Issue #81 — thanks @Alexbeav.
 - **Optional-plugin detection no longer false-positives on plugins sharing a name prefix** (e.g. `BlueprintRetarget` was wrongly detected as BlueprintAssist, hard-linking an absent module and breaking the user's build). Tightened the disk-presence globs in MonolithBABridge/MonolithGAS/MonolithLogicDriver/MonolithComboGraph from truncated prefixes (`Blueprin*`, `Gameplaya*`, `LogicDri*`, `ComboGra*`) to full plugin names (`BlueprintAssist*`, `GameplayAbilities*`, `LogicDriver*`, `ComboGraph*`); the trailing `*` still matches versioned install folders. Reported by @k-s-s (#66).
 
 ## [0.20.3] - 2026-06-20

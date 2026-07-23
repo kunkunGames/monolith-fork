@@ -582,15 +582,14 @@ namespace MonolithUI::SpecActionsInternal
         // Styles map.
         if (SpecObj->TryGetObjectField(TEXT("styles"), Sub) && Sub)
         {
-            for (const auto& Pair : (*Sub)->Values)
+            for (const auto& Pair : FMonolithJsonUtils::GetFields(*Sub))
             {
                 const TSharedPtr<FJsonObject>* StyleObj = nullptr;
                 if (Pair.Value.IsValid() && Pair.Value->TryGetObject(StyleObj) && StyleObj)
                 {
                     FUISpecStyle Style;
                     ParseStyle(*StyleObj, Style);
-                    const FString StyleName(Pair.Key.Len(), *Pair.Key);
-                    OutDoc.Styles.Add(FName(*StyleName), Style);
+                    OutDoc.Styles.Add(FName(*Pair.Key), Style);
                 }
             }
         }
@@ -5303,7 +5302,7 @@ namespace MonolithUI::SpecActionsInternal
             return false;
         }
 
-        OutObjects.Reserve(OutObjects.Num() + Values->Num());
+        OutValues.Reserve(OutValues.Num() + Values->Num());
         for (int32 Index = 0; Index < Values->Num(); ++Index)
         {
             FString Value;

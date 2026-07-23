@@ -414,7 +414,7 @@ FDryRunReport FMonolithGASBulkFillAdapter::GasBulkFill(const FBulkFillSpec& Spec
 	{
 		for (const auto& RowKV : FMonolithJsonUtils::GetFields(RowsObj))
 		{
-			const FString& RowName = RowKV.Key;
+			const FString RowName = MonolithKeyToString(RowKV.Key);
 			const TSharedPtr<FJsonObject>* RowObjPtr = nullptr;
 			if (!RowKV.Value->TryGetObject(RowObjPtr) || !RowObjPtr || !RowObjPtr->IsValid())
 			{
@@ -444,7 +444,7 @@ FDryRunReport FMonolithGASBulkFillAdapter::GasBulkFill(const FBulkFillSpec& Spec
 
 	for (const auto& RowKV : FMonolithJsonUtils::GetFields(RowsObj))
 	{
-		const FString& RowName = RowKV.Key;
+		const FString RowName = MonolithKeyToString(RowKV.Key);
 		const TSharedPtr<FJsonObject>* RowObjPtr = nullptr;
 		if (!RowKV.Value->TryGetObject(RowObjPtr) || !RowObjPtr || !RowObjPtr->IsValid())
 		{

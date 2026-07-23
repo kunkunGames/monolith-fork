@@ -16,7 +16,8 @@
 #   7. Runs the mandatory dumpbin hard-link import smoke against that zip's DLLs
 #   8. Prints the per-engine SHA256 marker for the release notes
 #   Finally: copies the UE5.7 zip to Monolith-v<X.Y.Z>.zip (legacy bridge for old updaters)
-#   and prints the legacy Monolith-SHA256: marker (= the UE5.7 hash).
+#   and prints the Monolith-SHA256-v2: marker (= the UE5.7 hash). All markers use the
+#   "v2" names -- pre-v0.21.1 updaters hard-crash on the old names (#90/#94).
 #
 # Source users (GitHub clones) are unaffected -- Build.cs auto-detects at compile time.
 #
@@ -1388,8 +1389,15 @@ Remove-Item $TempDir -Recurse -Force -ErrorAction SilentlyContinue
 
 # =====================================================================================
 # SHA256 markers for release notes (Issue #38 + per-engine contract). The updater anchors
-# on the EXACT markers: "Monolith-SHA256-UE5.7:" / "Monolith-SHA256-UE5.8:" for engine-
-# tagged assets, and the legacy "Monolith-SHA256:" (= UE5.7 hash) for old updaters.
+# on the EXACT markers: "Monolith-SHA256-v2-UE5.7:" / "Monolith-SHA256-v2-UE5.8:" for
+# engine-tagged assets, and "Monolith-SHA256-v2:" (= UE5.7 hash) for legacy-asset installs.
+#
+# "v2" GENERATION IS LOAD-BEARING (Issues #90/#94): updaters shipped in v0.14.7-v0.21.0
+# fatally checkf-assert the editor mid-install when the release notes carry a marker they
+# recognize (their integrity check calls FPlatformMisc::GetSHA256Signature, which has no
+# Windows impl). The v2 names are invisible to those updaters, so they fail SAFE instead
+# (per-engine parse aborts fail-closed; legacy parse proceeds unverified). NEVER emit the
+# old "Monolith-SHA256:[-UE5.x]" names in any release body again.
 # =====================================================================================
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Cyan
@@ -1413,20 +1421,21 @@ Write-Host ""
 foreach ($eng in $EngineMatrix) {
     $h = $EngineHashes[$eng.Tag]
     if ($h) {
-        Write-Host "  Monolith-SHA256-$($eng.Tag): $h" -ForegroundColor White
+        Write-Host "  Monolith-SHA256-v2-$($eng.Tag): $h" -ForegroundColor White
     } else {
-        Write-Host "  Monolith-SHA256-$($eng.Tag): <UNVERIFIED -- re-run without -AllowUnverifiedImports>" -ForegroundColor Yellow
+        Write-Host "  Monolith-SHA256-v2-$($eng.Tag): <UNVERIFIED -- re-run without -AllowUnverifiedImports>" -ForegroundColor Yellow
     }
 }
 if ($LegacyHash) {
-    Write-Host "  Monolith-SHA256: $LegacyHash" -ForegroundColor White
+    Write-Host "  Monolith-SHA256-v2: $LegacyHash" -ForegroundColor White
 }
 Write-Host ""
-Write-Host "The auto-updater parses these exact markers and refuses to install if the" -ForegroundColor Yellow
-Write-Host "downloaded zip's hash does not match. Engine-tagged assets (-UE5.7 / -UE5.8)" -ForegroundColor Yellow
-Write-Host "require the matching Monolith-SHA256-<tag>: marker; the legacy Monolith-SHA256:" -ForegroundColor Yellow
-Write-Host "marker (= the UE5.7 hash) serves pre-cross-engine updaters. Do not rename or" -ForegroundColor Yellow
-Write-Host "reformat the markers -- the prefix and a single space before the hex are required." -ForegroundColor Yellow
+Write-Host "The auto-updater (v0.21.1+) parses these exact markers and refuses to install" -ForegroundColor Yellow
+Write-Host "if the downloaded zip's hash does not match. Engine-tagged assets require the" -ForegroundColor Yellow
+Write-Host "matching Monolith-SHA256-v2-<tag>: marker; Monolith-SHA256-v2: (= the UE5.7" -ForegroundColor Yellow
+Write-Host "hash) covers legacy-asset installs. Do not rename or reformat the markers --" -ForegroundColor Yellow
+Write-Host "the prefix and a single space before the hex are required. NEVER emit the old" -ForegroundColor Yellow
+Write-Host "pre-v2 marker names: v0.14.7-v0.21.0 updaters hard-crash on them (#90/#94)." -ForegroundColor Yellow
 Write-Host "================================================================" -ForegroundColor Cyan
 
 # =====================================================================================

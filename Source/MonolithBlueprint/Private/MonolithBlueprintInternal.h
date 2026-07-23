@@ -200,7 +200,54 @@ namespace MonolithBlueprintInternal
 		{
 			if (UEdGraph* G = SearchArray(Iface.Graphs)) return G;
 		}
+
+		// Nested graphs (collapsed-graph composites, macro-instance internals) are
+		// not in any top-level array — resolve them via the recursive enumeration
+		// so get_graph_data can read inside a composite by name.
+		TArray<UEdGraph*> AllGraphs;
+		BP->GetAllGraphs(AllGraphs);
+		for (UEdGraph* G : AllGraphs)
+		{
+			if (G && G->GetName() == GraphName) return G;
+		}
 		return nullptr;
+	}
+
+	// Classify a graph against the Blueprint's top-level arrays. Nested graphs
+	// (collapsed-graph composites, macro-instance internals) that are in no
+	// top-level array classify as "subgraph" with OutParentGraph (if provided)
+	// set to the nearest enclosing graph's name.
+	inline FString ClassifyGraphType(const UBlueprint* BP, UEdGraph* Graph,
+		FString& OutInterfaceName, FString* OutParentGraph = nullptr)
+	{
+		OutInterfaceName.Reset();
+		if (BP->UbergraphPages.Contains(Graph))          return TEXT("event_graph");
+		if (BP->FunctionGraphs.Contains(Graph))          return TEXT("function");
+		if (BP->MacroGraphs.Contains(Graph))             return TEXT("macro");
+		if (BP->DelegateSignatureGraphs.Contains(Graph)) return TEXT("delegate_signature");
+		for (const FBPInterfaceDescription& Iface : BP->ImplementedInterfaces)
+		{
+			if (Iface.Graphs.Contains(Graph))
+			{
+				if (Iface.Interface)
+				{
+					OutInterfaceName = Iface.Interface->GetName();
+				}
+				return TEXT("interface");
+			}
+		}
+		for (const UObject* Outer = Graph->GetOuter(); Outer; Outer = Outer->GetOuter())
+		{
+			if (const UEdGraph* ParentGraph = Cast<UEdGraph>(Outer))
+			{
+				if (OutParentGraph)
+				{
+					*OutParentGraph = ParentGraph->GetName();
+				}
+				return TEXT("subgraph");
+			}
+		}
+		return TEXT("unknown");
 	}
 
 	inline FString PinTypeToString(const FEdGraphPinType& PinType)
@@ -222,7 +269,16 @@ namespace MonolithBlueprintInternal
 		if (PinType.PinCategory == UEdGraphSchema_K2::PC_Text)
 			return TEXT("text");
 		if (PinType.PinCategory == UEdGraphSchema_K2::PC_Byte)
+		{
+			// Enum-typed pins ARE byte-category pins with the UEnum as the
+			// subcategory object (schema convention) — report them as enums so
+			// round-tripping through add_variable's "enum:<Name>" form works.
+			if (Cast<UEnum>(PinType.PinSubCategoryObject.Get()))
+			{
+				return TEXT("enum:") + PinType.PinSubCategoryObject->GetName();
+			}
 			return TEXT("byte");
+		}
 
 		if (PinType.PinCategory == UEdGraphSchema_K2::PC_Object ||
 			PinType.PinCategory == UEdGraphSchema_K2::PC_Class ||
@@ -488,13 +544,17 @@ namespace MonolithBlueprintInternal
 		return Resolved;
 	}
 
-	inline TSharedPtr<FJsonObject> SerializeNode(UEdGraphNode* Node)
+	// bSafeTitle: report the class name instead of calling GetNodeTitle(). Use for
+	// generic-fallback nodes — some legacy node classes crash in GetNodeTitle() on
+	// unconfigured state (UK2Node_SpawnActor null-derefs its Blueprint pin's DefaultObject).
+	inline TSharedPtr<FJsonObject> SerializeNode(UEdGraphNode* Node, bool bSafeTitle = false)
 	{
 		TSharedPtr<FJsonObject> NObj = MakeShared<FJsonObject>();
 		NObj->SetStringField(TEXT("id"), Node->GetName());
 		NObj->SetStringField(TEXT("class"), Node->GetClass()->GetName());
-		NObj->SetStringField(TEXT("title"),
-			Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
+		NObj->SetStringField(TEXT("title"), bSafeTitle
+			? Node->GetClass()->GetName()
+			: Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
 
 		TArray<TSharedPtr<FJsonValue>> PosArr;
 		PosArr.Add(MakeShared<FJsonValueNumber>(Node->NodePosX));
@@ -687,8 +747,17 @@ namespace MonolithBlueprintInternal
 		return nullptr;
 	}
 
-	// Find a node by its GetName() across all graphs or a specific graph
-	inline UEdGraphNode* FindNodeById(UBlueprint* BP, const FString& GraphName, const FString& NodeId)
+	// Find a node by its GetName() across all graphs or a specific graph.
+	//
+	// When GraphName is empty the search spans every graph. A node ID (GetName())
+	// is only unique WITHIN a graph, so the same ID can legitimately exist in more
+	// than one graph. If OutMatchGraphs is provided it is filled with the name of
+	// every graph containing a match — the caller can then detect a cross-graph ID
+	// collision (OutMatchGraphs.Num() > 1) and ask for a disambiguating graph_name.
+	// The FIRST match is always returned (back-compat for callers that don't pass
+	// OutMatchGraphs); with OutMatchGraphs set the scan continues so all matches
+	// are recorded.
+	inline UEdGraphNode* FindNodeById(UBlueprint* BP, const FString& GraphName, const FString& NodeId, TArray<FString>* OutMatchGraphs = nullptr)
 	{
 		auto SearchGraph = [&](UEdGraph* Graph) -> UEdGraphNode*
 		{
@@ -703,22 +772,42 @@ namespace MonolithBlueprintInternal
 		if (!GraphName.IsEmpty())
 		{
 			UEdGraph* Graph = FindGraphByName(BP, GraphName);
-			return Graph ? SearchGraph(Graph) : nullptr;
+			UEdGraphNode* Found = Graph ? SearchGraph(Graph) : nullptr;
+			if (Found && OutMatchGraphs)
+			{
+				OutMatchGraphs->Add(Graph->GetName());
+			}
+			return Found;
 		}
 
-		auto SearchGraphs = [&](const TArray<TObjectPtr<UEdGraph>>& Graphs) -> UEdGraphNode*
+		// graph_name omitted → walk every graph array (same set as before:
+		// Ubergraph, Function, Macro). Without OutMatchGraphs, stop at the first
+		// match; with it, collect all matches for collision detection.
+		UEdGraphNode* First = nullptr;
+		const TArray<TObjectPtr<UEdGraph>>* AllArrays[] = { &BP->UbergraphPages, &BP->FunctionGraphs, &BP->MacroGraphs };
+		for (const TArray<TObjectPtr<UEdGraph>>* Arr : AllArrays)
 		{
-			for (const auto& G : Graphs)
+			for (const TObjectPtr<UEdGraph>& G : *Arr)
 			{
-				if (UEdGraphNode* N = SearchGraph(G)) return N;
+				if (!G) continue;
+				if (UEdGraphNode* N = SearchGraph(G))
+				{
+					if (!First)
+					{
+						First = N;
+					}
+					if (OutMatchGraphs)
+					{
+						OutMatchGraphs->Add(G->GetName());
+					}
+					else
+					{
+						return First;
+					}
+				}
 			}
-			return nullptr;
-		};
-
-		if (UEdGraphNode* N = SearchGraphs(BP->UbergraphPages)) return N;
-		if (UEdGraphNode* N = SearchGraphs(BP->FunctionGraphs)) return N;
-		if (UEdGraphNode* N = SearchGraphs(BP->MacroGraphs)) return N;
-		return nullptr;
+		}
+		return First;
 	}
 
 	// Build a comma-separated list of non-hidden pin names on a node (for error messages)
@@ -905,22 +994,40 @@ namespace MonolithBlueprintInternal
 		else if (TypeStr.StartsWith(TEXT("map:")))
 		{
 			ContainerType = EPinContainerType::Map;
-			// map:KeyType:ValueType — split on second colon
-			int32 SecondColon;
-			if (BaseType.Mid(4).FindChar(TEXT(':'), SecondColon))
+			// map:KeyType:ValueType. The key type may itself be a compound
+			// colon-bearing token (enum:Name, struct:Name, object:Name, class:Name,
+			// softobject:Name, softclass:Name), so a naive split on the first colon
+			// after "map:" is WRONG — it slices "enum:ESlateVisibility" into key
+			// "enum" (unrecognized -> PC_Boolean default -> "key type of Boolean
+			// cannot be hashed") and mangles the value. Detect a known key prefix and
+			// consume "<prefix>:<name>" as the whole key; otherwise the key is a
+			// simple token ending at the first colon. The remainder is the value.
+			const FString AfterMap = TypeStr.Mid(4);
+			static const TCHAR* const KeyTypePrefixes[] = {
+				TEXT("softobject:"), TEXT("softclass:"), TEXT("object:"),
+				TEXT("class:"), TEXT("struct:"), TEXT("enum:")
+			};
+			int32 KeyPrefixLen = 0;
+			for (const TCHAR* Prefix : KeyTypePrefixes)
 			{
-				BaseType = TypeStr.Mid(4, SecondColon);
-				FString ValueType = TypeStr.Mid(4 + SecondColon + 1);
+				if (AfterMap.StartsWith(Prefix)) { KeyPrefixLen = FCString::Strlen(Prefix); break; }
+			}
+			int32 SepColon = INDEX_NONE;
+			if (AfterMap.RightChop(KeyPrefixLen).FindChar(TEXT(':'), SepColon))
+			{
+				SepColon += KeyPrefixLen; // colon index within AfterMap that splits key/value
+				BaseType = AfterMap.Left(SepColon);
+				const FString ValueType = AfterMap.Mid(SepColon + 1);
 				PinType.PinValueType = FEdGraphTerminalType();
 				// Parse value type recursively for the terminal type
-				FEdGraphPinType ValPinType = ParsePinTypeFromString(ValueType);
+				const FEdGraphPinType ValPinType = ParsePinTypeFromString(ValueType);
 				PinType.PinValueType.TerminalCategory = ValPinType.PinCategory;
 				PinType.PinValueType.TerminalSubCategory = ValPinType.PinSubCategory;
 				PinType.PinValueType.TerminalSubCategoryObject = ValPinType.PinSubCategoryObject;
 			}
 			else
 			{
-				BaseType = TypeStr.Mid(4);
+				BaseType = AfterMap;
 			}
 		}
 
@@ -987,9 +1094,20 @@ namespace MonolithBlueprintInternal
 		}
 		else if (BaseType.StartsWith(TEXT("enum:")))
 		{
-			PinType.PinCategory = UEdGraphSchema_K2::PC_Enum;
+			// Enum data pins are PC_Byte + the UEnum as PinSubCategoryObject — the
+			// schema's own convention (UEdGraphSchema_K2 rewrites PC_Enum to PC_Byte
+			// when it builds pin types, and every enum check tests
+			// PC_Byte && Cast<UEnum>(SubCategoryObject)). A PC_Enum-categorized
+			// variable compiles to a non-enum property, so Get/Set nodes on it
+			// materialized plain INT pins that refuse real enum connections.
 			FString EnumName = BaseType.Mid(5);
 			UEnum* FoundEnum = FindFirstObject<UEnum>(*EnumName, EFindFirstObjectOptions::NativeFirst);
+			if (!FoundEnum && EnumName.Contains(TEXT("/")))
+			{
+				// Unloaded UserDefinedEnum asset referenced by object path.
+				FoundEnum = LoadObject<UEnum>(nullptr, *EnumName);
+			}
+			PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
 			if (FoundEnum) PinType.PinSubCategoryObject = FoundEnum;
 		}
 		else if (BaseType.StartsWith(TEXT("softobject:")))

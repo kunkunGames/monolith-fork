@@ -18,9 +18,17 @@
 
 namespace
 {
-	bool TeardownLoadedWorldForIndexing(UWorld* World, UPackage* Package)
+	bool TeardownLoadedWorldForIndexing(UWorld* World, UPackage* Package, bool bWasAlreadyLoaded)
 	{
 		if (!World || !Package)
+		{
+			return false;
+		}
+
+		// Issue #81: a world that was already resident before this indexing pass is
+		// referenced elsewhere. Uninitializing it, destroying it, or stripping
+		// RF_Standalone would strand those references, so leave it exactly as found.
+		if (bWasAlreadyLoaded)
 		{
 			return false;
 		}
@@ -48,7 +56,7 @@ namespace
 		}
 
 		World->ClearFlags(RF_Standalone);
-		return FMonolithMemoryHelper::TryUnloadPackage(World);
+		return FMonolithMemoryHelper::TryUnloadPackage(World, bWasAlreadyLoaded);
 	}
 }
 
@@ -119,6 +127,10 @@ bool FLevelIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedAsset
 			int64 LevelAssetId = DB.GetAssetId(WorldData.PackageName.ToString());
 			if (LevelAssetId < 0) continue;
 
+			// Capture residency BEFORE LoadPackage (issue #81): a world already resident
+			// (e.g. an open level) must keep RF_Standalone; only strip what this pass loads.
+			const bool bWasLoaded = FindPackage(nullptr, *WorldData.PackageName.ToString()) != nullptr;
+
 			// Load the package to access level data without initializing gameplay
 			UPackage* Package = LoadPackage(nullptr, *WorldData.PackageName.ToString(), LOAD_NoWarn | LOAD_Quiet);
 			if (!Package) continue;
@@ -132,7 +144,7 @@ bool FLevelIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedAsset
 			if (!World || !World->PersistentLevel)
 			{
 				// Mark package for unload even if we couldn't find the world
-				FMonolithMemoryHelper::TryUnloadPackage(Package);
+				FMonolithMemoryHelper::TryUnloadPackage(Package, bWasLoaded);
 				continue;
 			}
 
@@ -203,40 +215,50 @@ bool FLevelIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedAsset
 			{
 				if (bContainsLandscape)
 				{
-					// Unregister every landscape proxy's components BEFORE teardown so the grass-builder destructor
-					// (driven by CleanupWorld below) never dereferences the null World->Scene. See the block comment
-					// above for the full mechanism. World-wide iteration (persistent level + all streaming sublevels)
-					// is required because landscape proxies can live outside PersistentLevel->Actors in WP/streaming
-					// worlds. The proxy class is resolved by script path to avoid a Landscape Build.cs dependency.
-					int32 UnregisteredProxies = 0;
-					static UClass* LandscapeProxyClass = FindObject<UClass>(nullptr, TEXT("/Script/Landscape.LandscapeProxy"));
-					if (LandscapeProxyClass)
+					// Issue #81 residency guard: only tear a landscape world down if THIS pass freshly loaded
+					// it. If it was already resident (referenced elsewhere), CleanupWorld would Deinitialize a
+					// LIVE world's subsystems AND clear RF_Standalone (a superset of the TryUnloadPackage strip) --
+					// stranding an externally-referenced world so File->Save trips the data-loss guard 0x10000002.
+					// The actively-open editor world is already excluded by the World != EditorWorld guard above;
+					// this additionally covers a world resident via any other outstanding reference. Mirror
+					// TryUnloadPackage's early-return: a world we didn't load is left intact (indexing already ran).
+					if (!bWasLoaded)
 					{
-						for (TActorIterator<AActor> It(World); It; ++It)
+						// Unregister every landscape proxy's components BEFORE teardown so the grass-builder destructor
+						// (driven by CleanupWorld below) never dereferences the null World->Scene. See the block comment
+						// above for the full mechanism. World-wide iteration (persistent level + all streaming sublevels)
+						// is required because landscape proxies can live outside PersistentLevel->Actors in WP/streaming
+						// worlds. The proxy class is resolved by script path to avoid a Landscape Build.cs dependency.
+						int32 UnregisteredProxies = 0;
+						static UClass* LandscapeProxyClass = FindObject<UClass>(nullptr, TEXT("/Script/Landscape.LandscapeProxy"));
+						if (LandscapeProxyClass)
 						{
-							AActor* Actor = *It;
-							if (Actor && Actor->IsA(LandscapeProxyClass))
+							for (TActorIterator<AActor> It(World); It; ++It)
 							{
-								Actor->UnregisterAllComponents();
-								++UnregisteredProxies;
+								AActor* Actor = *It;
+								if (Actor && Actor->IsA(LandscapeProxyClass))
+								{
+									Actor->UnregisterAllComponents();
+									++UnregisteredProxies;
+								}
 							}
 						}
+
+						// Now safe: the grass FComponentStates are all NULLed, so ULandscapeSubsystem::Deinitialize's
+						// destructor early-exits without touching the render scene, and Super::Deinitialize clears
+						// bInitialized (no GC-time ensure). CleanupWorld also drives WorldPartition uninit and clears
+						// RF_Standalone (superset of TryUnloadPackage), so no separate WP-uninit / TryUnloadPackage is
+						// needed for landscape worlds.
+						World->CleanupWorld();
+
+						UE_LOG(LogMonolithIndex, Verbose,
+							TEXT("LevelIndexer: '%s' has a landscape subsystem - unregistered %d landscape proxies and cleaned up the world (issue #67 optimization)."),
+							*WorldData.PackageName.ToString(), UnregisteredProxies);
 					}
-
-					// Now safe: the grass FComponentStates are all NULLed, so ULandscapeSubsystem::Deinitialize's
-					// destructor early-exits without touching the render scene, and Super::Deinitialize clears
-					// bInitialized (no GC-time ensure). CleanupWorld also drives WorldPartition uninit and clears
-					// RF_Standalone (superset of TryUnloadPackage), so no separate WP-uninit / TryUnloadPackage is
-					// needed for landscape worlds.
-					World->CleanupWorld();
-
-					UE_LOG(LogMonolithIndex, Verbose,
-						TEXT("LevelIndexer: '%s' has a landscape subsystem - unregistered %d landscape proxies and cleaned up the world (issue #67 optimization)."),
-						*WorldData.PackageName.ToString(), UnregisteredProxies);
 				}
 				else
 				{
-					TeardownLoadedWorldForIndexing(World, Package);
+					TeardownLoadedWorldForIndexing(World, Package, bWasLoaded);
 				}
 			}
 

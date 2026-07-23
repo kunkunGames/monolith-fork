@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.20.3 (Beta)
+**Version:** 0.21.2 (Beta)
 
 ---
 
@@ -119,7 +119,7 @@ Pattern table:
 | `stop_automation_tests` | Request bounded cancellation only for the active Monolith-owned asynchronous run; optional `run_id` is an ownership guard. Synchronous compatibility runs remain non-cancellable. Running stops use one `StopTests()` call followed by a bounded five-second cleanup observation. |
 | `list_automation_history` | List compact recent Monolith-triggered automation runs newest-first. `max_results` defaults to 20 and is capped to the in-memory history capacity. |
 | `run_python` | Execute a Python command, statement, or file via IPythonScriptPlugin::ExecPythonCommandEx. `command` accepts `code` and `script` aliases. Returns success, stdout/stderr captured by Python, and (for evaluate_statement mode) the evaluated result. |
-| `load_level` | Close the current persistent level (without saving) and load the specified level by /Game/... asset path. Wraps ULevelEditorSubsystem::LoadLevel. |
+| `load_level` | Wraps `ULevelEditorSubsystem::LoadLevel(AssetPath)`. Single-arg map swap. **Dirty-current-map guard (fail-closed):** `LoadLevel` runs unattended (no save prompt), so if the current world's packages (persistent level, loaded streaming levels, or their loaded external OFPA/actor/data-layer packages) are dirty, the action REFUSES with the dirty package list; pass `dirty_policy:"discard"` to proceed and lose them explicitly (echoed in `discarded_dirty_packages`). **World-leak guard:** if a PIE world is still resident, the action REFUSES while a smoke session is running (caller must `stop_pie_smoke` first), else it drives PIE teardown to completion (`RequestEndPlayMap` + bounded synchronous `EndPlayMap`) and forces `CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS)` before loading. **Stale-resident-target guard:** if a rooted in-memory copy of the TARGET world survives a standalone-flag-clear + GC pass, the action REFUSES instead of tripping the same fatal assert. |
 | `start_pie` | Begin a PIE session pinned to in-viewport mode (`EPlaySessionWorldType::PlayInEditor` + first active level viewport via `FLevelEditorModule::GetFirstActiveViewport`). Independent of the user's `LastExecutedPlayModeType` toolbar choice. Returns `started: true, mode: 'in_viewport'`. Refuses to queue duplicates when PIE is already running. |
 | `stop_pie` | End the active PIE session via `GUnrealEd->RequestEndPlayMap()`. No-op (returns `stopped: false`) if PIE not active. |
 | `run_console_command` | Execute a console command. Routes to the first PIE PlayerController found (multi-client PIE not disambiguated); falls back to `GEngine->Exec` (with null-guard) when no PIE session is active. |

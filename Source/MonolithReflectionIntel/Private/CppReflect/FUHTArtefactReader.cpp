@@ -102,7 +102,15 @@ FUHTArtefactReader::FUHTArtefactReader()
 	, BeginInterfacePattern(
 		TEXT("//\\s*\\*+\\s*Begin\\s+Interface\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+\\*"))
 	, DependentSingletonPattern(
-		TEXT("\\(UObject\\*\\s*\\(\\*\\)\\(\\)\\)Z_Construct_UClass_([A-Za-z_][A-Za-z0-9_]*)\\b"))
+		// Parent class = first UClass entry in the DependentSingletons[] array,
+		// identified by its cast prefix. UE 5.7 casts each element as
+		// `(UObject* (*)())Z_Construct_UClass_<Parent>`; UE 5.8 changed the array
+		// element type so it casts as `(FTypeConstructFunc*)Z_Construct_UClass_<Parent>`.
+		// Accept either cast (non-capturing alt) so the parent resolves on both
+		// engines. The cast prefix is REQUIRED — it excludes the bare
+		// `Z_Construct_UClass_<X>` references that appear in property object-type
+		// and interface-param blocks (which would otherwise false-match as parents).
+		TEXT("\\((?:UObject\\*\\s*\\(\\*\\)\\(\\)|FTypeConstructFunc\\*)\\)Z_Construct_UClass_([A-Za-z_][A-Za-z0-9_]*)\\b"))
 	, ClassMetaDataParamsHeader(
 		TEXT("FMetaDataPairParam\\s+Class_MetaDataParams\\s*\\[\\s*\\]"))
 	, MetaDataPairPattern(
@@ -124,8 +132,11 @@ FUHTArtefactReader::FUHTArtefactReader()
 		// + UE::CodeGen::FClassNativeFunction).
 		TEXT("\\{\\s*\\.NameUTF8\\s*=\\s*UTF8TEXT\\(\\s*\"([A-Za-z_][A-Za-z0-9_]*)\"\\s*\\)\\s*,\\s*\\.Pointer\\s*=\\s*&([A-Za-z_][A-Za-z0-9_]*)::exec([A-Za-z_][A-Za-z0-9_]*)\\s*\\}"))
 	, InterfaceParamPattern(
-		// `{ Z_Construct_UClass_<I>_NoRegister, (int32)VTABLE_OFFSET(<C>, I<I_no_U>), false }`
-		TEXT("\\{\\s*Z_Construct_UClass_([A-Za-z_][A-Za-z0-9_]*)_NoRegister\\s*,\\s*\\(int32\\)VTABLE_OFFSET\\(\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*,"))
+		// UE 5.7: `{ Z_Construct_UClass_<I>_NoRegister, (int32)VTABLE_OFFSET(<C>, I<I>), false }`
+		// UE 5.8: same but the interface singleton drops the `_NoRegister` suffix
+		//         (`Z_Construct_UClass_<I>`). Make `_NoRegister` optional and the
+		//         interface-name capture non-greedy so <I> resolves on both engines.
+		TEXT("\\{\\s*Z_Construct_UClass_([A-Za-z_][A-Za-z0-9_]*?)(?:_NoRegister)?\\s*,\\s*\\(int32\\)VTABLE_OFFSET\\(\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*,"))
 	, FuncParamsHeaderPattern(
 		// The definition line of a function's registration params, e.g.:
 		//   const UECodeGen_Private::FFunctionParams
@@ -475,17 +486,40 @@ void FUHTArtefactReader::ScanArtefact(
 		// size lines sit between). A small bounded window is ample — verified
 		// layout is header line + up to ~4 continuation lines before the flags.
 		constexpr int32 kFlagsScanWindow = 8;
+		// UE 5.8 aliased form of the FuncParams registration line: the statics
+		// class is emitted through `#define UHT_STATICS Z_Construct_UFunction_<C>_<F>_Statics`,
+		// so the line reads
+		//   UHT_STATICS::FuncParams = { { (FTypeConstructFunc*)Z_Construct_UClass_<C>,
+		//     nullptr, "<Func>", ..., (EFunctionFlags)0x..., ... } };
+		// with the flags INLINE. Owning class + func name come straight off this
+		// single line (class from the first UClass singleton, func from the string
+		// literal) — no #define state to track. Built once per artefact.
+		const FRegexPattern AliasedFuncParamsPattern(
+			TEXT("UHT_STATICS::FuncParams\\s*=\\s*\\{\\s*\\{\\s*\\(FTypeConstructFunc\\*\\)Z_Construct_UClass_([A-Za-z_][A-Za-z0-9_]*)\\s*,\\s*[^\"]*\"([A-Za-z_][A-Za-z0-9_]*)\""));
+
 		for (int32 LineIdx = 0; LineIdx < Lines.Num(); ++LineIdx)
 		{
-			FRegexMatcher HeaderM(FuncParamsHeaderPattern, Lines[LineIdx]);
-			if (!HeaderM.FindNext()) { continue; }
+			FString DeclaringClass;
+			FString FuncStr;
 
-			const FString DeclaringClass = HeaderM.GetCaptureGroup(1);
-			const FString FuncSym        = HeaderM.GetCaptureGroup(2);
-			const FString FuncStr        = HeaderM.GetCaptureGroup(3);
-			// The string literal and the symbol token must agree; a mismatch is
-			// exceptional and skipped defensively (mirrors the Funcs[] policy).
-			if (!FuncStr.Equals(FuncSym, ESearchCase::CaseSensitive)) { continue; }
+			FRegexMatcher HeaderM(FuncParamsHeaderPattern, Lines[LineIdx]);
+			if (HeaderM.FindNext())
+			{
+				DeclaringClass        = HeaderM.GetCaptureGroup(1);
+				const FString FuncSym = HeaderM.GetCaptureGroup(2);
+				FuncStr               = HeaderM.GetCaptureGroup(3);
+				// The string literal and the symbol token must agree; a mismatch is
+				// exceptional and skipped defensively (mirrors the Funcs[] policy).
+				if (!FuncStr.Equals(FuncSym, ESearchCase::CaseSensitive)) { continue; }
+			}
+			else
+			{
+				// UE 5.8 aliased form — class + func read directly off the line.
+				FRegexMatcher AliasM(AliasedFuncParamsPattern, Lines[LineIdx]);
+				if (!AliasM.FindNext()) { continue; }
+				DeclaringClass = AliasM.GetCaptureGroup(1);
+				FuncStr        = AliasM.GetCaptureGroup(2);
+			}
 
 			// Scan this line and a bounded window of following lines for the
 			// `(EFunctionFlags)0x...` token belonging to this initializer.

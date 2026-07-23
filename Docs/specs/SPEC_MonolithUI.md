@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.20.3 (Beta) — architecture expansion Phase A–L landed 2026-04-26 (plan: [`Docs/plans/2026-04-25-monolith-ui-architecture-expansion.md`](../../../../Docs/plans/2026-04-25-monolith-ui-architecture-expansion.md)); optional EffectSurface provider decouple (Wave 1/2 + Final.1) landed 2026-04-27.
+**Version:** 0.21.2 (Beta) — architecture expansion Phase A–L landed 2026-04-26 (plan: [`Docs/plans/2026-04-25-monolith-ui-architecture-expansion.md`](../../../../Docs/plans/2026-04-25-monolith-ui-architecture-expansion.md)); optional EffectSurface provider decouple (Wave 1/2 + Final.1) landed 2026-04-27.
 
 ---
 
@@ -93,10 +93,10 @@ Count history before 2026-06-30 is retained for provenance, but the live registr
 |--------|--------|-------------|
 | `create_widget_blueprint` | `save_path`, `parent_class` | Create a new Widget Blueprint asset |
 | `get_widget_tree` | `asset_path` | Get the full widget hierarchy tree. An empty/missing `asset_path` now returns a clear `missing required asset_path parameter` error instead of a confusing downstream "not found" (2026-05-23). |
-| `add_widget` | `asset_path`, `widget_class`, `parent_slot` | Add a widget to the widget tree |
+| `add_widget` | `asset_path`, `widget_class`, `parent_slot`, `parent_name` (alias `parent`) | Add a widget to the widget tree. `parent` is accepted as an alias for `parent_name` (v0.21.0, #74), so a non-root panel can be targeted directly. |
 | `add_extension_point_widget` | `asset_path`, `widget_name`, `extension_point_tag`, optional layout params | Create or update a `UUIExtensionPointWidget`-compatible widget, assign a registered `GameplayTag` to `ExtensionPointTag`, and keep CanvasPanel/VerticalBox/HorizontalBox/Overlay slot layout idempotent. Defaults `widget_class` to `/Script/UIExtension.UIExtensionPointWidget` and resolves it by reflection so MonolithUI does not hard-link the optional UIExtension plugin. |
 | `remove_widget` | `asset_path`, `widget_name` | Remove a widget from the widget tree |
-| `set_widget_property` | `asset_path`, `widget_name`, `property_name`, `value` (alias: `property_value`) | Set a property on a widget via reflection. Allowlist-gated unless `raw_mode=true`. `value` and `property_value` are accepted as aliases since the 2026-05-16 Bug #6 fix. `property_name=IsVariable` or `bIsVariable` routes to the first-class `set_widget_is_variable` path so callers do not need `raw_mode=true` for variable exposure. |
+| `set_widget_property` | `asset_path`, `widget_name`, `property_name`, `value` (alias: `property_value`) | Set a property on a widget via reflection. Allowlist-gated unless `raw_mode=true`. `value` and `property_value` are accepted as aliases since the 2026-05-16 Bug #6 fix. As of v0.21.0 (#74) common `UWidget` properties are allowlisted by default (no `raw_mode` needed) — see § "Common UWidget property allowlist". |
 | `compile_widget` | `asset_path` | Compile the Widget Blueprint. Returns `errors[]`, `warnings[]`, `notes[]`, `error_count`, `warning_count` on success — shape mirrors `blueprint_query::compile_blueprint`. On BS_Error, the diagnostic list is packed into `valid_options[]` of the structured error (Bug #5 fix, 2026-05-16). |
 | `list_widget_types` | none | List all available widget classes that can be instantiated |
 | `rename_widget` | `wbp_path`, `old_name`, `new_name` | Rename a UWidget's FName in a WBP's tree. Uniqueness check runs against the full WidgetTree before the rename. Recompiles via `FKismetEditorUtilities::CompileBlueprint`. If `bIsVariable=true`, also walks `FBlueprintEditorUtils::RenameMemberVariable` so the BPVAR entry stays consistent with the new FName. Phase 2 Item #7 (2026-05-16 UI Gap Audit). |
@@ -124,7 +124,7 @@ Count history before 2026-06-30 is retained for provenance, but the live registr
 **Slot Operations (3)**
 | Action | Params | Description |
 |--------|--------|-------------|
-| `set_slot_property` | `asset_path`, `widget_name`; optional Canvas fields `anchors`, `offsets`, `position`, `size`, `alignment`, `z_order`, `auto_size`; optional box/overlay fields `h_align`, `v_align`, `padding`; optional Vertical/Horizontal box fields `size_rule=Automatic|Fill`, `fill_weight>=0`; `compile=false` | Set typed layout-slot fields. Box size-rule writes preserve unspecified rule/weight state, reject non-finite or negative weights, and reject box-only fields on incompatible slot classes. |
+| `set_slot_property` | `asset_path`, `widget_name`; optional Canvas fields `anchors`, `offsets`, `position`, `size`, `alignment`, `z_order`, `auto_size`; optional box/overlay fields `h_align`, `v_align`, `padding`; optional Vertical/Horizontal box fields `size_rule=Automatic|Fill`, `fill_weight>=0`; optional grid fields `row`, `column`, `row_span`, `column_span`; `compile=false` | Set typed layout-slot fields. Box size-rule writes preserve unspecified rule/weight state, reject non-finite or negative weights, and reject box-only fields on incompatible slot classes. Grid fields (v0.21.0, #74) apply to `UUniformGridSlot` (`row`/`column`) and `UGridSlot` (plus `row_span`/`column_span`). |
 | `set_anchor_preset` | `asset_path`, `widget_name`, `preset` | Apply an anchor preset to a Canvas Panel slot |
 | `move_widget` | `asset_path`, `widget_name`, `new_parent_name`, optional `sibling_index`, `expected_parent_name`, `compile` | Move a widget to another panel or reorder it at an exact zero-based final sibling index. Same-parent reorder uses `UPanelWidget::ShiftChild` and preserves the exact slot object; cross-parent moves preserve compatible Canvas/box/Overlay slot values. Invalid indices, stale expected parents, and non-panel targets fail before mutation. |
 
@@ -143,7 +143,7 @@ Count history before 2026-06-30 is retained for provenance, but the live registr
 **Styling (6)**
 | Action | Params | Description |
 |--------|--------|-------------|
-| `set_brush` | `asset_path`, `widget_name`, `brush_property`, `texture_path` | Set a brush/image property on a widget |
+| `set_brush` | `asset_path`, `widget_name`, `property_name`?, `texture_path` | Set a brush/image property on a widget. As of v0.21.0 (#74) `property_name` is optional — it auto-resolves from the widget type (`Image` → `Brush`, `Border` → `Background`); `color` is accepted as an alias for `tint_color`. |
 | `set_font` | `asset_path`, `widget_name`, `font_asset`, `size` | Set the font and size on a text widget |
 | `set_color_scheme` | `asset_path`, `color_map` | Apply a color scheme (name->LinearColor map) across the widget |
 | `batch_style` | `asset_path`, `style_operations` | Apply multiple styling operations in a single transaction |
@@ -399,6 +399,22 @@ The following correctness bugs were fixed in the 2026-05-16 sprint (plan: [`Docs
 - **Bug #6 — `set_widget_property` schema clarification.** The new value can now be supplied as `value` OR `property_value` (alias). Missing-value error preserves `wbp_path`, `widget_name`, `property_name` in the message body for caller-side context.
 
 ---
+
+## Common UWidget property allowlist (v0.21.0, #74)
+
+Prior to v0.21.0, `set_widget_property` only had curated allowlist entries for a handful of typed widgets (e.g. `CommonButtonBase`), so setting a base `UWidget` property required `raw_mode=true`. v0.21.0 adds a base `UWidget` curated block, so these common properties write without `raw_mode` on **every** widget type:
+
+| Property | Type | Notes |
+|----------|------|-------|
+| `Visibility` | `ESlateVisibility` | enum name (`Visible`, `Collapsed`, `Hidden`, `HitTestInvisible`, `SelfHitTestInvisible`) |
+| `RenderOpacity` | `float` | 0..1 |
+| `ToolTipText` | `FText` | |
+| `bIsEnabled` | `bool` | |
+| `RenderTransform.Angle` | `float` | render-transform rotation (degrees) |
+| `RenderTransform.Scale` | `FVector2D` | render-transform scale |
+| `RenderTransform.Translation` | `FVector2D` | render-transform offset |
+
+These are inherited by every `UWidget` subclass through the per-class allowlist walk, so a typed widget's own curated entries stack on top of the base set. Anything not on a curated allowlist still routes through `raw_mode=true`.
 
 ## CommonUI Property Allowlist Coverage
 

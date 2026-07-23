@@ -1461,7 +1461,16 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 		}
 		else
 		{
-			// No nested "params" — use top-level fields as params directly
+			// No nested "params" object — use top-level fields as params directly.
+			// If a "params" field exists but is NOT an object (or an object-parsable
+			// string), it is an ACTION param that happens to be named "params"
+			// (e.g. set_event_dispatcher_params) — keep it instead of silently
+			// dropping it; the registry's string-recovery pass restores its
+			// declared type.
+			if (TSharedPtr<FJsonValue> RawParamsField = Arguments->TryGetField(TEXT("params")))
+			{
+				TopLevelExtras->SetField(TEXT("params"), RawParamsField);
+			}
 			Arguments = TopLevelExtras;
 		}
 	}
@@ -1555,7 +1564,16 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 		}
 		else
 		{
-			// No nested "params" — use top-level fields as params directly
+			// No nested "params" object — use top-level fields as params directly.
+			// If a "params" field exists but is NOT an object (or an object-parsable
+			// string), it is an ACTION param that happens to be named "params"
+			// (e.g. set_event_dispatcher_params) — keep it instead of silently
+			// dropping it; the registry's string-recovery pass restores its
+			// declared type.
+			if (TSharedPtr<FJsonValue> RawParamsField = Arguments->TryGetField(TEXT("params")))
+			{
+				TopLevelExtras->SetField(TEXT("params"), RawParamsField);
+			}
 			Arguments = TopLevelExtras;
 		}
 	}

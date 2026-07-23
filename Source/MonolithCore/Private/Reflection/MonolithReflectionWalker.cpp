@@ -125,6 +125,82 @@ namespace
 		}
 		return Enum->GetNameStringByIndex(Index).EndsWith(TEXT("_MAX"), ESearchCase::CaseSensitive);
 	}
+
+	// -----------------------------------------------------------------------
+	// Compose a representative ImportText token for a single property. Used to
+	// build map-entry examples in the POSITIONAL ((K,V),(K,V)) form the engine's
+	// FMapProperty::ImportText actually parses (NOT the ((Key=..,Value=..)) form
+	// the old hint wrongly advertised). Best effort: enum -> first enumerator,
+	// struct -> (Field=..) one level deep, scalars -> a type-appropriate literal,
+	// anything else -> "...". Depth guards the struct recursion.
+	// -----------------------------------------------------------------------
+	FString ComposeExampleToken(const FProperty* Prop, int32 Depth)
+	{
+		if (!Prop)
+		{
+			return TEXT("...");
+		}
+
+		// Enum: native FEnumProperty, FByteProperty-with-enum, or a UserDefinedEnum
+		// recovered from a UDS numeric field. Emit the first non-sentinel enumerator.
+		const UEnum* Enum = nullptr;
+		if (const FEnumProperty* EnumProp = CastField<FEnumProperty>(Prop))
+		{
+			Enum = EnumProp->GetEnum();
+		}
+		else if (const FByteProperty* ByteProp = CastField<FByteProperty>(Prop))
+		{
+			Enum = ByteProp->Enum;
+		}
+		if (!Enum)
+		{
+			Enum = FMonolithReflectionWalker::RecoverUserDefinedEnum(Prop);
+		}
+		if (Enum)
+		{
+			const int32 N = Enum->NumEnums();
+			for (int32 i = 0; i < N; ++i)
+			{
+				if (IsAutoMaxSentinel(Enum, i)) continue;
+				return Enum->GetNameStringByIndex(i);
+			}
+			return TEXT("EnumValue");
+		}
+
+		// Struct: recurse one level into its fields -> (Field1=..,Field2=..).
+		if (const FStructProperty* StructProp = CastField<FStructProperty>(Prop))
+		{
+			if (Depth > 0 && StructProp->Struct)
+			{
+				TArray<FString> Fields;
+				for (TFieldIterator<FProperty> It(StructProp->Struct); It; ++It)
+				{
+					Fields.Add(FString::Printf(TEXT("%s=%s"), *It->GetName(), *ComposeExampleToken(*It, Depth - 1)));
+				}
+				if (Fields.Num() > 0)
+				{
+					return FString::Printf(TEXT("(%s)"), *FString::Join(Fields, TEXT(",")));
+				}
+			}
+			return TEXT("(Field1=...)");
+		}
+
+		// Scalars.
+		if (Prop->IsA(FBoolProperty::StaticClass()))
+		{
+			return TEXT("true");
+		}
+		if (const FNumericProperty* NumProp = CastField<FNumericProperty>(Prop))
+		{
+			return NumProp->IsFloatingPoint() ? TEXT("1.0") : TEXT("1");
+		}
+		if (Prop->IsA(FStrProperty::StaticClass()) || Prop->IsA(FNameProperty::StaticClass()) || Prop->IsA(FTextProperty::StaticClass()))
+		{
+			return TEXT("\"Text\"");
+		}
+
+		return TEXT("...");
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -1403,7 +1479,13 @@ FSchemaDescriptor FMonolithReflectionWalker::DescribeStruct(UStruct* TopStruct, 
 		}
 		else if (FMapProperty* MapProp = CastField<FMapProperty>(Prop))
 		{
-			Child.ImportTextForm = TEXT("((Key=K1,Value=V1),(Key=K2,Value=V2))");
+			// Engine FMapProperty::ImportText is POSITIONAL — ((K,V),(K,V)), NOT
+			// ((Key=..,Value=..)). Compose a single-entry example from the key/value
+			// property shapes so the hint is copy-pasteable (e.g. a Name->LinearColor
+			// map emits (("Text",(R=1.0,G=1.0,B=1.0,A=1.0)))).
+			const FString KeyExample = ComposeExampleToken(MapProp->KeyProp, /*Depth=*/2);
+			const FString ValueExample = ComposeExampleToken(MapProp->ValueProp, /*Depth=*/2);
+			Child.ImportTextForm = FString::Printf(TEXT("((%s,%s))"), *KeyExample, *ValueExample);
 			// Optional: descend into value type if it is a struct.
 			if (MaxDepth > 1 && MapProp->ValueProp)
 			{
