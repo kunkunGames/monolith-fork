@@ -2573,6 +2573,27 @@ FMonolithActionResult FMonolithUIActions::HandleGetWidgetTree(const TSharedPtr<F
     return FMonolithActionResult::Success(Result);
 }
 
+static FMonolithActionResult MakeAddChildError(UPanelWidget* ParentPanel, const FString& AddChildFailPrefix)
+{
+    if (!ParentPanel->CanHaveMultipleChildren() && ParentPanel->GetChildrenCount() > 0)
+    {
+        UWidget* ExistingChild = ParentPanel->GetChildAt(0);
+        const FString ExistingName = ExistingChild ? ExistingChild->GetName() : TEXT("<unknown>");
+        return FMonolithActionResult::Error(FString::Printf(
+            TEXT("%s: parent '%s' is a single-child container (%s) and already holds '%s'. ")
+            TEXT("Wrap additional children in a VerticalBox/HorizontalBox."),
+            *AddChildFailPrefix,
+            *ParentPanel->GetName(),
+            *ParentPanel->GetClass()->GetName(),
+            *ExistingName));
+    }
+    return FMonolithActionResult::Error(FString::Printf(
+        TEXT("%s for parent '%s' (%s)."),
+        *AddChildFailPrefix,
+        *ParentPanel->GetName(),
+        *ParentPanel->GetClass()->GetName()));
+}
+
 // --- add_widget ---
 FMonolithActionResult FMonolithUIActions::HandleAddWidget(const TSharedPtr<FJsonObject>& Params)
 {
@@ -2685,18 +2706,7 @@ FMonolithActionResult FMonolithUIActions::HandleAddWidget(const TSharedPtr<FJson
     UPanelSlot* Slot = ParentPanel->AddChild(NewWidget);
     if (!Slot)
     {
-        if (!ParentPanel->CanHaveMultipleChildren() && ParentPanel->GetChildrenCount() > 0)
-        {
-            UWidget* ExistingChild = ParentPanel->GetChildAt(0);
-            const FString ExistingName = ExistingChild ? ExistingChild->GetName() : TEXT("<unknown>");
-            return FMonolithActionResult::Error(FString::Printf(
-                TEXT("AddChild failed: parent '%s' is a single-child container (%s) and already holds '%s'. ")
-                TEXT("Wrap additional children in a VerticalBox/HorizontalBox."),
-                *ParentPanel->GetName(),
-                *ParentPanel->GetClass()->GetName(),
-                *ExistingName));
-        }
-        return FMonolithActionResult::Error(TEXT("AddChild returned null slot"));
+        return MakeAddChildError(ParentPanel, TEXT("AddChild failed"));
     }
     Slot->Modify();
 
@@ -2959,10 +2969,7 @@ FMonolithActionResult FMonolithUIActions::HandleAddExtensionPointWidget(const TS
         UPanelSlot* AddedSlot = ParentPanel->AddChild(ExtensionWidget);
         if (!AddedSlot)
         {
-            return FMonolithActionResult::Error(FString::Printf(
-                TEXT("AddChild failed for parent '%s' (%s)."),
-                *ParentPanel->GetName(),
-                *ParentPanel->GetClass()->GetName()));
+            return MakeAddChildError(ParentPanel, TEXT("AddChild failed"));
         }
         AddedSlot->Modify();
         MonolithUIInternal::RegisterCreatedWidget(WBP, ExtensionWidget);
@@ -2982,10 +2989,7 @@ FMonolithActionResult FMonolithUIActions::HandleAddExtensionPointWidget(const TS
         UPanelSlot* AddedSlot = ParentPanel->AddChild(ExtensionWidget);
         if (!AddedSlot)
         {
-            return FMonolithActionResult::Error(FString::Printf(
-                TEXT("AddChild failed while moving '%s' to parent '%s'."),
-                *WidgetName,
-                *ParentPanel->GetName()));
+            return MakeAddChildError(ParentPanel, FString::Printf(TEXT("AddChild failed while moving '%s'"), *WidgetName));
         }
         AddedSlot->Modify();
         bChanged = true;
@@ -3341,10 +3345,7 @@ FMonolithActionResult FMonolithUIActions::HandleAddPrimaryGameLayoutLayer(const 
         UPanelSlot* AddedSlot = ParentPanel->AddChild(LayerWidget);
         if (!AddedSlot)
         {
-            return FMonolithActionResult::Error(FString::Printf(
-                TEXT("AddChild failed for parent '%s' (%s)."),
-                *ParentPanel->GetName(),
-                *ParentPanel->GetClass()->GetName()));
+            return MakeAddChildError(ParentPanel, TEXT("AddChild failed"));
         }
         AddedSlot->Modify();
         MonolithUIInternal::RegisterCreatedWidget(WBP, LayerWidget);
@@ -3364,10 +3365,7 @@ FMonolithActionResult FMonolithUIActions::HandleAddPrimaryGameLayoutLayer(const 
         UPanelSlot* AddedSlot = ParentPanel->AddChild(LayerWidget);
         if (!AddedSlot)
         {
-            return FMonolithActionResult::Error(FString::Printf(
-                TEXT("AddChild failed while moving '%s' to parent '%s'."),
-                *WidgetName,
-                *ParentPanel->GetName()));
+            return MakeAddChildError(ParentPanel, FString::Printf(TEXT("AddChild failed while moving '%s'"), *WidgetName));
         }
         AddedSlot->Modify();
         bChanged = true;
