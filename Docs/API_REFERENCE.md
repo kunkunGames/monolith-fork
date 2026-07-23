@@ -1615,14 +1615,13 @@ Dry-run by default. `execute=true` is freshness-gated: if CRG projection counts,
 
 ### `source.search_crg_graph`
 
-Searches the optional `Saved\graph.db` export. Results expose `path_status=known|missing`, prefer known source paths, and suppress duplicate missing-path rows for the same symbol identity. Use this action for explicit graph-export/search needs; routine review should prefer `source.search_source`, `source.risk_score`, and `source.review_context`.
+Read-only CRG-compatible File/Symbol graph-node search over the canonical `source_graph_nodes` VIEW and `source_graph_nodes_fts` index inside `Saved\EngineSource.db`. There is no separate graph export. FTS is queried first and LIKE over `source_graph_nodes` is used only after a successful FTS query returns zero rows; FTS prepare/step failures surface structured warning/error detail instead of falling back. Results expose `backend=engine_source_fts`, `path_status=known|missing` with known-path-first ranking and duplicate suppression, `used_fts`, and `truncated`. Graph-node availability and parity are owned by `source.health`; when it recommends repair, call `source.repair_fts` with `target=graph_nodes` and `execute=true`. Routine review should prefer `source.search_source`, `source.risk_score`, and `source.review_context`.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `query` | string | **required** | Symbol/query text |
 | `kind` | string | optional | Optional node kind filter |
-| `limit` | integer | optional | Default: `20` |
-| `graph_db` | string | optional | Non-default graph DB path |
+| `limit` | integer | optional | Max graph-node matches, clamped to `1..200`. Default: `20` |
 
 ### `source.risk_score`
 
