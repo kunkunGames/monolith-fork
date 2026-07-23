@@ -81,6 +81,18 @@ Companion deep indexer: `FMetaSoundIndexer` lives in `MonolithIndex/Private/Inde
 
 > **MetaSound node discovery payloads.** `list_available_metasound_nodes(filter?, category?, limit=200, detail_level="minimal")` returns compact node identity rows plus `input_count`/`output_count` by default, with `matched_count`, `returned_count`, `limit`, and `truncated` metadata. Use `detail_level="standard"` when the caller needs full per-node `inputs[]` and `outputs[]` arrays.
 
+### `audio.create_test_wave` · NEW in Phase J F18
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Destination asset path under `/Game/` (Alias: `path`) |
+| `frequency_hz` | number | optional | Sine frequency (20.0 to 20000.0). Default: `440.0` |
+| `duration_seconds` | number | optional | Clip length (0.05 to 5.0). Default: `0.5` |
+| `sample_rate` | integer | optional | Allowlist `{22050, 44100, 48000}`. Default: `44100` |
+| `amplitude` | number | optional | Peak amplitude in `(0.0, 1.0]`. Default: `0.5` |
+
+**Returns:** `{ asset_path, samples_written, duration_actual_seconds, frequency_hz, sample_rate, amplitude }`
+
 ### Bulk Fill & Describe Surface (2026-05-11)
 
 `MonolithAudioBulkFillAdapter` registers under `FMonolithBulkFillRegistry` for the `audio` namespace, exposed via the framework-level `bulk_fill_query("apply", ...)` and `describe_query("schema", ...)` dispatchers. Phase 5 of the MCP ergonomics rollout (design spec `Docs/plans/2026-05-11-monolith-mcp-ergonomics-design.md`).
