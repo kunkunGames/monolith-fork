@@ -1272,10 +1272,9 @@ FMonolithActionResult FMonolithConfigActions::SetDeveloperSetting(const TSharedP
 	}
 
 	FString NewValueText;
-	const TSharedPtr<FJsonValue> ValueField = Params->TryGetField(TEXT("value"));
-	if (!ValueField.IsValid() || ValueField->IsNull() || !ValueField->TryGetString(NewValueText))
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("value"), NewValueText, ParamError))
 	{
-		return FMonolithActionResult::Error(TEXT("set_developer_setting: 'value' is required and must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		return FMonolithActionResult::Error(FString::Printf(TEXT("set_developer_setting: %s"), *ParamError), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	bool bSaveConfig = false;
