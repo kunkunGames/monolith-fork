@@ -12408,15 +12408,19 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetPhysicsAssetInfo(const
 
 	// Physical animation profiles
 #if WITH_EDITORONLY_DATA
+	TArray<FName> PhysAnimProfiles = PhysAsset->GetPhysicalAnimationProfileNames();
 	TArray<TSharedPtr<FJsonValue>> ProfilesArr;
-	for (const FName& ProfileName : PhysAsset->GetPhysicalAnimationProfileNames())
+	ProfilesArr.Reserve(PhysAnimProfiles.Num());
+	for (const FName& ProfileName : PhysAnimProfiles)
 	{
 		ProfilesArr.Add(MakeShared<FJsonValueString>(ProfileName.ToString()));
 	}
 	Root->SetArrayField(TEXT("physical_animation_profiles"), ProfilesArr);
 
+	TArray<FName> ConstraintProfiles = PhysAsset->GetConstraintProfileNames();
 	TArray<TSharedPtr<FJsonValue>> ConstraintProfilesArr;
-	for (const FName& ProfileName : PhysAsset->GetConstraintProfileNames())
+	ConstraintProfilesArr.Reserve(ConstraintProfiles.Num());
+	for (const FName& ProfileName : ConstraintProfiles)
 	{
 		ConstraintProfilesArr.Add(MakeShared<FJsonValueString>(ProfileName.ToString()));
 	}
