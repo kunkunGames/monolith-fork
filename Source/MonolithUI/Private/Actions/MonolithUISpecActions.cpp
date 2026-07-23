@@ -5303,6 +5303,7 @@ namespace MonolithUI::SpecActionsInternal
             return false;
         }
 
+        OutObjects.Reserve(OutObjects.Num() + Values->Num());
         for (int32 Index = 0; Index < Values->Num(); ++Index)
         {
             FString Value;
@@ -5355,6 +5356,7 @@ namespace MonolithUI::SpecActionsInternal
             return false;
         }
 
+        OutObjects.Reserve(OutObjects.Num() + Values->Num());
         for (int32 Index = 0; Index < Values->Num(); ++Index)
         {
             const TSharedPtr<FJsonObject>* Entry = nullptr;
