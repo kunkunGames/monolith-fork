@@ -3791,6 +3791,8 @@ Read-only RX-6 bridge between ProjectIndex assets and EngineSource symbols.
 |-----------|------|----------|-------------|
 | `asset_path` | string | optional | Project asset package path seed |
 | `symbol` | string | optional | Source symbol seed |
+| `limit` | integer | optional | Maximum bridge links. Default: `20` |
+| `detail_level` | string | optional | `minimal` or `standard`. Default: `minimal` |
 
 ## `dataflow` namespace
 
