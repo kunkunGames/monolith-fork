@@ -386,3 +386,48 @@ bool FMonolithUIParamGuardSetRetainerEffectMaterialMissingParams::RunTest(const 
     TestTrue(TEXT("set_retainer_effect_material reports a required param"), Result.ErrorMessage.Contains(TEXT("asset_path")) || Result.ErrorMessage.Contains(TEXT("required")));
     return true;
 }
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithUIParamGuardSetSlotGridNumericFields, "Monolith.ParamGuard.MonolithUI.SetSlotGridNumericFields", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIParamGuardSetSlotGridNumericFields::RunTest(const FString& Parameters)
+{
+    const FString AssetPath = TEXT("/Game/Tests/Monolith/UI/WBP_ParamGuardGridSlot");
+    FString Error;
+    UWidget* ChildWidget = nullptr;
+    if (!MonolithUI::TestUtils::CreateOrReuseTestWidgetBlueprint(AssetPath, TEXT("GridChild"), UImage::StaticClass(), Error, &ChildWidget))
+    {
+        AddError(Error);
+        return false;
+    }
+
+    TSharedPtr<FJsonObject> BadRowParams = MakeShared<FJsonObject>();
+    BadRowParams->SetStringField(TEXT("asset_path"), AssetPath);
+    BadRowParams->SetStringField(TEXT("widget_name"), TEXT("GridChild"));
+    BadRowParams->SetStringField(TEXT("row"), TEXT("not_a_number"));
+
+    const FMonolithActionResult Result = FMonolithUISlotActions::HandleSetSlotProperty(BadRowParams);
+
+    TestFalse(TEXT("set_slot_property correctly rejects malformed string for 'row'"), Result.bSuccess);
+    if (!Result.bSuccess)
+    {
+        TestTrue(TEXT("error message indicates parameter 'row' must be a number"), Result.ErrorMessage.Contains(TEXT("Parameter 'row' must be a number")));
+    }
+
+    TSharedPtr<FJsonObject> BadPaddingParams = MakeShared<FJsonObject>();
+    BadPaddingParams->SetStringField(TEXT("asset_path"), AssetPath);
+    BadPaddingParams->SetStringField(TEXT("widget_name"), TEXT("GridChild"));
+    TSharedPtr<FJsonObject> PaddingObj = MakeShared<FJsonObject>();
+    PaddingObj->SetStringField(TEXT("left"), TEXT("10px"));
+    BadPaddingParams->SetObjectField(TEXT("padding"), PaddingObj);
+
+    const FMonolithActionResult PadResult = FMonolithUISlotActions::HandleSetSlotProperty(BadPaddingParams);
+
+    TestFalse(TEXT("set_slot_property correctly rejects malformed string for padding 'left'"), PadResult.bSuccess);
+    if (!PadResult.bSuccess)
+    {
+        TestTrue(TEXT("error message indicates padding 'left' must be a number"), PadResult.ErrorMessage.Contains(TEXT("Padding 'left' must be a number")));
+    }
+
+    return true;
+}

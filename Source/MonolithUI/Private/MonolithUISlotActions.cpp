@@ -518,29 +518,29 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
     // spans plus per-slot padding. h_align/v_align reuse the parsers above.
     if (UUniformGridSlot* UGS = Cast<UUniformGridSlot>(Slot))
     {
-        if (Params->HasField(TEXT("row")))    { UGS->SetRow(static_cast<int32>(Params->GetNumberField(TEXT("row")))); PropsSet++; }
-        if (Params->HasField(TEXT("column"))) { UGS->SetColumn(static_cast<int32>(Params->GetNumberField(TEXT("column")))); PropsSet++; }
+        double UGSRow = 0; if (Params->HasField(TEXT("row")))    { if (!Params->TryGetNumberField(TEXT("row"), UGSRow)) return FMonolithActionResult::Error(TEXT("Parameter 'row' must be a number"), FMonolithJsonUtils::ErrInvalidParams); UGS->SetRow(static_cast<int32>(UGSRow)); PropsSet++; }
+        double UGSCol = 0; if (Params->HasField(TEXT("column"))) { if (!Params->TryGetNumberField(TEXT("column"), UGSCol)) return FMonolithActionResult::Error(TEXT("Parameter 'column' must be a number"), FMonolithJsonUtils::ErrInvalidParams); UGS->SetColumn(static_cast<int32>(UGSCol)); PropsSet++; }
         if (!HAlign.IsEmpty()) { UGS->SetHorizontalAlignment(ParseHAlign(HAlign)); PropsSet++; }
         if (!VAlign.IsEmpty()) { UGS->SetVerticalAlignment(ParseVAlign(VAlign)); PropsSet++; }
     }
     else if (UGridSlot* GS = Cast<UGridSlot>(Slot))
     {
-        if (Params->HasField(TEXT("row")))         { GS->SetRow(static_cast<int32>(Params->GetNumberField(TEXT("row")))); PropsSet++; }
-        if (Params->HasField(TEXT("column")))      { GS->SetColumn(static_cast<int32>(Params->GetNumberField(TEXT("column")))); PropsSet++; }
-        if (Params->HasField(TEXT("row_span")))    { GS->SetRowSpan(static_cast<int32>(Params->GetNumberField(TEXT("row_span")))); PropsSet++; }
-        if (Params->HasField(TEXT("column_span"))) { GS->SetColumnSpan(static_cast<int32>(Params->GetNumberField(TEXT("column_span")))); PropsSet++; }
+        double GSRow = 0; if (Params->HasField(TEXT("row")))         { if (!Params->TryGetNumberField(TEXT("row"), GSRow)) return FMonolithActionResult::Error(TEXT("Parameter 'row' must be a number"), FMonolithJsonUtils::ErrInvalidParams); GS->SetRow(static_cast<int32>(GSRow)); PropsSet++; }
+        double GSCol = 0; if (Params->HasField(TEXT("column")))      { if (!Params->TryGetNumberField(TEXT("column"), GSCol)) return FMonolithActionResult::Error(TEXT("Parameter 'column' must be a number"), FMonolithJsonUtils::ErrInvalidParams); GS->SetColumn(static_cast<int32>(GSCol)); PropsSet++; }
+        double GSRowSpan = 0; if (Params->HasField(TEXT("row_span")))    { if (!Params->TryGetNumberField(TEXT("row_span"), GSRowSpan)) return FMonolithActionResult::Error(TEXT("Parameter 'row_span' must be a number"), FMonolithJsonUtils::ErrInvalidParams); GS->SetRowSpan(static_cast<int32>(GSRowSpan)); PropsSet++; }
+        double GSColSpan = 0; if (Params->HasField(TEXT("column_span"))) { if (!Params->TryGetNumberField(TEXT("column_span"), GSColSpan)) return FMonolithActionResult::Error(TEXT("Parameter 'column_span' must be a number"), FMonolithJsonUtils::ErrInvalidParams); GS->SetColumnSpan(static_cast<int32>(GSColSpan)); PropsSet++; }
         if (!HAlign.IsEmpty()) { GS->SetHorizontalAlignment(ParseHAlign(HAlign)); PropsSet++; }
         if (!VAlign.IsEmpty()) { GS->SetVerticalAlignment(ParseVAlign(VAlign)); PropsSet++; }
 
         const TSharedPtr<FJsonObject>* GridPadObj = nullptr;
         if (Params->TryGetObjectField(TEXT("padding"), GridPadObj))
         {
-            GS->SetPadding(FMargin(
-                (*GridPadObj)->GetNumberField(TEXT("left")),
-                (*GridPadObj)->GetNumberField(TEXT("top")),
-                (*GridPadObj)->GetNumberField(TEXT("right")),
-                (*GridPadObj)->GetNumberField(TEXT("bottom"))
-            ));
+            double Left = 0.0, Top = 0.0, Right = 0.0, Bottom = 0.0;
+            if ((*GridPadObj)->HasField(TEXT("left")) && !(*GridPadObj)->TryGetNumberField(TEXT("left"), Left)) return FMonolithActionResult::Error(TEXT("Padding 'left' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+            if ((*GridPadObj)->HasField(TEXT("top")) && !(*GridPadObj)->TryGetNumberField(TEXT("top"), Top)) return FMonolithActionResult::Error(TEXT("Padding 'top' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+            if ((*GridPadObj)->HasField(TEXT("right")) && !(*GridPadObj)->TryGetNumberField(TEXT("right"), Right)) return FMonolithActionResult::Error(TEXT("Padding 'right' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+            if ((*GridPadObj)->HasField(TEXT("bottom")) && !(*GridPadObj)->TryGetNumberField(TEXT("bottom"), Bottom)) return FMonolithActionResult::Error(TEXT("Padding 'bottom' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+            GS->SetPadding(FMargin(Left, Top, Right, Bottom));
             PropsSet++;
         }
     }
