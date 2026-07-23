@@ -2043,9 +2043,13 @@ FMonolithActionResult FMonolithSourceActions::HandleFindCallers(const TSharedPtr
 		return FMonolithActionResult::Error(TEXT("\'symbol\' parameter is required and must be a string"));
 	}
 	int32 Limit = 50;
-	double RawLimit = 0;
-	if (Params->TryGetNumberField(TEXT("limit"), RawLimit))
+	if (Params->HasField(TEXT("limit")))
 	{
+		double RawLimit = 0;
+		if (!Params->TryGetNumberField(TEXT("limit"), RawLimit))
+		{
+			return FMonolithActionResult::Error(TEXT("'limit' parameter must be a number"));
+		}
 		Limit = FMath::Clamp(static_cast<int32>(RawLimit), 1, 1000);
 	}
 
@@ -2136,9 +2140,13 @@ FMonolithActionResult FMonolithSourceActions::HandleFindCallees(const TSharedPtr
 		return FMonolithActionResult::Error(TEXT("\'symbol\' parameter is required and must be a string"));
 	}
 	int32 Limit = 50;
-	double RawLimit = 0;
-	if (Params->TryGetNumberField(TEXT("limit"), RawLimit))
+	if (Params->HasField(TEXT("limit")))
 	{
+		double RawLimit = 0;
+		if (!Params->TryGetNumberField(TEXT("limit"), RawLimit))
+		{
+			return FMonolithActionResult::Error(TEXT("'limit' parameter must be a number"));
+		}
 		Limit = FMath::Clamp(static_cast<int32>(RawLimit), 1, 1000);
 	}
 
@@ -2805,25 +2813,51 @@ FMonolithActionResult FMonolithSourceActions::HandleReadFile(const TSharedPtr<FJ
 		return FMonolithActionResult::Error(TEXT("\'file_path\' parameter is required and must be a string"));
 	}
 	int32 StartLine = 1;
-	double RawStartLine = 0;
-	if (Params->TryGetNumberField(TEXT("start_line"), RawStartLine))
+	if (Params->HasField(TEXT("start_line")))
 	{
+		double RawStartLine = 0;
+		if (!Params->TryGetNumberField(TEXT("start_line"), RawStartLine))
+		{
+			return FMonolithActionResult::Error(TEXT("'start_line' parameter must be a number"));
+		}
 		StartLine = FMath::Clamp(static_cast<int32>(RawStartLine), 1, 1000000);
 	}
+
 	int32 EndLine = 0;
-	double RawEndLine = 0;
-	if (Params->TryGetNumberField(TEXT("end_line"), RawEndLine))
+	bool bHasEndLine = false;
+	if (Params->HasField(TEXT("end_line")))
 	{
+		double RawEndLine = 0;
+		if (!Params->TryGetNumberField(TEXT("end_line"), RawEndLine))
+		{
+			return FMonolithActionResult::Error(TEXT("'end_line' parameter must be a number"));
+		}
 		EndLine = FMath::Clamp(static_cast<int32>(RawEndLine), 0, 1000000);
+		bHasEndLine = true;
 	}
-	else
+
+	if (!bHasEndLine)
 	{
 		double RawLineCount = 0;
-		if (!Params->TryGetNumberField(TEXT("line_count"), RawLineCount))
+		bool bHasLineCount = false;
+		if (Params->HasField(TEXT("line_count")))
 		{
-			Params->TryGetNumberField(TEXT("max_lines"), RawLineCount);
+			if (!Params->TryGetNumberField(TEXT("line_count"), RawLineCount))
+			{
+				return FMonolithActionResult::Error(TEXT("'line_count' parameter must be a number"));
+			}
+			bHasLineCount = true;
 		}
-		if (RawLineCount > 0)
+		else if (Params->HasField(TEXT("max_lines")))
+		{
+			if (!Params->TryGetNumberField(TEXT("max_lines"), RawLineCount))
+			{
+				return FMonolithActionResult::Error(TEXT("'max_lines' parameter must be a number"));
+			}
+			bHasLineCount = true;
+		}
+
+		if (bHasLineCount && RawLineCount > 0)
 		{
 			const int32 LineCount = FMath::Clamp(static_cast<int32>(RawLineCount), 1, 1000000);
 			EndLine = FMath::Clamp(StartLine + LineCount - 1, 0, 1000000);
