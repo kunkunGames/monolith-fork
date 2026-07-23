@@ -88,13 +88,10 @@ void FMonolithUIAccessibilityActions::RegisterActions(FMonolithToolRegistry& Reg
 FMonolithActionResult FMonolithUIAccessibilityActions::HandleScaffoldAccessibilitySubsystem(const TSharedPtr<FJsonObject>& Params)
 {
     FString ClassName;
-    Params->TryGetStringField(TEXT("class_name"), ClassName);
+    FMonolithActionResult Err;
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("class_name"), ClassName, Err)) return Err;
     FString ModuleName;
-    Params->TryGetStringField(TEXT("module_name"), ModuleName);
-    if (ClassName.IsEmpty() || ModuleName.IsEmpty())
-    {
-        return FMonolithActionResult::Error(TEXT("Missing required params: class_name, module_name"));
-    }
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("module_name"), ModuleName, Err)) return Err;
     if (!IsSafeIdentifier(ClassName) || !IsSafeIdentifier(ModuleName))
     {
         return FMonolithActionResult::Error(TEXT("Invalid class_name/module_name: must be C++ identifiers"));
@@ -278,14 +275,10 @@ FMonolithActionResult FMonolithUIAccessibilityActions::HandleScaffoldAccessibili
 FMonolithActionResult FMonolithUIAccessibilityActions::HandleAuditAccessibility(const TSharedPtr<FJsonObject>& Params)
 {
     FString AssetPath;
-    Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-    if (AssetPath.IsEmpty())
-    {
-        return FMonolithActionResult::Error(TEXT("Missing required param: asset_path"));
-    }
+    FMonolithActionResult Err;
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("asset_path"), AssetPath, Err)) return Err;
 
     // Load widget blueprint
-    FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
     if (!WBP) return Err;
 
@@ -457,11 +450,8 @@ FMonolithActionResult FMonolithUIAccessibilityActions::HandleAuditAccessibility(
 FMonolithActionResult FMonolithUIAccessibilityActions::HandleSetColorblindMode(const TSharedPtr<FJsonObject>& Params)
 {
     FString Mode;
-    Params->TryGetStringField(TEXT("mode"), Mode);
-    if (Mode.IsEmpty())
-    {
-        return FMonolithActionResult::Error(TEXT("Missing required param: mode"));
-    }
+    FMonolithActionResult Err;
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("mode"), Mode, Err)) return Err;
 
     int32 Severity = 5;
     double TempSeverity;
