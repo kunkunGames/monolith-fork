@@ -879,17 +879,34 @@ FMonolithActionResult FMonolithMeshCityBlockActions::CreateStreet(const TSharedP
 	const FVector2D Start((*StartArr)[0]->AsNumber(), (*StartArr)[1]->AsNumber());
 	const FVector2D End((*EndArr)[0]->AsNumber(), (*EndArr)[1]->AsNumber());
 
-	const float RoadWidth = Params->HasField(TEXT("width"))
-		? static_cast<float>(Params->GetNumberField(TEXT("width"))) : 600.0f;
-	const float SidewalkWidth = Params->HasField(TEXT("sidewalk_width"))
-		? static_cast<float>(Params->GetNumberField(TEXT("sidewalk_width"))) : 200.0f;
-	const float CurbHeight = Params->HasField(TEXT("curb_height"))
-		? static_cast<float>(Params->GetNumberField(TEXT("curb_height"))) : 15.0f;
+	float RoadWidth = 600.0f;
+	if (Params->HasField(TEXT("width")))
+	{
+		double TmpVal;
+		if (!Params->TryGetNumberField(TEXT("width"), TmpVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'width', must be a number"));
+		RoadWidth = static_cast<float>(TmpVal);
+	}
+
+	float SidewalkWidth = 200.0f;
+	if (Params->HasField(TEXT("sidewalk_width")))
+	{
+		double TmpVal;
+		if (!Params->TryGetNumberField(TEXT("sidewalk_width"), TmpVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'sidewalk_width', must be a number"));
+		SidewalkWidth = static_cast<float>(TmpVal);
+	}
+
+	float CurbHeight = 15.0f;
+	if (Params->HasField(TEXT("curb_height")))
+	{
+		double TmpVal;
+		if (!Params->TryGetNumberField(TEXT("curb_height"), TmpVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'curb_height', must be a number"));
+		CurbHeight = static_cast<float>(TmpVal);
+	}
 
 	bool bHasSidewalk = true;
-	if (Params->HasField(TEXT("has_sidewalk")))
+	if (Params->HasField(TEXT("has_sidewalk")) && !Params->TryGetBoolField(TEXT("has_sidewalk"), bHasSidewalk))
 	{
-		bHasSidewalk = Params->GetBoolField(TEXT("has_sidewalk"));
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'has_sidewalk', must be a boolean"));
 	}
 
 	FVector Location = FVector::ZeroVector;
@@ -979,16 +996,37 @@ FMonolithActionResult FMonolithMeshCityBlockActions::PlaceStreetFurniture(const 
 	const FVector2D StreetStart((*StartArr)[0]->AsNumber(), (*StartArr)[1]->AsNumber());
 	const FVector2D StreetEnd((*EndArr)[0]->AsNumber(), (*EndArr)[1]->AsNumber());
 
-	const float Spacing = Params->HasField(TEXT("spacing"))
-		? static_cast<float>(Params->GetNumberField(TEXT("spacing"))) : 800.0f;
-	const float Offset = Params->HasField(TEXT("offset"))
-		? static_cast<float>(Params->GetNumberField(TEXT("offset"))) : 250.0f;
-	const float DecayLevel = Params->HasField(TEXT("decay"))
-		? static_cast<float>(Params->GetNumberField(TEXT("decay"))) : 0.0f;
+	float Spacing = 800.0f;
+	if (Params->HasField(TEXT("spacing")))
+	{
+		double TmpVal;
+		if (!Params->TryGetNumberField(TEXT("spacing"), TmpVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'spacing', must be a number"));
+		Spacing = static_cast<float>(TmpVal);
+	}
 
-	int32 Seed = Params->HasField(TEXT("seed"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("seed")))
-		: FMath::Rand();
+	float Offset = 250.0f;
+	if (Params->HasField(TEXT("offset")))
+	{
+		double TmpVal;
+		if (!Params->TryGetNumberField(TEXT("offset"), TmpVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'offset', must be a number"));
+		Offset = static_cast<float>(TmpVal);
+	}
+
+	float DecayLevel = 0.0f;
+	if (Params->HasField(TEXT("decay")))
+	{
+		double TmpVal;
+		if (!Params->TryGetNumberField(TEXT("decay"), TmpVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'decay', must be a number"));
+		DecayLevel = static_cast<float>(TmpVal);
+	}
+
+	int32 Seed = FMath::Rand();
+	if (Params->HasField(TEXT("seed")))
+	{
+		double TmpVal;
+		if (!Params->TryGetNumberField(TEXT("seed"), TmpVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'seed', must be a number"));
+		Seed = static_cast<int32>(TmpVal);
+	}
 	FRandomStream Rng(Seed);
 
 	FString Side = TEXT("both");
