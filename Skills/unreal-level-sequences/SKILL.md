@@ -95,8 +95,8 @@ blueprint_query({ action: "get_graph_summary", params: { asset_path: "...:LS_Int
 
 ### "How do I render a Level Sequence?"
 ```
-movie_render_query({ action: "add_job", params: { sequence_path: "/Game/Cinematics/LS_Intro.LS_Intro" } })
-movie_render_query({ action: "render_queue", params: { confirm: true } })
+movie_render({ action: "add_job", params: { sequence_path: "/Game/Cinematics/LS_Intro.LS_Intro" } })
+movie_render({ action: "render_queue", params: { confirm: true } })
 ```
 
 ## Rules
