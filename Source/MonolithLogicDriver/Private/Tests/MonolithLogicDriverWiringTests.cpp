@@ -9,6 +9,68 @@
 #if WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
 
 // ------------------------------------------------------------------------------------------------
+// Monolith.LogicDriverKeeper.GetSMStructureFunctional
+// Validates the functional 'happy path' for get_sm_structure.
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLogicDriverGetSMStructureFunctionalTest, "Monolith.LogicDriverKeeper.GetSMStructureFunctional", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithLogicDriverGetSMStructureFunctionalTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("get_sm_structure")))
+	{
+		FMonolithLogicDriverAssetActions::RegisterActions(Registry);
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	// 1. Create a State Machine Blueprint
+	FString AssetPath = TEXT("/Game/Tests/SM_StructureTest");
+	{
+		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+		CreateParams->SetStringField(TEXT("save_path"), AssetPath);
+		FMonolithActionResult CreateResult = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("create_state_machine"), CreateParams);
+
+		if (!CreateResult.bSuccess)
+		{
+			return true; // Graceful skip if SM module not fully available
+		}
+	}
+
+	// 2. Add Source State
+	{
+		TSharedPtr<FJsonObject> AddStateParams = MakeShared<FJsonObject>();
+		AddStateParams->SetStringField(TEXT("asset_path"), AssetPath);
+		AddStateParams->SetStringField(TEXT("name"), TEXT("SourceState"));
+
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_state"), AddStateParams);
+		TestTrue(TEXT("add_state should succeed"), Result.bSuccess);
+	}
+
+	// 3. Call get_sm_structure
+	{
+		TSharedPtr<FJsonObject> StructParams = MakeShared<FJsonObject>();
+		StructParams->SetStringField(TEXT("asset_path"), AssetPath);
+
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("get_sm_structure"), StructParams);
+		TestTrue(TEXT("get_sm_structure should succeed"), Result.bSuccess);
+		if (Result.bSuccess && Result.Payload.IsValid())
+		{
+			TestTrue(TEXT("Structure contains root_node_guid"), Result.Payload->HasField(TEXT("root_node_guid")));
+			TestTrue(TEXT("Structure contains nodes"), Result.Payload->HasField(TEXT("nodes")));
+		}
+	}
+
+	// 4. Cleanup
+	if (Registry.HasAction(TEXT("logicdriver"), TEXT("delete_state_machine")))
+	{
+		TSharedPtr<FJsonObject> DeleteParams = MakeShared<FJsonObject>();
+		DeleteParams->SetStringField(TEXT("asset_path"), AssetPath);
+		Registry.ExecuteAction(TEXT("logicdriver"), TEXT("delete_state_machine"), DeleteParams);
+	}
+
+	return true;
+}
+
+// ------------------------------------------------------------------------------------------------
 // Monolith.LogicDriverKeeper.GraphWiringFunctional
 // Validates the functional 'happy path' for adding states, conduits, and transitions.
 // ------------------------------------------------------------------------------------------------

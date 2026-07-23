@@ -37,6 +37,38 @@ namespace
 	}
 }
 
+// ------------------------------------------------------------------------------------------------
+// Monolith.ParamGuard.LogicDriver.GetSMStructureRejectsMalformedParams
+// Validates that get_sm_structure properly rejects malformed params
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverGetSMStructureRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.GetSMStructureRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverGetSMStructureRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("get_sm_structure")))
+	{
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	{
+		TSharedPtr<FJsonObject> MissingAssetPathParams = MakeShared<FJsonObject>();
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("get_sm_structure"), MissingAssetPathParams);
+		TestTrue(TEXT("get_sm_structure rejects missing asset_path"), !Result.bSuccess);
+		TestTrue(TEXT("get_sm_structure reports missing asset_path"), Result.ErrorMessage.Contains(TEXT("Missing required param 'asset_path'")));
+	}
+
+	{
+		TSharedPtr<FJsonObject> InvalidDepthParams = MakeShared<FJsonObject>();
+		InvalidDepthParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+		InvalidDepthParams->SetStringField(TEXT("depth"), TEXT("invalid_depth")); // should be a number
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("get_sm_structure"), InvalidDepthParams);
+		TestTrue(TEXT("get_sm_structure rejects invalid depth param"), !Result.bSuccess);
+		TestTrue(TEXT("get_sm_structure reports invalid depth param"), Result.ErrorMessage.Contains(TEXT("Invalid param: 'depth' must be a number")));
+	}
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGetSMComponentConfigRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.GetSMComponentConfigRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FGetSMComponentConfigRejectsMalformedParamsTest::RunTest(const FString& Parameters)
 {
