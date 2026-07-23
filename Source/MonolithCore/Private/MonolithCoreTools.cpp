@@ -698,6 +698,15 @@ static void AppendDerivedFindMetadata(const FMonolithActionInfo& Info, TArray<FS
 static FString BuildFindSearchMetadataText(const FMonolithActionInfo& Info)
 {
 	TArray<FString> Parts;
+	Parts.Reserve(
+		Info.SearchMetadata.Keywords.Num() +
+		Info.SearchMetadata.Aliases.Num() +
+		Info.SearchMetadata.Examples.Num() +
+		1 +
+		Info.PlanningMetadata.Preconditions.Num() +
+		Info.PlanningMetadata.Outputs.Num() +
+		Info.PlanningMetadata.NextActions.Num()
+	);
 	Parts.Append(Info.SearchMetadata.Keywords);
 	Parts.Append(Info.SearchMetadata.Aliases);
 	Parts.Append(Info.SearchMetadata.Examples);
