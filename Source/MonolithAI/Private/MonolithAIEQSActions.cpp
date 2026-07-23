@@ -74,6 +74,30 @@ namespace
 		return true;
 	}
 
+	bool ExtractOptionIndex(const TSharedPtr<FJsonObject>& Params, int32& OutOptionIndex, FMonolithActionResult& OutErrorResult)
+	{
+		double TempOptionIndex = 0.0;
+		if (!Params->TryGetNumberField(TEXT("option_index"), TempOptionIndex))
+		{
+			OutErrorResult = FMonolithActionResult::Error(TEXT("Parameter 'option_index' must be a number"));
+			return false;
+		}
+		OutOptionIndex = static_cast<int32>(TempOptionIndex);
+		return true;
+	}
+
+	bool ExtractTestIndex(const TSharedPtr<FJsonObject>& Params, int32& OutTestIndex, FMonolithActionResult& OutErrorResult)
+	{
+		double TempTestIndex = 0.0;
+		if (!Params->TryGetNumberField(TEXT("test_index"), TempTestIndex))
+		{
+			OutErrorResult = FMonolithActionResult::Error(TEXT("Parameter 'test_index' must be a number"));
+			return false;
+		}
+		OutTestIndex = static_cast<int32>(TempTestIndex);
+		return true;
+	}
+
 	/** Get the mutable options array from UEnvQuery. Returns TArray<TObjectPtr<UEnvQueryOption>>&. */
 	TArray<TObjectPtr<UEnvQueryOption>>& GetOptionsMutable(UEnvQuery* Query)
 	{
@@ -1094,12 +1118,12 @@ FMonolithActionResult FMonolithAIEQSActions::HandleRemoveEQSGenerator(const TSha
 		return FMonolithActionResult::Error(Error);
 	}
 
-	double TempOptionIndex = 0.0;
-	if (!Params->TryGetNumberField(TEXT("option_index"), TempOptionIndex))
+	int32 OptionIndex = 0;
+	FMonolithActionResult ExtractError;
+	if (!ExtractOptionIndex(Params, OptionIndex, ExtractError))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'option_index' must be a number"));
+		return ExtractError;
 	}
-	int32 OptionIndex = static_cast<int32>(TempOptionIndex);
 
 	UEnvQueryOption* Option = nullptr;
 	if (!GetOptionByIndex(Query, OptionIndex, Option, Error))
@@ -1144,12 +1168,12 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSGenerator(const T
 		return FMonolithActionResult::Error(Error);
 	}
 
-	double TempOptionIndex = 0.0;
-	if (!Params->TryGetNumberField(TEXT("option_index"), TempOptionIndex))
+	int32 OptionIndex = 0;
+	FMonolithActionResult ExtractError;
+	if (!ExtractOptionIndex(Params, OptionIndex, ExtractError))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'option_index' must be a number"));
+		return ExtractError;
 	}
-	int32 OptionIndex = static_cast<int32>(TempOptionIndex);
 
 	UEnvQueryOption* Option = nullptr;
 	if (!GetOptionByIndex(Query, OptionIndex, Option, Error))
@@ -1216,12 +1240,12 @@ FMonolithActionResult FMonolithAIEQSActions::HandleAddEQSTest(const TSharedPtr<F
 		return FMonolithActionResult::Error(Error);
 	}
 
-	double TempOptionIndex = 0.0;
-	if (!Params->TryGetNumberField(TEXT("option_index"), TempOptionIndex))
+	int32 OptionIndex = 0;
+	FMonolithActionResult ExtractError;
+	if (!ExtractOptionIndex(Params, OptionIndex, ExtractError))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'option_index' must be a number"));
+		return ExtractError;
 	}
-	int32 OptionIndex = static_cast<int32>(TempOptionIndex);
 
 	UEnvQueryOption* Option = nullptr;
 	if (!GetOptionByIndex(Query, OptionIndex, Option, Error))
@@ -1300,18 +1324,18 @@ FMonolithActionResult FMonolithAIEQSActions::HandleRemoveEQSTest(const TSharedPt
 		return FMonolithActionResult::Error(Error);
 	}
 
-	double TempOptionIndex = 0.0;
-	if (!Params->TryGetNumberField(TEXT("option_index"), TempOptionIndex))
+	int32 OptionIndex = 0;
+	FMonolithActionResult ExtractError;
+	if (!ExtractOptionIndex(Params, OptionIndex, ExtractError))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'option_index' must be a number"));
+		return ExtractError;
 	}
-	int32 OptionIndex = static_cast<int32>(TempOptionIndex);
-	double TempTestIndex = 0.0;
-	if (!Params->TryGetNumberField(TEXT("test_index"), TempTestIndex))
+	int32 TestIndex = 0;
+	FMonolithActionResult TestExtractError;
+	if (!ExtractTestIndex(Params, TestIndex, TestExtractError))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'test_index' must be a number"));
+		return TestExtractError;
 	}
-	int32 TestIndex = static_cast<int32>(TempTestIndex);
 
 	UEnvQueryOption* Option = nullptr;
 	UEnvQueryTest* Test = nullptr;
@@ -1358,18 +1382,18 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSTest(const TShare
 		return FMonolithActionResult::Error(Error);
 	}
 
-	double TempOptionIndex = 0.0;
-	if (!Params->TryGetNumberField(TEXT("option_index"), TempOptionIndex))
+	int32 OptionIndex = 0;
+	FMonolithActionResult ExtractError;
+	if (!ExtractOptionIndex(Params, OptionIndex, ExtractError))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'option_index' must be a number"));
+		return ExtractError;
 	}
-	int32 OptionIndex = static_cast<int32>(TempOptionIndex);
-	double TempTestIndex = 0.0;
-	if (!Params->TryGetNumberField(TEXT("test_index"), TempTestIndex))
+	int32 TestIndex = 0;
+	FMonolithActionResult TestExtractError;
+	if (!ExtractTestIndex(Params, TestIndex, TestExtractError))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'test_index' must be a number"));
+		return TestExtractError;
 	}
-	int32 TestIndex = static_cast<int32>(TempTestIndex);
 
 	UEnvQueryOption* Option = nullptr;
 	UEnvQueryTest* Test = nullptr;
@@ -1443,18 +1467,18 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSScoring(const TSh
 		return FMonolithActionResult::Error(Error);
 	}
 
-	double TempOptionIndex = 0.0;
-	if (!Params->TryGetNumberField(TEXT("option_index"), TempOptionIndex))
+	int32 OptionIndex = 0;
+	FMonolithActionResult ExtractError;
+	if (!ExtractOptionIndex(Params, OptionIndex, ExtractError))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'option_index' must be a number"));
+		return ExtractError;
 	}
-	int32 OptionIndex = static_cast<int32>(TempOptionIndex);
-	double TempTestIndex = 0.0;
-	if (!Params->TryGetNumberField(TEXT("test_index"), TempTestIndex))
+	int32 TestIndex = 0;
+	FMonolithActionResult TestExtractError;
+	if (!ExtractTestIndex(Params, TestIndex, TestExtractError))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'test_index' must be a number"));
+		return TestExtractError;
 	}
-	int32 TestIndex = static_cast<int32>(TempTestIndex);
 
 	UEnvQueryOption* Option = nullptr;
 	UEnvQueryTest* Test = nullptr;
@@ -1653,18 +1677,18 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSFilter(const TSha
 		return FMonolithActionResult::Error(Error);
 	}
 
-	double TempOptionIndex = 0.0;
-	if (!Params->TryGetNumberField(TEXT("option_index"), TempOptionIndex))
+	int32 OptionIndex = 0;
+	FMonolithActionResult ExtractError;
+	if (!ExtractOptionIndex(Params, OptionIndex, ExtractError))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'option_index' must be a number"));
+		return ExtractError;
 	}
-	int32 OptionIndex = static_cast<int32>(TempOptionIndex);
-	double TempTestIndex = 0.0;
-	if (!Params->TryGetNumberField(TEXT("test_index"), TempTestIndex))
+	int32 TestIndex = 0;
+	FMonolithActionResult TestExtractError;
+	if (!ExtractTestIndex(Params, TestIndex, TestExtractError))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'test_index' must be a number"));
+		return TestExtractError;
 	}
-	int32 TestIndex = static_cast<int32>(TempTestIndex);
 
 	UEnvQueryOption* Option = nullptr;
 	UEnvQueryTest* Test = nullptr;
@@ -1999,12 +2023,12 @@ FMonolithActionResult FMonolithAIEQSActions::HandleReorderEQSTests(const TShared
 		return FMonolithActionResult::Error(Error);
 	}
 
-	double TempOptionIndex = 0.0;
-	if (!Params->TryGetNumberField(TEXT("option_index"), TempOptionIndex))
+	int32 OptionIndex = 0;
+	FMonolithActionResult ExtractError;
+	if (!ExtractOptionIndex(Params, OptionIndex, ExtractError))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'option_index' must be a number"));
+		return ExtractError;
 	}
-	int32 OptionIndex = static_cast<int32>(TempOptionIndex);
 
 	UEnvQueryOption* Option = nullptr;
 	if (!GetOptionByIndex(Query, OptionIndex, Option, Error))
