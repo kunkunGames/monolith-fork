@@ -232,6 +232,7 @@ FMonolithActionResult FMonolithHlodActions::ListHlodLayers(const TSharedPtr<FJso
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
 	TArray<FAssetData> Assets = GetHlodLayerAssets(PackagePath);
+	Rows.Reserve(FMath::Min(Assets.Num(), Limit));
 	for (const FAssetData& Asset : Assets)
 	{
 		if (Rows.Num() >= Limit)
