@@ -6272,6 +6272,8 @@ FMonolithActionResult FMonolithNiagaraActions::CreateScriptFromHLSL(const TShare
 	Result->SetNumberField(TEXT("node_count"), NodeCount);
 
 	TArray<TSharedPtr<FJsonValue>> InputPinNames, OutputPinNames;
+	InputPinNames.Reserve(ParsedInputs.Num());
+	OutputPinNames.Reserve(ParsedOutputs.Num());
 	for (const FPinDef& P : ParsedInputs)
 		InputPinNames.Add(MakeShared<FJsonValueString>(P.Name));
 	for (const FPinDef& P : ParsedOutputs)
