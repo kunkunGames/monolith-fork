@@ -187,6 +187,9 @@ TSharedPtr<FBAGraphHandler> FMonolithBAFormatterImpl::FindHandlerForGraph(UEdGra
 		}
 	}
 
+	const UObject* TargetOuter = Graph->GetOuter();
+	const FName TargetName = Graph->GetFName();
+
 	// Tier 3: Outer + Name match (last resort for multi-graph assets
 	// where the focused graph in a tab doesn't match our target)
 	for (const TSharedPtr<FBAGraphHandler>& Handler : AllHandlers)
@@ -197,8 +200,8 @@ TSharedPtr<FBAGraphHandler> FMonolithBAFormatterImpl::FindHandlerForGraph(UEdGra
 		}
 		UEdGraph* HGraph = Handler->GetFocusedEdGraph();
 		if (HGraph
-			&& HGraph->GetOuter() == Graph->GetOuter()
-			&& HGraph->GetFName() == Graph->GetFName())
+			&& HGraph->GetOuter() == TargetOuter
+			&& HGraph->GetFName() == TargetName)
 		{
 			return Handler;
 		}

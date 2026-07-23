@@ -43,9 +43,10 @@ public:
 
 private:
 #if WITH_BLUEPRINT_ASSIST
-	static FName GetBlueprintAssistModuleName()
+	static const FName& GetBlueprintAssistModuleName()
 	{
-		return TEXT("BlueprintAssist");
+		static const FName Name(TEXT("BlueprintAssist"));
+		return Name;
 	}
 
 	void OnModulesChanged(FName ModuleName, EModuleChangeReason ReasonForChange)
