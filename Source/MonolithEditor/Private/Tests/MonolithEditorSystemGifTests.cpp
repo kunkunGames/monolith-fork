@@ -268,6 +268,151 @@ bool FMonolithEditorEncodeFrameSequenceGifPythonOpaqueSlateAlphaTest::RunTest(co
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithEditorEncodeFrameSequenceGifFFmpegExactFrameCountTest,
+	"Monolith.Editor.Temporal.EncodeFrameSequenceGif.FFmpegExactFrameCount",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithEditorEncodeFrameSequenceGifFFmpegExactFrameCountTest::RunTest(const FString& /*Parameters*/)
+{
+	auto IsToolAvailable = [](const TCHAR* ToolName)
+	{
+		int32 ReturnCode = -1;
+		FString StdOut;
+		FString StdErr;
+		return FPlatformProcess::ExecProcess(
+			ToolName,
+			TEXT("-version"),
+			&ReturnCode,
+			&StdOut,
+			&StdErr)
+			&& ReturnCode == 0;
+	};
+
+	if (!IsToolAvailable(TEXT("ffmpeg")) || !IsToolAvailable(TEXT("ffprobe")))
+	{
+		AddInfo(TEXT("SKIPPED: ffmpeg and ffprobe are required for the exact-frame-count GIF regression test."));
+		return true;
+	}
+
+	const FString TestDir = FPaths::ConvertRelativePathToFull(
+		FPaths::ProjectSavedDir()
+		/ TEXT("Automation/Monolith/EditorGifExactFrameCount")
+		/ FGuid::NewGuid().ToString(EGuidFormats::Digits));
+	if (!IFileManager::Get().MakeDirectory(*TestDir, true))
+	{
+		AddError(FString::Printf(TEXT("Failed to create exact-frame-count GIF test directory: %s"), *TestDir));
+		return false;
+	}
+	ON_SCOPE_EXIT
+	{
+		IFileManager::Get().DeleteDirectory(*TestDir, false, true);
+	};
+
+	constexpr int32 ExpectedFrameCount = 100;
+	constexpr int32 ExpectedFPS = 20;
+	constexpr int32 FrameWidth = 16;
+	constexpr int32 FrameHeight = 16;
+	TArray<TSharedPtr<FJsonValue>> FramePathValues;
+	FramePathValues.Reserve(ExpectedFrameCount);
+	for (int32 FrameIndex = 0; FrameIndex < ExpectedFrameCount; ++FrameIndex)
+	{
+		FImage Image;
+		Image.Init(FrameWidth, FrameHeight, ERawImageFormat::BGRA8, EGammaSpace::sRGB);
+		FColor* Pixels = reinterpret_cast<FColor*>(Image.RawData.GetData());
+		const FColor FrameColor(
+			static_cast<uint8>((FrameIndex * 37) % 256),
+			static_cast<uint8>((FrameIndex * 73) % 256),
+			static_cast<uint8>((FrameIndex * 109) % 256),
+			255);
+		for (int32 PixelIndex = 0; PixelIndex < FrameWidth * FrameHeight; ++PixelIndex)
+		{
+			Pixels[PixelIndex] = FrameColor;
+		}
+
+		const FString FramePath = TestDir / FString::Printf(TEXT("frame_%04d.png"), FrameIndex);
+		if (!TestTrue(
+			*FString::Printf(TEXT("Exactness source PNG %d is written"), FrameIndex),
+			FImageUtils::SaveImageAutoFormat(*FramePath, Image)))
+		{
+			return false;
+		}
+		FramePathValues.Add(MakeShared<FJsonValueString>(FramePath));
+	}
+
+	const FString GifPath = TestDir / TEXT("exact_100_frames_20fps.gif");
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetArrayField(TEXT("frame_paths"), FramePathValues);
+	Params->SetStringField(TEXT("output_path"), GifPath);
+	Params->SetStringField(TEXT("encoder"), TEXT("ffmpeg"));
+	Params->SetNumberField(TEXT("fps"), ExpectedFPS);
+	Params->SetNumberField(TEXT("source_fps"), ExpectedFPS);
+
+	const FMonolithActionResult Result = FMonolithEditorActions::HandleEncodeFrameSequenceGif(Params);
+	if (!TestTrue(TEXT("100-frame ffmpeg GIF encoding succeeds"), Result.bSuccess))
+	{
+		AddError(FString::Printf(TEXT("Exact-frame-count GIF encoding error: %s"), *Result.ErrorMessage));
+		return false;
+	}
+	if (!TestTrue(TEXT("Exact-frame-count encoding returns a result object"), Result.Result.IsValid()))
+	{
+		return false;
+	}
+
+	double SelectedFrameCount = 0.0;
+	double EncodedFrameCount = 0.0;
+	double EncodedDurationSeconds = 0.0;
+	bool bFrameCountVerified = false;
+	FString ProbeTool;
+	FString TimingMode;
+	Result.Result->TryGetNumberField(TEXT("selected_frame_count"), SelectedFrameCount);
+	Result.Result->TryGetNumberField(TEXT("encoded_frame_count"), EncodedFrameCount);
+	Result.Result->TryGetNumberField(TEXT("encoded_gif_duration_seconds"), EncodedDurationSeconds);
+	Result.Result->TryGetBoolField(TEXT("gif_frame_count_verified"), bFrameCountVerified);
+	Result.Result->TryGetStringField(TEXT("gif_probe_tool"), ProbeTool);
+	Result.Result->TryGetStringField(TEXT("gif_timing_mode"), TimingMode);
+	TestTrue(TEXT("All 100 source frames are selected"), FMath::IsNearlyEqual(SelectedFrameCount, 100.0));
+	TestTrue(TEXT("The response reports the probed 100-frame GIF"), FMath::IsNearlyEqual(EncodedFrameCount, 100.0));
+	TestTrue(TEXT("The response reports the probed 5.0-second duration"), FMath::IsNearlyEqual(EncodedDurationSeconds, 5.0, 0.000001));
+	TestTrue(TEXT("The response marks the GIF frame count verified"), bFrameCountVerified);
+	TestEqual(TEXT("The response identifies ffprobe verification"), ProbeTool, FString(TEXT("ffprobe")));
+	TestEqual(
+		TEXT("The response identifies the exact ffmpeg timing route"),
+		TimingMode,
+		FString(TEXT("ffmpeg_fps_filter_exact_frame_cap")));
+
+	const FString ProbeArgs = FString::Printf(
+		TEXT("-v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames,duration -of default=noprint_wrappers=1 \"%s\""),
+		*GifPath);
+	int32 ProbeReturnCode = -1;
+	FString ProbeStdOut;
+	FString ProbeStdErr;
+	const bool bProbeLaunched = FPlatformProcess::ExecProcess(
+		TEXT("ffprobe"),
+		*ProbeArgs,
+		&ProbeReturnCode,
+		&ProbeStdOut,
+		&ProbeStdErr);
+	TestTrue(TEXT("Independent ffprobe validation launches"), bProbeLaunched);
+	TestEqual(TEXT("Independent ffprobe validation succeeds"), ProbeReturnCode, 0);
+	TestTrue(TEXT("Independent ffprobe decodes exactly 100 frames"), ProbeStdOut.Contains(TEXT("nb_read_frames=100")));
+	TestTrue(TEXT("Independent ffprobe reports exactly 5.000000 seconds"), ProbeStdOut.Contains(TEXT("duration=5.000000")));
+	TArray<FString> ConcatSidecars;
+	IFileManager::Get().FindFiles(
+		ConcatSidecars,
+		*(TestDir / TEXT("*_ffmpeg_frames*.txt")),
+		true,
+		false);
+	TestEqual(TEXT("The ffmpeg concat manifest is always cleaned up"), ConcatSidecars.Num(), 0);
+	if (ProbeReturnCode != 0)
+	{
+		AddError(FString::Printf(TEXT("Independent ffprobe validation failed: %s"), *ProbeStdErr.Left(500)));
+		return false;
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FMonolithEditorGifCumulativeCadenceScheduleTest,
 	"Monolith.Editor.Temporal.EncodeFrameSequenceGif.CumulativeCadenceSchedule",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

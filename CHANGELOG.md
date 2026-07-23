@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - **Persistent `scene.move_actor` transform contract** — The action now fails closed before mutation for actors without a root component and for transient or non-dirtyable actor/root/package state. Effective edits verify package dirtiness, participate in Undo, and issue the editor move notification; clean no-ops open no transaction and do not manufacture dirtiness. The action still does not auto-save. Covered by `Monolith.Scene.MoveActor.TransformDirtyPersistence`.
+- **Exact ffmpeg GIF frame-count verification** — `editor.capture_system_gif` and `editor.encode_frame_sequence_gif` cap muxed output to the selected frame count and require an `ffprobe` postcondition. Unprobeable or count-mismatched output is deleted and rejected; explicit ffmpeg requests without `ffprobe` report `frames_only`. Results distinguish selected and decoded frame counts and report verified duration/timing evidence. Covered by `Monolith.Editor.Temporal.EncodeFrameSequenceGif.FFmpegExactFrameCount`.
 
 ### Removed
 
