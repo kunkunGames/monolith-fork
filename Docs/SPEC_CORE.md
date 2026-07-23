@@ -532,7 +532,7 @@ This folder is both the working copy and the git repo (`git@github.com:tumourlov
    ```bash
    gh release create vX.Y.Z "../../Monolith-vX.Y.Z.zip" "../../Monolith-vX.Y.Z-UE5.7.zip" "../../Monolith-vX.Y.Z-UE5.8.zip" --title "Monolith vX.Y.Z" --notes-file release_notes.md
    ```
-   **Crucial:** You must copy the exact SHA256 marker lines printed by the release script into the release notes body before publishing. Per-engine assets use `Monolith-SHA256-UE5.7: <hash>` / `Monolith-SHA256-UE5.8: <hash>`, and the script also prints legacy `Monolith-SHA256: <hash>` for compatibility. If the matching platform/engine marker is missing, the auto-updater logs a warning and proceeds without the release-notes integrity check.
+   **Crucial:** You must copy the exact SHA256 marker lines printed by the release script into the release notes body before publishing. Per-engine assets use `Monolith-SHA256-UE5.7: <hash>` / `Monolith-SHA256-UE5.8: <hash>`, and the script also prints legacy `Monolith-SHA256: <hash>` for compatibility. If the matching platform/engine marker is missing, the auto-updater aborts the installation (the "warn and proceed" fallback only applies to legacy assets).
 
 **Important:** Release zips MUST include pre-compiled DLLs (`Binaries/Win64/*.dll`) so Blueprint-only users can use the plugin without rebuilding. The `make_release.ps1` script builds these cleanly (with optional dependencies disabled), packages them into the zip, and sets `"Installed": true` in the zip's `.uplugin` to suppress rebuild prompts. The local dev copy keeps `"Installed": false`.
 
@@ -541,7 +541,7 @@ This folder is both the working copy and the git repo (`git@github.com:tumourlov
 1. On editor startup (5s delay), checks `api.github.com/repos/tumourlove/monolith/releases/latest`
 2. Compares `tag_name` semver against compiled `MONOLITH_VERSION`
 3. If newer: shows a dialog window with full release notes + "Install Update" / "Remind Me Later"
-4. Download stages to `Saved/Monolith/Staging/` (NOT Plugins/ — would cause UBT conflicts). If a matching `Monolith-SHA256-UE5.x:` marker is present in the release notes, the downloaded zip is verified against it before extraction; legacy `Monolith-SHA256:` remains accepted for compatibility. If no matching marker is present, it warns but proceeds.
+4. Download stages to `Saved/Monolith/Staging/` (NOT Plugins/ — would cause UBT conflicts). If a matching `Monolith-SHA256-UE5.x:` marker is present in the release notes, the downloaded zip is verified against it before extraction; legacy `Monolith-SHA256:` remains accepted for compatibility. If no matching engine marker is present, it aborts (it warns and proceeds only for legacy assets).
 5. On editor exit, a detached swap script runs:
    - Polls `tasklist` for `UnrealEditor.exe` until it's gone (120s timeout)
    - Asks for user confirmation (Y/N)
