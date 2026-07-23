@@ -15295,6 +15295,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 			US.GetUserParameters(ExistingParams);
 
 			TSet<FString> ExistingNames;
+			ExistingNames.Reserve(ExistingParams.Num());
 			for (const FNiagaraVariable& V : ExistingParams)
 			{
 				ExistingNames.Add(V.GetName().ToString());
@@ -15368,6 +15369,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 			}
 
 			TSet<FString> ExistingEmitterNames;
+			ExistingEmitterNames.Reserve(System->GetEmitterHandles().Num());
 			for (const FNiagaraEmitterHandle& Handle : System->GetEmitterHandles())
 			{
 				ExistingEmitterNames.Add(Handle.GetName().ToString());
@@ -15410,6 +15412,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 		System->Modify();
 
 		TSet<FGuid> AllHandleIds;
+		AllHandleIds.Reserve(System->GetEmitterHandles().Num());
 		for (const FNiagaraEmitterHandle& Handle : System->GetEmitterHandles())
 		{
 			AllHandleIds.Add(Handle.GetId());

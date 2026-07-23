@@ -2766,6 +2766,8 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetStateMachines(const TS
 
 			TArray<TSharedPtr<FJsonValue>> StatesArr;
 			TArray<TSharedPtr<FJsonValue>> TransitionsArr;
+			StatesArr.Reserve(SMGraph->Nodes.Num());
+			TransitionsArr.Reserve(SMGraph->Nodes.Num());
 
 			for (UEdGraphNode* SMChildNode : SMGraph->Nodes)
 			{
@@ -9218,6 +9220,8 @@ static void StateMachineGraphToJson(UAnimationStateMachineGraph* SMGraph, TShare
 {
 	TArray<TSharedPtr<FJsonValue>> StatesArr;
 	TArray<TSharedPtr<FJsonValue>> TransArr;
+	StatesArr.Reserve(SMGraph->Nodes.Num());
+	TransArr.Reserve(SMGraph->Nodes.Num());
 	for (UEdGraphNode* Node : SMGraph->Nodes)
 	{
 		if (UAnimStateNode* StateNode = Cast<UAnimStateNode>(Node))
