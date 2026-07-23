@@ -642,8 +642,10 @@ FMonolithActionResult FMonolithMeshValidationActions::BatchValidate(const TShare
 		const TSharedPtr<FJsonObject>* BObj;
 		if (A->TryGetObject(AObj) && B->TryGetObject(BObj))
 		{
-			double APrio = (*AObj)->GetNumberField(TEXT("severity_priority"));
-			double BPrio = (*BObj)->GetNumberField(TEXT("severity_priority"));
+			double APrio = 99;
+			(*AObj)->TryGetNumberField(TEXT("severity_priority"), APrio);
+			double BPrio = 99;
+			(*BObj)->TryGetNumberField(TEXT("severity_priority"), BPrio);
 			return APrio < BPrio;
 		}
 		return false;
