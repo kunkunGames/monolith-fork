@@ -22,6 +22,8 @@ public class MonolithEditor : ModuleRules
 			"UnrealEd",
 			"EditorSubsystem",
 			"PropertyEditor",
+			"ApplicationCore",
+			"InputCore",
 			"Slate",
 			"SlateCore",
 			"Json",
