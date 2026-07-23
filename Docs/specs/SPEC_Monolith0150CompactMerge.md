@@ -251,7 +251,7 @@ Latest focused compact-merge contract pass: [../testing/2026-07-17-compact-merge
 | Gate | Verified result |
 |------|-----------------|
 | Full C++ build | PASS. `<Project>Editor Win64 Development` built through UBT after the final code changes. |
-| Registry health | PASS. Live `monolith_status()` reported version `0.15.0`, 2102 actions, and 45 namespaces in the fully loaded project. |
+| Registry health | PASS. Live `monolith_status()` reported version `0.15.0`, 2125 actions, and 45 namespaces in the fully loaded project. |
 | MCP tool surface | PASS. `tools/list` exposed 77 MCP tools, including 44 `_query` namespace dispatch tools. |
 | Routing boundary smoke | PASS. `monolith_find` routes tasks, `monolith_discover` returns exact schemas, `describe` returns writable shapes, and `monolith_guide` returns editorial workflow prose. |
 | Discover schema mode | PASS. `monolith_discover(namespace="material", action="build_material_graph", mode="schema")` returned the exact action schema without unknown-param warnings. |
@@ -268,7 +268,7 @@ Latest focused compact-merge contract pass: [../testing/2026-07-17-compact-merge
 | Full C++ build | Resolve engine via `BatchFiles\Script\ResolveUnrealEngine.ps1`, then run UBT for `<Project>Editor Win64 Development -Project=<Project>.uproject -WaitMutex -NoHotReloadFromIDE`. | Build succeeds without relying on hard-coded engine paths. |
 | Registry health | `monolith_status()` through the configured MCP client, or equivalent live health check. | Server is reachable and reports expected version/action counts. |
 | Routing boundary smoke | `monolith_find` for action search, `monolith_discover` for params, `describe.schema` for writable shape, and `monolith.guide(section="decisions")` for prose. | Each surface returns its own kind of information without duplicating another surface's output. |
-| Discovery count | `monolith_discover()` and per-namespace discover calls. | The live full-project snapshot is recorded as 2102 actions / 45 namespaces. Static in-tree reference tables either match their curated scope or explicitly defer exact schemas/counts to live discovery. |
+| Discovery count | `monolith_discover()` and per-namespace discover calls. | The live full-project snapshot is recorded as 2125 actions / 45 namespaces. Static in-tree reference tables either match their curated scope or explicitly defer exact schemas/counts to live discovery. |
 | Core framework smoke | `bulk_fill.list_namespaces`, `describe.action_schema`, `describe.schema` for representative namespaces. | Available namespaces and schema payloads match retained adapters; target listing is optional inventory. |
 | Reflection automation | Run the `Leviathan.Monolith.Reflection.*` automation tests after replacing placeholder bodies. | Tests assert write behavior, nested/container handling, unknown-field reporting, and dry-run no-side-effects. |
 | Adapter dry-run smoke | One `bulk_fill.apply` with `dry_run=true` for Blueprint, UI, Material MIC, GAS AttributeInit when available, Niagara, and one optional-gated adapter. | Dry-run reports intended writes, warnings, and silent drops without mutating assets. |
