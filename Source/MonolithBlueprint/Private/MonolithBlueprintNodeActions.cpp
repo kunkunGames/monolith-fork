@@ -3661,9 +3661,9 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 		// the transient BP at the context's classes so self-scope pin resolution
 		// (SetSelfMember) finds a BP-authored function during the dry-run.
 		UBlueprint* ContextBP = nullptr;
-		if (!Params->GetStringField(TEXT("asset_path")).IsEmpty())
+		FString ResolveAssetPath;
+		if (Params->TryGetStringField(TEXT("asset_path"), ResolveAssetPath) && !ResolveAssetPath.IsEmpty())
 		{
-			FString ResolveAssetPath;
 			ContextBP = MonolithBlueprintInternal::LoadBlueprintFromParams(Params, ResolveAssetPath);
 		}
 		if (ContextBP)
@@ -3698,7 +3698,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 	}
 	else if (NodeType == TEXT("SwitchOnEnum"))
 	{
-		FString EnumType = Params->GetStringField(TEXT("enum_type"));
+		FString EnumType;
+		Params->TryGetStringField(TEXT("enum_type"), EnumType);
 		if (EnumType.IsEmpty())
 		{
 			return FMonolithActionResult::Error(TEXT("SwitchOnEnum requires 'enum_type' (e.g. enum_type=ECollisionChannel, or a /Script or /Game asset path for a UserDefinedEnum)"));
