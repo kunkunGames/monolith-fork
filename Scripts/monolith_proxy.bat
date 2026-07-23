@@ -2,7 +2,7 @@
 :: Monolith MCP Proxy launcher
 :: Finds a working runtime automatically and runs the proxy.
 :: Usage in .mcp.json:
-::   {"mcpServers": {"monolith": {"command": "<project-root>/Plugins/Monolith/Scripts/monolith_proxy.bat"}}}
+::   {"mcpServers": {"monolith": {"command": "<project-root>/Plugins/Monolith/Scripts/monolith_proxy.bat", "args": []}}}
 
 setlocal
 

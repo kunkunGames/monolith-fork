@@ -8,7 +8,7 @@ Survives editor restarts — proxy process never dies.
 Background health poll auto-detects when the editor comes online.
 
 Usage (in .mcp.json):
-  {"mcpServers": {"monolith": {"command": "<project-root>/Plugins/Monolith/Scripts/monolith_proxy.sh"}}} (or .bat on Windows)
+  {"mcpServers": {"monolith": {"command": "<project-root>/Plugins/Monolith/Scripts/monolith_proxy.sh", "args": []}}} (or .bat on Windows)
 
 Requirements: Python 3.8+ (stdlib only, no pip install needed)
 """

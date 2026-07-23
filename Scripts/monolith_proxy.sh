@@ -2,7 +2,7 @@
 # Monolith MCP Proxy launcher (macOS / Linux).
 # Finds Python automatically and runs the proxy.
 # Usage in .mcp.json:
-#   {"mcpServers": {"monolith": {"command": "<project-root>/Plugins/Monolith/Scripts/monolith_proxy.sh"}}}
+#   {"mcpServers": {"monolith": {"command": "<project-root>/Plugins/Monolith/Scripts/monolith_proxy.sh", "args": []}}}
 
 set -eu
 
