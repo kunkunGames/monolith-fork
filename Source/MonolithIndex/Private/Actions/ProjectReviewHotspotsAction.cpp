@@ -22,7 +22,8 @@ FMonolithActionResult FProjectReviewHotspotsAction::Execute(const TSharedPtr<FJs
 		}
 		Limit = static_cast<int32>(LimitValue);
 	}
-	Limit = FMath::Clamp(Limit, 1, 1000);
+	// Preserve the <= 0 default sentinel. ReviewHotspots is the single owner of
+	// defaulting and the effective 1..200 result cap.
 
 	int32 MinLines = 100;
 	if (Params->HasField(TEXT("min_lines")))
@@ -34,7 +35,7 @@ FMonolithActionResult FProjectReviewHotspotsAction::Execute(const TSharedPtr<FJs
 		}
 		MinLines = static_cast<int32>(MinLinesValue);
 	}
-	MinLines = FMath::Max(MinLines, 0);
+	// Preserve the <= 0 default sentinel. ReviewHotspots owns the effective floor.
 
 	bool bIncludeQuestions = true;
 	if (Params->HasField(TEXT("include_questions")))

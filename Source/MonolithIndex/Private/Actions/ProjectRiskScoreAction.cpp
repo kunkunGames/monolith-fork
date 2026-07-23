@@ -40,7 +40,8 @@ FMonolithActionResult FProjectRiskScoreAction::Execute(const TSharedPtr<FJsonObj
 		}
 		Limit = static_cast<int32>(LimitValue);
 	}
-	Limit = FMath::Clamp(Limit, 1, 1000);
+	// Preserve the <= 0 default sentinel. RiskScore is the single owner of
+	// defaulting and the effective 1..200 result cap.
 
 	FString MinTier = TEXT("low");
 	if (Params->HasField(TEXT("min_tier")))
