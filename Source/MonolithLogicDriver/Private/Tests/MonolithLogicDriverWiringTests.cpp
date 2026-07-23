@@ -5,6 +5,7 @@
 #include "MonolithToolRegistry.h"
 #include "MonolithLogicDriverAssetActions.h"
 #include "MonolithLogicDriverGraphActions.h"
+#include "MonolithLogicDriverNodeActions.h"
 
 #if WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
 
@@ -1517,4 +1518,105 @@ bool FMonolithLogicDriverAddConduitFunctionalTest::RunTest(const FString& Parame
 
 	return true;
 }
+
+// ------------------------------------------------------------------------------------------------
+// Monolith.LogicDriverKeeper.SetTransitionConditionFunctional
+// Validates the functional 'happy path' for setting a transition condition in a state machine graph.
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLogicDriverSetTransitionConditionFunctionalTest, "Monolith.LogicDriverKeeper.SetTransitionConditionFunctional", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithLogicDriverSetTransitionConditionFunctionalTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("set_transition_condition")))
+	{
+		FMonolithLogicDriverAssetActions::RegisterActions(Registry);
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+		FMonolithLogicDriverNodeActions::RegisterActions(Registry);
+	}
+
+	// 1. Create a State Machine Blueprint
+	FString AssetPath = TEXT("/Game/Tests/SM_SetTransitionConditionTest");
+	{
+		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+		CreateParams->SetStringField(TEXT("save_path"), AssetPath);
+		FMonolithActionResult CreateResult = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("create_state_machine"), CreateParams);
+
+		TestTrue(TEXT("create_state_machine should succeed"), CreateResult.bSuccess);
+		if (!CreateResult.bSuccess)
+		{
+			return true;
+		}
+	}
+
+	// 2. Add State A
+	FString StateA_Guid;
+	{
+		TSharedPtr<FJsonObject> AddStateParams = MakeShared<FJsonObject>();
+		AddStateParams->SetStringField(TEXT("asset_path"), AssetPath);
+		AddStateParams->SetStringField(TEXT("state_name"), TEXT("StateA"));
+		FMonolithActionResult AddResult = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_state"), AddStateParams);
+		TestTrue(TEXT("add_state A should succeed"), AddResult.bSuccess);
+		if (AddResult.bSuccess && AddResult.ReturnData.IsValid())
+		{
+			AddResult.ReturnData->TryGetStringField(TEXT("node_guid"), StateA_Guid);
+		}
+	}
+
+	// 3. Add State B
+	FString StateB_Guid;
+	{
+		TSharedPtr<FJsonObject> AddStateParams = MakeShared<FJsonObject>();
+		AddStateParams->SetStringField(TEXT("asset_path"), AssetPath);
+		AddStateParams->SetStringField(TEXT("state_name"), TEXT("StateB"));
+		FMonolithActionResult AddResult = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_state"), AddStateParams);
+		TestTrue(TEXT("add_state B should succeed"), AddResult.bSuccess);
+		if (AddResult.bSuccess && AddResult.ReturnData.IsValid())
+		{
+			AddResult.ReturnData->TryGetStringField(TEXT("node_guid"), StateB_Guid);
+		}
+	}
+
+	// 4. Add Transition
+	FString Transition_Guid;
+	if (!StateA_Guid.IsEmpty() && !StateB_Guid.IsEmpty())
+	{
+		TSharedPtr<FJsonObject> AddTransParams = MakeShared<FJsonObject>();
+		AddTransParams->SetStringField(TEXT("asset_path"), AssetPath);
+		AddTransParams->SetStringField(TEXT("from_guid"), StateA_Guid);
+		AddTransParams->SetStringField(TEXT("to_guid"), StateB_Guid);
+		FMonolithActionResult TransResult = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_transition"), AddTransParams);
+		TestTrue(TEXT("add_transition should succeed"), TransResult.bSuccess);
+		if (TransResult.bSuccess && TransResult.ReturnData.IsValid())
+		{
+			TransResult.ReturnData->TryGetStringField(TEXT("transition_guid"), Transition_Guid);
+		}
+	}
+
+	// 5. Set Transition Condition
+	if (!Transition_Guid.IsEmpty())
+	{
+		TSharedPtr<FJsonObject> SetCondParams = MakeShared<FJsonObject>();
+		SetCondParams->SetStringField(TEXT("asset_path"), AssetPath);
+		SetCondParams->SetStringField(TEXT("transition_guid"), Transition_Guid);
+		SetCondParams->SetStringField(TEXT("condition_type"), TEXT("time_delay"));
+
+		TSharedPtr<FJsonObject> CondArgs = MakeShared<FJsonObject>();
+		CondArgs->SetNumberField(TEXT("duration"), 5.0);
+		SetCondParams->SetObjectField(TEXT("params"), CondArgs);
+
+		FMonolithActionResult SetCondResult = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("set_transition_condition"), SetCondParams);
+		TestTrue(TEXT("set_transition_condition should succeed"), SetCondResult.bSuccess);
+	}
+
+	// 6. Cleanup
+	{
+		TSharedPtr<FJsonObject> DelParams = MakeShared<FJsonObject>();
+		DelParams->SetStringField(TEXT("asset_path"), AssetPath);
+		FMonolithActionResult DelResult = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("delete_state_machine"), DelParams);
+		TestTrue(TEXT("Cleanup should succeed"), DelResult.bSuccess);
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
