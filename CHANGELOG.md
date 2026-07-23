@@ -101,7 +101,7 @@ Small ergonomics upgrades to the `ui` and `blueprint` action packs, driven by re
 
 ### Internal
 
-- **Test Coverage** — Expanded validation tests for `MonolithLogicDriver` graph actions (`set_initial_state`, `set_end_state`) and added a runtime audio perception statics test scaffold in `MonolithAudio` (e.g., 38aed6e, 4fdb053, 3a48e26).
+- **Test Coverage** — Expanded validation tests for `MonolithLogicDriver` graph actions (`set_initial_state`, `set_end_state`), added transition condition validation test for SM authoring actions, added parameter validation test for `configure_physics_props` action, and added a runtime audio perception statics test scaffold in `MonolithAudio` (e.g., b4ff237, 67580b8, 38aed6e, 4fdb053, 3a48e26).
 
 ## [0.20.2] - 2026-06-15
 
