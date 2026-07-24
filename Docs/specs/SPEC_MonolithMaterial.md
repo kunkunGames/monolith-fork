@@ -15,7 +15,7 @@
 | Class | Responsibility |
 |-------|---------------|
 | `FMonolithMaterialModule` | Registers 63 material actions |
-| `FMonolithMaterialActions` | Static handlers + helpers for loading materials and serializing expressions |
+| `FMonolithMaterialActions` | Static handlers + helpers for loading materials and serializing expressions. All five package-creating action families validate writable long package names before asset lookup, import, or package creation; the PBR-from-disk workflow also validates `texture_folder` before importing textures. Destination collision checks use non-loading existence probes, so a normal missing destination is not logged as a load failure. |
 
 ### Actions (63 — namespace: "material")
 

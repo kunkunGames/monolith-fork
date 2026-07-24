@@ -1,6 +1,7 @@
 #include "MonolithMaterialActions.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
+#include "MonolithPackagePathValidator.h"
 
 #include "Materials/Material.h"
 #include "Materials/MaterialExpression.h"
@@ -2574,6 +2575,10 @@ static bool ParseEnum(const FString& Str, TEnum& OutValue, FString& OutError)
 FMonolithActionResult FMonolithMaterialActions::CreateMaterial(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 
 	// Parse optional properties
 	FString BlendModeStr = Params->HasField(TEXT("blend_mode")) ? Params->GetStringField(TEXT("blend_mode")) : TEXT("Opaque");
@@ -2581,27 +2586,10 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterial(const TSharedPtr<
 	FString DomainStr = Params->HasField(TEXT("material_domain")) ? Params->GetStringField(TEXT("material_domain")) : TEXT("Surface");
 	bool bTwoSided = Params->HasField(TEXT("two_sided")) ? Params->GetBoolField(TEXT("two_sided")) : false;
 
-	// Extract package path and asset name from the asset path
-	FString PackagePath, AssetName;
-	int32 LastSlash;
-	if (AssetPath.FindLastChar('/', LastSlash))
-	{
-		PackagePath = AssetPath.Left(LastSlash);
-		AssetName = AssetPath.Mid(LastSlash + 1);
-	}
-	else
-	{
-		return FMonolithActionResult::Error(TEXT("Invalid asset path — must contain at least one '/' (e.g. /Game/Materials/M_Name)"));
-	}
-
-	if (AssetName.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("Asset name is empty"));
-	}
+	const FString AssetName = FPackageName::GetLongPackageAssetName(AssetPath);
 
 	// Check if asset already exists
-	UObject* Existing = UEditorAssetLibrary::LoadAsset(AssetPath);
-	if (Existing)
+	if (UEditorAssetLibrary::DoesAssetExist(AssetPath))
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
 	}
@@ -2674,6 +2662,10 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString ParentPath = Params->GetStringField(TEXT("parent_material"));
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 
 	// Load parent material
 	UObject* ParentObj = UEditorAssetLibrary::LoadAsset(ParentPath);
@@ -2684,20 +2676,12 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 	}
 
 	// Check if asset already exists
-	UObject* Existing = UEditorAssetLibrary::LoadAsset(AssetPath);
-	if (Existing)
+	if (UEditorAssetLibrary::DoesAssetExist(AssetPath))
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
 	}
 
-	// Extract asset name
-	FString AssetName;
-	int32 LastSlash;
-	if (!AssetPath.FindLastChar('/', LastSlash) || LastSlash == AssetPath.Len() - 1)
-	{
-		return FMonolithActionResult::Error(TEXT("Invalid asset path"));
-	}
-	AssetName = AssetPath.Mid(LastSlash + 1);
+	const FString AssetName = FPackageName::GetLongPackageAssetName(AssetPath);
 
 	// Create package and MIC
 	UPackage* Pkg = CreatePackage(*AssetPath);
@@ -6292,28 +6276,14 @@ void FMonolithMaterialActions::BuildGraphFromSpec(
 FMonolithActionResult FMonolithMaterialActions::CreateMaterialFunction(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-
-	// Extract package path and asset name
-	FString PackagePath, AssetName;
-	int32 LastSlash;
-	if (AssetPath.FindLastChar('/', LastSlash))
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
 	{
-		PackagePath = AssetPath.Left(LastSlash);
-		AssetName = AssetPath.Mid(LastSlash + 1);
+		return FMonolithActionResult::Error(ValidationError);
 	}
-	else
-	{
-		return FMonolithActionResult::Error(TEXT("Invalid asset path — must contain at least one '/' (e.g. /Game/Materials/Functions/MF_MyFunc)"));
-	}
-
-	if (AssetName.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("Asset name is empty"));
-	}
+	const FString AssetName = FPackageName::GetLongPackageAssetName(AssetPath);
 
 	// Check if asset already exists
-	UObject* Existing = UEditorAssetLibrary::LoadAsset(AssetPath);
-	if (Existing)
+	if (UEditorAssetLibrary::DoesAssetExist(AssetPath))
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
 	}
@@ -7996,6 +7966,22 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 		return FMonolithActionResult::Error(TEXT("'maps' must be a non-empty object mapping PBR type to disk file path"));
 	}
 
+	// Preserve the existing convenience contract before validating the folder.
+	if (TextureFolder.EndsWith(TEXT("/")))
+	{
+		TextureFolder = TextureFolder.LeftChop(1);
+	}
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(MaterialPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(TextureFolder); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Invalid texture_folder: %s"),
+			*ValidationError));
+	}
+
 	// ---- Parse optional params ----
 	FString BlendModeStr = Params->HasField(TEXT("blend_mode")) ? Params->GetStringField(TEXT("blend_mode")) : TEXT("Opaque");
 	FString ShadingModelStr = Params->HasField(TEXT("shading_model")) ? Params->GetStringField(TEXT("shading_model")) : TEXT("DefaultLit");
@@ -8004,22 +7990,15 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 	int32 MaxTextureSize = Params->HasField(TEXT("max_texture_size")) ? static_cast<int32>(Params->GetNumberField(TEXT("max_texture_size"))) : 2048;
 	bool bOpacityFromAlpha = Params->HasField(TEXT("opacity_from_alpha")) ? Params->GetBoolField(TEXT("opacity_from_alpha")) : false;
 	bool bReplaceExisting = Params->HasField(TEXT("replace_existing")) ? Params->GetBoolField(TEXT("replace_existing")) : false;
+	const bool bMaterialExists =
+		UEditorAssetLibrary::DoesAssetExist(MaterialPath);
+	if (!bReplaceExisting && bMaterialExists)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Material already exists at '%s'. Set replace_existing: true to overwrite."), *MaterialPath));
+	}
 
-	// Validate material_path format
-	FString MaterialPackagePath, MaterialAssetName;
-	{
-		int32 LastSlash;
-		if (!MaterialPath.FindLastChar('/', LastSlash) || LastSlash == MaterialPath.Len() - 1)
-		{
-			return FMonolithActionResult::Error(TEXT("Invalid material_path — must contain at least one '/' and an asset name (e.g. /Game/Materials/M_MyMat)"));
-		}
-		MaterialPackagePath = MaterialPath.Left(LastSlash);
-		MaterialAssetName = MaterialPath.Mid(LastSlash + 1);
-	}
-	if (MaterialAssetName.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("material_path has empty asset name"));
-	}
+	const FString MaterialAssetName =
+		FPackageName::GetLongPackageAssetName(MaterialPath);
 
 	// Derive base name for textures: strip "M_" or "MI_" prefix if present
 	FString TextureBaseName = MaterialAssetName;
@@ -8030,12 +8009,6 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 	else if (TextureBaseName.StartsWith(TEXT("MI_")))
 	{
 		TextureBaseName = TextureBaseName.Mid(3);
-	}
-
-	// Ensure texture folder has no trailing slash
-	if (TextureFolder.EndsWith(TEXT("/")))
-	{
-		TextureFolder = TextureFolder.LeftChop(1);
 	}
 
 	const TMap<FString, FPBRMapSettings>& SettingsTable = GetPBRMapSettingsTable();
@@ -8120,22 +8093,10 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 	// Phase 2 — Create material
 	// ========================================================================
 
-	// Handle replace_existing for the material
-	if (bReplaceExisting)
+	// Replace only after at least one texture import succeeded.
+	if (bReplaceExisting && bMaterialExists)
 	{
-		UObject* ExistingMat = UEditorAssetLibrary::LoadAsset(MaterialPath);
-		if (ExistingMat)
-		{
-			UEditorAssetLibrary::DeleteAsset(MaterialPath);
-		}
-	}
-	else
-	{
-		UObject* ExistingMat = UEditorAssetLibrary::LoadAsset(MaterialPath);
-		if (ExistingMat)
-		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("Material already exists at '%s'. Set replace_existing: true to overwrite."), *MaterialPath));
-		}
+		UEditorAssetLibrary::DeleteAsset(MaterialPath);
 	}
 
 	// Parse enums
@@ -8321,22 +8282,18 @@ FMonolithActionResult FMonolithMaterialActions::CreateFunctionInstance(const TSh
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString ParentPath = Params->GetStringField(TEXT("parent"));
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 
 	// Check if asset already exists
-	UObject* Existing = UEditorAssetLibrary::LoadAsset(AssetPath);
-	if (Existing)
+	if (UEditorAssetLibrary::DoesAssetExist(AssetPath))
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
 	}
 
-	// Extract package path and asset name
-	FString AssetName;
-	int32 LastSlash;
-	if (!AssetPath.FindLastChar('/', LastSlash) || LastSlash == AssetPath.Len() - 1)
-	{
-		return FMonolithActionResult::Error(TEXT("Invalid asset path"));
-	}
-	AssetName = AssetPath.Mid(LastSlash + 1);
+	const FString AssetName = FPackageName::GetLongPackageAssetName(AssetPath);
 
 	// Load parent as UMaterialFunctionInterface
 	UObject* ParentObj = UEditorAssetLibrary::LoadAsset(ParentPath);
