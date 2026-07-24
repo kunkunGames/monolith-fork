@@ -15,7 +15,7 @@
 | Class | Responsibility |
 |-------|---------------|
 | `FMonolithNiagaraModule` | Registers 129 Niagara actions (108 baseline in `MonolithNiagaraActions.cpp` + 1 layout in `MonolithNiagaraLayoutActions.cpp` + 9 timing actions in `MonolithNiagaraTimingActions.cpp` + 1 stateless-emitter factory in `MonolithNiagaraActions.cpp` + 7 issue #64 Tranche 2 search/discovery + 2 PR #65 CustomHlsl-text read/write). The 2 CustomHlsl-text actions ride public UPROPERTY reflection and are always registered regardless of `WITH_NIAGARA_WIZARD_PRIVATE` |
-| `FMonolithNiagaraActions` | Static handlers + extensive private helpers |
+| `FMonolithNiagaraActions` | Static handlers + extensive private helpers. Seven owning create/duplicate/template-save entry points validate writable long package names before loading source assets or calling AssetTools/package APIs; `create_system_from_spec` delegates to the validated `create_system` path instead of layering a second check. |
 | `FMonolithNiagaraLayoutActions` | `auto_layout` Blueprint Assist bridge for Niagara graphs |
 | `MonolithNiagaraHelpers` | 6 reimplemented NiagaraEditor functions (non-exported APIs) |
 

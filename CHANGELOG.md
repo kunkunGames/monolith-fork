@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Niagara asset creation, duplication, and template-save actions now reject malformed destination package paths.** Seven owning entry points validate `save_path` before source/template loads or package APIs; `create_system_from_spec` inherits the same check through its single `create_system` delegation, and the stateless-emitter path is covered as well.
+
 ## [0.21.2] - 2026-07-22
 
 ### Fixed

@@ -3,6 +3,7 @@
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
+#include "MonolithPackagePathValidator.h"
 
 #include "NiagaraSystem.h"
 #include "NiagaraEmitter.h"
@@ -3830,17 +3831,18 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateSystem(const TSharedP
 {
 	FString SavePath = Params->GetStringField(TEXT("save_path"));
 	FString TemplatePath = Params->HasField(TEXT("template")) ? Params->GetStringField(TEXT("template")) : FString();
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
+	const FString PackagePath = FPackageName::GetLongPackagePath(SavePath);
+	const FString AssetName = FPackageName::GetLongPackageAssetName(SavePath);
 
 	if (!TemplatePath.IsEmpty())
 	{
 		UNiagaraSystem* Template = FMonolithAssetUtils::LoadAssetByPath<UNiagaraSystem>(TemplatePath);
 		if (!Template) return FMonolithActionResult::Error(TEXT("Failed to load template"));
-
-		FString PackagePath, AssetName;
-		int32 LastSlash;
-		if (!SavePath.FindLastChar('/', LastSlash)) return FMonolithActionResult::Error(TEXT("Invalid save path"));
-		PackagePath = SavePath.Left(LastSlash);
-		AssetName = SavePath.Mid(LastSlash + 1);
 
 		IAssetTools& AT = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
 		UObject* Dup = AT.DuplicateAsset(AssetName, PackagePath, Template);
@@ -3848,14 +3850,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateSystem(const TSharedP
 		return NA_SuccessStr(Dup->GetPathName());
 	}
 
-	FString PackagePath, AssetName;
-	int32 LastSlash;
-	if (!SavePath.FindLastChar('/', LastSlash)) return FMonolithActionResult::Error(TEXT("Invalid save path"));
-	PackagePath = SavePath.Left(LastSlash);
-	AssetName = SavePath.Mid(LastSlash + 1);
-
-	FString FullPath = PackagePath / AssetName;
-	UPackage* Pkg = CreatePackage(*FullPath);
+	UPackage* Pkg = CreatePackage(*SavePath);
 	if (!Pkg) return FMonolithActionResult::Error(TEXT("Failed to create package"));
 
 	UNiagaraSystem* NS = NewObject<UNiagaraSystem>(Pkg, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
@@ -3896,15 +3891,13 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateStatelessEmitter(cons
 	// package + NewObject pattern to author a standalone .uasset whose top-level
 	// object is the stateless emitter itself.
 	FString SavePath = Params->GetStringField(TEXT("save_path"));
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+	const FString AssetName = FPackageName::GetLongPackageAssetName(SavePath);
 
-	FString PackagePath, AssetName;
-	int32 LastSlash;
-	if (!SavePath.FindLastChar('/', LastSlash)) return FMonolithActionResult::Error(TEXT("Invalid save path"));
-	PackagePath = SavePath.Left(LastSlash);
-	AssetName = SavePath.Mid(LastSlash + 1);
-
-	FString FullPath = PackagePath / AssetName;
-	UPackage* Pkg = CreatePackage(*FullPath);
+	UPackage* Pkg = CreatePackage(*SavePath);
 	if (!Pkg) return FMonolithActionResult::Error(TEXT("Failed to create package"));
 
 	// Resolve UNiagaraStatelessEmitter's UClass at runtime via FindObject — its
@@ -5382,6 +5375,10 @@ FMonolithActionResult FMonolithNiagaraActions::CreateScriptFromHLSL(const TShare
 
 	if (Name.IsEmpty()) return FMonolithActionResult::Error(TEXT("'name' is required"));
 	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("'save_path' is required"));
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 	if (HlslBody.IsEmpty()) return FMonolithActionResult::Error(TEXT("'hlsl' is required"));
 
 	// Parse inputs array
@@ -5479,15 +5476,8 @@ FMonolithActionResult FMonolithNiagaraActions::CreateScriptFromHLSL(const TShare
 	}
 
 	// === Create package and NiagaraScript asset ===
-	FString PackagePath, AssetName;
-	int32 LastSlash;
-	if (!SavePath.FindLastChar('/', LastSlash))
-		return FMonolithActionResult::Error(TEXT("Invalid save_path - must contain '/'"));
-	PackagePath = SavePath.Left(LastSlash);
-	AssetName = SavePath.Mid(LastSlash + 1);
-
-	FString FullPath = PackagePath / AssetName;
-	UPackage* Pkg = CreatePackage(*FullPath);
+	const FString AssetName = FPackageName::GetLongPackageAssetName(SavePath);
+	UPackage* Pkg = CreatePackage(*SavePath);
 	if (!Pkg) return FMonolithActionResult::Error(TEXT("Failed to create package"));
 
 	UNiagaraScript* Script = NewObject<UNiagaraScript>(Pkg, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
@@ -9046,16 +9036,16 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateSystem(const TShar
 	FString SystemPath = NA_GetAssetPath(Params);
 	FString SavePath = Params->GetStringField(TEXT("save_path"));
 	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: save_path"));
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load source system"));
 
-	// Parse save_path into package path + asset name
-	int32 LastSlash;
-	if (!SavePath.FindLastChar('/', LastSlash))
-		return FMonolithActionResult::Error(TEXT("Invalid save_path — must contain '/'"));
-	FString DestPath = SavePath.Left(LastSlash);
-	FString NewName = SavePath.Mid(LastSlash + 1);
+	const FString DestPath = FPackageName::GetLongPackagePath(SavePath);
+	const FString NewName = FPackageName::GetLongPackageAssetName(SavePath);
 
 	FAssetToolsModule& ATModule = FModuleManager::Get().LoadModuleChecked<FAssetToolsModule>("AssetTools");
 	UObject* Dup = ATModule.Get().DuplicateAsset(NewName, DestPath, System);
@@ -11886,22 +11876,21 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateNPC(const TSharedPtr<
 
 	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: save_path"));
 	if (Namespace.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: namespace"));
-
-	FString PackagePath, AssetName;
-	int32 LastSlash;
-	if (!SavePath.FindLastChar('/', LastSlash)) return FMonolithActionResult::Error(TEXT("Invalid save path"));
-	PackagePath = SavePath.Left(LastSlash);
-	AssetName = SavePath.Mid(LastSlash + 1);
-	FString FullPath = PackagePath / AssetName;
-
-	// Check for existing asset — CreatePackage with same path returns existing in-memory package
-	UNiagaraParameterCollection* Existing = LoadObject<UNiagaraParameterCollection>(nullptr, *FullPath);
-	if (Existing)
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("NPC already exists at '%s'"), *FullPath));
+		return FMonolithActionResult::Error(ValidationError);
 	}
 
-	UPackage* Pkg = CreatePackage(*FullPath);
+	const FString AssetName = FPackageName::GetLongPackageAssetName(SavePath);
+
+	// Check for existing asset — CreatePackage with same path returns existing in-memory package
+	UNiagaraParameterCollection* Existing = LoadObject<UNiagaraParameterCollection>(nullptr, *SavePath);
+	if (Existing)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("NPC already exists at '%s'"), *SavePath));
+	}
+
+	UPackage* Pkg = CreatePackage(*SavePath);
 	if (!Pkg) return FMonolithActionResult::Error(TEXT("Failed to create package"));
 
 	UNiagaraParameterCollection* NPC = NewObject<UNiagaraParameterCollection>(Pkg, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
@@ -12205,22 +12194,21 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateEffectType(const TSha
 {
 	FString SavePath = Params->GetStringField(TEXT("save_path"));
 	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: save_path"));
-
-	FString PackagePath, AssetName;
-	int32 LastSlash;
-	if (!SavePath.FindLastChar('/', LastSlash)) return FMonolithActionResult::Error(TEXT("Invalid save path"));
-	PackagePath = SavePath.Left(LastSlash);
-	AssetName = SavePath.Mid(LastSlash + 1);
-	FString FullPath = PackagePath / AssetName;
-
-	// Check for existing asset
-	UNiagaraEffectType* Existing = LoadObject<UNiagaraEffectType>(nullptr, *FullPath);
-	if (Existing)
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Effect type already exists at '%s'"), *FullPath));
+		return FMonolithActionResult::Error(ValidationError);
 	}
 
-	UPackage* Pkg = CreatePackage(*FullPath);
+	const FString AssetName = FPackageName::GetLongPackageAssetName(SavePath);
+
+	// Check for existing asset
+	UNiagaraEffectType* Existing = LoadObject<UNiagaraEffectType>(nullptr, *SavePath);
+	if (Existing)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Effect type already exists at '%s'"), *SavePath));
+	}
+
+	UPackage* Pkg = CreatePackage(*SavePath);
 	if (!Pkg) return FMonolithActionResult::Error(TEXT("Failed to create package"));
 
 	UNiagaraEffectType* ET = NewObject<UNiagaraEffectType>(Pkg, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
@@ -13835,6 +13823,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSaveEmitterAsTemplate(const
 
 	if (EmitterHandleId.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: emitter"));
 	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: save_path"));
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -13847,29 +13839,14 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSaveEmitterAsTemplate(const
 	UNiagaraEmitter* SourceEmitter = VE.Emitter;
 	if (!SourceEmitter) return FMonolithActionResult::Error(TEXT("Source emitter is null"));
 
-	// Check for existing asset at save path
-	FString PackagePath = SavePath;
-	FString AssetName;
-	int32 LastSlash;
-	if (SavePath.FindLastChar('/', LastSlash))
-	{
-		AssetName = SavePath.Mid(LastSlash + 1);
-		PackagePath = SavePath;
-	}
-	else
-	{
-		AssetName = SavePath;
-	}
-
-	// Convert /Game/ path to package name
-	FString PackageName = SavePath;
+	const FString AssetName = FPackageName::GetLongPackageAssetName(SavePath);
 
 	// Check if asset already exists
-	if (FindObject<UPackage>(nullptr, *PackageName))
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at: %s"), *PackageName));
+	if (FindObject<UPackage>(nullptr, *SavePath))
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at: %s"), *SavePath));
 
 	// Create the package
-	UPackage* NewPackage = CreatePackage(*PackageName);
+	UPackage* NewPackage = CreatePackage(*SavePath);
 	if (!NewPackage) return FMonolithActionResult::Error(TEXT("Failed to create package"));
 
 	// Duplicate the emitter into the new package
@@ -13895,7 +13872,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSaveEmitterAsTemplate(const
 
 	// Mark dirty and save
 	NewPackage->MarkPackageDirty();
-	FString PackageFilename = FPackageName::LongPackageNameToFilename(PackageName, FPackageName::GetAssetPackageExtension());
+	FString PackageFilename = FPackageName::LongPackageNameToFilename(SavePath, FPackageName::GetAssetPackageExtension());
 
 	FSavePackageArgs SaveArgs;
 	SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
@@ -13906,7 +13883,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSaveEmitterAsTemplate(const
 
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetBoolField(TEXT("success"), true);
-	R->SetStringField(TEXT("saved_path"), PackageName);
+	R->SetStringField(TEXT("saved_path"), SavePath);
 	R->SetStringField(TEXT("emitter_name"), NewEmitter->GetName());
 	R->SetStringField(TEXT("source_system"), SystemPath);
 	R->SetStringField(TEXT("source_emitter"), Handle.GetName().ToString());
