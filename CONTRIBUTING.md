@@ -173,6 +173,8 @@ RegisterIndexer(MakeShared<FMyIndexer>());
 
 If your indexer needs new tables, execute the schema during indexing using `DB.GetRawDatabase()` (or add it to `GCreateTablesSQL` in `MonolithIndexDatabase.cpp`). Follow the existing pattern with `CREATE TABLE IF NOT EXISTS`.
 
+If the new rows should be discoverable via full-text search, you must also define a corresponding `CREATE VIRTUAL TABLE IF NOT EXISTS fts_your_table USING fts5(...)` and add `AFTER INSERT`, `AFTER DELETE`, and `AFTER UPDATE` synchronization triggers in `GCreateTablesSQL`.
+
 ---
 
 ## Coding Conventions
