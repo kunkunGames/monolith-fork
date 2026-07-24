@@ -10683,6 +10683,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetSyncMarkers(const TSha
 	if (!Seq) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimSequence not found: %s"), *AssetPath));
 
 	TArray<TSharedPtr<FJsonValue>> MarkersArr;
+	MarkersArr.Reserve(Seq->AuthoredSyncMarkers.Num());
 	for (int32 i = 0; i < Seq->AuthoredSyncMarkers.Num(); ++i)
 	{
 		const FAnimSyncMarker& Marker = Seq->AuthoredSyncMarkers[i];
