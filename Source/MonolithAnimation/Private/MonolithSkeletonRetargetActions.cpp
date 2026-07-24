@@ -226,7 +226,11 @@ void FMonolithSkeletonRetargetActions::RegisterActions(FMonolithToolRegistry& Re
 FMonolithActionResult FMonolithSkeletonRetargetActions::HandleSetBoneTranslationRetargeting(
 	const TSharedPtr<FJsonObject>& Params)
 {
-	const FString SkeletonPath = Params->GetStringField(TEXT("skeleton_path"));
+	FString SkeletonPath;
+	if (!Params->TryGetStringField(TEXT("skeleton_path"), SkeletonPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'skeleton_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	USkeleton* Skeleton = FMonolithAssetUtils::LoadAssetByPath<USkeleton>(SkeletonPath);
 	if (!Skeleton)
@@ -234,7 +238,11 @@ FMonolithActionResult FMonolithSkeletonRetargetActions::HandleSetBoneTranslation
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
 	}
 
-	const FString Preset = Params->GetStringField(TEXT("preset"));
+	FString Preset;
+	if (Params->HasField(TEXT("preset")) && !Params->TryGetStringField(TEXT("preset"), Preset))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'preset' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	bool bRecursive = false;
 	if (Params->HasField(TEXT("recursive")))
 	{
@@ -366,7 +374,11 @@ FMonolithActionResult FMonolithSkeletonRetargetActions::HandleSetBoneTranslation
 FMonolithActionResult FMonolithSkeletonRetargetActions::HandleGetBoneTranslationRetargeting(
 	const TSharedPtr<FJsonObject>& Params)
 {
-	const FString SkeletonPath = Params->GetStringField(TEXT("skeleton_path"));
+	FString SkeletonPath;
+	if (!Params->TryGetStringField(TEXT("skeleton_path"), SkeletonPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'skeleton_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	USkeleton* Skeleton = FMonolithAssetUtils::LoadAssetByPath<USkeleton>(SkeletonPath);
 	if (!Skeleton)
@@ -467,7 +479,11 @@ FMonolithActionResult FMonolithSkeletonRetargetActions::HandleGetBoneTranslation
 FMonolithActionResult FMonolithSkeletonRetargetActions::HandleSetIkRigBoneSettings(
 	const TSharedPtr<FJsonObject>& Params)
 {
-	const FString IkRigPath = Params->GetStringField(TEXT("ik_rig_path"));
+	FString IkRigPath;
+	if (!Params->TryGetStringField(TEXT("ik_rig_path"), IkRigPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'ik_rig_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UIKRigDefinition* IkRig = FMonolithAssetUtils::LoadAssetByPath<UIKRigDefinition>(IkRigPath);
 	if (!IkRig)
@@ -767,7 +783,11 @@ FMonolithActionResult FMonolithSkeletonRetargetActions::HandleSetIkRigBoneSettin
 FMonolithActionResult FMonolithSkeletonRetargetActions::HandleGetIkRigBoneSettings(
 	const TSharedPtr<FJsonObject>& Params)
 {
-	const FString IkRigPath = Params->GetStringField(TEXT("ik_rig_path"));
+	FString IkRigPath;
+	if (!Params->TryGetStringField(TEXT("ik_rig_path"), IkRigPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'ik_rig_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UIKRigDefinition* IkRig = FMonolithAssetUtils::LoadAssetByPath<UIKRigDefinition>(IkRigPath);
 	if (!IkRig)
