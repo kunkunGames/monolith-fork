@@ -1170,6 +1170,38 @@ bool FMonolithParamGuardLogicDriverRuntimeStopSMRejectsMalformedParamsTest::RunT
 	return true;
 }
 
+// ------------------------------------------------------------------------------------------------
+// Monolith.ParamGuard.LogicDriver.RuntimeRestartSMRejectsMalformedParams
+// Validates that runtime_restart_sm rejects malformed params.
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverRuntimeRestartSMRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.RuntimeRestartSMRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverRuntimeRestartSMRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("runtime_restart_sm")))
+	{
+		FMonolithLogicDriverRuntimeActions::RegisterActions(Registry);
+	}
+
+	{
+		TSharedPtr<FJsonObject> EmptyParams = MakeShared<FJsonObject>();
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("runtime_restart_sm"), EmptyParams);
+		TestTrue(TEXT("runtime_restart_sm rejects missing actor param"), !Result.bSuccess);
+		TestTrue(TEXT("runtime_restart_sm reports missing actor"), Result.ErrorMessage.Contains(TEXT("Missing required param 'actor'")));
+	}
+	{
+		TSharedPtr<FJsonObject> MalformedComponentNameParams = MakeShared<FJsonObject>();
+		MalformedComponentNameParams->SetStringField(TEXT("actor"), TEXT("BP_SMInstance_C_0"));
+		MalformedComponentNameParams->SetNumberField(TEXT("component_name"), 12345.0);
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("runtime_restart_sm"), MalformedComponentNameParams);
+		TestTrue(TEXT("runtime_restart_sm rejects malformed component_name param"), !Result.bSuccess);
+		TestTrue(TEXT("runtime_restart_sm reports malformed component_name"), Result.ErrorMessage.Contains(TEXT("Invalid param: 'component_name' must be a string")));
+	}
+
+	return true;
+}
+
+
 
 // ------------------------------------------------------------------------------------------------
 // Monolith.ParamGuard.LogicDriver.CompileStateMachineRejectsMalformedParams
