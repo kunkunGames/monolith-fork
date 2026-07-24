@@ -17,6 +17,7 @@
 | `FMonolithBlueprintModule` | Registers ~120 blueprint actions (count approximate — query `monolith_discover("blueprint")` for the live figure; includes the 2026-06-10 `find_variable_references`, Gap 5) |
 | `FMonolithBlueprintActions` | Static handlers. Uses `FMonolithAssetUtils::LoadAssetByPath<UBlueprint>` |
 | `FMonolithBlueprintContractActions` | Variable-contract reconciliation: `compare_class_variable_contract` (diff engine) + `promote_variables_to_parent`. Pin-type-aware descriptor extraction shared by both. |
+| `FMonolithBlueprintStructActions` | Creates user-defined structs/enums, DataTables, and raw DataAssets. New assets are constructed directly in the package returned by `CreatePackage`; the create path never calls `FullyLoad()` on a new or already-resident package. |
 | `MonolithBlueprintInternal` | Helpers: AddGraphArray, FindGraphByName, PinTypeToString, SerializePin/Node, TraceExecFlow, FindEntryNode |
 
 > **Unity-safe file-local helpers (#68).** Internal-linkage helpers (anonymous-namespace functions/types, file-`static`s) must carry file-unique names or live in per-file named namespaces — matching the MonolithUI model — so they don't collide when adaptive/full unity concatenates same-module `.cpp`s into one translation unit. (The previously-global `InterpModeToString` in `MonolithBlueprintNodeActions.cpp` is now `NodeInterpModeToString`.)

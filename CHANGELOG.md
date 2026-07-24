@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Blueprint structural asset creation no longer force-loads new packages.** User-defined structs/enums, DataTables, and DataAssets now create their object directly in the package returned by `CreatePackage` instead of calling `FullyLoad()` on a new or already-resident package.
+
 ## [0.21.2] - 2026-07-22
 
 ### Fixed
