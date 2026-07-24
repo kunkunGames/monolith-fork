@@ -3334,8 +3334,10 @@ FMonolithActionResult FMonolithCoreTools::HandleSetNotificationSettings(const TS
 		bool Value = false;
 	};
 
+	const TArray<FNotificationBoolSetting>& AllSettings = GetNotificationSettings();
 	TArray<FPendingNotificationBoolSetting> PendingSettings;
-	for (const FNotificationBoolSetting& Def : GetNotificationSettings())
+	PendingSettings.Reserve(AllSettings.Num());
+	for (const FNotificationBoolSetting& Def : AllSettings)
 	{
 		TSharedPtr<FJsonValue> Field = (*SettingsObj)->TryGetField(Def.Name);
 		if (Field.IsValid())
@@ -3356,6 +3358,7 @@ FMonolithActionResult FMonolithCoreTools::HandleSetNotificationSettings(const TS
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Changed;
+	Changed.Reserve(PendingSettings.Num());
 	for (const FPendingNotificationBoolSetting& Pending : PendingSettings)
 	{
 		const FNotificationBoolSetting& Def = *Pending.Definition;
