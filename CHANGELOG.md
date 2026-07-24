@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Blueprint structural asset actions now reject malformed package paths.** Struct, enum, DataTable, DataAsset, and seeded DataAsset creation validate `save_path` before querying the Asset Registry or calling `CreatePackage`, returning a normal action error instead of passing invalid input into Unreal's package APIs.
+
 ## [0.21.2] - 2026-07-22
 
 ### Fixed

@@ -1,5 +1,6 @@
 #include "MonolithBlueprintStructActions.h"
 #include "MonolithBlueprintInternal.h"
+#include "MonolithPackagePathValidator.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
@@ -118,6 +119,10 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedSt
 	if (AssetName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("save_path must not end with '/': %s"), *SavePath));
+	}
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
 	}
 
 	// Guard against existing asset (same pattern as create_blueprint)
@@ -281,6 +286,10 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedEn
 	if (AssetName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("save_path must not end with '/': %s"), *SavePath));
+	}
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
 	}
 
 	// Guard against existing asset
@@ -471,6 +480,10 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateDataTable(con
 	if (AssetName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("save_path must not end with '/': %s"), *SavePath));
+	}
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
 	}
 
 	// Guard against existing asset
@@ -799,6 +812,10 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateDataAsset(con
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("save_path must not end with '/': %s"), *SavePath));
 	}
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 
 	// Resolve class_name → UClass*
 	UClass* ResolvedClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
@@ -984,6 +1001,10 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleSeedDataAsset(const
 	if (AssetName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("save_path must not end with '/': %s"), *SavePath));
+	}
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
 	}
 
 	// Resolve class_name → UClass* (same resolution as create_data_asset).
