@@ -10,7 +10,7 @@
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore
 **Namespace:** `combograph` | **Tool:** `combograph_query(action, params)` | **Actions:** 13
-**Conditional:** ComboGraph plugin features wrapped in `#if WITH_COMBOGRAPH`. When ComboGraph is absent, the module compiles to an empty stub (0 actions registered). Uses UObject reflection only — no direct C++ API linkage against ComboGraph binaries.
+**Conditional:** ComboGraph plugin features wrapped in `#if WITH_COMBOGRAPH`. When ComboGraph is absent, the module compiles to an empty stub (0 actions registered). Build.cs detection checks the `.uproject` via `IsPluginEnabled`.
 **Settings toggle:** `bEnableComboGraph` (default: True)
 
 MonolithComboGraph provides MCP coverage of the ComboGraph marketplace plugin. It covers combo graph CRUD, node and edge management, gameplay effect and cue assignment per node, ability creation/linking, and full-graph scaffolding from montage lists.
@@ -71,7 +71,7 @@ MonolithComboGraph provides MCP coverage of the ComboGraph marketplace plugin. I
 
 ### Notes
 
-> **Precompiled plugin integration.** ComboGraph is a marketplace plugin with precompiled binaries. MonolithComboGraph uses UObject reflection (`FindPropertyByName`, `FProperty::GetValue_InContainer`) and `UComboGraphFactory` (discovered via reflection) rather than linking against ComboGraph headers. This makes the integration version-agnostic as long as property names are stable.
+> **Precompiled plugin integration.** ComboGraph is a marketplace plugin with precompiled binaries. MonolithComboGraph links against `ComboGraph` and `ComboGraphEditor` in `MonolithComboGraph.Build.cs` when the plugin is enabled in the `.uproject` (detected via `IsPluginEnabled`).
 >
 > **EdGraph sync.** ComboGraph assets contain both runtime and editor graphs. All write actions update both representations so changes are visible in the ComboGraph editor without manual refresh.
 >
