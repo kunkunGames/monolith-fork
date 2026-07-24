@@ -137,6 +137,16 @@ namespace MonolithCommonUI
 	}
 
 	/**
+	 * Extracts wbp_path and widget_name from the given Params.
+	 * Returns true if both are present and non-empty. Populates OutError if either is missing.
+	 */
+	MONOLITHUI_API bool TryExtractWbpAndWidgetName(
+		const TSharedPtr<FJsonObject>& Params,
+		FString& OutWbpPath,
+		FString& OutWidgetName,
+		FMonolithActionResult& OutError);
+
+	/**
 	 * Return the world used for runtime (PIE) actions. Returns nullptr outside PIE.
 	 * Use at handler entry for [RUNTIME] actions: nullptr → FMonolithActionResult::Error(...).
 	 */

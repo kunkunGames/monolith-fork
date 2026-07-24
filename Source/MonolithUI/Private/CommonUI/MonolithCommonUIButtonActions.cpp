@@ -226,11 +226,11 @@ namespace MonolithCommonUIButton
 		UWidgetBlueprint*& OutWbp,
 		UWidget*& OutTarget)
 	{
-		if (!Params.IsValid() || !Params->TryGetStringField(TEXT("widget_name"), OutWidgetName))
-			return FMonolithActionResult::Error(TEXT("wbp_path and widget_name required"));
-		OutWbpPath = MonolithCommonUI::GetWbpPath(Params);
-		if (OutWbpPath.IsEmpty())
-			return FMonolithActionResult::Error(TEXT("wbp_path (or asset_path) required"));
+		FMonolithActionResult ExtractError;
+		if (!MonolithCommonUI::TryExtractWbpAndWidgetName(Params, OutWbpPath, OutWidgetName, ExtractError))
+		{
+			return ExtractError;
+		}
 
 		return MonolithCommonUI::LoadWidgetForMutation(OutWbpPath, FName(*OutWidgetName), OutWbp, OutTarget);
 	}
@@ -338,12 +338,12 @@ namespace MonolithCommonUIButton
 
 	static FMonolithActionResult HandleConvertButtonToCommon(const TSharedPtr<FJsonObject>& Params)
 	{
-		FString WidgetName;
-		if (!Params.IsValid() || !Params->TryGetStringField(TEXT("widget_name"), WidgetName))
-			return FMonolithActionResult::Error(TEXT("wbp_path and widget_name required"));
-		FString WbpPath = MonolithCommonUI::GetWbpPath(Params);
-		if (WbpPath.IsEmpty())
-			return FMonolithActionResult::Error(TEXT("wbp_path (or asset_path) required"));
+		FString WidgetName, WbpPath;
+		FMonolithActionResult ExtractError;
+		if (!MonolithCommonUI::TryExtractWbpAndWidgetName(Params, WbpPath, WidgetName, ExtractError))
+		{
+			return ExtractError;
+		}
 
 		// Optional: caller supplies a concrete UCommonButtonBase subclass to construct.
 		// UCommonButtonBase itself is UCLASS(Abstract) in UE 5.7, so defaulting to the base

@@ -247,13 +247,12 @@ namespace MonolithCommonUIList
 
 	static FMonolithActionResult HandleConfigureAnimatedSwitcher(const TSharedPtr<FJsonObject>& Params)
 	{
-		FString WidgetName;
-		if (!Params.IsValid() ||
-			!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
-			return FMonolithActionResult::Error(TEXT("wbp_path and widget_name required"));
-		FString WbpPath = MonolithCommonUI::GetWbpPath(Params);
-		if (WbpPath.IsEmpty())
-			return FMonolithActionResult::Error(TEXT("wbp_path (or asset_path) required"));
+		FString WidgetName, WbpPath;
+		FMonolithActionResult ExtractError;
+		if (!MonolithCommonUI::TryExtractWbpAndWidgetName(Params, WbpPath, WidgetName, ExtractError))
+		{
+			return ExtractError;
+		}
 
 		UWidgetBlueprint* Wbp = nullptr;
 		UWidget* Target = nullptr;
@@ -314,13 +313,12 @@ namespace MonolithCommonUIList
 
 	static FMonolithActionResult AddPanelToWbp(UClass* Cls, const TSharedPtr<FJsonObject>& Params, const FString& ReportClassName)
 	{
-		FString WidgetName, ParentName;
-		if (!Params.IsValid() ||
-			!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
-			return FMonolithActionResult::Error(TEXT("wbp_path and widget_name required"));
-		FString WbpPath = MonolithCommonUI::GetWbpPath(Params);
-		if (WbpPath.IsEmpty())
-			return FMonolithActionResult::Error(TEXT("wbp_path (or asset_path) required"));
+		FString WidgetName, ParentName, WbpPath;
+		FMonolithActionResult ExtractError;
+		if (!MonolithCommonUI::TryExtractWbpAndWidgetName(Params, WbpPath, WidgetName, ExtractError))
+		{
+			return ExtractError;
+		}
 		Params->TryGetStringField(TEXT("parent_widget"), ParentName);
 
 		UWidgetBlueprint* Wbp = MonolithCommonUI::LoadWidgetBlueprintAsset(WbpPath);

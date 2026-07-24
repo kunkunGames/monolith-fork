@@ -201,13 +201,12 @@ namespace MonolithCommonUIInput
 
 	static FMonolithActionResult HandleCreateBoundActionBar(const TSharedPtr<FJsonObject>& Params)
 	{
-		FString WidgetName, ParentWidgetName;
-		if (!Params.IsValid() ||
-			!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
-			return FMonolithActionResult::Error(TEXT("wbp_path and widget_name required"));
-		FString WbpPath = MonolithCommonUI::GetWbpPath(Params);
-		if (WbpPath.IsEmpty())
-			return FMonolithActionResult::Error(TEXT("wbp_path (or asset_path) required"));
+		FString WidgetName, ParentWidgetName, WbpPath;
+		FMonolithActionResult ExtractError;
+		if (!MonolithCommonUI::TryExtractWbpAndWidgetName(Params, WbpPath, WidgetName, ExtractError))
+		{
+			return ExtractError;
+		}
 		Params->TryGetStringField(TEXT("parent_widget"), ParentWidgetName);
 
 		// Resolve the button class up front so we can surface a clean error

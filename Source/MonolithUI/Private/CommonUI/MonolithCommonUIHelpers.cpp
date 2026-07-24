@@ -375,6 +375,28 @@ namespace MonolithCommonUI
 		return false;
 	}
 
+	bool TryExtractWbpAndWidgetName(
+		const TSharedPtr<FJsonObject>& Params,
+		FString& OutWbpPath,
+		FString& OutWidgetName,
+		FMonolithActionResult& OutError)
+	{
+		if (!Params.IsValid() || !Params->TryGetStringField(TEXT("widget_name"), OutWidgetName))
+		{
+			OutError = FMonolithActionResult::Error(TEXT("wbp_path and widget_name required"));
+			return false;
+		}
+
+		OutWbpPath = MonolithCommonUI::GetWbpPath(Params);
+		if (OutWbpPath.IsEmpty())
+		{
+			OutError = FMonolithActionResult::Error(TEXT("wbp_path (or asset_path) required"));
+			return false;
+		}
+
+		return true;
+	}
+
 	UWorld* GetPIEWorld()
 	{
 		if (!GEditor) return nullptr;
