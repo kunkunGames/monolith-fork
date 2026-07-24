@@ -190,7 +190,7 @@ Each module has its own spec file under `specs/`. The table below is the index.
 | 3.29 | MonolithGameplayMessage | [specs/SPEC_MonolithGameplayMessage.md](specs/SPEC_MonolithGameplayMessage.md) | Read-only GameplayMessageRouter channel, match-type, payload UScriptStruct, and static broadcaster/listener source diagnostics (5 actions) |
 | 3.30 | MonolithGameSettings | [specs/SPEC_MonolithGameSettings.md](specs/SPEC_MonolithGameSettings.md) | Read-only GameSettings registry, setting-class, data-source path, visual-data, and player-mappable input diagnostics (6 actions) |
 | 3.31 | MonolithLoading | [specs/SPEC_MonolithLoading.md](specs/SPEC_MonolithLoading.md) | Read-only CommonLoadingScreen manager reason, processor candidate, settings/CVar, and optional Lyra loading handoff diagnostics (4 actions) |
-| 3.32 | MonolithSprite | [specs/SPEC_MonolithSpriteAsset.md](specs/SPEC_MonolithSpriteAsset.md) | Sprite asset validation, generation, extraction, and contact sheet building |
+| 3.32 | MonolithSprite | [specs/SPEC_MonolithSprite.md](specs/SPEC_MonolithSprite.md) | Sprite asset validation, generation, extraction, and contact sheet building |
 | 3.33 | MonolithAsset | [specs/SPEC_MonolithAsset.md](specs/SPEC_MonolithAsset.md) | Generic asset ingest/save/delete/inspection/find plus guarded package graph copy/remap planning, duplication, reference fixup, and dependency-closure validation |
 | 3.34 | MonolithWorldConditions | [specs/SPEC_MonolithWorldConditions.md](specs/SPEC_MonolithWorldConditions.md) | World Conditions queries and validation |
 | 3.35 | MonolithInterchange | [specs/SPEC_MonolithInterchange.md](specs/SPEC_MonolithInterchange.md) | Interchange import operations and overrides |

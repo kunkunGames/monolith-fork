@@ -110,14 +110,14 @@ The current folder set covers the main public domains, but several implemented o
 | `unreal-asset` | `asset` | Generic asset workflows are embedded in `unreal-materials`, but texture/font ingest, file import, save/delete, asset inspection, naming validation, and batch rename are cross-domain. | P1 |
 | `monolith-schema` | `bulk_fill`, `describe` | Schema-first and reflection bulk-fill workflows are central and cross-domain, but no focused skill teaches the `project.search -> describe -> bulk_fill.apply` path. | P1 |
 | `unreal-reflection-intel` | `cppreflect`, `network`, `decision`, `risk`, `reflect` | `cppreflect` appears in `unreal-cpp` and `unreal-project-search`, but RI network, decision, and risk queries are not discoverable from a dedicated skill. | P1 |
-| `unreal-sprite` | `sprite` | `SPEC_MonolithSpriteAsset.md` documents an implemented `sprite` namespace and production contract, but the skill is absent. | P1 |
+| `unreal-sprite` | `sprite` | `SPEC_MonolithSprite.md` documents an implemented `sprite` namespace and production contract, but the skill is absent. | P1 |
 
 These four candidates were accepted because each maps to an implemented or documented namespace family and improves trigger accuracy over burying the workflow inside another skill:
 
 - `unreal-asset` is backed by `Docs/specs/SPEC_MonolithAsset.md` and the `asset` namespace.
 - `monolith-schema` is backed by the core `describe`/`bulk_fill` schema workflow and contract tests.
 - `unreal-reflection-intel` is backed by Reflection Intelligence namespaces documented in `Scripts/monolith_offline.py` and `Source/MonolithReflectionIntel`.
-- `unreal-sprite` is backed by `Docs/specs/SPEC_MonolithSpriteAsset.md`.
+- `unreal-sprite` is backed by `Docs/specs/SPEC_MonolithSprite.md`.
 
 ## 4. Required Repository Shape
 

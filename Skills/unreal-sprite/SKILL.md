@@ -14,7 +14,7 @@ monolith_discover({ namespace: "sprite" })                                      
 monolith_discover({ namespace: "sprite", action: "<action>", mode: "schema" })  # exact params
 ```
 
-When the right action is unclear, `monolith_find("<task>")` suggests candidates across namespaces. Production spec: `Docs/specs/SPEC_MonolithSpriteAsset.md`.
+When the right action is unclear, `monolith_find("<task>")` suggests candidates across namespaces. Production spec: `Docs/specs/SPEC_MonolithSprite.md`.
 
 ## When to use / Use a different skill for
 
