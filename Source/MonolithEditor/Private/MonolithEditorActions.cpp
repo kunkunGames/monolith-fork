@@ -2099,6 +2099,7 @@ FMonolithActionResult FMonolithEditorActions::HandleGetLogCategories(const TShar
 	{
 		TArray<FString> Categories = CachedLogCapture->GetActiveCategories();
 		Categories.Sort();
+		CatArr.Reserve(Categories.Num());
 		for (const FString& Cat : Categories)
 		{
 			CatArr.Add(MakeShared<FJsonValueString>(Cat));
