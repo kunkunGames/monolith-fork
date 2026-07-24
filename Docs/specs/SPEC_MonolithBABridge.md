@@ -17,7 +17,7 @@ MonolithBABridge is an **optional** editor module that bridges Blueprint Assist'
 | Class | Responsibility |
 |-------|---------------|
 | `FMonolithBABridgeModule` | IModuleInterface. On startup, subscribes to `FModuleManager::OnModulesChanged()` to listen for `BlueprintAssist` state changes. Registers `IMonolithGraphFormatter` when BA is loaded, and unregisters it when BA unloads to support dynamic loading/unloading behavior. |
-| `FMonolithBAFormatterImpl` | Concrete `IMonolithGraphFormatter` impl. Delegates to BA's `FBAGraphHandler`. Checks `IsCalculatingNodeSize()` before formatting. |
+| `FMonolithBAFormatterImpl` | Concrete `IMonolithGraphFormatter` impl. Delegates to BA's `FBAGraphHandler`. Checks `IsCalculatingNodeSize()` (or `GetNumberOfPendingNodesToCache()` on BA 4.9+) before formatting. |
 
 ### IMonolithGraphFormatter Interface
 
