@@ -365,4 +365,77 @@ bool FMonolithParamGuardWorldGenCityBlockMalformedParamsTest::RunTest(const FStr
 	return true;
 }
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardWorldGenCreateBlockoutPrimitiveMalformedParamsTest, "Monolith.ParamGuard.MonolithWorldGen.CreateBlockoutPrimitiveRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardWorldGenCreateBlockoutPrimitiveMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithMeshBlockoutActions::RegisterActions(FMonolithToolRegistry::Get());
+	TestTrue(TEXT("create_blockout_primitive action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("worldgen"), TEXT("create_blockout_primitive")));
+
+	// Test missing shape
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("create_blockout_primitive"), Params);
+		TestFalse(TEXT("create_blockout_primitive with empty params should fail"), Result.bSuccess);
+		TestTrue(TEXT("create_blockout_primitive reports missing shape"), Result.ErrorMessage.Contains(TEXT("Missing required param: shape")));
+	}
+
+	// Test missing location
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("shape"), TEXT("box"));
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("create_blockout_primitive"), Params);
+		TestFalse(TEXT("create_blockout_primitive missing location should fail"), Result.bSuccess);
+		TestTrue(TEXT("create_blockout_primitive reports missing location"), Result.ErrorMessage.Contains(TEXT("Missing or invalid required param: location")));
+	}
+
+	// Test missing scale
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("shape"), TEXT("box"));
+
+		TArray<TSharedPtr<FJsonValue>> LocationArr;
+		LocationArr.Add(MakeShared<FJsonValueNumber>(0)); LocationArr.Add(MakeShared<FJsonValueNumber>(0)); LocationArr.Add(MakeShared<FJsonValueNumber>(0));
+		Params->SetArrayField(TEXT("location"), LocationArr);
+
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("create_blockout_primitive"), Params);
+		TestFalse(TEXT("create_blockout_primitive missing scale should fail"), Result.bSuccess);
+		TestTrue(TEXT("create_blockout_primitive reports missing scale"), Result.ErrorMessage.Contains(TEXT("Missing or invalid required param: scale")));
+	}
+
+	// Test invalid shape
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("shape"), TEXT("invalid_shape_name"));
+
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Add(MakeShared<FJsonValueNumber>(0)); Arr.Add(MakeShared<FJsonValueNumber>(0)); Arr.Add(MakeShared<FJsonValueNumber>(0));
+		Params->SetArrayField(TEXT("location"), Arr);
+		Params->SetArrayField(TEXT("scale"), Arr);
+
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("create_blockout_primitive"), Params);
+		TestFalse(TEXT("create_blockout_primitive with invalid shape should fail"), Result.bSuccess);
+		TestTrue(TEXT("create_blockout_primitive reports invalid shape"), Result.ErrorMessage.Contains(TEXT("Invalid shape: 'invalid_shape_name'")));
+	}
+
+
+	// Test valid params
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("shape"), TEXT("box"));
+
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Add(MakeShared<FJsonValueNumber>(0)); Arr.Add(MakeShared<FJsonValueNumber>(0)); Arr.Add(MakeShared<FJsonValueNumber>(0));
+		Params->SetArrayField(TEXT("location"), Arr);
+		Params->SetArrayField(TEXT("scale"), Arr);
+		Params->SetStringField(TEXT("label"), TEXT("TestBox"));
+
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("create_blockout_primitive"), Params);
+		TestTrue(TEXT("create_blockout_primitive with valid params should succeed"), Result.bSuccess);
+	}
+
+	return true;
+}
+
 #endif // WITH_GEOMETRYSCRIPT
