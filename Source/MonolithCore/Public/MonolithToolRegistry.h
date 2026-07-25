@@ -139,6 +139,18 @@ public:
 	int32 GetActionCount() const;
 
 	/**
+	 * Return a stable, content-derived version for the live action catalog.
+	 *
+	 * The fingerprint covers every registered action's identity, description,
+	 * category, parameter schema, MCP annotations, and dispatcher annotations.
+	 * Action keys and JSON object keys are canonicalized before hashing, so the
+	 * result does not depend on module registration or TMap iteration order.
+	 *
+	 * Format: "sha256:" followed by the first 16 lowercase hex digits.
+	 */
+	FString GetCatalogFingerprint() const;
+
+	/**
 	 * Survivor A (plan §3.A) — Set MCP hint annotations for a namespace dispatcher
 	 * tool (e.g. `source_query`). These are serialized into `tools/list` under the
 	 * dispatcher tool's `annotations` sub-object. Only namespaces whose dispatcher

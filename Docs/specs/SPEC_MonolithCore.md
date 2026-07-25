@@ -16,12 +16,12 @@
 |-------|---------------|
 | `FMonolithCoreModule` | IModuleInterface. Starts HTTP server, registers core tools, owns `TUniquePtr<FMonolithHttpServer>` |
 | `FMonolithHttpServer` | Embedded MCP HTTP server. JSON-RPC 2.0 dispatch over HTTP. Fully stateless (no session tracking). `tools/list` response embeds per-action param schemas in the `params` property description (`*name(type)` format, `*` = required) so AI clients see param names without calling `monolith_discover` first |
-| `FMonolithToolRegistry` | Central singleton action registry. `TMap<FString, FRegisteredAction>` keyed by "namespace.action". Thread-safe — releases lock before executing handlers. Validates required params from schema before dispatch (skips `asset_path` — `GetAssetPath()` handles aliases itself). Returns descriptive error listing missing + provided keys |
+| `FMonolithToolRegistry` | Central singleton action registry. `TMap<FString, FRegisteredAction>` keyed by "namespace.action". Thread-safe — releases lock before executing handlers. Validates required params from schema before dispatch (skips `asset_path` — `GetAssetPath()` handles aliases itself). Returns descriptive error listing missing + provided keys. `GetCatalogFingerprint()` canonicalizes sorted action metadata, JSON schemas, and MCP annotations into the stable `sha256:<16 hex>` catalog version used by conditional discovery |
 | `FMonolithJsonUtils` | Static JSON-RPC 2.0 helpers. Standard error codes (-32700 through -32603). Declares `LogMonolith` category |
 | `FMonolithAssetUtils` | Asset loading with 4-tier fallback: StaticLoadObject(resolved) -> PackageName.ObjectName -> FindObject+_C suffix -> ForEachObjectWithPackage |
 | `UMonolithSettings` | UDeveloperSettings (config=Monolith). ServerPort, bAutoUpdateEnabled, DatabasePathOverride, EngineSourceDBPathOverride, EngineSourcePath, 10 module enable toggles + `bEnableProceduralTownGen` (experimental, default false) (functional — checked at registration time), LogVerbosity. Settings UI customized via `FMonolithSettingsCustomization` (IDetailCustomization) with re-index buttons for project and source databases |
 | `UMonolithUpdateSubsystem` | UEditorSubsystem. GitHub Releases auto-updater. Shows dialog window with full release notes on update detection. Downloads zip, cross-platform extraction (PowerShell on Windows, unzip on Mac/Linux). Stages to Saved/Monolith/Staging/, hot-swaps on editor exit via FCoreDelegates::OnPreExit. Current version always from compiled MONOLITH_VERSION (version.json only stores pending/staging state). Release zips include pre-compiled DLLs. |
-| `FMonolithCoreTools` | Registers 4 core actions |
+| `FMonolithCoreTools` | Registers 5 core actions (`discover`, `status`, `update`, `reindex`, and the separately implemented `guide`) |
 | `FBulkFillSpec` | USTRUCT (`BlueprintType`). Input shape for `bulk_fill_query("apply")`: `target_namespace`, `target` (asset path or class), nested JSON `tree`, plus `dry_run` / `strict` toggles. Same shape consumed by every per-namespace adapter registered via `FMonolithBulkFillRegistry`. |
 | `FDryRunReport` | USTRUCT (`BlueprintType`). Output shape returned when `dry_run=true`. Carries per-field `FieldWrites`, `SilentDrops` (with reason — covers `FGameplayAttribute`-rename hazard class and other type-mismatch / unknown-field cases), `Clamps` (engine clamp annotations such as the AI `lose_sight_radius >= 1.1 × sight_radius` rule), `Errors`. Promoted to hard error and transaction-rollback when `strict=true`. |
 | `FSchemaDescriptor` | USTRUCT (`BlueprintType`). Output shape returned by `describe_query("schema")`. Recursive tree of `FFieldDescriptor` nodes: type name, ImportText sample form, `range_min` / `range_max`, `enum_values`, `conditional_on` discriminators (for tagged-union fields like GE modifier magnitudes), nested struct/array/map/set children. Authoritative source for legal `set_cdo_properties` / `bulk_fill` payload grammar. |
@@ -36,14 +36,15 @@
 |--------|--------|---------------|
 | `MonolithCore::ValidatePackagePath(const FString&)` | `MonolithPackagePathValidator.h` (inline) | Wraps `FPackageName::IsValidLongPackageName` with an empty-string-on-success / error-msg-on-failure contract. Rejects empty input, double-slash (`//Game/...`), missing `/Game/` root, trailing slash, illegal chars. Added `dv.367` after a fatal `UObjectGlobals.cpp:1012` ensure from a malformed `//Game/...` JSON payload reaching `CreatePackage`. Currently routed at three sites: `HandleCreateWidgetBlueprint` (direct crash site), `MonolithAIInternal::GetOrCreatePackage` (~17 AI callers), `MonolithGASInternal::GetOrCreatePackage` (~6 GAS callers). ~24 of 80 `CreatePackage` call sites guarded; remaining ~56 sites across MonolithBlueprint / MonolithMaterial / MonolithLogicDriver / MonolithUITemplateActions / MonolithCommonUI* / MonolithMesh are follow-up backlog. |
 
-### Actions (4 — namespace: "monolith")
+### Actions (5 — namespace: "monolith")
 
 | Action | MCP Tool | Description |
 |--------|----------|-------------|
-| `discover` | `monolith_discover` | List available tool namespaces and their actions. Optional `namespace` filter. **Per-namespace branch is terse by default** (action name + one-line description; param schemas omitted). Optional params: `detail` (bool, default false — `true` inlines every action's full `params` schema), `verbose` (alias for `detail`), `filter` (case-insensitive substring on name OR full description), `offset`/`limit` (opt-in pagination; `limit=0` = ALL). See "Terse per-namespace discover" below |
-| `status` | `monolith_status` | Server health: version, uptime, port, action count, engine_version, project_name |
+| `discover` | `monolith_discover` | List available tool namespaces and their actions. Optional `namespace` filter. **Per-namespace branch is terse by default** (action name + one-line description; param schemas omitted). Optional params: `detail` (bool, default false — `true` inlines every action's full `params` schema), `verbose` (alias for `detail`), `filter` (case-insensitive substring on name OR full description), `offset`/`limit` (opt-in pagination; `limit=0` = ALL), and `if_version` (compact unchanged-catalog response). See "Terse per-namespace discover" and "Conditional catalog response" below |
+| `status` | `monolith_status` | Server health: version, port, action count, engine_version, project_name, plus `catalog_version`, `catalog_action_count`, and `catalog_namespace_count` |
 | `update` | `monolith_update` | Check/install updates from GitHub Releases. `action`: "check" or "install" |
 | `reindex` | `monolith_reindex` | Trigger project re-index. Defaults to incremental (hash-based delta); pass `force=true` for full wipe-and-rebuild (via reflection to MonolithIndex, no hard dependency) |
+| `guide` | `monolith_guide` | Serve the section-keyed editorial onboarding and cross-namespace workflow guide with a live registry overlay |
 
 #### Terse per-namespace discover
 
@@ -58,12 +59,30 @@
 | `detail` | bool | `false` (terse) | `true` inlines every action's full `params` schema — reproduces the pre-change response shape byte-for-byte (`action`/`description`/`category`/`params` per action). Canonical flag. |
 | `verbose` | bool | unset | Accepted ALIAS for `detail` (read only when `detail` is unset). `verbose=true` == `detail=true`. |
 | `filter` | string | — | Case-insensitive substring matched against the action name OR the FULL description. Applied after any `category` filter, before pagination. |
+| `if_version` | string | — | Version from a previously cached `status`/`discover` result. If it equals the live catalog version, return the compact unchanged response instead of the requested full listing. |
 | `offset` | int | `0` | Opt-in pagination start, clamped to `[0, total]`. Only meaningful with `limit > 0`. |
 | `limit` | int | `0` (= ALL) | `0` = no cap (the COMPLETE post-filter action list — no action hidden). Any `limit > 0` clamps to `[0, total]`. Pagination is purely OPT-IN. |
 
-**Top-level response fields:** `total` (always; post-filter count); `next_offset` (only when a positive `limit` was supplied AND more remain); `schema_hint` (terse only). The `schema_hint` string is: `Param schemas omitted. Call describe_query(action_schema, target_namespace="<ns>", target_action="<name>") for one action's full schema, or pass detail=true to inline all.`
+**Top-level response fields:** `catalog_version` (every normal response); `total` (namespace-filtered responses; post-filter count); `next_offset` (only when a positive `limit` was supplied AND more remain); `schema_hint` (terse only). The `schema_hint` string is: `Param schemas omitted. Call describe_query(action_schema, target_namespace="<ns>", target_action="<name>") for one action's full schema, or pass detail=true to inline all.`
 
-**Unchanged:** the full `discover()` (no namespace) response is untouched. `describe_query action_schema` is the unchanged lazy-fetch target for a single action's full schema.
+Apart from the additive top-level `catalog_version`, the full `discover()` (no namespace) and namespace-filtered legacy shapes are unchanged when callers omit `if_version`. `describe_query action_schema` remains the lazy-fetch target for one action's full schema.
+
+#### Conditional catalog response
+
+The registry fingerprint covers sorted `namespace.action` keys, descriptions, categories, canonicalized parameter schemas, per-action MCP annotations, and namespace-dispatcher annotations. Registration order and `TMap`/JSON-object iteration order therefore cannot create a false catalog change. Registering, unregistering, or changing any discovery/tool-contract metadata does change the version.
+
+When a non-empty `if_version` exactly matches the live fingerprint, `monolith_discover` returns:
+
+```json
+{
+  "status": "unchanged",
+  "catalog_version": "sha256:0123456789abcdef",
+  "total_actions": 1400,
+  "namespaces": ["animation", "blueprint", "material"]
+}
+```
+
+The namespace names are sorted and the response is bounded below 1 KiB for the standard plugin surface. A stale or omitted version follows the normal discovery path and reports the current `catalog_version`. A non-string `if_version` fails with JSON-RPC invalid params (`-32602`) rather than silently behaving as an uncached request.
 
 ### Actions (2 — namespace: "bulk_fill")
 

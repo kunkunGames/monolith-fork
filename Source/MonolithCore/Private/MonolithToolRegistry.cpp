@@ -2,10 +2,102 @@
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithFuzzyMatch.h"
+#include "MonolithSha256.h"
 #include "HAL/PlatformMisc.h"
 #include "Dom/JsonValue.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+
+namespace MonolithCatalogFingerprintDetail
+{
+	static void AppendLengthPrefixed(FString& Out, const FString& Value)
+	{
+		Out += FString::FromInt(Value.Len());
+		Out += TEXT(":");
+		Out += Value;
+	}
+
+	static void AppendCanonicalJsonValue(FString& Out, const TSharedPtr<FJsonValue>& Value);
+
+	static void AppendCanonicalJsonObject(FString& Out, const TSharedPtr<FJsonObject>& Object)
+	{
+		if (!Object.IsValid())
+		{
+			Out += TEXT("null");
+			return;
+		}
+
+		TArray<FString> Keys;
+		Keys.Reserve(Object->Values.Num());
+		for (const auto& Pair : Object->Values)
+		{
+			Keys.Add(MonolithKeyToString(Pair.Key));
+		}
+		Keys.Sort();
+
+		Out += TEXT("{");
+		for (const FString& Key : Keys)
+		{
+			Out += TEXT("K");
+			AppendLengthPrefixed(Out, Key);
+			AppendCanonicalJsonValue(Out, Object->TryGetField(Key));
+		}
+		Out += TEXT("}");
+	}
+
+	static void AppendCanonicalJsonValue(FString& Out, const TSharedPtr<FJsonValue>& Value)
+	{
+		if (!Value.IsValid() || Value->IsNull())
+		{
+			Out += TEXT("N");
+			return;
+		}
+
+		switch (Value->Type)
+		{
+		case EJson::String:
+			Out += TEXT("S");
+			AppendLengthPrefixed(Out, Value->AsString());
+			break;
+		case EJson::Number:
+			Out += TEXT("D");
+			Out += FString::Printf(TEXT("%.17g"), Value->AsNumber());
+			Out += TEXT(";");
+			break;
+		case EJson::Boolean:
+			Out += Value->AsBool() ? TEXT("B1") : TEXT("B0");
+			break;
+		case EJson::Array:
+			Out += TEXT("[");
+			for (const TSharedPtr<FJsonValue>& Entry : Value->AsArray())
+			{
+				AppendCanonicalJsonValue(Out, Entry);
+			}
+			Out += TEXT("]");
+			break;
+		case EJson::Object:
+			AppendCanonicalJsonObject(Out, Value->AsObject());
+			break;
+		default:
+			Out += TEXT("N");
+			break;
+		}
+	}
+
+	static void AppendField(FString& Out, const TCHAR* Name, const FString& Value)
+	{
+		Out += Name;
+		Out += TEXT("=");
+		AppendLengthPrefixed(Out, Value);
+		Out += TEXT(";");
+	}
+
+	static void AppendBoolField(FString& Out, const TCHAR* Name, bool bValue)
+	{
+		Out += Name;
+		Out += bValue ? TEXT("=1;") : TEXT("=0;");
+	}
+}
 
 // =============================================================================
 //  FMonolithParamSchema — K2 alias rewriting + K3 unknown-key detection
@@ -198,6 +290,7 @@ void FMonolithToolRegistry::UnregisterNamespace(const FString& Namespace)
 		UE_LOG(LogMonolith, Log, TEXT("Unregistered namespace: %s (%d actions)"), *Namespace, Keys->Num());
 		NamespaceActions.Remove(Namespace);
 	}
+	DispatcherAnnotations.Remove(Namespace);
 }
 
 FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
@@ -591,6 +684,60 @@ int32 FMonolithToolRegistry::GetActionCount() const
 {
 	FScopeLock Lock(&RegistryLock);
 	return Actions.Num();
+}
+
+FString FMonolithToolRegistry::GetCatalogFingerprint() const
+{
+	using namespace MonolithCatalogFingerprintDetail;
+
+	FScopeLock Lock(&RegistryLock);
+
+	TArray<FString> ActionKeys;
+	Actions.GetKeys(ActionKeys);
+	ActionKeys.Sort();
+
+	FString Canonical;
+	Canonical.Reserve(FMath::Max(4096, ActionKeys.Num() * 512));
+	for (const FString& Key : ActionKeys)
+	{
+		const FMonolithActionInfo& Info = Actions.FindChecked(Key).Info;
+		AppendField(Canonical, TEXT("key"), Key);
+		AppendField(Canonical, TEXT("description"), Info.Description);
+		AppendField(Canonical, TEXT("category"), Info.Category);
+		AppendBoolField(Canonical, TEXT("read_only"), Info.bReadOnlyHint);
+		AppendBoolField(Canonical, TEXT("destructive"), Info.bDestructiveHint);
+		AppendBoolField(Canonical, TEXT("idempotent"), Info.bIdempotentHint);
+		AppendField(Canonical, TEXT("title"), Info.Title);
+		Canonical += TEXT("schema=");
+		AppendCanonicalJsonObject(Canonical, Info.ParamSchema);
+		Canonical += TEXT(";\n");
+	}
+
+	TArray<FString> DispatcherNamespaces;
+	DispatcherAnnotations.GetKeys(DispatcherNamespaces);
+	DispatcherNamespaces.Sort();
+	for (const FString& Namespace : DispatcherNamespaces)
+	{
+		if (!NamespaceActions.Contains(Namespace))
+		{
+			continue;
+		}
+		const FMonolithDispatcherAnnotations& Annotations = DispatcherAnnotations.FindChecked(Namespace);
+		AppendField(Canonical, TEXT("dispatcher"), Namespace);
+		AppendBoolField(Canonical, TEXT("read_only"), Annotations.bReadOnlyHint);
+		AppendBoolField(Canonical, TEXT("destructive"), Annotations.bDestructiveHint);
+		AppendBoolField(Canonical, TEXT("idempotent"), Annotations.bIdempotentHint);
+		AppendField(Canonical, TEXT("title"), Annotations.Title);
+		Canonical += TEXT("\n");
+	}
+
+	FTCHARToUTF8 Utf8(*Canonical);
+	FSHA256Signature Signature;
+	MonolithSha256::Compute(
+		reinterpret_cast<const uint8*>(Utf8.Get()),
+		static_cast<uint64>(Utf8.Length()),
+		Signature);
+	return TEXT("sha256:") + Signature.ToString().ToLower().Left(16);
 }
 
 void FMonolithToolRegistry::SetDispatcherAnnotations(

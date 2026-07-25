@@ -149,6 +149,11 @@ void FMonolithCoreTools::RegisterAll()
 		FilterProp->SetStringField(TEXT("description"), TEXT("Optional: case-insensitive substring matched against each action's name or description (applied within the namespace)."));
 		Schema->SetObjectField(TEXT("filter"), FilterProp);
 
+		TSharedPtr<FJsonObject> IfVersionProp = MakeShared<FJsonObject>();
+		IfVersionProp->SetStringField(TEXT("type"), TEXT("string"));
+		IfVersionProp->SetStringField(TEXT("description"), TEXT("Optional: catalog_version from monolith.status or an earlier discover response. When unchanged, return a compact status payload instead of the full catalog."));
+		Schema->SetObjectField(TEXT("if_version"), IfVersionProp);
+
 		TSharedPtr<FJsonObject> OffsetProp = MakeShared<FJsonObject>();
 		OffsetProp->SetStringField(TEXT("type"), TEXT("integer"));
 		OffsetProp->SetStringField(TEXT("description"), TEXT("Optional: pagination start index (default 0). Only meaningful when limit > 0."));
@@ -161,7 +166,7 @@ void FMonolithCoreTools::RegisterAll()
 
 		Registry.RegisterAction(
 			TEXT("monolith"), TEXT("discover"),
-			TEXT("List available tool namespaces and their actions. Pass namespace (and optional category) to filter. Per-namespace output is terse by default (action name + description); pass detail=true to inline param schemas, or use describe_query action_schema for one action. Supports filter (substring) and opt-in offset/limit pagination."),
+			TEXT("List available tool namespaces and their actions. Pass namespace (and optional category) to filter. Per-namespace output is terse by default (action name + description); pass detail=true to inline param schemas, or use describe_query action_schema for one action. Supports filter (substring), opt-in offset/limit pagination, and if_version for an unchanged-catalog short circuit."),
 			FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleDiscover),
 			Schema
 		);
@@ -230,13 +235,48 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 
 	FString FilterNamespace;
 	FString FilterCategory;
+	FString IfVersion;
 	if (Params.IsValid())
 	{
 		Params->TryGetStringField(TEXT("namespace"), FilterNamespace);
 		Params->TryGetStringField(TEXT("category"), FilterCategory);
+
+		if (Params->HasField(TEXT("if_version")))
+		{
+			if (!Params->HasTypedField<EJson::String>(TEXT("if_version")))
+			{
+				return FMonolithActionResult::Error(
+					TEXT("Parameter 'if_version' must be a string."),
+					FMonolithJsonUtils::ErrInvalidParams);
+			}
+			Params->TryGetStringField(TEXT("if_version"), IfVersion);
+		}
+	}
+
+	IfVersion.TrimStartAndEndInline();
+	const FString CatalogVersion = Registry.GetCatalogFingerprint();
+	if (!IfVersion.IsEmpty() && IfVersion == CatalogVersion)
+	{
+		TArray<FString> Namespaces = Registry.GetNamespaces();
+		Namespaces.Sort();
+
+		TArray<TSharedPtr<FJsonValue>> NamespaceArray;
+		NamespaceArray.Reserve(Namespaces.Num());
+		for (const FString& Namespace : Namespaces)
+		{
+			NamespaceArray.Add(MakeShared<FJsonValueString>(Namespace));
+		}
+
+		TSharedPtr<FJsonObject> Unchanged = MakeShared<FJsonObject>();
+		Unchanged->SetStringField(TEXT("status"), TEXT("unchanged"));
+		Unchanged->SetStringField(TEXT("catalog_version"), CatalogVersion);
+		Unchanged->SetNumberField(TEXT("total_actions"), Registry.GetActionCount());
+		Unchanged->SetArrayField(TEXT("namespaces"), NamespaceArray);
+		return FMonolithActionResult::Success(Unchanged);
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("catalog_version"), CatalogVersion);
 
 	TArray<FString> Namespaces = Registry.GetNamespaces();
 
@@ -471,6 +511,9 @@ FMonolithActionResult FMonolithCoreTools::HandleStatus(const TSharedPtr<FJsonObj
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 	Result->SetNumberField(TEXT("total_actions"), Registry.GetActionCount());
 	Result->SetNumberField(TEXT("namespaces"), Registry.GetNamespaces().Num());
+	Result->SetStringField(TEXT("catalog_version"), Registry.GetCatalogFingerprint());
+	Result->SetNumberField(TEXT("catalog_action_count"), Registry.GetActionCount());
+	Result->SetNumberField(TEXT("catalog_namespace_count"), Registry.GetNamespaces().Num());
 
 	// Engine info
 	Result->SetStringField(TEXT("engine_version"), FApp::GetBuildVersion());

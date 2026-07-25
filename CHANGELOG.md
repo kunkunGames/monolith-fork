@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Conditional `monolith_discover` catalog caching.** `monolith_status` and every full discovery response now expose a stable `catalog_version` (`sha256:<16 hex>`). Clients that already cached a discovery result can pass that version back as `if_version`; when the live action catalog is unchanged, Monolith returns a compact `{status, catalog_version, total_actions, namespaces}` response under 1 KiB instead of serializing the full catalog again. The fingerprint canonicalizes action and JSON-schema key order, changes with action/schema/MCP-annotation content, and is mirrored in both native and Python proxy fallback schemas.
+
 ## [0.21.2] - 2026-07-22
 
 ### Fixed

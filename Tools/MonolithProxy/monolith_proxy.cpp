@@ -821,7 +821,7 @@ static json make_seed_tools()
 
     tools.push_back(make_tool(
         "monolith_discover",
-        "List available tool namespaces and their actions. Pass namespace and optional category to filter.",
+        "List available tool namespaces and their actions. Pass namespace and optional category to filter; pass if_version to skip an unchanged catalog.",
         {
             {"type", "object"},
             {"properties", {
@@ -832,6 +832,30 @@ static json make_seed_tools()
                 {"category", {
                     {"type", "string"},
                     {"description", "Optional: filter actions within the namespace by category"}
+                }},
+                {"detail", {
+                    {"type", "boolean"},
+                    {"description", "Optional: inline the full param schema for every action (default false = terse)."}
+                }},
+                {"verbose", {
+                    {"type", "boolean"},
+                    {"description", "Alias for detail; inline full param schemas."}
+                }},
+                {"filter", {
+                    {"type", "string"},
+                    {"description", "Optional case-insensitive substring matched against action names or descriptions."}
+                }},
+                {"if_version", {
+                    {"type", "string"},
+                    {"description", "Catalog version from monolith_status or an earlier discover response. A match returns a compact unchanged payload."}
+                }},
+                {"offset", {
+                    {"type", "integer"},
+                    {"description", "Optional pagination start index (default 0). Only meaningful when limit is positive."}
+                }},
+                {"limit", {
+                    {"type", "integer"},
+                    {"description", "Optional maximum actions to return (default 0 = all)."}
                 }},
                 {"_fields", {
                     {"type", "array"},

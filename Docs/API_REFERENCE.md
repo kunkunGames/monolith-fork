@@ -100,8 +100,16 @@ List available tool namespaces and their actions. Pass `namespace` to filter; pa
 |-----------|------|----------|-------------|
 | `namespace` | string | optional | Filter to a specific namespace |
 | `category` | string | optional | Filter actions within the namespace by category |
+| `detail` | boolean | optional | Inline every returned action's complete parameter schema. Default: `false` (terse descriptions only) |
+| `verbose` | boolean | optional | Backward-compatible alias for `detail` |
+| `filter` | string | optional | Case-insensitive substring filter over action names and descriptions |
+| `if_version` | string | optional | A `catalog_version` from an earlier `status` or `discover` response. A match returns the compact unchanged response |
+| `offset` | integer | optional | Pagination start index. Used only when `limit > 0`; default `0` |
+| `limit` | integer | optional | Maximum actions to return. Default `0` means the complete filtered list |
 
-**Returns:** Per-action param schemas for every registered action. AI clients also receive these in `tools/list` at session start, so most callers never need to call `discover` explicitly.
+**Returns:** With no namespace, namespace summaries and the live `total_actions`; with a namespace, action names and one-line descriptions by default, or full schemas when `detail=true`. Every normal response includes `catalog_version`.
+
+If a client already holds a catalog response tagged with the same version, `discover(if_version="<cached version>")` returns only `status:"unchanged"`, `catalog_version`, `total_actions`, and the namespace-name list (under 1 KiB in the standard plugin surface). A stale version returns the normal full response with the new version, so legacy callers that omit `if_version` retain the existing behavior.
 
 ---
 
@@ -110,6 +118,8 @@ List available tool namespaces and their actions. Pass `namespace` to filter; pa
 Get Monolith server health: version, uptime, port, registered action count, namespace count, engine version, project name, module load status.
 
 *No parameters.*
+
+**Catalog cache fields:** `catalog_version` is the stable fingerprint consumed by `monolith.discover(if_version=...)`; `catalog_action_count` and `catalog_namespace_count` describe that live catalog. A fresh client should call normal discovery and cache its response/version. A client that already has a cached catalog may pass the cached version to `discover`; `status:"unchanged"` means the cached catalog is still authoritative.
 
 ---
 
