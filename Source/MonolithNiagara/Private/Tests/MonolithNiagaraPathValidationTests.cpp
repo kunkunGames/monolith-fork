@@ -1,10 +1,10 @@
 #include "CoreMinimal.h"
 #include "Dom/JsonObject.h"
-#include "HAL/FileManager.h"
+#include "EditorAssetLibrary.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/PackageName.h"
-#include "Misc/ScopeExit.h"
 #include "MonolithNiagaraActions.h"
+#include "Tests/AutomationCommon.h"
 #include "UObject/Package.h"
 #include "UObject/UObjectIterator.h"
 
@@ -58,25 +58,46 @@ namespace MonolithNiagaraPathValidationTest
 		return Params;
 	}
 
-	static void CleanupAsset(
-		const FString& PackageName,
-		const FString& AssetName)
+	static FString MakeUniquePackagePath(const TCHAR* AssetPrefix)
 	{
-		if (UPackage* Package = FindPackage(nullptr, *PackageName))
-		{
-			if (UObject* Asset = FindObject<UObject>(Package, *AssetName))
-			{
-				Asset->ClearFlags(RF_Public | RF_Standalone);
-				Asset->MarkAsGarbage();
-			}
-		}
+		return FString::Printf(
+			TEXT("/Game/Tests/Monolith/Niagara/%s_%s"),
+			AssetPrefix,
+			*FGuid::NewGuid().ToString(EGuidFormats::Digits));
+	}
 
+	DEFINE_LATENT_AUTOMATION_COMMAND_TWO_PARAMETER(
+		FDeleteNiagaraFixtureCommand,
+		FString,
+		PackageName,
+		FAutomationTestBase*,
+		Test);
+
+	bool FDeleteNiagaraFixtureCommand::Update()
+	{
+		const bool bDeleted =
+			!UEditorAssetLibrary::DoesAssetExist(PackageName) ||
+			UEditorAssetLibrary::DeleteAsset(PackageName);
 		CollectGarbage(RF_NoFlags);
+		Test->TestTrue(
+			TEXT("the uniquely named Niagara fixture is removed through the editor asset API"),
+			bDeleted && !UEditorAssetLibrary::DoesAssetExist(PackageName));
+		return true;
+	}
 
-		const FString Filename = FPackageName::LongPackageNameToFilename(
-			PackageName,
-			FPackageName::GetAssetPackageExtension());
-		IFileManager::Get().Delete(*Filename, false, true, true);
+	DEFINE_LATENT_AUTOMATION_COMMAND_TWO_PARAMETER(
+		FVerifyNiagaraFixtureRemovedCommand,
+		FString,
+		PackageName,
+		FAutomationTestBase*,
+		Test);
+
+	bool FVerifyNiagaraFixtureRemovedCommand::Update()
+	{
+		Test->TestFalse(
+			TEXT("the deleted Niagara fixture stays absent after file notifications settle"),
+			UEditorAssetLibrary::DoesAssetExist(PackageName));
+		return true;
 	}
 }
 
@@ -208,14 +229,8 @@ bool FMonolithNiagaraValidPackagePathTest::RunTest(
 {
 	using namespace MonolithNiagaraPathValidationTest;
 
-	const FString PackageName =
-		TEXT("/Game/Tests/Monolith/Niagara/NS_ValidPackagePath");
-	const FString AssetName = TEXT("NS_ValidPackagePath");
-	CleanupAsset(PackageName, AssetName);
-	ON_SCOPE_EXIT
-	{
-		CleanupAsset(PackageName, AssetName);
-	};
+	const FString PackageName = MakeUniquePackagePath(TEXT("NS_ValidPackagePath"));
+	const FString AssetName = FPackageName::GetLongPackageAssetName(PackageName);
 
 	const FMonolithActionResult Result =
 		FMonolithNiagaraActions::HandleCreateSystem(
@@ -230,6 +245,16 @@ bool FMonolithNiagaraValidPackagePathTest::RunTest(
 			TEXT("the valid package contains the requested Niagara system"),
 			FindObject<UObject>(Package, *AssetName));
 	}
+
+	// Let the editor process the save notification before deletion, then let the
+	// delete notification settle before the test completes. Deleting in the same
+	// frame as SavePackage races DirectoryWatcher and leaves a stale registry hit.
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(
+		FDeleteNiagaraFixtureCommand(PackageName, this));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(
+		FVerifyNiagaraFixtureRemovedCommand(PackageName, this));
 	return true;
 }
 
