@@ -449,6 +449,7 @@ namespace
         Screen->SetArrayField(TEXT("forbidden_widgets"), StringArrayJson(Spec.ForbiddenWidgets));
 
         TArray<TSharedPtr<FJsonValue>> ScreenChecks;
+        ScreenChecks.Reserve(4);
         TArray<TSharedPtr<FJsonValue>> RequiredWidgetRows;
         RequiredWidgetRows.Reserve(Spec.RequiredWidgets.Num());
         TArray<TSharedPtr<FJsonValue>> ForbiddenWidgetRows;
