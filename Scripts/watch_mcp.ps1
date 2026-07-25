@@ -21,6 +21,11 @@ daily Monolith index maintenance pass. By default this runs at 05:00 Korea
 Standard Time, starts incremental asset/source indexing through the bridge
 namespace, and waits for those indexes to go idle.
 
+Saved/Monolith/Activation.ini is the authority for operator intent. When server
+activation is off, the watchdog reports MCP_DISABLED and performs no
+probe/build/recovery mutation. When indexing activation is off, daily and
+restart indexing maintenance is skipped while DB reads remain unaffected.
+
 This script does not replace recover_mcp.ps1. It is a supervisor for the common
 Codex/direct-client pain point where the endpoint dies between agent calls.
 
@@ -138,6 +143,7 @@ The same structured events are appended to
 Notable events:
   WatchdogStart         watchdog instance started (instance boundary marker)
   McpUp                 endpoint is reachable
+  McpDisabled           durable server activation is off; no mutation occurs
   TrustedEditorBusy     exact project/listener identity is intact but /health
                         transport timed out; no mutation is attempted
   TrustedEditorBusyReset
@@ -165,7 +171,8 @@ Notable events:
                         occupied endpoint fails trusted project/process identity
 
 Exit codes:
-  0  endpoint is up, or recover cycle succeeded in -Once mode, or
+  0  endpoint is up, server activation is intentionally disabled, or recover
+     cycle succeeded in -Once mode, or
      -ProbeBuildLocksOnly found all link outputs free
   2  endpoint down, trusted-busy, or planned-exit automation active and
      -ProbeOnly/-Once was requested, or
@@ -227,6 +234,14 @@ if (-not (Test-Path -LiteralPath $hostRoleHelperPath -PathType Leaf)) {
     exit 3
 }
 . $hostRoleHelperPath
+
+$activationHelperPath = Join-Path $PSScriptRoot 'monolith_activation_state.ps1'
+if (-not (Test-Path -LiteralPath $activationHelperPath -PathType Leaf)) {
+    Write-Output ("RESULT=BLOCKED reason=activation_state_helper_missing path={0}" -f $activationHelperPath)
+    exit 3
+}
+. $activationHelperPath
+
 $script:lastKnownMcpPid = $null
 $script:watchdogInlinePayloadLimit = 240
 $script:watchdogLogRoot = Join-Path (Split-Path -Parent $PSScriptRoot) 'Logs'
@@ -794,6 +809,18 @@ function Invoke-DailyReindexIfDue {
         return [PSCustomObject]@{ Ran = $false; Succeeded = $true; ExitCode = 0 }
     }
 
+    $activation = Get-MonolithActivationState -Root $script:hostRoot
+    if (-not $activation.IndexingEnabled) {
+        if (-not $script:indexingDisabledReported) {
+            Write-Watchdog (
+                "daily_reindex_skipped reason=indexing_activation_disabled state_path={0} mutation=none" -f
+                    (Format-WatchdogValue $activation.StatePath))
+            $script:indexingDisabledReported = $true
+        }
+        return [PSCustomObject]@{ Ran = $false; Succeeded = $true; ExitCode = 0 }
+    }
+    $script:indexingDisabledReported = $false
+
     $reason = $null
     if ($RunDailyReindexNow -and -not $script:runDailyReindexNowConsumed) {
         $script:runDailyReindexNowConsumed = $true
@@ -1360,6 +1387,14 @@ function Invoke-SourceCommandletReindex {
         [string]$Mode
     )
 
+    $activation = Get-MonolithActivationState -Root $Root
+    if (-not $activation.IndexingEnabled) {
+        Write-Watchdog (
+            "pre_restart_reindex_source_skipped reason=indexing_activation_disabled state_path={0} mutation=none" -f
+                (Format-WatchdogValue $activation.StatePath))
+        return $true
+    }
+
     $uproject = Get-ProjectFile -Root $Root
     if (-not $uproject) {
         Write-Watchdog ("RESULT=BLOCKED reason=uproject_not_found root={0}" -f $Root)
@@ -1411,6 +1446,14 @@ function Invoke-SourceCommandletReindex {
 function Invoke-PreRestartReindex {
     param([string]$Root)
 
+    $activation = Get-MonolithActivationState -Root $Root
+    if (-not $activation.IndexingEnabled) {
+        Write-Watchdog (
+            "pre_restart_reindex_skipped reason=indexing_activation_disabled state_path={0} mutation=none" -f
+                (Format-WatchdogValue $activation.StatePath))
+        return $true
+    }
+
     if ($SkipRestartReindex) {
         Write-Watchdog 'pre_restart_reindex_skipped reason=SkipRestartReindex'
         return $true
@@ -1447,6 +1490,14 @@ function Invoke-PostRecoverReindex {
         [string]$Root,
         [switch]$RetryPreRestartTargets
     )
+
+    $activation = Get-MonolithActivationState -Root $Root
+    if (-not $activation.IndexingEnabled) {
+        Write-Watchdog (
+            "post_recover_reindex_skipped reason=indexing_activation_disabled state_path={0} mutation=none" -f
+                (Format-WatchdogValue $activation.StatePath))
+        return $true
+    }
 
     if ($SkipRestartReindex) {
         return $true
@@ -1616,6 +1667,14 @@ function Invoke-RestartSequence {
         [string]$Reason
     )
 
+    $activation = Get-MonolithActivationState -Root $Root
+    if (-not $activation.ServerEnabled) {
+        Write-Watchdog (
+            "RESULT=MCP_DISABLED desired_enabled=false mutation=none state_path={0} next_action=run_Monolith.StartServer_in_editor_console" -f
+                (Format-WatchdogValue $activation.StatePath))
+        return [PSCustomObject]@{ ExitCode = 0; Result = 'RESULT=MCP_DISABLED' }
+    }
+
     # This is the common mutation boundary for build, offline maintenance, and
     # relaunch. Any listener without a fully accepted health response owns the
     # port until an operator resolves it; never race that owner with UBT or a
@@ -1693,7 +1752,7 @@ function Invoke-RestartSequence {
     }
 
     $recoverResult = Invoke-Recover -Root $Root -ForceLaunch
-    if ($recoverResult.ExitCode -eq 0) {
+    if ($recoverResult.ExitCode -eq 0 -and $recoverResult.Result -notmatch 'RESULT=MCP_DISABLED') {
         $postRecoverReindexOk = Invoke-PostRecoverReindex -Root $Root -RetryPreRestartTargets:(-not $preRestartReindexOk)
         if (-not $postRecoverReindexOk) {
             # Keep the successful availability result. The explicit maintenance
@@ -1710,6 +1769,7 @@ $script:dailyReindexSchedule = $null
 $script:dailyReindexTimeZoneInfo = $null
 $script:lastDailyReindexAttemptDate = $null
 $script:runDailyReindexNowConsumed = $false
+$script:indexingDisabledReported = $false
 
 if (-not $DisableDailyReindex -and -not $ProbeOnly -and -not $ProbeBuildLocksOnly) {
     if ($DailyReindexWaitTimeoutSec -lt 0 -or $DailyReindexWaitPollSec -le 0 -or
@@ -1735,6 +1795,7 @@ if (-not $DisableDailyReindex -and -not $ProbeOnly -and -not $ProbeBuildLocksOnl
 $restartAttempts = 0
 $script:consecutiveBuildFailures = 0
 $script:consecutiveTrustedBusy = 0
+$script:serverDisabledReported = $false
 
 # Terminal logging guarantee: every abnormal end must leave a last line in
 # watchdog.jsonl (2026-07-03/04 incidents ended with no terminal record).
@@ -1778,6 +1839,23 @@ if ($ProbeBuildLocksOnly) {
 }
 
 while ($true) {
+    $activation = Get-MonolithActivationState -Root $script:hostRoot
+    if (-not $activation.ServerEnabled) {
+        if (-not $script:serverDisabledReported) {
+            Write-Watchdog (
+                "RESULT=MCP_DISABLED desired_enabled=false mutation=none state_path={0} next_action=run_Monolith.StartServer_in_editor_console" -f
+                    (Format-WatchdogValue $activation.StatePath))
+            $script:serverDisabledReported = $true
+        }
+        if ($ProbeOnly -or $Once) { exit 0 }
+        Start-Sleep -Seconds $PollIntervalSec
+        continue
+    }
+    if ($script:serverDisabledReported) {
+        Write-Watchdog 'server_activation_enabled action=resume_health_supervision'
+        $script:serverDisabledReported = $false
+    }
+
     $health = Get-MonolithHealth
     if ($health) {
         Write-Watchdog ("RESULT=MCP_UP version={0} tools_registered={1} pid={2} uptime_seconds={3}" -f `

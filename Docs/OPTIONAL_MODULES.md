@@ -195,8 +195,10 @@ Add the module to `Monolith.uplugin`:
 }
 ```
 
-> Use `Default` loading phase, not `PostEngineInit`. MonolithCore starts its HTTP server at
-> `PostEngineInit`. Bridge modules must be registered before that. See
+> Use `Default` loading phase, not `PostEngineInit`. MonolithCore finalizes its tool
+> registry at `PostEngineInit` and starts the HTTP server there only when persistent
+> server activation and project policy are both enabled. Bridge modules must be
+> registered before that. See
 > `OPTIONAL_MODULE_ARCHITECTURE.md` section 12.2.
 
 ### 3. Implement the interface

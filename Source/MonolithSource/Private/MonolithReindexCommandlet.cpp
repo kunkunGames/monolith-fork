@@ -1,5 +1,6 @@
 #include "MonolithReindexCommandlet.h"
 
+#include "MonolithActivationState.h"
 #include "MonolithIndexFreshness.h"
 #include "MonolithSourceIndexer.h"
 #include "MonolithSourceDatabase.h" // DECLARE_LOG_CATEGORY_EXTERN(LogMonolithSource)
@@ -59,6 +60,20 @@ int32 UMonolithReindexCommandlet::Main(const FString& Params)
 	if (FParse::Value(*Params, TEXT("enginesource="), Override) && !Override.IsEmpty()) { EngineSrcPath = Override; }
 	if (FParse::Value(*Params, TEXT("projectpath="), Override) && !Override.IsEmpty())  { ProjectPath = Override; }
 	const bool bForceClean = FParse::Param(*Params, TEXT("clean"));
+	const bool bAllowWhenIndexingDisabled =
+		FParse::Param(*Params, TEXT("AllowWhenIndexingDisabled"));
+
+	if (!FMonolithActivationState::IsIndexingEnabled() && !bAllowWhenIndexingDisabled)
+	{
+		UE_LOG(LogMonolithSource, Error,
+			TEXT("MonolithReindex: indexing is disabled. Run Monolith.StartIndexing in the editor console, or pass -AllowWhenIndexingDisabled for an explicit one-shot maintenance override."));
+		return 1;
+	}
+	if (bAllowWhenIndexingDisabled)
+	{
+		UE_LOG(LogMonolithSource, Display,
+			TEXT("MonolithReindex: explicit -AllowWhenIndexingDisabled override accepted; durable activation is unchanged"));
+	}
 
 	IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
 

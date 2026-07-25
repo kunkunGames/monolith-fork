@@ -9259,22 +9259,34 @@ static fs::path get_exe_dir() {
     return exe_path.empty() ? fs::path() : exe_path.parent_path();
 }
 
+static fs::path resolve_plugin_root();
+
 static std::string resolve_db_dir() {
-    // Default: ../../Saved/ relative to exe location
-    // (exe at Plugins/Monolith/Tools/MonolithQuery/ or Plugins/Monolith/Binaries/)
-    auto exe_dir = get_exe_dir();
-    if (exe_dir.empty()) {
-        // Fallback: try current directory
-        return ".";
+    // Anchor the default DB directory to the nearest valid Monolith plugin root.
+    // Blind relative probing is ambiguous in a project checkout because a
+    // sibling Plugins/Saved directory can exist and incorrectly win before
+    // Plugins/Monolith/Saved.
+    const fs::path plugin_root = resolve_plugin_root();
+    if (!plugin_root.empty()) {
+        const fs::path plugin_saved = plugin_root / "Saved";
+        if (fs::exists(plugin_saved))
+            return fs::canonical(plugin_saved).string();
+        return plugin_saved.string();
     }
 
-    // Try ../../Saved/ (from Tools/MonolithQuery/)
-    auto saved1 = exe_dir / ".." / ".." / "Saved";
-    if (fs::exists(saved1)) return fs::canonical(saved1).string();
+    // Fallback for copied/standalone executables without Monolith.uplugin.
+    auto exe_dir = get_exe_dir();
+    if (exe_dir.empty()) {
+        return ".";
+    }
 
     // Try ../Saved/ (from Binaries/)
     auto saved2 = exe_dir / ".." / "Saved";
     if (fs::exists(saved2)) return fs::canonical(saved2).string();
+
+    // Try ../../Saved/ (from Tools/MonolithQuery/)
+    auto saved1 = exe_dir / ".." / ".." / "Saved";
+    if (fs::exists(saved1)) return fs::canonical(saved1).string();
 
     // Try ./Saved/ (from plugin root)
     auto saved3 = exe_dir / "Saved";

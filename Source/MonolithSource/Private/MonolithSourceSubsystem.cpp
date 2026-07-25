@@ -1,5 +1,6 @@
 ﻿#include "MonolithSourceSubsystem.h"
 #include "MonolithSourceIndexer.h"
+#include "MonolithActivationState.h"
 #include "MonolithSettings.h"
 #include "Misc/Paths.h"
 #include "HAL/PlatformFileManager.h"
@@ -67,27 +68,19 @@ void UMonolithSourceSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	Database = MakeUnique<FMonolithSourceDatabase>();
 	TryOpenDatabaseWithRetry(GetDatabasePath(), TEXT("Initialize"));
 
-	// F17 (2026-04-26): Auto-reindex on hot-reload / Live Coding completion.
-	// Without this, agents see stale source_query results until a manual `source.trigger_project_reindex` call.
-	// `FCoreUObjectDelegates::ReloadCompleteDelegate` fires on both Live Coding patches AND full UBT-restart
-	// hot-reloads (precedent: unreal-code-reviewer agent memory ref_ue57_ui_plan_review_findings.md).
-	// Editor-only by construction: this whole subsystem is a UEditorSubsystem and the commandlet branch
-	// above already short-circuits cook/compile; no extra WITH_EDITOR gate needed here.
-	ReloadCompleteHandle = FCoreUObjectDelegates::ReloadCompleteDelegate.AddUObject(
-		this, &UMonolithSourceSubsystem::OnReloadComplete);
+	// DB reads stay available regardless of indexing activation. Writer hooks
+	// and the startup catch-up run are conditional.
+	SetAutomaticIndexingEnabled(true);
+	StartPreferredIndex();
 }
 
 void UMonolithSourceSubsystem::Deinitialize()
 {
 	bIsDeinitializing = true;
 
-	// F17: Unbind the hot-reload hook BEFORE we tear down anything else, so a late-firing
-	// reload signal during shutdown can't re-enter into a half-destroyed subsystem.
-	if (ReloadCompleteHandle.IsValid())
-	{
-		FCoreUObjectDelegates::ReloadCompleteDelegate.Remove(ReloadCompleteHandle);
-		ReloadCompleteHandle.Reset();
-	}
+	// Unbind the hot-reload hook BEFORE we tear down anything else, so a
+	// late-firing reload signal cannot re-enter a half-destroyed subsystem.
+	SetAutomaticIndexingEnabled(false);
 
 	// Stop any running indexer
 	if (Indexer)
@@ -113,12 +106,89 @@ FMonolithSourceDatabase* UMonolithSourceSubsystem::GetDatabase()
 	return Database.Get();
 }
 
+bool UMonolithSourceSubsystem::IsIndexingWorkEnabled() const
+{
+	const UMonolithSettings* Settings = GetDefault<UMonolithSettings>();
+	return bAutomaticIndexingEnabled
+		&& (!Settings || Settings->bEnableSource);
+}
+
+void UMonolithSourceSubsystem::SetAutomaticIndexingEnabled(bool bEnabled)
+{
+	check(IsInGameThread());
+
+	if (!bEnabled)
+	{
+		bAutomaticIndexingEnabled = false;
+		if (ReloadCompleteHandle.IsValid())
+		{
+			FCoreUObjectDelegates::ReloadCompleteDelegate.Remove(ReloadCompleteHandle);
+			ReloadCompleteHandle.Reset();
+			UE_LOG(LogMonolithSource, Log,
+				TEXT("Source indexing hot-reload hook unregistered"));
+		}
+		return;
+	}
+
+	const UMonolithSettings* Settings = GetDefault<UMonolithSettings>();
+	if ((Settings && !Settings->bEnableSource)
+		|| !FMonolithActivationState::IsIndexingEnabled())
+	{
+		bAutomaticIndexingEnabled = false;
+		UE_LOG(LogMonolithSource, Log,
+			TEXT("MonolithSource: indexing activation or project policy is off; existing EngineSource.db remains available for reads"));
+		return;
+	}
+
+	bAutomaticIndexingEnabled = true;
+	if (!ReloadCompleteHandle.IsValid())
+	{
+		ReloadCompleteHandle = FCoreUObjectDelegates::ReloadCompleteDelegate.AddUObject(
+			this, &UMonolithSourceSubsystem::OnReloadComplete);
+		UE_LOG(LogMonolithSource, Log,
+			TEXT("Source indexing hot-reload hook registered"));
+	}
+}
+
+bool UMonolithSourceSubsystem::StartPreferredIndex()
+{
+	check(IsInGameThread());
+
+	if (!IsIndexingWorkEnabled())
+	{
+		UE_LOG(LogMonolithSource, Warning,
+			TEXT("Source indexing is disabled. Run Monolith.StartIndexing to enable source and asset indexing persistently."));
+		return false;
+	}
+
+	if (bIsIndexing)
+	{
+		UE_LOG(LogMonolithSource, Log,
+			TEXT("Preferred source index request accepted: an index run is already in progress"));
+		return true;
+	}
+
+	const FString DbPath = GetDatabasePath();
+	if (FPlatformFileManager::Get().GetPlatformFile().FileExists(*DbPath))
+	{
+		return TriggerProjectReindexInternal();
+	}
+	return TriggerReindexInternal();
+}
+
 // ============================================================
 // F17: Hot-reload auto-reindex hook
 // ============================================================
 
 void UMonolithSourceSubsystem::OnReloadComplete(EReloadCompleteReason Reason)
 {
+	if (!IsIndexingWorkEnabled())
+	{
+		UE_LOG(LogMonolithSource, Verbose,
+			TEXT("[F17] OnReloadComplete: indexing activation is off — skipping auto-kick"));
+		return;
+	}
+
 	// Idempotency guard #1: a reindex is already running. UBT can fire multiple
 	// ReloadCompleteDelegate signals (one per loaded module) in quick succession —
 	// without this, every additional fire would log a "Indexing already in progress"
@@ -171,10 +241,23 @@ void UMonolithSourceSubsystem::OnReloadComplete(EReloadCompleteReason Reason)
 
 void UMonolithSourceSubsystem::TriggerReindex()
 {
+	TriggerReindexInternal();
+}
+
+bool UMonolithSourceSubsystem::TriggerReindexInternal()
+{
+	check(IsInGameThread());
+	if (!IsIndexingWorkEnabled())
+	{
+		UE_LOG(LogMonolithSource, Warning,
+			TEXT("Full source indexing is disabled; run Monolith.StartIndexing first"));
+		return false;
+	}
+
 	if (bIsIndexing)
 	{
 		UE_LOG(LogMonolithSource, Warning, TEXT("Indexing already in progress"));
-		return;
+		return false;
 	}
 
 	FString DbPath = GetDatabasePath();
@@ -212,7 +295,8 @@ void UMonolithSourceSubsystem::TriggerReindex()
 			if (UMonolithSourceSubsystem* Subsystem = WeakThis.Get())
 			{
 				Subsystem->FinishIndexingOnGameThread(
-					DbPath, TEXT("Full source indexing"), Files, Symbols, Errors, bSucceeded);
+					DbPath, TEXT("Full source indexing"), Files, Symbols, Errors, bSucceeded,
+					/*bRequiresFullCrgRebuild=*/true);
 			}
 		});
 	});
@@ -226,7 +310,9 @@ void UMonolithSourceSubsystem::TriggerReindex()
 			ReopenDatabase(DbPath);
 		}
 		bIsIndexing = false;
+		return false;
 	}
+	return true;
 }
 
 // ============================================================
@@ -235,10 +321,23 @@ void UMonolithSourceSubsystem::TriggerReindex()
 
 void UMonolithSourceSubsystem::TriggerProjectReindex()
 {
+	TriggerProjectReindexInternal();
+}
+
+bool UMonolithSourceSubsystem::TriggerProjectReindexInternal()
+{
+	check(IsInGameThread());
+	if (!IsIndexingWorkEnabled())
+	{
+		UE_LOG(LogMonolithSource, Warning,
+			TEXT("Project source indexing is disabled; run Monolith.StartIndexing first"));
+		return false;
+	}
+
 	if (bIsIndexing)
 	{
 		UE_LOG(LogMonolithSource, Warning, TEXT("Indexing already in progress"));
-		return;
+		return false;
 	}
 
 	FString DbPath = GetDatabasePath();
@@ -247,7 +346,7 @@ void UMonolithSourceSubsystem::TriggerProjectReindex()
 	if (!PlatformFile.FileExists(*DbPath))
 	{
 		UE_LOG(LogMonolithSource, Error, TEXT("EngineSource.db not found at %s — run full TriggerReindex() first"), *DbPath);
-		return;
+		return false;
 	}
 
 	// Close DB during reindex
@@ -274,7 +373,8 @@ void UMonolithSourceSubsystem::TriggerProjectReindex()
 			if (UMonolithSourceSubsystem* Subsystem = WeakThis.Get())
 			{
 				Subsystem->FinishIndexingOnGameThread(
-					DbPath, TEXT("Project source indexing"), Files, Symbols, Errors, bSucceeded);
+					DbPath, TEXT("Project source indexing"), Files, Symbols, Errors, bSucceeded,
+					/*bRequiresFullCrgRebuild=*/false);
 			}
 		});
 	});
@@ -288,7 +388,9 @@ void UMonolithSourceSubsystem::TriggerProjectReindex()
 			ReopenDatabase(DbPath);
 		}
 		bIsIndexing = false;
+		return false;
 	}
+	return true;
 }
 
 // ============================================================
@@ -328,7 +430,8 @@ void UMonolithSourceSubsystem::FinishIndexingOnGameThread(
 	int32 Files,
 	int32 Symbols,
 	int32 Errors,
-	bool bSucceeded)
+	bool bSucceeded,
+	bool bRequiresFullCrgRebuild)
 {
 	if (bIsDeinitializing)
 	{
@@ -356,7 +459,16 @@ void UMonolithSourceSubsystem::FinishIndexingOnGameThread(
 		return;
 	}
 
-	RebuildSourceCrgCacheAfterIndexing(Database.Get(), *Context);
+	if (bRequiresFullCrgRebuild)
+	{
+		RebuildSourceCrgCacheAfterIndexing(Database.Get(), *Context);
+	}
+	else
+	{
+		UE_LOG(LogMonolithSource, Log,
+			TEXT("%s retained the indexer-owned scoped source CRG projection/cache refresh"),
+			*Context);
+	}
 	bDatabaseRequiresSuccessfulReindex = false;
 	UE_LOG(LogMonolithSource, Log, TEXT("%s complete: %d files, %d symbols, %d errors"),
 		*Context, Files, Symbols, Errors);

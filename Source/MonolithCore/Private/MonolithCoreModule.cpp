@@ -1,4 +1,5 @@
 #include "MonolithCoreModule.h"
+#include "MonolithActivationState.h"
 #include "MonolithHttpServer.h"
 #include "MonolithMcpHostRole.h"
 #include "MonolithSettings.h"
@@ -29,6 +30,18 @@ static FAutoConsoleCommand GMonolithRestartCmd(
 	TEXT("Monolith.Restart"),
 	TEXT("Restart the Monolith MCP HTTP server on its configured port."),
 	FConsoleCommandDelegate::CreateStatic(&FMonolithCoreModule::RestartHttpServer)
+);
+
+static FAutoConsoleCommand GMonolithStartServerCmd(
+	TEXT("Monolith.StartServer"),
+	TEXT("Persistently enable and start the Monolith MCP HTTP server."),
+	FConsoleCommandDelegate::CreateStatic(&FMonolithCoreModule::StartHttpServerCommand)
+);
+
+static FAutoConsoleCommand GMonolithStopServerCmd(
+	TEXT("Monolith.StopServer"),
+	TEXT("Persistently disable and stop the Monolith MCP HTTP server."),
+	FConsoleCommandDelegate::CreateStatic(&FMonolithCoreModule::StopHttpServerCommand)
 );
 
 void RegisterMonolithExecutionGuardActions();
@@ -71,7 +84,15 @@ void FMonolithCoreModule::StartupModule()
 		return;
 	}
 
-	// Start HTTP server (gated on bMcpServerEnabled — Issue #38 kill-switch)
+	if (!FMonolithActivationState::IsServerEnabled())
+	{
+		UE_LOG(LogMonolith, Log,
+			TEXT("Monolith — HTTP server activation is off; run Monolith.StartServer to enable it persistently"));
+		return;
+	}
+
+	// bMcpServerEnabled remains the project-policy kill switch. The durable
+	// activation flag is local operator intent and cannot override this policy.
 	const UMonolithSettings* Settings = UMonolithSettings::Get();
 	if (Settings && !Settings->bMcpServerEnabled)
 	{
@@ -80,26 +101,15 @@ void FMonolithCoreModule::StartupModule()
 		return;
 	}
 
-	int32 Port = Settings ? Settings->ServerPort : 9316;
-
-	HttpServer = MakeUnique<FMonolithHttpServer>();
-	if (HttpServer->Start(Port))
-	{
-		WriteSentinelFile(Port);
-	}
-	else
-	{
-		UE_LOG(LogMonolith, Error, TEXT("Failed to start MCP server on port %d"), Port);
-	}
+	StartHttpServer();
 }
 
 void FMonolithCoreModule::ShutdownModule()
 {
-	RemoveSentinelFile();
+	StopHttpServer();
 
 	if (HttpServer.IsValid())
 	{
-		HttpServer->Stop();
 		HttpServer.Reset();
 	}
 
@@ -110,6 +120,57 @@ void FMonolithCoreModule::ShutdownModule()
 	FMonolithCrashBreadcrumb::Get().Shutdown();
 
 	UE_LOG(LogMonolith, Log, TEXT("Monolith — Core module shut down"));
+}
+
+bool FMonolithCoreModule::StartHttpServer()
+{
+	const EMonolithMcpHostRole HostRole = FMonolithMcpHostRole::ClassifyCurrentProcess();
+	if (!FMonolithMcpHostRole::IsDurableHost(HostRole))
+	{
+		UE_LOG(LogMonolith, Warning,
+			TEXT("Monolith.StartServer: host role=%s is not durable; listener startup refused"),
+			FMonolithMcpHostRole::ToString(HostRole));
+		return false;
+	}
+
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	if (Settings && !Settings->bMcpServerEnabled)
+	{
+		UE_LOG(LogMonolith, Warning,
+			TEXT("Monolith.StartServer: blocked by project policy bMcpServerEnabled=false"));
+		return false;
+	}
+
+	const int32 Port = Settings ? Settings->ServerPort : 9316;
+	if (!HttpServer.IsValid())
+	{
+		HttpServer = MakeUnique<FMonolithHttpServer>();
+	}
+	if (HttpServer->IsRunning())
+	{
+		UE_LOG(LogMonolith, Log,
+			TEXT("Monolith.StartServer: HTTP server already running on port %d"),
+			HttpServer->GetPort());
+		return true;
+	}
+
+	if (!HttpServer->Start(Port))
+	{
+		UE_LOG(LogMonolith, Error, TEXT("Monolith.StartServer: failed to start MCP server on port %d"), Port);
+		return false;
+	}
+
+	WriteSentinelFile(Port);
+	return true;
+}
+
+void FMonolithCoreModule::StopHttpServer()
+{
+	RemoveSentinelFile();
+	if (HttpServer.IsValid())
+	{
+		HttpServer->Stop();
+	}
 }
 
 void FMonolithCoreModule::RegisterCoreTools()
@@ -224,14 +285,29 @@ void FMonolithCoreModule::RestartHttpServer()
 	}
 
 	FMonolithCoreModule& Module = Get();
-	if (!Module.HttpServer.IsValid())
+	if (!FMonolithActivationState::IsServerEnabled())
 	{
-		UE_LOG(LogMonolith, Warning, TEXT("Monolith.Restart: HTTP server instance missing"));
+		UE_LOG(LogMonolith, Warning,
+			TEXT("Monolith.Restart: server activation is off; run Monolith.StartServer instead"));
 		return;
 	}
 
 	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	if (Settings && !Settings->bMcpServerEnabled)
+	{
+		UE_LOG(LogMonolith, Warning,
+			TEXT("Monolith.Restart: blocked by project policy bMcpServerEnabled=false"));
+		return;
+	}
 	const int32 Port = Settings ? Settings->ServerPort : 9316;
+
+	if (!Module.HttpServer.IsValid() || !Module.HttpServer->IsRunning())
+	{
+		UE_LOG(LogMonolith, Log,
+			TEXT("Monolith.Restart: server is not running; starting it on port %d"), Port);
+		Module.StartHttpServer();
+		return;
+	}
 
 	UE_LOG(LogMonolith, Log, TEXT("Monolith.Restart: restarting HTTP server on port %d"), Port);
 	// Drop the old ownership marker before unbinding. A failed restart must not
@@ -245,6 +321,80 @@ void FMonolithCoreModule::RestartHttpServer()
 	else
 	{
 		UE_LOG(LogMonolith, Error, TEXT("Monolith.Restart: failed to rebind port %d"), Port);
+	}
+}
+
+void FMonolithCoreModule::StartHttpServerCommand()
+{
+	if (!IsAvailable())
+	{
+		UE_LOG(LogMonolith, Warning, TEXT("Monolith.StartServer: MonolithCore module not loaded"));
+		return;
+	}
+
+	const EMonolithMcpHostRole HostRole = FMonolithMcpHostRole::ClassifyCurrentProcess();
+	if (!FMonolithMcpHostRole::IsDurableHost(HostRole))
+	{
+		UE_LOG(LogMonolith, Warning,
+			TEXT("Monolith.StartServer: host role=%s is not durable; activation was not changed"),
+			FMonolithMcpHostRole::ToString(HostRole));
+		return;
+	}
+
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	if (Settings && !Settings->bMcpServerEnabled)
+	{
+		UE_LOG(LogMonolith, Warning,
+			TEXT("Monolith.StartServer: blocked by project policy bMcpServerEnabled=false; activation was not changed"));
+		return;
+	}
+
+	FString Error;
+	if (!FMonolithActivationState::SetServerEnabled(true, &Error))
+	{
+		UE_LOG(LogMonolith, Error, TEXT("Monolith.StartServer: %s"), *Error);
+		return;
+	}
+
+	FMonolithCoreModule& Module = Get();
+	if (Module.StartHttpServer())
+	{
+		UE_LOG(LogMonolith, Log,
+			TEXT("Monolith.StartServer: server enabled persistently in %s"),
+			*FMonolithActivationState::GetStateFilePath());
+	}
+	else
+	{
+		UE_LOG(LogMonolith, Error,
+			TEXT("Monolith.StartServer: activation is persisted but listener startup failed; the next durable editor launch will retry"));
+	}
+}
+
+void FMonolithCoreModule::StopHttpServerCommand()
+{
+	if (!IsAvailable())
+	{
+		UE_LOG(LogMonolith, Warning, TEXT("Monolith.StopServer: MonolithCore module not loaded"));
+		return;
+	}
+
+	FString Error;
+	const bool bPersisted = FMonolithActivationState::SetServerEnabled(false, &Error);
+
+	FMonolithCoreModule& Module = Get();
+	Module.StopHttpServer();
+
+	if (bPersisted)
+	{
+		UE_LOG(LogMonolith, Log,
+			TEXT("Monolith.StopServer: server stopped and disabled persistently in %s"),
+			*FMonolithActivationState::GetStateFilePath());
+	}
+	else
+	{
+		UE_LOG(LogMonolith, Error,
+			TEXT("Monolith.StopServer: server stopped for this process, but persistent deactivation failed: %s"),
+			*Error);
 	}
 }
 

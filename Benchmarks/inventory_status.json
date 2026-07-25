@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "snapshot_id": "graph-retirement-20260721-08",
+  "snapshot_id": "activation-default-on-20260725-02",
   "suites": {
     "OfflineParity": {
       "state": "accepted",
-      "evidence": "Benchmarks/OfflineParity/accepted/graph-retirement-20260721-08/summary.json",
-      "evidence_bundle_sha256": "2dadec0e8b6ddab672f8e60b7a27957f136dd56153401b3800bbc3b19afee34e",
-      "input_fingerprint": "f2acf3584953af0c3cf89414467ec57c81f31fc1c2768bf93dcf65558e5fb9d6",
-      "diagnostic": "Final Query graph-retirement generation: 311 MATCH, 0 DIFF, 0 ERROR, 6 explicit decision_id-dependent SKIP. Accepted freshness checks every input file SHA plus the 4.66 GB EngineSource.db content SHA-256; no graph.db input exists.",
+      "evidence": "Benchmarks/OfflineParity/accepted/activation-default-on-20260725-02/summary.json",
+      "evidence_bundle_sha256": "420e4084a39e3b34577062f7a1ed021fc10bccd3932f2dde06b8b6be447fe997",
+      "input_fingerprint": "bb0de36be35f842ac3a8c0cc289dcee481abf6d60190a3659e95b88acb49695f",
+      "diagnostic": "Default-on activation and final single-writer EngineSource baseline: 311 MATCH, 0 DIFF, 0 ERROR, 6 explicit decision_id-dependent SKIP. Accepted freshness checks every input file SHA plus the 3.81 GB EngineSource.db content SHA-256; no graph.db input exists.",
       "namespace_results": {
         "cppreflect": {"pass": 96, "fail": 0, "expected_skip": 0},
         "decision": {"pass": 44, "fail": 0, "expected_skip": 6},

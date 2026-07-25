@@ -1,0 +1,27 @@
+{
+  "schema_version": 2,
+  "benchmark": "OfflineParity",
+  "suite": "OfflineParity",
+  "snapshot_id": "activation-default-on-20260725-02",
+  "summary_file": "summary.json",
+  "summary_sha256": "42fbfab9d2c00c0ce8133dd7f9b238b7c1a96fcb92ad6dd5a5a6848b4fd340de",
+  "artifact_files": {
+    "per_action.jsonl": {
+      "sha256": "e44d6171b05ef78563152f205c6de202e2bf9faa4c11be2da6ddcfc0293abf8b",
+      "non_empty_line_count": 317
+    }
+  },
+  "input_fingerprint": "bb0de36be35f842ac3a8c0cc289dcee481abf6d60190a3659e95b88acb49695f",
+  "database_inputs": [
+    {
+      "kind": "database",
+      "path": "Saved/EngineSource.db",
+      "exists": true,
+      "size_bytes": 3812814848,
+      "mtime_ns": 1784967348390855500,
+      "signature": "3812814848:1784967348390855500",
+      "sha256": "c77aaf29b09b1334f8e72e23ae07aa8f0e39992c40d6001006a6595b48394a51"
+    }
+  ],
+  "portable_database_policy": "attest_when_absent_verify_when_present"
+}

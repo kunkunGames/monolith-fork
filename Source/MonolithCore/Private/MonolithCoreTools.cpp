@@ -1,4 +1,5 @@
 #include "MonolithCoreTools.h"
+#include "MonolithActivationState.h"
 #include "MonolithAsyncJobRegistry.h"
 #include "MonolithParamUtils.h"
 #include "MonolithGuideTool.h"
@@ -2949,6 +2950,15 @@ FMonolithActionResult FMonolithCoreTools::HandleReindex(const TSharedPtr<FJsonOb
 		{
 			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
 		}
+	}
+
+	if (!FMonolithActivationState::IsIndexingEnabled())
+	{
+		Result->SetStringField(TEXT("status"), TEXT("indexing_disabled"));
+		Result->SetStringField(
+			TEXT("message"),
+			TEXT("Monolith indexing is disabled. Run Monolith.StartIndexing in the editor console to enable source and asset indexing persistently."));
+		return FMonolithActionResult::Success(Result);
 	}
 
 	UClass* IndexSubsystemClass = FindObject<UClass>(nullptr, TEXT("/Script/MonolithIndex.MonolithIndexSubsystem"));

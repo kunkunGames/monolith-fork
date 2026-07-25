@@ -27,12 +27,20 @@ public:
 	/** Get the running HTTP server instance */
 	FMonolithHttpServer* GetHttpServer() const { return HttpServer.Get(); }
 
+	/** Console-command target: persist activation and start the HTTP server now. */
+	static void StartHttpServerCommand();
+
+	/** Console-command target: persist deactivation and stop serving Monolith routes now. */
+	static void StopHttpServerCommand();
+
 	/** Console-command target: stop and restart the HTTP server on its configured port. */
 	static void RestartHttpServer();
 
 private:
 	TUniquePtr<FMonolithHttpServer> HttpServer;
 
+	bool StartHttpServer();
+	void StopHttpServer();
 	void RegisterCoreTools();
 	void WriteSentinelFile(int32 Port);
 	void RemoveSentinelFile();

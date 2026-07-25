@@ -362,9 +362,13 @@ public:
 		meta=(ClampMin="0.0", ClampMax="1.0", ToolTip="Sleep time when throttling due to memory pressure."))
 	float YieldTimeSeconds = 0.1f;
 
-	/** Defer first-time indexing until explicitly triggered via console command. Useful for very large projects. */
+	/**
+	 * Legacy compatibility setting. Persistent indexing activation now defaults
+	 * on and Monolith.StopIndexing is the explicit durable opt-out, so this value
+	 * is retained for config compatibility but is no longer consulted.
+	 */
 	UPROPERTY(config, EditAnywhere, Category="Indexing|Performance", DisplayName="Defer First-Time Index",
-		meta=(ToolTip="If true, first-time indexing won't run automatically. Use 'Monolith.StartIndex' console command to trigger."))
+		meta=(ToolTip="Deprecated: indexing now starts by default and Monolith.StopIndexing disables it persistently."))
 	bool bDeferFirstTimeIndex = false;
 
 	/** Log memory statistics periodically during indexing. Off by default to keep shipped-project logs quiet — opt in when debugging indexer behavior. */

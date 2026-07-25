@@ -4,13 +4,15 @@ Deterministic Monolith MCP recovery: probe /health, launch the host project's
 headless editor wrapper when the server is down, wait for the endpoint, report.
 
 .DESCRIPTION
-Runs the documented Go-checkout recovery sequence (CLAUDE.md section 14 and
+Runs the documented checkout recovery sequence (AGENTS.md section 14 and
 Skills/monolith-mcp) as one deterministic entry point:
 
-  1. GET <mcp-url-with-/health> (HealthTimeoutSec, default 5s). The response is healthy only when
+  1. Read Saved/Monolith/Activation.ini. When server activation is off,
+     report RESULT=MCP_DISABLED and perform no probe/build/launch mutation.
+  2. GET <mcp-url-with-/health> (HealthTimeoutSec, default 5s). The response is healthy only when
      its JSON contract is complete and its PID is an Unreal Editor process for
      this checkout's .uproject.
-  2. If down, require the MCP port to have no listener before any launch. A
+  3. If down, require the MCP port to have no listener before any launch. A
      non-HTTP/non-200, malformed, multi-owner, or unreadable listener is an
      untrusted occupied endpoint and blocks recovery. A transport timeout from
      one exclusive listener PID is classified as trusted-busy only when that
@@ -18,13 +20,13 @@ Skills/monolith-mcp) as one deterministic entry point:
      planned-exit automation editor is classified separately and is allowed to
      finish without build/launch/stop mutation before recovery continues. In
      -ProbeOnly mode, report the health failure reason plus local candidates.
-  3. Resolve the host checkout root (walk up from this script until a
+  4. Resolve the host checkout root (walk up from this script until a
      *.uproject is found, or use -ProjectRoot) and require
      Build/BatchFiles/RunHeadlessEditor.bat there. No substitute editor launch
      is attempted when the wrapper is missing.
-  4. Skip the launch when an UnrealEditor process already exists (a boot may
+  5. Skip the launch when an UnrealEditor process already exists (a boot may
      be in progress) unless -ForceLaunch is passed.
-  5. Poll /health until it answers with the validated contract or -TimeoutSec
+  6. Poll /health until it answers with the validated contract or -TimeoutSec
      elapses; on timeout,
      point at the newest Saved/HeadlessMcp/Logs/HeadlessEditor-*.log.
 
@@ -56,7 +58,7 @@ Explicit host checkout root containing the .uproject (skips upward search).
 Line-oriented status ending in one RESULT= token.
 
 Exit codes:
-  0  MCP endpoint is up (already up, or came up after the launch step)
+  0  MCP endpoint is up, or server activation is intentionally disabled
   2  endpoint down, exact durable editor is transiently busy, or exact-project
      planned-exit automation is active, and -ProbeOnly was requested
   3  blocked: no host checkout / RunHeadlessEditor.bat not found, or the MCP
@@ -86,6 +88,13 @@ if (-not (Test-Path -LiteralPath $hostRoleHelperPath -PathType Leaf)) {
     exit 3
 }
 . $hostRoleHelperPath
+
+$activationHelperPath = Join-Path $PSScriptRoot 'monolith_activation_state.ps1'
+if (-not (Test-Path -LiteralPath $activationHelperPath -PathType Leaf)) {
+    Write-Output ("RESULT=BLOCKED reason=activation_state_helper_missing path={0}" -f $activationHelperPath)
+    exit 3
+}
+. $activationHelperPath
 
 function Get-MonolithHealth {
     $probe = Get-MonolithHealthProbe
@@ -835,6 +844,18 @@ if (-not $hostRoot) {
     exit 3
 }
 $script:hostRoot = $hostRoot
+
+$activationState = Get-MonolithActivationState -Root $hostRoot
+if (-not $activationState.ServerEnabled) {
+    $invalidKeys = @($activationState.InvalidKeys) -join ','
+    if ([string]::IsNullOrWhiteSpace($invalidKeys)) {
+        $invalidKeys = '-'
+    }
+    Write-Output (
+        "RESULT=MCP_DISABLED desired_enabled=false mutation=none state_path={0} invalid_keys={1} next_action=run_Monolith.StartServer_in_editor_console" -f
+            (Format-RecoverResultValue $activationState.StatePath), $invalidKeys)
+    exit 0
+}
 
 $healthProbe = Get-MonolithHealthProbe
 if ($healthProbe.Health) {

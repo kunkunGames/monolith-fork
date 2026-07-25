@@ -36,7 +36,7 @@ Most MCP integrations register every action as a separate tool, which floods the
 
 **Config (11 actions)** — Full INI resolution chain awareness: Base, Platform, Project, User. Ask what any setting does, where it's overridden, what the effective value is, and how it differs from the engine default. Search across all config files at once. Perfect for performance tuning sessions where you want the AI to just sort out your INIs.
 
-**Source (11 actions)** — Search over 1M+ Unreal Engine C++ symbols instantly. Read function implementations, get full class hierarchies, trace call graphs (callers and callees), verify include paths — all against a local index, fully offline. The native C++ indexer runs automatically on editor startup. No Python, no setup. Optionally index your project's own C++ source for the same coverage on your code. The AI never has to guess at a function signature again.
+**Source (11 actions)** — Search over 1M+ Unreal Engine C++ symbols instantly. Read function implementations, get full class hierarchies, trace call graphs (callers and callees), verify include paths — all against a local index, fully offline. The native C++ indexer requires no Python and starts automatically by default; `Monolith.StopIndexing` persists an opt-out and `Monolith.StartIndexing` enables startup and hot-reload refreshes again. Existing DB reads remain available while refreshes are disabled. Optionally index your project's own C++ source for the same coverage on your code. The AI never has to guess at a function signature again.
 
 **Project (7 actions)** — SQLite FTS5 full-text search across every indexed asset in your project. Find assets by name, type, path, or content. Trace references between assets. Search gameplay tags. Get detailed asset metadata. The index updates live as assets change and covers marketplace/Fab plugin content too — 15 deep indexers registered including DataAsset subclasses.
 
@@ -108,7 +108,7 @@ Query/catalog generation selected by `monolith_query.current.json` during
 editor transport outages. For **Cursor/Cline**, **macOS/Linux**, or the
 **Python fallback**, see the [Installation wiki page](https://github.com/tumourlove/monolith/wiki/Installation).
 
-**3. Connect, then open the editor for editor-backed work.** The proxy can initialize and expose its read-only fallback before UE starts. Open the editor for asset/world mutation and live runtime actions; wait 30-60 seconds for the first-launch index. When you see `Monolith MCP server listening on port 9316` in the Output Log (filter `LogMonolith`), `monolith_status()` should switch from the offline catalog status to the live editor status without restarting the AI client.
+**3. Connect; services are enabled by default.** The proxy can initialize and expose its read-only fallback before UE starts. Monolith's HTTP server and source/asset indexing both default to **on** when a fresh checkout has no `Saved/Monolith/Activation.ini`. Run `Monolith.StopServer` or `Monolith.StopIndexing` in the editor console to persist an opt-out across restarts; the matching Start command enables that service again. Existing `EngineSource.db` and `ProjectIndex.db` reads remain available while indexing is off.
 
 macOS / Linux:
 ```json
@@ -146,11 +146,13 @@ macOS / Linux:
 
 Open your `.uproject` as normal. On first launch:
 
-1. Monolith auto-indexes your project (30-60 seconds depending on size — go get a coffee)
-2. Open the **Output Log** (Window > Developer Tools > Output Log)
-3. Filter for `LogMonolith` — you'll see the server start up and the index complete
+1. Open the **Output Log** (Window > Developer Tools > Output Log).
+2. Filter for `LogMonolith` — the HTTP endpoint and cheapest correct source + asset catch-up pass start automatically unless a prior Stop command persisted an opt-out.
+3. If a service was previously stopped, run `Monolith.StartServer` or `Monolith.StartIndexing` to enable it again.
 
 When you see `Monolith MCP server listening on port 9316`, you're in business.
+
+Use `Monolith.StopServer` to remove the Monolith HTTP routes immediately and keep them off on later launches. Use `Monolith.StopIndexing` to remove automatic source/asset hooks immediately; an already-running index pass drains to a valid database boundary instead of being force-killed.
 
 ### Step 4: Connect your AI
 
@@ -172,14 +174,13 @@ Whatever your AI generates, drop it at the appropriate path for your toolchain. 
 
 ### Step 6: (Optional) Index your project's C++ source
 
-Engine source indexing is automatic — `source_query` works immediately with no setup.
+Existing engine/project source database reads work even when indexing is disabled. Source and asset indexing start automatically by default; if `Monolith.StopIndexing` was previously persisted, run `Monolith.StartIndexing` once in the editor console to resume automatic catch-up and hot-reload hooks.
 
 If you also want your AI to search your **own project's C++ source** (find callers, callees, and class hierarchies across your own code):
 
-1. Install **Python 3.10+**
-2. Run `python Plugins/Monolith/Scripts/index_project.py` from your project root
-3. Your project source gets indexed into `EngineSource.db` alongside engine symbols
-4. To re-run the indexer without leaving the editor: `source_query("trigger_project_reindex")`
+1. Confirm indexing is enabled; run `Monolith.StartIndexing` only if a prior Stop command disabled it.
+2. Monolith's native C++ indexer updates `EngineSource.db` with engine and project symbols.
+3. To request a focused project-source refresh while activation remains enabled, call `source_query("trigger_project_reindex")`.
 
 ### Verify it's alive
 
@@ -191,7 +192,7 @@ curl -X POST http://localhost:9316/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
-You'll get a JSON response listing all Monolith tools. If you get "connection refused", the editor isn't running or something went sideways — check the Output Log for `LogMonolith` errors.
+You'll get a JSON response listing all Monolith tools. If you get "connection refused", run `Scripts/recover_mcp.ps1 -ProbeOnly`: `MCP_DISABLED` means a prior `Monolith.StopServer` must be reversed with `Monolith.StartServer`; otherwise check whether the editor is running and inspect the Output Log for `LogMonolith` errors.
 
 ### (Optional) Install Claude Code skills
 
@@ -279,9 +280,9 @@ Off by default as of v0.14.6. Opt in via **Auto Update Enabled** in Editor Prefe
 
 ## Network exposure
 
-Monolith starts a local HTTP server on port 9316 to receive MCP traffic. UE's `FHttpServerModule` does **not** expose a bind-address parameter, so the listener is reachable on all network interfaces, not just `127.0.0.1`. CORS is restricted to localhost origins (which blocks browser-based cross-origin reads) but does **not** block direct HTTP requests from other devices on the same LAN.
+Monolith's HTTP server defaults to **on** when no local activation state exists, and uses port 9316 to receive MCP traffic. UE's `FHttpServerModule` does **not** expose a bind-address parameter, so an active listener is reachable on all network interfaces, not just `127.0.0.1`. CORS is restricted to localhost origins (which blocks browser-based cross-origin reads) but does **not** block direct HTTP requests from other devices on the same LAN.
 
-If you work on an untrusted network: either add a Windows Firewall rule blocking inbound TCP on port 9316 from non-loopback addresses, or untick **MCP Server Enabled** in Editor Preferences > Plugins > Monolith and restart the editor.
+If you work on an untrusted network, run `Monolith.StopServer` before exposing the machine to that network; the disabled choice persists until `Monolith.StartServer`. For defense in depth, add a Windows Firewall rule blocking inbound TCP on port 9316 from non-loopback addresses. The **MCP Server Enabled** project setting remains a policy kill switch that `Monolith.StartServer` cannot override.
 
 See [SECURITY.md](SECURITY.md) for the full threat model and disclosure policy.
 

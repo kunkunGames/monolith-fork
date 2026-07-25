@@ -1,5 +1,43 @@
 # Offline Parity Benchmark Results
 
+## 2026-07-25 activation-default-on-20260725-02
+
+| Item | Value |
+| --- | ---: |
+| `offline_parity_score` | **1.0** |
+| Actions | 317 total; 311 comparable; 6 decision-chain skips |
+| MATCH / DIFF / real ERROR | 311 / 0 / 0 |
+| Expected-error cases | 5 (0 problems) |
+| `version_parity_score` | 1.0 (`2026-05-29.1` on both implementations) |
+| Input fingerprint | `bb0de36be35f842ac3a8c0cc289dcee481abf6d60190a3659e95b88acb49695f` |
+| Accepted evidence | `Benchmarks\OfflineParity\accepted\activation-default-on-20260725-02` |
+
+This full run pins the database produced after the final default-on activation
+build restarted the editor and automatically completed its source catch-up.
+Native Query and Python matched every comparable action against the resulting
+3.81 GB single-writer `EngineSource.db`; deep health also proved exact native /
+CRG parity and no required maintenance.
+
+## 2026-07-25 activation-controls-20260725-01
+
+| Item | Value |
+| --- | ---: |
+| `offline_parity_score` | **1.0** |
+| Actions | 317 total; 311 comparable; 6 decision-chain skips |
+| MATCH / DIFF / real ERROR | 311 / 0 / 0 |
+| Expected-error cases | 5 (0 problems) |
+| `version_parity_score` | 1.0 (`2026-05-29.1` on both implementations) |
+| Input fingerprint | `ac8f994ab58e35673a98af48bae1cbf34129f50e2df69a940b23e08c86d6df98` |
+| Accepted evidence | `Benchmarks\OfflineParity\accepted\activation-controls-20260725-01` |
+
+This full run fixes the accepted baseline to the activation-aware Query bundle
+and the rebuilt, integrity-checked `EngineSource.db`. Native Query and Python
+matched every comparable action after server and indexing activation became
+durable opt-in state. The accepted bundle fingerprints the final 3.80 GB
+single-writer source database after scoped CRG edge parity reached 91,057 /
+91,057, while retaining portable verification when that generated database is
+not present in a clean checkout.
+
 ## 2026-07-21 graph-retirement-20260721-08
 
 | Item | Value |

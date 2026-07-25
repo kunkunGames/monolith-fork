@@ -400,12 +400,12 @@ Setting names below match the actual `UMonolithSettings` UPROPERTY identifiers i
 | bEnableExternalInventoryModule | True | Allow an external sibling plugin to register `inventory_query` actions |
 | bEnableProceduralTownGen | **False** | Enable Procedural Town Generator actions (45 actions). Requires `bEnableMesh`. **Work-in-progress** — known geometry issues, disabled by default. Unless you're willing to dig in and help improve it, best left alone |
 | bEnableBlueprintAssist | True | Allow MonolithBABridge to register IMonolithGraphFormatter when Blueprint Assist is present. Set false to fully disable Blueprint Assist formatting and force built-in layout for all auto_layout calls (unsupported for domains with no built-in formatter) |
-| bDeferFirstTimeIndex | False | If true, first-time indexing won't run automatically. Use `Monolith.StartIndex` console command to trigger |
+| bDeferFirstTimeIndex | False | Legacy compatibility field; durable indexing now defaults on and is controlled by `Monolith.StartIndexing` / `Monolith.StopIndexing` |
 | bLogMemoryStats | False | Log memory usage during indexing for debugging. Default off — enable when investigating memory pressure |
 | LogVerbosity | 3 (Log) | 0=Silent, 1=Error, 2=Warning, 3=Log, 4=Verbose |
 | bIndexDomainAssets | True | Enable AssetRegistry-only supplemental ProjectIndex rows for graph-like domains such as ControlRig/RigVM, StateTree, and Chooser without loading their UObject graphs. |
 
-**Note:** Module enable toggles are functional — each module checks its toggle at registration time and skips action registration if disabled. **Exception — `bEnableIndex`:** the Index module always registers its query actions (so `project_query` answers from an existing DB); the toggle instead gates the indexing *run* at `UMonolithIndexSubsystem::Initialize`. `bDeferFirstTimeIndex` similarly skips only the automatic first-time index, leaving it triggerable via the `Monolith.StartIndex` console command.
+**Note:** Module enable toggles are functional — each module checks its toggle at registration time and skips action registration if disabled. **Exception — `bEnableIndex`:** the Index module always registers its query actions (so `project_query` answers from an existing DB); the toggle instead gates the indexing *run* at `UMonolithIndexSubsystem::Initialize`. `bDeferFirstTimeIndex` is retained only for config compatibility and is no longer consulted; a missing activation state enables indexing, while `Monolith.StopIndexing` persists the explicit opt-out.
 
 ---
 

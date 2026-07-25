@@ -1,6 +1,6 @@
 ﻿# Monolith API Reference
 
-**Version:** v0.21.2 · **Last updated:** 2026-07-22
+**Version:** v0.21.2 · **Last updated:** 2026-07-25
 
 **In-tree action total is approximate: current source contains roughly 2126 in-tree `RegisterAction` registrations** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large and build-flag dependent to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `console` namespace adds live `IConsoleManager` registry discovery plus EngineSource.db/FTS5 snapshot search. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
@@ -128,6 +128,23 @@ These releases added the `level_sequence` namespace, the `bulk_fill` / `describe
 
 ---
 
+## Editor console service activation
+
+The MCP HTTP endpoint and all automatic source/asset indexing default to on when a fresh checkout has no local activation state. These are editor console commands, not MCP actions, so `Monolith.StartServer` remains usable from the editor console after an explicit Stop has removed the HTTP endpoint:
+
+| Command | Persistent effect | Immediate effect |
+|---------|-------------------|------------------|
+| `Monolith.StartServer` | Writes `ServerEnabled=True` to `Saved/Monolith/Activation.ini` | Starts Monolith's `/mcp` and `/health` routes on the configured port |
+| `Monolith.StopServer` | Writes `ServerEnabled=False` | Removes the Monolith routes and sentinel immediately; unrelated UE HTTP routes/listeners are not globally stopped |
+| `Monolith.StartIndexing` | Writes `IndexingEnabled=True` | Enables source hot-reload and asset-registry hooks, starts project-source incremental/full bootstrap as needed, and starts the cheapest correct asset catch-up mode |
+| `Monolith.StopIndexing` | Writes `IndexingEnabled=False` | Removes queued/automatic source and asset hooks immediately; an active run drains to its normal transaction/completion boundary |
+
+Missing state files or keys default to `true`; malformed values still fail closed to `false`. An explicit Stop therefore survives editor restarts, while a fresh checkout starts both services without creating a state file. The state is local under `Saved`, is not project policy, and persists across editor restarts once written. `UMonolithSettings::bMcpServerEnabled`, `bEnableSource`, and `bEnableIndex` remain project-policy gates and cannot be overridden by a Start command.
+
+Index deactivation never blocks existing `ProjectIndex.db` or `EngineSource.db` reads. An active source reindex still owns the source DB until it completes because that writer intentionally closes and atomically reopens the database. The compatibility command `Monolith.StartIndex` does not enable indexing; it can request a full asset index only after `Monolith.StartIndexing`.
+
+---
+
 ## monolith
 
 Core server management and introspection.
@@ -215,13 +232,13 @@ Check for or install Monolith updates from GitHub Releases. Auto-updater hits `h
 
 ### `monolith.reindex`
 
-Re-index the Monolith project database. Incremental by default (delta only). Pass `force=true` for a full wipe + rebuild.
+Re-index the Monolith project database. Incremental by default (delta only). Pass `force=true` for a full wipe + rebuild. The durable indexing state must already be enabled with `Monolith.StartIndexing`; this MCP action never changes operator activation.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `force` | bool | optional | Full wipe + rebuild instead of incremental delta. Default: `false` |
 
-**Returns:** with `UMonolithSettings::bEnableAsyncJobs=true` (default), `status:"started"`, `legacy_status:"reindex_started"`, `job_id`, `poll_action:"monolith.get_job"`, `cancel_action:"monolith.cancel_job"`, `supports_progress:true`, and `cancellable:true`. Polling that job reaches an honest terminal state from the index subsystem: `completed` on successful full/incremental/no-change indexing, `failed` when the indexer cannot start or reports failure, and `cancelled` when cooperative job cancellation is observed. If async jobs are disabled, the legacy response remains `status:"reindex_started"` plus a message. If the async start is rejected before indexing begins, the action response uses `status:"reindex_not_started"` and the returned `job_id` contains the failure details.
+**Returns:** `status:"indexing_disabled"` plus guidance when durable activation is off. With `UMonolithSettings::bEnableAsyncJobs=true` (default) and activation on, `status:"started"`, `legacy_status:"reindex_started"`, `job_id`, `poll_action:"monolith.get_job"`, `cancel_action:"monolith.cancel_job"`, `supports_progress:true`, and `cancellable:true`. Polling that job reaches an honest terminal state from the index subsystem: `completed` on successful full/incremental/no-change indexing, `failed` when the indexer cannot start or reports failure, and `cancelled` when cooperative job cancellation is observed. If async jobs are disabled, the legacy response remains `status:"reindex_started"` plus a message. If the async start is rejected before indexing begins, the action response uses `status:"reindex_not_started"` and the returned `job_id` contains the failure details.
 
 ---
 
@@ -1562,7 +1579,7 @@ Unreal Engine C++ source code navigation. 1M+ symbols indexed. **13 actions** (1
 
 ### `source.trigger_reindex` · `source.trigger_project_reindex`
 
-`trigger_reindex` does a full clean build (engine + shaders + project). `trigger_project_reindex` is incremental (project Source/ + Plugins/ only). Both take *no parameters*. Offline `monolith_query.exe source trigger_project_reindex` returns live-only guidance instead of an unknown-action error; actual indexing still requires the editor-backed MCP action.
+`trigger_reindex` does a full clean build (engine + shaders + project). `trigger_project_reindex` is incremental (project Source/ + Plugins/ only). Both take *no parameters*, require prior durable activation through the editor-console command `Monolith.StartIndexing`, and never enable it implicitly. Offline `monolith_query.exe source trigger_project_reindex` returns live-only guidance instead of an unknown-action error; actual indexing still requires the editor-backed MCP action.
 
 ### `source.impact_radius`
 
@@ -3755,9 +3772,11 @@ Report local project/source index readiness for Monolith bridge searches.
 |-----------|------|----------|-------------|
 | `include_stats` | bool | optional | Include project index stats when available. Default: `false` |
 
+**Returns:** includes top-level `indexing_activation_enabled` in addition to project/source availability and in-flight status. Database availability is independent of that flag.
+
 ### `bridge.start_indexing`
 
-Start local project asset and/or source indexing for bridge search.
+Start local project asset and/or source indexing for bridge search. Requires prior `Monolith.StartIndexing` activation and never changes the persisted flag itself.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|

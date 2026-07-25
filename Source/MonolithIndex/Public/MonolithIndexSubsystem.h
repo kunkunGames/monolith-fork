@@ -71,6 +71,20 @@ public:
 	/** Is indexing currently in progress? */
 	bool IsIndexing() const { return bIsIndexing; }
 
+	/**
+	 * Start the cheapest correct catch-up mode: incremental when the current DB
+	 * supports it, otherwise full. If the Asset Registry is still loading, the
+	 * request is queued until OnFilesLoaded.
+	 */
+	bool StartPreferredIndex();
+
+	/**
+	 * Enable or disable automatic Asset Registry hooks. Disabling is graceful:
+	 * queued/live work is detached immediately, while an active index run is
+	 * allowed to finish so the database cannot be left half-reset.
+	 */
+	void SetAutomaticIndexingEnabled(bool bEnabled);
+
 	/** Get indexing progress (0.0 - 1.0) */
 	float GetProgress() const;
 
@@ -99,6 +113,7 @@ public:
 #if WITH_DEV_AUTOMATION_TESTS
 	void SetActiveAsyncJobForTests(const FString& JobId, const FString& IndexMode);
 	void CompleteActiveAsyncJobForTests(bool bSuccess);
+	void SetIndexingWorkEnabledForTests(bool bEnabled) { bAutomaticIndexingEnabled = bEnabled; }
 #endif
 
 private:
@@ -156,6 +171,7 @@ private:
 	FString ComputeIndexerFleetSignature() const;
 	FString GetDatabasePath() const;
 	bool ShouldAutoIndex() const;
+	bool IsIndexingWorkEnabled() const;
 
 	/** Gather mount paths for enabled marketplace plugins */
 	TArray<FIndexedPluginInfo> GatherMarketplacePluginPaths() const;
@@ -199,6 +215,7 @@ private:
 	TUniquePtr<FRunnableThread> IndexingThread;
 	TUniquePtr<FIndexingTask> IndexingTaskPtr;
 	TAtomic<bool> bIsIndexing{false};
+	bool bAutomaticIndexingEnabled = false;
 	FString ActiveAsyncJobId;
 	FString ActiveAsyncJobMode;
 

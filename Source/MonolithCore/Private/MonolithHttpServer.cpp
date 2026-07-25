@@ -1,4 +1,5 @@
 #include "MonolithHttpServer.h"
+#include "MonolithActivationState.h"
 #include "MonolithActionExecutionGuard.h"
 #include "MonolithCancellationRegistry.h"
 #include "MonolithCoreModule.h"
@@ -181,11 +182,11 @@ bool FMonolithHttpServer::Start(int32 Port)
 		return true;
 	}
 
-	// On a fresh editor launch, the OS keeps the port in TIME_WAIT for up to
-	// 2*MSL (~30s on macOS/Linux) after the previous editor shut down. UE's
-	// HttpServerModule also caches a broken listener internally and won't
-	// rebind until StopAllListeners() is called. Budget ~40s total so a
-	// rapid close+reopen cycle doesn't drop the MCP server on the floor.
+	// On a fresh editor launch, the OS can keep the port in TIME_WAIT after
+	// the previous editor shut down. Budget ~40s total so a rapid close+reopen
+	// cycle does not drop the MCP server. We deliberately do not call the
+	// process-global StopAllListeners(): Monolith owns only its routes, and
+	// stopping unrelated UE HTTP services would violate that ownership boundary.
 	constexpr int32 MaxAttempts = 20;
 	constexpr float BackoffSeconds = 2.0f;
 
@@ -208,9 +209,6 @@ bool FMonolithHttpServer::Start(int32 Port)
 			RouteHandles.Empty();
 			HttpRouter.Reset();
 
-			// Full module reset — the HttpServerModule caches a failed listener
-			// and refuses to re-bind the same port until we explicitly stop it.
-			FHttpServerModule::Get().StopAllListeners();
 		}
 
 		HttpRouter = FHttpServerModule::Get().GetHttpRouter(Port, true);
@@ -255,10 +253,7 @@ bool FMonolithHttpServer::Start(int32 Port)
 
 void FMonolithHttpServer::Stop()
 {
-	if (!bIsRunning)
-	{
-		return;
-	}
+	const bool bWasRunning = bIsRunning;
 
 	if (HttpRouter.IsValid())
 	{
@@ -269,11 +264,18 @@ void FMonolithHttpServer::Stop()
 		RouteHandles.Empty();
 	}
 
-	FHttpServerModule::Get().StopAllListeners();
+	// IHttpRouter exposes route ownership but no per-listener stop. Unbinding
+	// every Monolith route makes the endpoint unavailable while preserving any
+	// unrelated routes/listeners owned by other UE systems.
 	HttpRouter.Reset();
 
 	bIsRunning = false;
-	UE_LOG(LogMonolith, Log, TEXT("Monolith MCP server stopped"));
+	BoundPort = 0;
+	StartTime = FDateTime::MinValue();
+	if (bWasRunning)
+	{
+		UE_LOG(LogMonolith, Log, TEXT("Monolith MCP routes stopped"));
+	}
 }
 
 void FMonolithHttpServer::BindRoutes()
@@ -334,22 +336,7 @@ bool FMonolithHttpServer::ProbePort(int32 Port)
 
 bool FMonolithHttpServer::Restart(int32 Port)
 {
-	// Unbind our routes
-	if (HttpRouter.IsValid())
-	{
-		for (const FHttpRouteHandle& Handle : RouteHandles)
-		{
-			HttpRouter->UnbindRoute(Handle);
-		}
-	}
-	RouteHandles.Empty();
-	HttpRouter.Reset();
-
-	// Full stop — safe here because we own the listener
-	FHttpServerModule::Get().StopAllListeners();
-
-	bIsRunning = false;
-	BoundPort = 0;
+	Stop();
 	return Start(Port);
 }
 
@@ -571,6 +558,9 @@ bool FMonolithHttpServer::HandleHealthCheck(const FHttpServerRequest& Request, c
 	Health->SetNumberField(TEXT("port"), BoundPort);
 	Health->SetNumberField(TEXT("pid"), FPlatformProcess::GetCurrentProcessId());
 	Health->SetStringField(TEXT("version"), MONOLITH_VERSION);
+	const FMonolithActivationSnapshot Activation = FMonolithActivationState::Load();
+	Health->SetBoolField(TEXT("server_activation_enabled"), Activation.bServerEnabled);
+	Health->SetBoolField(TEXT("indexing_activation_enabled"), Activation.bIndexingEnabled);
 
 	const FTimespan Uptime = FDateTime::UtcNow() - StartTime;
 	Health->SetNumberField(TEXT("uptime_seconds"), static_cast<double>(Uptime.GetTotalSeconds()));

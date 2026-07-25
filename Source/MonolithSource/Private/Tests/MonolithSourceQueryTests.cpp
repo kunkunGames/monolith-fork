@@ -887,10 +887,17 @@ bool FSourcePluginDescriptorDiscoveryDeduplicatesNestedSourceDirsTest::RunTest(c
 	{
 		return false;
 	}
+	const int64 IncrementalSymbolCount = CountSourceRows(VerificationDb, TEXT("SELECT COUNT(*) FROM symbols;"));
 	TestEqual(TEXT("incremental case/alias input does not duplicate module rows"),
 		CountSourceRows(VerificationDb, TEXT("SELECT COUNT(*) FROM modules;")), static_cast<int64>(3));
 	TestEqual(TEXT("incremental case/relative spelling preserves one row per normalized source path"),
 		CountSourceRows(VerificationDb, TEXT("SELECT COUNT(*) FROM files;")), static_cast<int64>(4));
+	TestEqual(TEXT("incremental completion leaves one source CRG node per symbol"),
+		CountSourceRows(VerificationDb, TEXT("SELECT COUNT(*) FROM crg_nodes WHERE domain='source';")), IncrementalSymbolCount);
+	TestEqual(TEXT("incremental completion leaves one source CRG metric per symbol"),
+		CountSourceRows(VerificationDb, TEXT(
+			"SELECT COUNT(*) FROM crg_node_metrics m JOIN crg_nodes n ON n.id=m.node_id WHERE n.domain='source';")),
+		IncrementalSymbolCount);
 	TestEqual(TEXT("incremental case/alias input creates no exact duplicate symbols"),
 		CountSourceRows(VerificationDb, TEXT(
 			"SELECT COUNT(*) FROM ("
@@ -1025,7 +1032,7 @@ bool FMonolithReindexCommandletFatalIndexerExitCodeTest::RunTest(const FString& 
 	if (Commandlet)
 	{
 		const FString CommandletParams = FString::Printf(
-			TEXT("-mode=project -db=\"%s\" -projectpath=\"%s\""),
+			TEXT("-mode=project -db=\"%s\" -projectpath=\"%s\" -AllowWhenIndexingDisabled"),
 			*DbPath,
 			*FPaths::ConvertRelativePathToFull(FPaths::ProjectDir()));
 		TestEqual(TEXT("fatal indexer failure returns commandlet exit code 1"), Commandlet->Main(CommandletParams), 1);
@@ -1661,6 +1668,8 @@ bool FSourcePruneIndexedFilesUnderRootsRemovesProjectSliceTest::RunTest(const FS
 	const int64 ReindexedSymbol = Db.InsertSymbol(TEXT("ProjectTouched"), TEXT("Game::ProjectTouched"), TEXT("function"), ReindexedFile, 11, 21, 0, TEXT("public"), TEXT("void ProjectTouched()"), TEXT(""), false);
 	TestTrue(TEXT("project file reinserted after prune"), ReindexedFile > 0);
 	TestTrue(TEXT("project symbol reinserted after prune"), ReindexedSymbol > 0);
+	Db.InsertReference(EngineSymbol, EngineLeafSymbol, TEXT("call"), ReindexedFile, 13);
+	TestEqual(TEXT("project-owned reference with surviving engine endpoints is reinserted"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM \"references\";")), static_cast<int64>(2));
 	const TArray<FMonolithSourceSymbol> Reindexed = Db.GetSymbolsByName(TEXT("ProjectTouched"), TEXT("function"), 10);
 	TestEqual(TEXT("project reindex does not duplicate old project symbol"), Reindexed.Num(), 1);
 	if (Reindexed.Num() == 1)
@@ -1675,8 +1684,9 @@ bool FSourcePruneIndexedFilesUnderRootsRemovesProjectSliceTest::RunTest(const FS
 	TestEqual(TEXT("scoped source CRG refresh mode"), ScopedRefresh->GetStringField(TEXT("refresh_mode")), FString(TEXT("scoped_files")));
 	const TSharedPtr<FJsonObject> ScopedCounts = ScopedRefresh->GetObjectField(TEXT("counts"));
 	TestEqual(TEXT("scoped refresh keeps the changed symbol and both surviving reference endpoints affected"), ScopedCounts->GetNumberField(TEXT("affected_symbols")), 3.0);
+	TestEqual(TEXT("scoped refresh includes references owned by reindexed files even when both endpoints survive"), ScopedCounts->GetNumberField(TEXT("reference_edges_refreshed")), 1.0);
 	TestEqual(TEXT("scoped refresh restores source CRG node parity"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM crg_nodes WHERE domain='source';")), static_cast<int64>(3));
-	TestEqual(TEXT("scoped refresh restores source CRG edge parity"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM crg_edges WHERE domain='source';")), static_cast<int64>(1));
+	TestEqual(TEXT("scoped refresh restores source CRG edge parity"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM crg_edges WHERE domain='source';")), static_cast<int64>(2));
 	TestEqual(TEXT("scoped refresh restores source CRG metric parity"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM crg_node_metrics m JOIN crg_nodes n ON n.id = m.node_id WHERE n.domain='source';")), static_cast<int64>(3));
 
 	TSharedPtr<FJsonObject> Health = Db.ComputeHealth(false, true);
@@ -1702,6 +1712,7 @@ bool FSourcePruneIndexedFilesUnderRootsRemovesProjectSliceTest::RunTest(const FS
 			if (Raw.IsValid())
 			{
 				TestEqual(TEXT("old neighbor caller count recomputed after prune"), Raw->GetNumberField(TEXT("callers")), 0.0);
+				TestEqual(TEXT("project-owned surviving-endpoint reference contributes to refreshed callee count"), Raw->GetNumberField(TEXT("callees")), 2.0);
 			}
 		}
 	}

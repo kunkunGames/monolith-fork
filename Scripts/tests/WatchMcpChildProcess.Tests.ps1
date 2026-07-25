@@ -573,6 +573,14 @@ Describe 'watch_mcp fail-closed mutation gates' {
         $NoBuildBeforeRestart = $false
 
         function Write-Watchdog { param([string]$Message) }
+        function Get-MonolithActivationState {
+            param([string]$Root)
+            return [PSCustomObject]@{
+                ServerEnabled = $true
+                IndexingEnabled = $true
+                StatePath = 'D:\P4\speed\Saved\Monolith\Activation.ini'
+            }
+        }
         function Get-McpHealthPort { return 9316 }
         function Get-MonolithRecoveryPortGate {
             param([int]$Port)
@@ -613,6 +621,14 @@ Describe 'watch_mcp fail-closed mutation gates' {
         $NoBuildBeforeRestart = $false
 
         function Write-Watchdog { param([string]$Message) }
+        function Get-MonolithActivationState {
+            param([string]$Root)
+            return [PSCustomObject]@{
+                ServerEnabled = $true
+                IndexingEnabled = $true
+                StatePath = 'D:\P4\speed\Saved\Monolith\Activation.ini'
+            }
+        }
         function Get-McpHealthPort { return 9316 }
         function Get-MonolithRecoveryPortGate {
             param([int]$Port)
@@ -652,6 +668,14 @@ Describe 'watch_mcp recovery availability ordering' {
         $NoBuildBeforeRestart = $true
 
         function Write-Watchdog { param([string]$Message) }
+        function Get-MonolithActivationState {
+            param([string]$Root)
+            return [PSCustomObject]@{
+                ServerEnabled = $true
+                IndexingEnabled = $true
+                StatePath = 'D:\P4\speed\Saved\Monolith\Activation.ini'
+            }
+        }
         function Get-McpHealthPort { return 9316 }
         function Get-MonolithRecoveryPortGate {
             param([int]$Port)
@@ -722,5 +746,23 @@ Describe 'watch_mcp graph export retirement contract' {
             )) {
             $scriptText.Contains($retiredToken) | Should Be $false
         }
+    }
+
+    It 'keeps explicit editor-down source maintenance on the indexer-owned scoped CRG path' {
+        $pluginRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+        $projectRoot = Split-Path -Parent (Split-Path -Parent $pluginRoot)
+        $postBuildPath = Join-Path $projectRoot 'Build\BatchFiles\PostBuildSourceIndex.bat'
+        Test-Path -LiteralPath $postBuildPath | Should Be $true
+
+        $postBuildText = [System.IO.File]::ReadAllText($postBuildPath)
+        $postBuildText.Contains('MonolithReindex') | Should Be $true
+        $postBuildText.Contains('repair_crg_cache') | Should Be $false
+        $postBuildText.Contains('build_crg_graph') | Should Be $false
+        $postBuildText.Contains('MONOLITH_SKIP_CRG') | Should Be $false
+
+        $targetPath = Join-Path $projectRoot 'Source\SpeedEditor.Target.cs'
+        Test-Path -LiteralPath $targetPath | Should Be $true
+        $targetText = [System.IO.File]::ReadAllText($targetPath)
+        $targetText.Contains('PostBuildSourceIndex.bat') | Should Be $false
     }
 }

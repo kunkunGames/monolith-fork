@@ -14,12 +14,17 @@
  * Invoke:
  *   UnrealEditor-Cmd.exe <Project>.uproject -run=MonolithReindex
  *       [-mode=project|full] [-db=<path>] [-enginesource=<path>]
- *       [-projectpath=<path>] [-clean] -unattended -nullrhi
+ *       [-projectpath=<path>] [-clean] [-AllowWhenIndexingDisabled]
+ *       -unattended -nullrhi
  *
  * Modes:
  *   project (default) — incremental project-only C++ reindex; keeps existing
  *                        engine symbols. Requires EngineSource.db to exist.
  *   full              — engine + shaders + project, clean rebuild.
+ *
+ * Durable indexing activation must be enabled. The explicit
+ * -AllowWhenIndexingDisabled switch permits one maintenance run without
+ * changing the persisted state.
  *
  * Exit code: 0 on success, 1 on failure (errors, or DB not produced).
  */

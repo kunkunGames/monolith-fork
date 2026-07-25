@@ -31,6 +31,12 @@ public:
 	/** Incremental project-only reindex: loads existing engine symbols, indexes only project C++ source. */
 	void TriggerProjectReindex();
 
+	/** Start project-only indexing when the DB exists, otherwise bootstrap a full source index. */
+	bool StartPreferredIndex();
+
+	/** Enable/disable hot-reload auto-index hooks without closing the read database. */
+	void SetAutomaticIndexingEnabled(bool bEnabled);
+
 	/** Is indexing currently running? */
 	bool IsIndexing() const { return bIsIndexing; }
 
@@ -42,10 +48,13 @@ private:
 	FString GetEngineShaderPath() const;
 	FString GetProjectPath() const;
 	bool EnsureDatabaseOpen();
+	bool IsIndexingWorkEnabled() const;
+	bool TriggerReindexInternal();
+	bool TriggerProjectReindexInternal();
 	bool TryOpenDatabaseWithRetry(const FString& DbPath, const TCHAR* Context);
 	void ReopenDatabase(const FString& DbPath);
 	void FinishIndexingOnGameThread(const FString& DbPath, const FString& Context,
-		int32 Files, int32 Symbols, int32 Errors, bool bSucceeded);
+		int32 Files, int32 Symbols, int32 Errors, bool bSucceeded, bool bRequiresFullCrgRebuild);
 
 	/**
 	 * F17 (2026-04-26): Auto-reindex hook. Fires when Live Coding / hot-reload completes.
@@ -62,6 +71,7 @@ private:
 	TAtomic<bool> bIsIndexing{false};
 	TAtomic<bool> bIsDeinitializing{false};
 	TAtomic<bool> bDatabaseRequiresSuccessfulReindex{false};
+	bool bAutomaticIndexingEnabled = false;
 
 	/** F17: Handle into FCoreUObjectDelegates::ReloadCompleteDelegate; cleared on Deinitialize. */
 	FDelegateHandle ReloadCompleteHandle;

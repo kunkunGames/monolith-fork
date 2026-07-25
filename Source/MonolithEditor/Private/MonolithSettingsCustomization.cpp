@@ -1,4 +1,5 @@
 #include "MonolithSettingsCustomization.h"
+#include "MonolithActivationState.h"
 #include "MonolithSettings.h"
 #include "MonolithIndexSubsystem.h"
 #include "MonolithSourceSubsystem.h"
@@ -32,8 +33,15 @@ void FMonolithSettingsCustomization::CustomizeDetails(IDetailLayoutBuilder& Deta
 		[
 			SNew(SButton)
 			.Text(LOCTEXT("ReindexProjectBtn", "Re-Index Now"))
+			.ToolTipText(LOCTEXT(
+				"ReindexProjectTooltip",
+				"Requires persistent indexing activation. Run Monolith.StartIndexing in the editor console first."))
 			.IsEnabled_Lambda([]()
 			{
+				if (!FMonolithActivationState::IsIndexingEnabled())
+				{
+					return false;
+				}
 				if (GEditor)
 				{
 					if (auto* Sub = GEditor->GetEditorSubsystem<UMonolithIndexSubsystem>())
@@ -68,8 +76,15 @@ void FMonolithSettingsCustomization::CustomizeDetails(IDetailLayoutBuilder& Deta
 		[
 			SNew(SButton)
 			.Text(LOCTEXT("ReindexEngineBtn", "Re-Index Now"))
+			.ToolTipText(LOCTEXT(
+				"ReindexEngineTooltip",
+				"Requires persistent indexing activation. Run Monolith.StartIndexing in the editor console first."))
 			.IsEnabled_Lambda([]()
 			{
+				if (!FMonolithActivationState::IsIndexingEnabled())
+				{
+					return false;
+				}
 				if (GEditor)
 				{
 					if (auto* Sub = GEditor->GetEditorSubsystem<UMonolithSourceSubsystem>())

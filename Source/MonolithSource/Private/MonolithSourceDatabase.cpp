@@ -3899,17 +3899,6 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RefreshCrgCacheForFiles(const T
 		AddNextActions(Root, { TEXT("source.trigger_reindex"), TEXT("source.health") });
 		return Root;
 	}
-	if (FileIds.Num() == 0)
-	{
-		Root->SetStringField(TEXT("status"), TEXT("ok"));
-		Root->SetStringField(TEXT("summary"), TEXT("No indexed source files; skipped scoped source CRG refresh."));
-		Root->SetStringField(TEXT("refresh_mode"), TEXT("skipped"));
-		Root->SetArrayField(TEXT("warnings"), Warnings);
-		Root->SetBoolField(TEXT("truncated"), false);
-		AddNextActions(Root, { TEXT("source.health"), TEXT("source.risk_score"), TEXT("source.review_context") });
-		return Root;
-	}
-
 	auto ObjectExists = [&](const TCHAR* Type, const TCHAR* Name) -> bool
 	{
 		FSQLitePreparedStatement Stmt;
@@ -3934,6 +3923,16 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RefreshCrgCacheForFiles(const T
 		Root->SetArrayField(TEXT("warnings"), Warnings);
 		Root->SetBoolField(TEXT("truncated"), false);
 		AddNextActions(Root, { TEXT("source.repair_crg_cache execute=true"), TEXT("source.health") });
+		return Root;
+	}
+	if (FileIds.Num() == 0)
+	{
+		Root->SetStringField(TEXT("status"), TEXT("ok"));
+		Root->SetStringField(TEXT("summary"), TEXT("No indexed source files; skipped scoped source CRG refresh."));
+		Root->SetStringField(TEXT("refresh_mode"), TEXT("skipped"));
+		Root->SetArrayField(TEXT("warnings"), Warnings);
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNextActions(Root, { TEXT("source.health"), TEXT("source.risk_score"), TEXT("source.review_context") });
 		return Root;
 	}
 
@@ -4058,11 +4057,23 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RefreshCrgCacheForFiles(const T
 	Exec(TEXT(
 		"INSERT OR IGNORE INTO monolith_source_crg_reference_ids(id) "
 		"SELECT id FROM \"references\" "
+		"WHERE file_id IN (SELECT id FROM monolith_source_crg_files);"), TEXT("reference ids owned by scoped files"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_source_crg_reference_ids(id) "
+		"SELECT id FROM \"references\" "
 		"WHERE from_symbol_id IN (SELECT id FROM monolith_source_crg_seed_symbols);"), TEXT("reference ids from seed symbols"));
 	Exec(TEXT(
 		"INSERT OR IGNORE INTO monolith_source_crg_reference_ids(id) "
 		"SELECT id FROM \"references\" "
 		"WHERE to_symbol_id IN (SELECT id FROM monolith_source_crg_seed_symbols);"), TEXT("reference ids to seed symbols"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_source_crg_refresh_symbols(id) "
+		"SELECT from_symbol_id FROM \"references\" "
+		"WHERE id IN (SELECT id FROM monolith_source_crg_reference_ids);"), TEXT("reference source symbols owned by scoped refresh"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_source_crg_refresh_symbols(id) "
+		"SELECT to_symbol_id FROM \"references\" "
+		"WHERE id IN (SELECT id FROM monolith_source_crg_reference_ids);"), TEXT("reference target symbols owned by scoped refresh"));
 	Exec(TEXT(
 		"INSERT OR IGNORE INTO monolith_source_crg_inheritance_ids(id) "
 		"SELECT id FROM inheritance "
