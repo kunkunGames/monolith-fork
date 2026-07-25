@@ -252,6 +252,27 @@ bool FMonolithMaterialValidPackagePathTest::RunTest(
 			FindObject<UObject>(Package, *AssetName));
 	}
 
+	const FString CollisionTextureFolder =
+		MakeUniquePackagePath(TEXT("PbrCollisionTextures"));
+	const int32 TexturePackagesBefore =
+		CountLoadedPackagesWithPrefix(CollisionTextureFolder + TEXT("/"));
+	const FMonolithActionResult CollisionResult =
+		FMonolithMaterialActions::CreatePbrMaterialFromDisk(
+			MakePbrParams(PackageName, CollisionTextureFolder));
+	TestFalse(
+		TEXT("PBR creation rejects an existing material when replacement is disabled"),
+		CollisionResult.bSuccess);
+	TestTrue(
+		TEXT("the collision is reported before the invalid source file is inspected"),
+		CollisionResult.ErrorMessage.Contains(TEXT("Material already exists")));
+	TestEqual(
+		TEXT("the early material collision imports no texture packages"),
+		CountLoadedPackagesWithPrefix(CollisionTextureFolder + TEXT("/")),
+		TexturePackagesBefore);
+	TestTrue(
+		TEXT("the existing material remains registered after collision rejection"),
+		UEditorAssetLibrary::DoesAssetExist(PackageName));
+
 	// Let the editor process the save notification before deletion, then let the
 	// delete notification settle before the test completes. Deleting in the same
 	// frame as SavePackage races DirectoryWatcher and leaves a stale registry hit.

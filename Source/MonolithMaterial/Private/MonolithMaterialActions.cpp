@@ -8058,6 +8058,33 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 		TextureBaseName = TextureBaseName.Mid(3);
 	}
 
+	// Reject all material-only preflight failures before importing any textures.
+	// Keep replacement deletion in Phase 2 so a failed import cannot destroy the
+	// existing material.
+	if (!bReplaceExisting && UEditorAssetLibrary::DoesAssetExist(MaterialPath))
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Material already exists at '%s'. Set replace_existing: true to overwrite."),
+			*MaterialPath));
+	}
+
+	FString EnumError;
+	EMaterialDomain Domain;
+	if (!ParseEnum<EMaterialDomain>(DomainStr, Domain, EnumError))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("material_domain: %s"), *EnumError));
+	}
+	EBlendMode BlendMode;
+	if (!ParseEnum<EBlendMode>(BlendModeStr, BlendMode, EnumError))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("blend_mode: %s"), *EnumError));
+	}
+	EMaterialShadingModel ShadingModel;
+	if (!ParseEnum<EMaterialShadingModel>(ShadingModelStr, ShadingModel, EnumError))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("shading_model: %s"), *EnumError));
+	}
+
 	const TMap<FString, FPBRMapSettings>& SettingsTable = GetPBRMapSettingsTable();
 
 	// ========================================================================
@@ -8140,38 +8167,11 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 	// Phase 2 — Create material
 	// ========================================================================
 
-	// Handle replace_existing for the material
-	if (bReplaceExisting)
+	// The non-replacement collision was rejected before Phase 1. Delay the
+	// destructive replacement path until at least one texture has imported.
+	if (bReplaceExisting && UEditorAssetLibrary::DoesAssetExist(MaterialPath))
 	{
-		if (UEditorAssetLibrary::DoesAssetExist(MaterialPath))
-		{
-			UEditorAssetLibrary::DeleteAsset(MaterialPath);
-		}
-	}
-	else
-	{
-		if (UEditorAssetLibrary::DoesAssetExist(MaterialPath))
-		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("Material already exists at '%s'. Set replace_existing: true to overwrite."), *MaterialPath));
-		}
-	}
-
-	// Parse enums
-	FString EnumError;
-	EMaterialDomain Domain;
-	if (!ParseEnum<EMaterialDomain>(DomainStr, Domain, EnumError))
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("material_domain: %s"), *EnumError));
-	}
-	EBlendMode BlendMode;
-	if (!ParseEnum<EBlendMode>(BlendModeStr, BlendMode, EnumError))
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("blend_mode: %s"), *EnumError));
-	}
-	EMaterialShadingModel ShadingModel;
-	if (!ParseEnum<EMaterialShadingModel>(ShadingModelStr, ShadingModel, EnumError))
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("shading_model: %s"), *EnumError));
+		UEditorAssetLibrary::DeleteAsset(MaterialPath);
 	}
 
 	// Create package and material

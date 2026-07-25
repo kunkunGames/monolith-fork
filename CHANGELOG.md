@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- **Material creation actions now reject malformed destination package paths before doing work.** Material, material-instance, material-function, PBR-from-disk, and function-instance creation validate their destination paths up front; the compound PBR action also validates its texture destination folder before importing files, and normal new-asset existence probes no longer log failed loads.
+- **Material creation actions now reject malformed destination package paths before doing work.** Material, material-instance, material-function, PBR-from-disk, and function-instance creation validate their destination paths up front; the compound PBR action also validates its texture destination folder, enum options, and non-replacement material collision before importing files, and normal new-asset existence probes no longer log failed loads.
 
 ## [0.21.2] - 2026-07-22
 
