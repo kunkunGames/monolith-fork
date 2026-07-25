@@ -395,7 +395,13 @@ FMonolithActionResult FMonolithLevelDesignHorrorActions::FindAmbushPoints(const 
 	}
 
 	double LateralRange = 500.0;
-	Params->TryGetNumberField(TEXT("lateral_range"), LateralRange);
+	if (Params->TryGetNumberField(TEXT("lateral_range"), LateralRange))
+	{
+		if (LateralRange > 10000.0)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("lateral_range must be <= 10000.0, got %f"), LateralRange));
+		}
+	}
 
 	double ConcealmentThreshold = 0.7;
 	Params->TryGetNumberField(TEXT("concealment_threshold"), ConcealmentThreshold);
