@@ -88,7 +88,11 @@ In your module's `Actions.cpp`:
 TSharedPtr<FJsonObject> FMonolithFooActions::HandleMyAction(const TSharedPtr<FJsonObject>& Params)
 {
     // Extract params
-    FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+    FString AssetPath;
+    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+    {
+        return FMonolithActionResult::Error(TEXT("Missing asset_path"));
+    }
 
     // Do work (on game thread — handlers run on game thread via AsyncTask)
 
