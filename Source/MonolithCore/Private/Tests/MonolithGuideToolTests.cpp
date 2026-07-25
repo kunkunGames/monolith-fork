@@ -131,8 +131,6 @@ bool FMonolithGuideUnknownSectionTest::RunTest(const FString& /*Parameters*/)
 	return true;
 }
 
-#endif // WITH_DEV_AUTOMATION_TESTS
-
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FMonolithGuideInvalidSectionTest,
 	"Monolith.Core.Guide.InvalidSectionParam",
@@ -148,3 +146,5 @@ bool FMonolithGuideInvalidSectionTest::RunTest(const FString& /*Parameters*/)
 		Result.ErrorMessage.Contains(TEXT("must be a string")));
 	return true;
 }
+
+#endif // WITH_DEV_AUTOMATION_TESTS
