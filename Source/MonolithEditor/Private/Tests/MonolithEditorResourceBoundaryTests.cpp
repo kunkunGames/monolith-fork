@@ -44,7 +44,9 @@ namespace
 			{
 				return false;
 			}
-			const TSharedPtr<FJsonObject> CurrentRun = StatusResult.Result->GetObjectField(TEXT("current_run"));
+			const TSharedPtr<FJsonObject>* CurrentRunPtr = nullptr;
+			if (!StatusResult.Result->TryGetObjectField(TEXT("current_run"), CurrentRunPtr) || !CurrentRunPtr || !(*CurrentRunPtr).IsValid()) { return false; }
+			const TSharedPtr<FJsonObject> CurrentRun = *CurrentRunPtr;
 			if (!CurrentRun.IsValid() || !CurrentRun->TryGetStringField(TEXT("run_id"), OutSnapshot.CurrentRunId))
 			{
 				return false;
@@ -57,7 +59,9 @@ namespace
 			{
 				return false;
 			}
-			const TSharedPtr<FJsonObject> LastRun = StatusResult.Result->GetObjectField(TEXT("last_run"));
+			const TSharedPtr<FJsonObject>* LastRunPtr = nullptr;
+			if (!StatusResult.Result->TryGetObjectField(TEXT("last_run"), LastRunPtr) || !LastRunPtr || !(*LastRunPtr).IsValid()) { return false; }
+			const TSharedPtr<FJsonObject> LastRun = *LastRunPtr;
 			if (!LastRun.IsValid() || !LastRun->TryGetStringField(TEXT("run_id"), OutSnapshot.LastRunId))
 			{
 				return false;
