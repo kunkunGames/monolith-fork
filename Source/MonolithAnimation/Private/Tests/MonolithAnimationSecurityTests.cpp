@@ -584,4 +584,35 @@ bool FMonolithAnimationAddEvaluateChooserNodeParamGuardTest::RunTest(const FStri
 	return true;
 }
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAddPoseSearchNotifyParamGuardTest, "Monolith.ParamGuard.Animation.AddPoseSearchNotify", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithAddPoseSearchNotifyParamGuardTest::RunTest(const FString& Parameters)
+{
+	if (!FMonolithToolRegistry::Get().HasAction(TEXT("animation"), TEXT("add_pose_search_notify")))
+	{
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("animation"), TEXT("add_pose_search_notify"), Params);
+	TestFalse(TEXT("Missing anim_path should return Error"), Result.bSuccess);
+
+	Params->SetStringField(TEXT("anim_path"), TEXT("/Game/Anims/MyAnim"));
+	Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("animation"), TEXT("add_pose_search_notify"), Params);
+	TestFalse(TEXT("Missing notify_kind should return Error"), Result.bSuccess);
+
+	Params->SetNumberField(TEXT("anim_path"), 123);
+	Params->SetStringField(TEXT("notify_kind"), TEXT("ExcludeFromDatabase"));
+	Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("animation"), TEXT("add_pose_search_notify"), Params);
+	TestFalse(TEXT("Malformed anim_path should return Error"), Result.bSuccess);
+
+	Params->SetStringField(TEXT("anim_path"), TEXT("/Game/Anims/MyAnim"));
+	Params->SetNumberField(TEXT("notify_kind"), 123);
+	Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("animation"), TEXT("add_pose_search_notify"), Params);
+	TestFalse(TEXT("Malformed notify_kind should return Error"), Result.bSuccess);
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

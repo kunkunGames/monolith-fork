@@ -1996,8 +1996,17 @@ static UClass* ResolvePoseSearchNotifyClass(const FString& Kind)
 
 static FMonolithActionResult HandleAddPoseSearchNotify(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AnimPath = Params->GetStringField(TEXT("anim_path"));
-	FString NotifyKind = Params->GetStringField(TEXT("notify_kind"));
+	FString AnimPath;
+	if (!Params->TryGetStringField(TEXT("anim_path"), AnimPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'anim_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FString NotifyKind;
+	if (!Params->TryGetStringField(TEXT("notify_kind"), NotifyKind))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'notify_kind' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	double StartTimeDouble = 0.0;
 	if (!Params->TryGetNumberField(TEXT("start_time"), StartTimeDouble))
