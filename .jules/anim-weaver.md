@@ -42,3 +42,8 @@ AnimWeaver PRs improve animation and PoseSearch action safety while preserving t
 **Learning:** General instructions in `AGENTS.md` to avoid generic placeholder names and random suffixes are often missed by agents unless directly included in their specific `.jules/<agent>.md` instructions. When an agent creates a PR title of "concise animation-domain improvement.", it is echoing the prompt's instructions rather than describing the actual change.
 **Prevention:** Always replace the PR title placeholder with a concrete description of the change. Never append numeric task IDs or UUIDs to branch names to evade collision checks. If your chosen branch name is taken, stop without PR instead of renaming it.
 **Avoid:** Using `AnimWeaver: concise animation-domain improvement.` as a PR title or generating branches with `-<number>` suffixes.
+## 2026-07-25 - Stop emitting template-echo titles like "concise animation-domain improvement"
+**Coordination issue:** AnimWeaver continued to submit PRs using the generic template-echo title "AnimWeaver: concise animation-domain improvement." (e.g. PR #1912) despite the previous rule.
+**Learning:** The previous instruction to "replace the PR title placeholder" was not explicit enough to prevent the exact literal string "concise animation-domain improvement." from being used as a fallback. Agents need an explicit rejection of that specific string.
+**Prevention:** You must explicitly check your proposed PR title before submission. If your title contains the literal string "concise animation-domain improvement", you MUST change it to describe the actual work (e.g., `AnimWeaver: harden blendspace array inputs`).
+**Avoid:** Using the exact phrase "concise animation-domain improvement" anywhere in your PR title.
