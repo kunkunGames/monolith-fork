@@ -1,10 +1,10 @@
 #include "CoreMinimal.h"
 #include "Dom/JsonObject.h"
-#include "HAL/FileManager.h"
+#include "EditorAssetLibrary.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/PackageName.h"
-#include "Misc/ScopeExit.h"
 #include "MonolithMaterialActions.h"
+#include "Tests/AutomationCommon.h"
 #include "UObject/Package.h"
 #include "UObject/UObjectIterator.h"
 
@@ -88,25 +88,46 @@ namespace MonolithMaterialPathValidationTest
 		return Params;
 	}
 
-	static void CleanupAsset(
-		const FString& PackageName,
-		const FString& AssetName)
+	static FString MakeUniquePackagePath(const TCHAR* AssetPrefix)
 	{
-		if (UPackage* Package = FindPackage(nullptr, *PackageName))
-		{
-			if (UObject* Asset = FindObject<UObject>(Package, *AssetName))
-			{
-				Asset->ClearFlags(RF_Public | RF_Standalone);
-				Asset->MarkAsGarbage();
-			}
-		}
+		return FString::Printf(
+			TEXT("/Game/Tests/Monolith/Material/%s_%s"),
+			AssetPrefix,
+			*FGuid::NewGuid().ToString(EGuidFormats::Digits));
+	}
 
+	DEFINE_LATENT_AUTOMATION_COMMAND_TWO_PARAMETER(
+		FDeleteMaterialFixtureCommand,
+		FString,
+		PackageName,
+		FAutomationTestBase*,
+		Test);
+
+	bool FDeleteMaterialFixtureCommand::Update()
+	{
+		const bool bDeleted =
+			!UEditorAssetLibrary::DoesAssetExist(PackageName) ||
+			UEditorAssetLibrary::DeleteAsset(PackageName);
 		CollectGarbage(RF_NoFlags);
+		Test->TestTrue(
+			TEXT("the uniquely named material fixture is removed through the editor asset API"),
+			bDeleted && !UEditorAssetLibrary::DoesAssetExist(PackageName));
+		return true;
+	}
 
-		const FString Filename = FPackageName::LongPackageNameToFilename(
-			PackageName,
-			FPackageName::GetAssetPackageExtension());
-		IFileManager::Get().Delete(*Filename, false, true, true);
+	DEFINE_LATENT_AUTOMATION_COMMAND_TWO_PARAMETER(
+		FVerifyMaterialFixtureRemovedCommand,
+		FString,
+		PackageName,
+		FAutomationTestBase*,
+		Test);
+
+	bool FVerifyMaterialFixtureRemovedCommand::Update()
+	{
+		Test->TestFalse(
+			TEXT("the deleted material fixture stays absent after file notifications settle"),
+			UEditorAssetLibrary::DoesAssetExist(PackageName));
+		return true;
 	}
 }
 
@@ -214,14 +235,8 @@ bool FMonolithMaterialValidPackagePathTest::RunTest(
 {
 	using namespace MonolithMaterialPathValidationTest;
 
-	const FString PackageName =
-		TEXT("/Game/Tests/Monolith/Material/M_ValidPackagePath");
-	const FString AssetName = TEXT("M_ValidPackagePath");
-	CleanupAsset(PackageName, AssetName);
-	ON_SCOPE_EXIT
-	{
-		CleanupAsset(PackageName, AssetName);
-	};
+	const FString PackageName = MakeUniquePackagePath(TEXT("M_ValidPackagePath"));
+	const FString AssetName = FPackageName::GetLongPackageAssetName(PackageName);
 
 	const FMonolithActionResult Result =
 		FMonolithMaterialActions::CreateMaterial(
@@ -236,6 +251,16 @@ bool FMonolithMaterialValidPackagePathTest::RunTest(
 			TEXT("the valid package contains the requested material"),
 			FindObject<UObject>(Package, *AssetName));
 	}
+
+	// Let the editor process the save notification before deletion, then let the
+	// delete notification settle before the test completes. Deleting in the same
+	// frame as SavePackage races DirectoryWatcher and leaves a stale registry hit.
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(
+		FDeleteMaterialFixtureCommand(PackageName, this));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(
+		FVerifyMaterialFixtureRemovedCommand(PackageName, this));
 	return true;
 }
 
