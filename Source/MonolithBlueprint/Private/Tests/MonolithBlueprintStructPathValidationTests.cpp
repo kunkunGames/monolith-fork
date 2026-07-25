@@ -1,7 +1,7 @@
 #include "CoreMinimal.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
-#include "HAL/FileManager.h"
+#include "EditorAssetLibrary.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/PackageName.h"
 #include "Misc/ScopeExit.h"
@@ -88,7 +88,7 @@ namespace MonolithBlueprintStructPathValidationTest
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("save_path"), SavePath);
-		Params->SetStringField(TEXT("class_name"), TEXT("DataAsset"));
+		Params->SetStringField(TEXT("class_name"), TEXT("CurveFloat"));
 		Params->SetBoolField(TEXT("skip_save"), true);
 		return Params;
 	}
@@ -101,25 +101,24 @@ namespace MonolithBlueprintStructPathValidationTest
 		return Params;
 	}
 
-	static void CleanupAsset(
-		const FString& PackageName,
-		const FString& AssetName)
+	static FString MakeUniquePackagePath(const TCHAR* AssetPrefix)
 	{
-		const FString Filename = FPackageName::LongPackageNameToFilename(
-			PackageName,
-			FPackageName::GetAssetPackageExtension());
-		IFileManager::Get().Delete(*Filename, false, true, true);
+		return FString::Printf(
+			TEXT("/Game/Tests/Monolith/Blueprint/%s_%s"),
+			AssetPrefix,
+			*FGuid::NewGuid().ToString(EGuidFormats::Digits));
+	}
 
-		if (UPackage* Package = FindPackage(nullptr, *PackageName))
+	static bool CleanupCreatedAsset(const FString& PackageName)
+	{
+		if (!UEditorAssetLibrary::DoesAssetExist(PackageName))
 		{
-			if (UObject* Asset = FindObject<UObject>(Package, *AssetName))
-			{
-				Asset->ClearFlags(RF_Public | RF_Standalone);
-				Asset->MarkAsGarbage();
-			}
+			return true;
 		}
 
+		const bool bDeleted = UEditorAssetLibrary::DeleteAsset(PackageName);
 		CollectGarbage(RF_NoFlags);
+		return bDeleted && !UEditorAssetLibrary::DoesAssetExist(PackageName);
 	}
 }
 
@@ -191,21 +190,22 @@ bool FMonolithBlueprintStructValidPathTest::RunTest(
 {
 	using namespace MonolithBlueprintStructPathValidationTest;
 
-	const FString PackageName =
-		TEXT("/Game/Tests/Monolith/Blueprint/S_ValidPackagePath");
-	const FString AssetName = TEXT("S_ValidPackagePath");
-
-	CleanupAsset(PackageName, AssetName);
+	// Use the handler's explicit skip_save contract so this fixture never creates
+	// a file-system event that can race Asset Registry deletion during teardown.
+	const FString PackageName = MakeUniquePackagePath(TEXT("DA_ValidPackagePath"));
+	const FString AssetName = FPackageName::GetLongPackageAssetName(PackageName);
 	ON_SCOPE_EXIT
 	{
-		CleanupAsset(PackageName, AssetName);
+		TestTrue(
+			TEXT("the uniquely named test asset is removed through the editor asset API"),
+			CleanupCreatedAsset(PackageName));
 	};
 
 	const FMonolithActionResult Result =
-		FMonolithBlueprintStructActions::HandleCreateUserDefinedStruct(
-			MakeStructParams(PackageName));
+		FMonolithBlueprintStructActions::HandleCreateDataAsset(
+			MakeDataAssetParams(PackageName));
 
-	TestTrue(TEXT("a valid long package name still creates the asset"), Result.bSuccess);
+	TestTrue(TEXT("a valid long package name still creates an unsaved test asset"), Result.bSuccess);
 	UPackage* Package = FindPackage(nullptr, *PackageName);
 	TestNotNull(TEXT("the valid package exists"), Package);
 	if (Package)
