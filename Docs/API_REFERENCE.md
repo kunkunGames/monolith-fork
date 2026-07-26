@@ -130,16 +130,16 @@ These releases added the `level_sequence` namespace, the `bulk_fill` / `describe
 
 ## Editor console service activation
 
-The MCP HTTP endpoint and all automatic source/asset indexing default to on when a fresh checkout has no local activation state. These are editor console commands, not MCP actions, so `Monolith.StartServer` remains usable from the editor console after an explicit Stop has removed the HTTP endpoint:
+`UMonolithSettings::bServerEnabledByDefault` and `bIndexingEnabledByDefault` define the project defaults in `Config/DefaultMonolith.ini` (both ship as true). These are editor console commands, not MCP actions, so `Monolith.StartServer` remains usable from the editor console after an explicit Stop has removed the HTTP endpoint:
 
 | Command | Persistent effect | Immediate effect |
 |---------|-------------------|------------------|
-| `Monolith.StartServer` | Writes `ServerEnabled=True` to `Saved/Monolith/Activation.ini` | Starts Monolith's `/mcp` and `/health` routes on the configured port |
+| `Monolith.StartServer` | Writes `[Monolith.UserActivation] ServerEnabled=True` to generated `Saved/Config/WindowsEditor/Monolith.ini` | Starts Monolith's `/mcp` and `/health` routes on the configured port |
 | `Monolith.StopServer` | Writes `ServerEnabled=False` | Removes the Monolith routes and sentinel immediately; unrelated UE HTTP routes/listeners are not globally stopped |
 | `Monolith.StartIndexing` | Writes `IndexingEnabled=True` | Enables source hot-reload and asset-registry hooks, starts project-source incremental/full bootstrap as needed, and starts the cheapest correct asset catch-up mode |
 | `Monolith.StopIndexing` | Writes `IndexingEnabled=False` | Removes queued/automatic source and asset hooks immediately; an active run drains to its normal transaction/completion boundary |
 
-Missing state files or keys default to `true`; malformed values still fail closed to `false`. An explicit Stop therefore survives editor restarts, while a fresh checkout starts both services without creating a state file. The state is local under `Saved`, is not project policy, and persists across editor restarts once written. `UMonolithSettings::bMcpServerEnabled`, `bEnableSource`, and `bEnableIndex` remain project-policy gates and cannot be overridden by a Start command.
+A missing user key inherits its matching project default; malformed user values fail closed to `false`. An explicit Stop therefore survives editor restarts and is local to that checkout/user, while project teams can change the initial policy without manufacturing user state. Older `Saved/Monolith/Activation.ini` choices migrate once into the generated config. `UMonolithSettings::bMcpServerEnabled`, `bEnableSource`, and `bEnableIndex` remain hard project-policy gates and cannot be overridden by a Start command.
 
 Index deactivation never blocks existing `ProjectIndex.db` or `EngineSource.db` reads. An active source reindex still owns the source DB until it completes because that writer intentionally closes and atomically reopens the database. The compatibility command `Monolith.StartIndex` does not enable indexing; it can request a full asset index only after `Monolith.StartIndexing`.
 

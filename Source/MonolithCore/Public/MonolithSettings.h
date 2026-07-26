@@ -13,6 +13,20 @@ enum class EMonolithLogVerbosity : uint8
 	VeryVerbose
 };
 
+/**
+ * Effective service activation resolved by UMonolithSettings.
+ *
+ * Project defaults come from Config/DefaultMonolith.ini. Explicit console
+ * choices are per-user overrides in Saved/Config/<Platform>/Monolith.ini.
+ */
+struct MONOLITHCORE_API FMonolithServiceActivation
+{
+	bool bServerEnabled = true;
+	bool bIndexingEnabled = true;
+	bool bServerOverriddenByUser = false;
+	bool bIndexingOverriddenByUser = false;
+};
+
 UCLASS(config=Monolith, defaultconfig, meta=(DisplayName="Monolith"))
 class MONOLITHCORE_API UMonolithSettings : public UDeveloperSettings
 {
@@ -31,6 +45,15 @@ public:
 	 *  kill-switch. Takes effect on next editor restart. (Issue #38) */
 	UPROPERTY(config, EditAnywhere, Category="MCP Server")
 	bool bMcpServerEnabled = true;
+
+	/**
+	 * Project default for the HTTP server when this user has not run
+	 * Monolith.StartServer or Monolith.StopServer. The console commands write
+	 * only the per-user generated Monolith.ini and never change this policy.
+	 */
+	UPROPERTY(config, EditAnywhere, Category="MCP Server|Activation",
+		meta=(DisplayName="Server Enabled By Default"))
+	bool bServerEnabledByDefault = true;
 
 	/** Port for the embedded MCP HTTP server */
 	UPROPERTY(config, EditAnywhere, Category="MCP Server", meta=(ClampMin="1024", ClampMax="65535"))
@@ -201,6 +224,15 @@ public:
 	bool bNotifyUpdateAvailable = true;
 
 	// --- Indexing ---
+
+	/**
+	 * Project default for automatic source and asset indexing when this user
+	 * has not run Monolith.StartIndexing or Monolith.StopIndexing. Existing DB
+	 * reads are independent of this activation setting.
+	 */
+	UPROPERTY(config, EditAnywhere, Category="Indexing|Activation",
+		meta=(DisplayName="Indexing Enabled By Default"))
+	bool bIndexingEnabledByDefault = true;
 
 	/** Content paths to index in addition to /Game. Add plugin mount points like /MyPlugin. */
 	UPROPERTY(config, EditAnywhere, Category="Indexing")
@@ -550,6 +582,28 @@ public:
 
 	static const UMonolithSettings* Get();
 
+	/**
+	 * Resolve the project defaults plus this user's explicit activation
+	 * overrides. A legacy Saved/Monolith/Activation.ini is migrated once.
+	 */
+	static FMonolithServiceActivation GetServiceActivation();
+
+	static bool IsServerActivationEnabled();
+	static bool IsIndexingActivationEnabled();
+
+	/**
+	 * Persist an explicit per-user choice in the generated Monolith.ini
+	 * without modifying Config/DefaultMonolith.ini.
+	 */
+	static bool SetServerActivationEnabled(bool bEnabled, FString* OutError = nullptr);
+	static bool SetIndexingActivationEnabled(bool bEnabled, FString* OutError = nullptr);
+
+	/** Absolute per-user generated config path (Saved/Config/<Platform>/Monolith.ini). */
+	static FString GetUserActivationConfigFilePath();
+
+	/** Absolute path accepted only for one-time migration from older builds. */
+	static FString GetLegacyActivationConfigFilePath();
+
 	/** Returns /Game plus all AdditionalContentPaths as FName array for FARFilter usage */
 	static TArray<FName> GetIndexedContentPaths();
 
@@ -558,4 +612,20 @@ public:
 
 	/** Settings category path */
 	virtual FName GetCategoryName() const override { return FName(TEXT("Plugins")); }
+
+#if WITH_DEV_AUTOMATION_TESTS
+	static FMonolithServiceActivation LoadServiceActivationFromFilesForTests(
+		const FString& UserConfigFilePath,
+		const FString& LegacyConfigFilePath,
+		bool bServerEnabledByProjectDefault,
+		bool bIndexingEnabledByProjectDefault);
+	static bool SetServerActivationInFileForTests(
+		const FString& UserConfigFilePath,
+		bool bEnabled,
+		FString* OutError = nullptr);
+	static bool SetIndexingActivationInFileForTests(
+		const FString& UserConfigFilePath,
+		bool bEnabled,
+		FString* OutError = nullptr);
+#endif
 };

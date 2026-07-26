@@ -1,5 +1,4 @@
 #include "MonolithHttpServer.h"
-#include "MonolithActivationState.h"
 #include "MonolithActionExecutionGuard.h"
 #include "MonolithCancellationRegistry.h"
 #include "MonolithCoreModule.h"
@@ -558,7 +557,7 @@ bool FMonolithHttpServer::HandleHealthCheck(const FHttpServerRequest& Request, c
 	Health->SetNumberField(TEXT("port"), BoundPort);
 	Health->SetNumberField(TEXT("pid"), FPlatformProcess::GetCurrentProcessId());
 	Health->SetStringField(TEXT("version"), MONOLITH_VERSION);
-	const FMonolithActivationSnapshot Activation = FMonolithActivationState::Load();
+	const FMonolithServiceActivation Activation = UMonolithSettings::GetServiceActivation();
 	Health->SetBoolField(TEXT("server_activation_enabled"), Activation.bServerEnabled);
 	Health->SetBoolField(TEXT("indexing_activation_enabled"), Activation.bIndexingEnabled);
 

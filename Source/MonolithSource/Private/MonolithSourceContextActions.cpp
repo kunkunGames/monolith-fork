@@ -4,9 +4,9 @@
 #include "Editor.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
-#include "MonolithActivationState.h"
 #include "MonolithIndexSubsystem.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithSettings.h"
 #include "MonolithParamSchema.h"
 #include "MonolithSourceBridgeHelpers.h"
 #include "MonolithSourceDatabase.h"
@@ -569,7 +569,7 @@ FMonolithActionResult FMonolithSourceContextActions::HandleGetIndexStatus(const 
 	Result->SetBoolField(TEXT("embedding_provider_settings_supported"), false);
 	Result->SetBoolField(
 		TEXT("indexing_activation_enabled"),
-		FMonolithActivationState::IsIndexingEnabled());
+		UMonolithSettings::IsIndexingActivationEnabled());
 
 	TSharedPtr<FJsonObject> ProjectObj = MakeShared<FJsonObject>();
 	ProjectObj->SetBoolField(TEXT("available"), ProjectIndex != nullptr);
@@ -627,7 +627,7 @@ FMonolithActionResult FMonolithSourceContextActions::HandleStartIndexing(const T
 		return FMonolithActionResult::Error(TEXT("'scope' must be 'all', 'assets', or 'source'"), -32602);
 	}
 
-	if (!FMonolithActivationState::IsIndexingEnabled())
+	if (!UMonolithSettings::IsIndexingActivationEnabled())
 	{
 		return FMonolithActionResult::Error(
 			TEXT("Monolith indexing is disabled. Run Monolith.StartIndexing in the editor console before calling bridge.start_indexing."));

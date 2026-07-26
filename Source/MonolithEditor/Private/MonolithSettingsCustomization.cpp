@@ -1,5 +1,4 @@
 #include "MonolithSettingsCustomization.h"
-#include "MonolithActivationState.h"
 #include "MonolithSettings.h"
 #include "MonolithIndexSubsystem.h"
 #include "MonolithSourceSubsystem.h"
@@ -38,7 +37,7 @@ void FMonolithSettingsCustomization::CustomizeDetails(IDetailLayoutBuilder& Deta
 				"Requires persistent indexing activation. Run Monolith.StartIndexing in the editor console first."))
 			.IsEnabled_Lambda([]()
 			{
-				if (!FMonolithActivationState::IsIndexingEnabled())
+				if (!UMonolithSettings::IsIndexingActivationEnabled())
 				{
 					return false;
 				}
@@ -81,7 +80,7 @@ void FMonolithSettingsCustomization::CustomizeDetails(IDetailLayoutBuilder& Deta
 				"Requires persistent indexing activation. Run Monolith.StartIndexing in the editor console first."))
 			.IsEnabled_Lambda([]()
 			{
-				if (!FMonolithActivationState::IsIndexingEnabled())
+				if (!UMonolithSettings::IsIndexingActivationEnabled())
 				{
 					return false;
 				}

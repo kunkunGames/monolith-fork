@@ -1,6 +1,6 @@
 # Offline Parity Benchmark Results
 
-## 2026-07-25 activation-default-on-20260725-02
+## 2026-07-26 activation-settings-rebase-20260726-01
 
 | Item | Value |
 | --- | ---: |
@@ -9,14 +9,14 @@
 | MATCH / DIFF / real ERROR | 311 / 0 / 0 |
 | Expected-error cases | 5 (0 problems) |
 | `version_parity_score` | 1.0 (`2026-05-29.1` on both implementations) |
-| Input fingerprint | `bb0de36be35f842ac3a8c0cc289dcee481abf6d60190a3659e95b88acb49695f` |
-| Accepted evidence | `Benchmarks\OfflineParity\accepted\activation-default-on-20260725-02` |
+| Input fingerprint | `4ad876e8d1840c63d2a9be2e6e14d4982b1ed017fe0b48ddae0cbd9a1afddc64` |
+| Accepted evidence | `Benchmarks\OfflineParity\accepted\activation-settings-rebase-20260726-01` |
 
-This full run pins the database produced after the final default-on activation
-build restarted the editor and automatically completed its source catch-up.
-Native Query and Python matched every comparable action against the resulting
-3.81 GB single-writer `EngineSource.db`; deep health also proved exact native /
-CRG parity and no required maintenance.
+This full run refreshes the accepted input fingerprint after the activation
+settings series was rebased onto the latest `origin/master`. Native Query and
+Python matched every comparable action against the same verified 3.82 GB
+single-writer `EngineSource.db`; the rebase introduced no offline behavior
+drift.
 
 ## 2026-07-25 activation-controls-20260725-01
 

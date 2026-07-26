@@ -1,5 +1,4 @@
 #include "MonolithCoreTools.h"
-#include "MonolithActivationState.h"
 #include "MonolithAsyncJobRegistry.h"
 #include "MonolithParamUtils.h"
 #include "MonolithGuideTool.h"
@@ -2952,7 +2951,7 @@ FMonolithActionResult FMonolithCoreTools::HandleReindex(const TSharedPtr<FJsonOb
 		}
 	}
 
-	if (!FMonolithActivationState::IsIndexingEnabled())
+	if (!UMonolithSettings::IsIndexingActivationEnabled())
 	{
 		Result->SetStringField(TEXT("status"), TEXT("indexing_disabled"));
 		Result->SetStringField(

@@ -142,13 +142,13 @@ Beyond the core tools, the `monolith` namespace carries server-management action
 
 For project work that needs editor-backed Monolith actions, use the configured MCP client connection to `http://localhost:9316/mcp` and confirm it with `monolith_status()` or the active MCP client's health check before calling editor actions.
 
-The HTTP server is enabled by default when a fresh checkout has no activation state. Probe the durable operator state before treating an unreachable endpoint as a failure:
+The HTTP server inherits project `bServerEnabledByDefault` until a generated per-user override exists. Probe the effective activation before treating an unreachable endpoint as a failure:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File Plugins\Monolith\Scripts\recover_mcp.ps1 -ProbeOnly
 ```
 
-`RESULT=MCP_DISABLED` is a healthy no-mutation outcome for an explicitly disabled service, not a crash. It means `Monolith.StopServer` was persisted. Do not force recovery or create a launch loop in that state; an operator must run `Monolith.StartServer` in an editor console. Both choices persist in `Saved\Monolith\Activation.ini`.
+`RESULT=MCP_DISABLED` is a healthy no-mutation outcome for a disabled service, not a crash. Do not force recovery or create a launch loop in that state; an operator must run `Monolith.StartServer` in an editor console. Project defaults live in `Config\DefaultMonolith.ini`; Start/Stop choices persist per user in generated `Saved\Config\WindowsEditor\Monolith.ini`.
 
 If the state is enabled and the endpoint is unreachable or the MCP transport fails, treat it as an editor/server availability issue and start the project wrapper from the checkout root:
 
@@ -228,7 +228,7 @@ The CLI is the MCP-free equivalent of `source_query` / `project_query` / `bridge
 
 ## Source/project index freshness
 
-When a source query fails to show a C++ change that is present on disk, first inspect `bridge.get_index_status.indexing_activation_enabled`. Indexing defaults to enabled when no activation state exists. Existing DB reads remain available after `Monolith.StopIndexing` persists an explicit opt-out, but no source or asset writer is then started. Run `Monolith.StartIndexing` in the editor console before requesting a refresh; the enabled state persists until `Monolith.StopIndexing`.
+When a source query fails to show a C++ change that is present on disk, first inspect `bridge.get_index_status.indexing_activation_enabled`. Indexing inherits project `bIndexingEnabledByDefault` until a per-user choice exists. Existing DB reads remain available after `Monolith.StopIndexing` persists an explicit opt-out, but no source or asset writer is then started. Run `Monolith.StartIndexing` in the editor console before requesting a refresh; the enabled state persists until `Monolith.StopIndexing`.
 
 1. With indexing activation enabled, discover the current `source` reindex action schema through the live catalog, then call the source reindex action when available.
 2. After the reindex reports completion, verify freshness by searching for the touched symbol, filename, or unique changed text through `source_query("search_source", ...)` or `source_query("read_source", ...)`.

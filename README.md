@@ -108,7 +108,7 @@ Query/catalog generation selected by `monolith_query.current.json` during
 editor transport outages. For **Cursor/Cline**, **macOS/Linux**, or the
 **Python fallback**, see the [Installation wiki page](https://github.com/tumourlove/monolith/wiki/Installation).
 
-**3. Connect; services are enabled by default.** The proxy can initialize and expose its read-only fallback before UE starts. Monolith's HTTP server and source/asset indexing both default to **on** when a fresh checkout has no `Saved/Monolith/Activation.ini`. Run `Monolith.StopServer` or `Monolith.StopIndexing` in the editor console to persist an opt-out across restarts; the matching Start command enables that service again. Existing `EngineSource.db` and `ProjectIndex.db` reads remain available while indexing is off.
+**3. Connect; services are enabled by default.** The proxy can initialize and expose its read-only fallback before UE starts. `bServerEnabledByDefault=True` and `bIndexingEnabledByDefault=True` in `Config/DefaultMonolith.ini` are the project defaults. Run `Monolith.StopServer` or `Monolith.StopIndexing` in the editor console to write a per-user override to generated `Saved/Config/WindowsEditor/Monolith.ini`; the matching Start command enables that service again without changing project policy. Existing `EngineSource.db` and `ProjectIndex.db` reads remain available while indexing is off.
 
 macOS / Linux:
 ```json
@@ -280,7 +280,7 @@ Off by default as of v0.14.6. Opt in via **Auto Update Enabled** in Editor Prefe
 
 ## Network exposure
 
-Monolith's HTTP server defaults to **on** when no local activation state exists, and uses port 9316 to receive MCP traffic. UE's `FHttpServerModule` does **not** expose a bind-address parameter, so an active listener is reachable on all network interfaces, not just `127.0.0.1`. CORS is restricted to localhost origins (which blocks browser-based cross-origin reads) but does **not** block direct HTTP requests from other devices on the same LAN.
+Monolith's HTTP server inherits the project `bServerEnabledByDefault` policy (on in the shipped default) when no per-user override exists, and uses port 9316 to receive MCP traffic. UE's `FHttpServerModule` does **not** expose a bind-address parameter, so an active listener is reachable on all network interfaces, not just `127.0.0.1`. CORS is restricted to localhost origins (which blocks browser-based cross-origin reads) but does **not** block direct HTTP requests from other devices on the same LAN.
 
 If you work on an untrusted network, run `Monolith.StopServer` before exposing the machine to that network; the disabled choice persists until `Monolith.StartServer`. For defense in depth, add a Windows Firewall rule blocking inbound TCP on port 9316 from non-loopback addresses. The **MCP Server Enabled** project setting remains a policy kill switch that `Monolith.StartServer` cannot override.
 

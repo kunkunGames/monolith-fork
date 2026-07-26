@@ -405,7 +405,7 @@ Setting names below match the actual `UMonolithSettings` UPROPERTY identifiers i
 | LogVerbosity | 3 (Log) | 0=Silent, 1=Error, 2=Warning, 3=Log, 4=Verbose |
 | bIndexDomainAssets | True | Enable AssetRegistry-only supplemental ProjectIndex rows for graph-like domains such as ControlRig/RigVM, StateTree, and Chooser without loading their UObject graphs. |
 
-**Note:** Module enable toggles are functional — each module checks its toggle at registration time and skips action registration if disabled. **Exception — `bEnableIndex`:** the Index module always registers its query actions (so `project_query` answers from an existing DB); the toggle instead gates the indexing *run* at `UMonolithIndexSubsystem::Initialize`. `bDeferFirstTimeIndex` is retained only for config compatibility and is no longer consulted; a missing activation state enables indexing, while `Monolith.StopIndexing` persists the explicit opt-out.
+**Note:** Module enable toggles are functional — each module checks its toggle at registration time and skips action registration if disabled. **Exception — `bEnableIndex`:** the Index module always registers its query actions (so `project_query` answers from an existing DB); the toggle instead gates the indexing *run* at `UMonolithIndexSubsystem::Initialize`. `bDeferFirstTimeIndex` is retained only for config compatibility and is no longer consulted; a missing per-user activation key inherits project `bIndexingEnabledByDefault`, while `Monolith.StopIndexing` persists the explicit user opt-out in generated `Monolith.ini`.
 
 ---
 

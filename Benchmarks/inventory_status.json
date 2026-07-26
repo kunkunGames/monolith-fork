@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "snapshot_id": "activation-default-on-20260725-02",
+  "snapshot_id": "activation-settings-rebase-20260726-01",
   "suites": {
     "OfflineParity": {
       "state": "accepted",
-      "evidence": "Benchmarks/OfflineParity/accepted/activation-default-on-20260725-02/summary.json",
-      "evidence_bundle_sha256": "420e4084a39e3b34577062f7a1ed021fc10bccd3932f2dde06b8b6be447fe997",
-      "input_fingerprint": "bb0de36be35f842ac3a8c0cc289dcee481abf6d60190a3659e95b88acb49695f",
-      "diagnostic": "Default-on activation and final single-writer EngineSource baseline: 311 MATCH, 0 DIFF, 0 ERROR, 6 explicit decision_id-dependent SKIP. Accepted freshness checks every input file SHA plus the 3.81 GB EngineSource.db content SHA-256; no graph.db input exists.",
+      "evidence": "Benchmarks/OfflineParity/accepted/activation-settings-rebase-20260726-01/summary.json",
+      "evidence_bundle_sha256": "118588dd7b49e965dcfdc66a24bbf38a3da652e8710cbae97b606efb05b1bccc",
+      "input_fingerprint": "4ad876e8d1840c63d2a9be2e6e14d4982b1ed017fe0b48ddae0cbd9a1afddc64",
+      "diagnostic": "Rebased UMonolithSettings activation hierarchy and final single-writer EngineSource baseline: 311 MATCH, 0 DIFF, 0 ERROR, 6 explicit decision_id-dependent SKIP. The accepted bundle fingerprints the post-rebase benchmark inputs plus the verified 3.82 GB EngineSource.db content SHA-256.",
       "namespace_results": {
         "cppreflect": {"pass": 96, "fail": 0, "expected_skip": 0},
         "decision": {"pass": 44, "fail": 0, "expected_skip": 6},

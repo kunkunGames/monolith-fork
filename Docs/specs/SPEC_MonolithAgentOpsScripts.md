@@ -19,7 +19,7 @@ The MCP and index scripts are Windows-host helpers (they drive `RunHeadlessEdito
 
 | Script | Purpose | Writes anything? |
 |---|---|---|
-| `Scripts/monolith_activation_state.ps1` | Shared strict reader for project-local `Saved/Monolith/Activation.ini`; dot-sourced by recovery/watchdog scripts and callable as a CLI feature probe (`server` or `indexing`) | No; the editor console commands remain the only writers |
+| `Scripts/monolith_activation_state.ps1` | Shared strict resolver for plugin/project `DefaultMonolith.ini`, generated per-user `Saved/Config/WindowsEditor/Monolith.ini`, and read-only legacy fallback; dot-sourced by recovery/watchdog scripts and callable as a CLI feature probe (`server` or `indexing`) | No; the editor console commands remain the only writers/migrators |
 | `Scripts/mcp_host_role.ps1` | Shared pure command-line helpers for exact-project durable-host vs planned-exit automation classification; dot-sourced by recovery and watchdog scripts | No |
 | `Scripts/recover_mcp.ps1` | Read durable server activation first; report no-mutation `MCP_DISABLED` while off, otherwise probe MCP `/health` and launch the host project's headless editor wrapper with headless-safe settings when enabled but down | No repo/DB writes; launches an editor process only while server activation is enabled |
 | `Scripts/watch_mcp.ps1` | Long-running activation-aware MCP watchdog; perform no endpoint/build/process mutation while server activation is off, apply bounded availability recovery while on, and run restart/scheduled asset/source maintenance only while indexing activation is also on | Writes UBT/source commandlet logs under `Saved/Monolith/Watchdog/`; may launch or restart a headless editor only while server-enabled; maintenance writes `Saved/ProjectIndex.db` and/or `Saved/EngineSource.db` only while indexing-enabled |
@@ -33,7 +33,7 @@ The MCP and index scripts are Windows-host helpers (they drive `RunHeadlessEdito
 
 ### 2.1 Activation-state reader
 
-`monolith_activation_state.ps1` resolves `<project>\Saved\Monolith\Activation.ini`, reads only `[Monolith.Activation] ServerEnabled/IndexingEnabled`, accepts case-insensitive `true`/`false` and numeric `1`/`0`, defaults missing keys/files to enabled, and fails malformed values closed to disabled. Dot-sourced callers use `Get-MonolithActivationState -Root <project>`. Direct CLI use selects `-Feature server|indexing`: exit `0` means enabled, exit `2` means explicitly disabled or malformed, and exit `3` means the project root cannot be resolved. It never creates or changes the state file.
+`monolith_activation_state.ps1` resolves the same hierarchy as `UMonolithSettings`: built-in true -> `Plugins/Monolith/Config/DefaultMonolith.ini` -> project `Config/DefaultMonolith.ini` for `bServerEnabledByDefault` / `bIndexingEnabledByDefault`, then generated `Saved/Config/WindowsEditor/Monolith.ini` `[Monolith.UserActivation] ServerEnabled/IndexingEnabled`. If a generated key is absent, older `Saved/Monolith/Activation.ini` is a read-only fallback until the editor migrates it. The parser accepts case-insensitive `true`/`false` and numeric `1`/`0`; malformed values fail closed. Dot-sourced callers use `Get-MonolithActivationState -Root <project>`. Direct CLI use selects `-Feature server|indexing`: exit `0` means enabled, exit `2` means disabled or malformed, and exit `3` means the project root cannot be resolved. The script never creates, migrates, or changes config.
 
 ## 3. `recover_mcp.ps1` Contract
 

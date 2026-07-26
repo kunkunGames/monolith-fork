@@ -1,6 +1,6 @@
 # Monolith Benchmark Completion Inventory
 
-Snapshot: `activation-default-on-20260725-02`
+Snapshot: `activation-settings-rebase-20260726-01`
 Catalog contract: `sha256:72abda9f0901c33d` / 61 namespaces / 1863 checked-in actions
 Source of truth: manifests and JSONL corpora under `Benchmarks`, plus `Benchmarks/inventory_status.json` for accepted-run evidence.
 Validation modes are explicit: `--portable-check` rederives tracked accepted bundles in a clean checkout and uses recorded DB attestation only when the DB is absent; `--check` additionally requires every live DB and pending Saved diagnostic and rejects mtime/content drift.
@@ -23,7 +23,7 @@ A diagnostic subset or an interrupted prefix is evidence, but never reduces the 
 
 | Suite | Namespace rows | Items | Pass | Expected skip | Fail | Unverified | Unwritten | State | Gap | Evidence / diagnostic |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- |
-| OfflineParity | 5 | 317 | 311 | 6 | 0 | 0 | 0 | accepted |  | Benchmarks/OfflineParity/accepted/activation-default-on-20260725-02/summary.json; Default-on activation and final single-writer EngineSource baseline: 311 MATCH, 0 DIFF, 0 ERROR, 6 explicit decision_id-dependent SKIP. Accepted freshness checks every input file SHA plus the 3.81 GB EngineSource.db content SHA-256; no graph.db input exists. |
+| OfflineParity | 5 | 317 | 311 | 6 | 0 | 0 | 0 | accepted |  | Benchmarks/OfflineParity/accepted/activation-settings-rebase-20260726-01/summary.json; Rebased UMonolithSettings activation hierarchy and final single-writer EngineSource baseline: 311 MATCH, 0 DIFF, 0 ERROR, 6 explicit decision_id-dependent SKIP. The accepted bundle fingerprints the post-rebase benchmark inputs plus the verified 3.82 GB EngineSource.db content SHA-256. |
 | ActionGuidance | 61 | 569 | 0 | 0 | 0 | 569 | 0 | pending | GAP-ACTION-001 | Saved/Monolith/Benchmarks/ActionGuidance/diagnostic-legacy-migrations/run-02/summary.json; 16/16 retired-action migration subset passed; explicit subset is non-canonical and does not reduce the 454-row full-run gap. |
 | SourceIndex | 1 | 374 | 0 | 0 | 0 | 374 | 0 | pending | GAP-SOURCE-001 | Saved/Monolith/Benchmarks/SourceIndex/audit-20260717-full01/partial_summary.json; 284 valid prefix rows followed by 3 transport failures; interrupted results are non-comparable, so all 374 rows remain unverified. |
 | SchemaCompleteness probe contract | 51 | 329 | 0 | 0 | 0 | 329 | 0 | pending | GAP-SCHEMA-PROBE-001 | The previously reported 329-probe pre-link artifact is not retained locally, so no positive result is claimed. All probe rows remain unverified until the final-linked exact catalog identity is captured and the canonical probe run is retained. |

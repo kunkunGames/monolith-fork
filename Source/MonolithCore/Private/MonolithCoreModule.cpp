@@ -1,5 +1,4 @@
 #include "MonolithCoreModule.h"
-#include "MonolithActivationState.h"
 #include "MonolithHttpServer.h"
 #include "MonolithMcpHostRole.h"
 #include "MonolithSettings.h"
@@ -84,15 +83,15 @@ void FMonolithCoreModule::StartupModule()
 		return;
 	}
 
-	if (!FMonolithActivationState::IsServerEnabled())
+	if (!UMonolithSettings::IsServerActivationEnabled())
 	{
 		UE_LOG(LogMonolith, Log,
 			TEXT("Monolith — HTTP server activation is off; run Monolith.StartServer to enable it persistently"));
 		return;
 	}
 
-	// bMcpServerEnabled remains the project-policy kill switch. The durable
-	// activation flag is local operator intent and cannot override this policy.
+	// bMcpServerEnabled remains the hard project-policy kill switch. The
+	// resolved project-default/per-user activation cannot override this gate.
 	const UMonolithSettings* Settings = UMonolithSettings::Get();
 	if (Settings && !Settings->bMcpServerEnabled)
 	{
@@ -285,7 +284,7 @@ void FMonolithCoreModule::RestartHttpServer()
 	}
 
 	FMonolithCoreModule& Module = Get();
-	if (!FMonolithActivationState::IsServerEnabled())
+	if (!UMonolithSettings::IsServerActivationEnabled())
 	{
 		UE_LOG(LogMonolith, Warning,
 			TEXT("Monolith.Restart: server activation is off; run Monolith.StartServer instead"));
@@ -350,7 +349,7 @@ void FMonolithCoreModule::StartHttpServerCommand()
 	}
 
 	FString Error;
-	if (!FMonolithActivationState::SetServerEnabled(true, &Error))
+	if (!UMonolithSettings::SetServerActivationEnabled(true, &Error))
 	{
 		UE_LOG(LogMonolith, Error, TEXT("Monolith.StartServer: %s"), *Error);
 		return;
@@ -361,7 +360,7 @@ void FMonolithCoreModule::StartHttpServerCommand()
 	{
 		UE_LOG(LogMonolith, Log,
 			TEXT("Monolith.StartServer: server enabled persistently in %s"),
-			*FMonolithActivationState::GetStateFilePath());
+			*UMonolithSettings::GetUserActivationConfigFilePath());
 	}
 	else
 	{
@@ -379,7 +378,7 @@ void FMonolithCoreModule::StopHttpServerCommand()
 	}
 
 	FString Error;
-	const bool bPersisted = FMonolithActivationState::SetServerEnabled(false, &Error);
+	const bool bPersisted = UMonolithSettings::SetServerActivationEnabled(false, &Error);
 
 	FMonolithCoreModule& Module = Get();
 	Module.StopHttpServer();
@@ -388,7 +387,7 @@ void FMonolithCoreModule::StopHttpServerCommand()
 	{
 		UE_LOG(LogMonolith, Log,
 			TEXT("Monolith.StopServer: server stopped and disabled persistently in %s"),
-			*FMonolithActivationState::GetStateFilePath());
+			*UMonolithSettings::GetUserActivationConfigFilePath());
 	}
 	else
 	{

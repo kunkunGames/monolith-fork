@@ -7,7 +7,8 @@ headless editor wrapper when the server is down, wait for the endpoint, report.
 Runs the documented checkout recovery sequence (AGENTS.md section 14 and
 Skills/monolith-mcp) as one deterministic entry point:
 
-  1. Read Saved/Monolith/Activation.ini. When server activation is off,
+  1. Resolve project defaults from DefaultMonolith.ini plus the per-user
+     Saved/Config/WindowsEditor/Monolith.ini override. When activation is off,
      report RESULT=MCP_DISABLED and perform no probe/build/launch mutation.
   2. GET <mcp-url-with-/health> (HealthTimeoutSec, default 5s). The response is healthy only when
      its JSON contract is complete and its PID is an Unreal Editor process for

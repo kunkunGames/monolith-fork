@@ -1,6 +1,6 @@
 {
-  "label": "activation-default-on-20260725-02",
-  "created_at": "2026-07-25T08:18:03.068736+00:00",
+  "label": "activation-settings-rebase-20260726-01",
+  "created_at": "2026-07-26T03:52:16.975087+00:00",
   "ignore_cursor_bytes": false,
   "run_environment": {
     "status": "valid",
@@ -144,8 +144,8 @@
         "path": "Scripts/benchmark_common.py",
         "exists": true,
         "size_bytes": 36090,
-        "mtime_ns": 1784889548488553500,
-        "signature": "36090:1784889548488553500",
+        "mtime_ns": 1785037686096896800,
+        "signature": "36090:1785037686096896800",
         "sha256": "f00473cf9e6e198fdbf1b58c3035ab68e33e814c0351b3e5d387104f3373b9f1"
       },
       "tasks": {
@@ -173,8 +173,8 @@
         "path": "Scripts/offline_parity_benchmark.py",
         "exists": true,
         "size_bytes": 51743,
-        "mtime_ns": 1784889548490551700,
-        "signature": "51743:1784889548490551700",
+        "mtime_ns": 1785037686099455400,
+        "signature": "51743:1785037686099455400",
         "sha256": "bc6a9903b4823e8f044e205e9baacb0c557b44a18424c3a356c774ab6cc44197"
       },
       "offline_exe": {
@@ -201,10 +201,10 @@
         "kind": "database",
         "path": "Saved/EngineSource.db",
         "exists": true,
-        "size_bytes": 3812814848,
-        "mtime_ns": 1784967348390855500,
-        "signature": "3812814848:1784967348390855500",
-        "sha256": "c77aaf29b09b1334f8e72e23ae07aa8f0e39992c40d6001006a6595b48394a51"
+        "size_bytes": 3822317568,
+        "mtime_ns": 1784976829246478900,
+        "signature": "3822317568:1784976829246478900",
+        "sha256": "31ec8697f5c3561c5912acdd42c20c949bfddca73b6a24ed8b216bf5d890c45f"
       }
     ],
     "mcp_catalog": {
@@ -212,7 +212,7 @@
         "generated_at": "2026-06-18T00:00:00+00:00"
       }
     },
-    "fingerprint_sha256": "bb0de36be35f842ac3a8c0cc289dcee481abf6d60190a3659e95b88acb49695f"
+    "fingerprint_sha256": "4ad876e8d1840c63d2a9be2e6e14d4982b1ed017fe0b48ddae0cbd9a1afddc64"
   },
-  "input_fingerprint": "bb0de36be35f842ac3a8c0cc289dcee481abf6d60190a3659e95b88acb49695f"
+  "input_fingerprint": "4ad876e8d1840c63d2a9be2e6e14d4982b1ed017fe0b48ddae0cbd9a1afddc64"
 }

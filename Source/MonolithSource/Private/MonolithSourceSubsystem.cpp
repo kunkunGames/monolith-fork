@@ -1,6 +1,5 @@
 ﻿#include "MonolithSourceSubsystem.h"
 #include "MonolithSourceIndexer.h"
-#include "MonolithActivationState.h"
 #include "MonolithSettings.h"
 #include "Misc/Paths.h"
 #include "HAL/PlatformFileManager.h"
@@ -132,7 +131,7 @@ void UMonolithSourceSubsystem::SetAutomaticIndexingEnabled(bool bEnabled)
 
 	const UMonolithSettings* Settings = GetDefault<UMonolithSettings>();
 	if ((Settings && !Settings->bEnableSource)
-		|| !FMonolithActivationState::IsIndexingEnabled())
+		|| !UMonolithSettings::IsIndexingActivationEnabled())
 	{
 		bAutomaticIndexingEnabled = false;
 		UE_LOG(LogMonolithSource, Log,

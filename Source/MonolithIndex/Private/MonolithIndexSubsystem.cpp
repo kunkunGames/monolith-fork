@@ -1,5 +1,4 @@
 ﻿#include "MonolithIndexSubsystem.h"
-#include "MonolithActivationState.h"
 #include "MonolithAsyncJobRegistry.h"
 #include "MonolithIndexDatabase.h"
 #include "MonolithIndexReview.h"
@@ -197,7 +196,8 @@ void UMonolithIndexSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	RegisterDefaultIndexers();
 
-	// Project policy and durable operator activation gate only indexing work.
+	// Hard project policy and resolved project-default/per-user activation gate
+	// only indexing work.
 	// Database initialization remains above these returns so existing DB reads
 	// continue to work while indexing is disabled.
 	if (!GetDefault<UMonolithSettings>()->bEnableIndex)
@@ -206,7 +206,7 @@ void UMonolithIndexSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		return;
 	}
 
-	if (!FMonolithActivationState::IsIndexingEnabled())
+	if (!UMonolithSettings::IsIndexingActivationEnabled())
 	{
 		UE_LOG(LogMonolithIndex, Log,
 			TEXT("MonolithIndex: durable indexing activation is off; existing ProjectIndex.db remains available for reads"));
@@ -516,7 +516,7 @@ void UMonolithIndexSubsystem::SetAutomaticIndexingEnabled(bool bEnabled)
 
 	const UMonolithSettings* Settings = GetDefault<UMonolithSettings>();
 	if ((Settings && !Settings->bEnableIndex)
-		|| !FMonolithActivationState::IsIndexingEnabled())
+		|| !UMonolithSettings::IsIndexingActivationEnabled())
 	{
 		bAutomaticIndexingEnabled = false;
 		UE_LOG(LogMonolithIndex, Warning,

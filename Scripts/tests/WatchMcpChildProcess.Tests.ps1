@@ -578,7 +578,7 @@ Describe 'watch_mcp fail-closed mutation gates' {
             return [PSCustomObject]@{
                 ServerEnabled = $true
                 IndexingEnabled = $true
-                StatePath = 'D:\P4\speed\Saved\Monolith\Activation.ini'
+                StatePath = 'D:\P4\speed\Saved\Config\WindowsEditor\Monolith.ini'
             }
         }
         function Get-McpHealthPort { return 9316 }
@@ -626,7 +626,7 @@ Describe 'watch_mcp fail-closed mutation gates' {
             return [PSCustomObject]@{
                 ServerEnabled = $true
                 IndexingEnabled = $true
-                StatePath = 'D:\P4\speed\Saved\Monolith\Activation.ini'
+                StatePath = 'D:\P4\speed\Saved\Config\WindowsEditor\Monolith.ini'
             }
         }
         function Get-McpHealthPort { return 9316 }
@@ -673,7 +673,7 @@ Describe 'watch_mcp recovery availability ordering' {
             return [PSCustomObject]@{
                 ServerEnabled = $true
                 IndexingEnabled = $true
-                StatePath = 'D:\P4\speed\Saved\Monolith\Activation.ini'
+                StatePath = 'D:\P4\speed\Saved\Config\WindowsEditor\Monolith.ini'
             }
         }
         function Get-McpHealthPort { return 9316 }

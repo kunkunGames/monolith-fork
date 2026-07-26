@@ -1,5 +1,5 @@
 #include "MonolithSourceActions.h"
-#include "MonolithActivationState.h"
+#include "MonolithSettings.h"
 #include "MonolithSourceDatabase.h"
 #include "MonolithSourceReview.h"
 #include "MonolithSourceQueryProcessArgs.h"
@@ -2879,7 +2879,7 @@ FMonolithActionResult FMonolithSourceActions::HandleReadFile(const TSharedPtr<FJ
 
 FMonolithActionResult FMonolithSourceActions::HandleTriggerReindex(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!FMonolithActivationState::IsIndexingEnabled())
+	if (!UMonolithSettings::IsIndexingActivationEnabled())
 	{
 		return FMonolithActionResult::Error(
 			TEXT("Monolith indexing is disabled. Run Monolith.StartIndexing in the editor console before requesting source indexing."));
@@ -2919,7 +2919,7 @@ FMonolithActionResult FMonolithSourceActions::HandleTriggerReindex(const TShared
 
 FMonolithActionResult FMonolithSourceActions::HandleTriggerProjectReindex(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!FMonolithActivationState::IsIndexingEnabled())
+	if (!UMonolithSettings::IsIndexingActivationEnabled())
 	{
 		return FMonolithActionResult::Error(
 			TEXT("Monolith indexing is disabled. Run Monolith.StartIndexing in the editor console before requesting source indexing."));

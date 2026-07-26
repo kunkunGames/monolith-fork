@@ -2,12 +2,16 @@
 
 <#
 .SYNOPSIS
-Reads the durable Monolith server/indexing activation state.
+Reads Monolith's effective server/indexing activation.
 
 .DESCRIPTION
-The authoritative state file is <ProjectRoot>\Saved\Monolith\Activation.ini.
-Missing values default to enabled, while malformed values fail closed to
-disabled, matching FMonolithActivationState in MonolithCore.
+Project defaults are bServerEnabledByDefault and bIndexingEnabledByDefault in
+Config/DefaultMonolith.ini. Explicit console choices are per-user overrides in
+Saved/Config/WindowsEditor/Monolith.ini under [Monolith.UserActivation].
+
+Saved/Monolith/Activation.ini is read only as a legacy fallback until
+UMonolithSettings migrates it. Missing values inherit the project default;
+malformed values fail closed to disabled, matching UMonolithSettings.
 
 When dot-sourced, this file only defines helper functions. When invoked
 directly with -Feature, it exits 0 for enabled and 2 for disabled.
@@ -47,6 +51,13 @@ function Get-MonolithActivationStatePath {
     param([string]$Root)
 
     $resolvedRoot = Resolve-MonolithActivationProjectRoot -Root $Root
+    return Join-Path $resolvedRoot 'Saved\Config\WindowsEditor\Monolith.ini'
+}
+
+function Get-MonolithLegacyActivationStatePath {
+    param([string]$Root)
+
+    $resolvedRoot = Resolve-MonolithActivationProjectRoot -Root $Root
     return Join-Path $resolvedRoot 'Saved\Monolith\Activation.ini'
 }
 
@@ -69,23 +80,22 @@ function ConvertFrom-MonolithActivationBool {
     return $false
 }
 
-function Get-MonolithActivationState {
-    param([string]$Root)
+function Get-MonolithIniSection {
+    param(
+        [string]$Path,
+        [string]$Section,
+        [string[]]$Keys
+    )
 
-    $statePath = Get-MonolithActivationStatePath -Root $Root
-    $values = @{
-        ServerEnabled = $true
-        IndexingEnabled = $true
+    $values = @{}
+    $present = @{}
+    foreach ($key in $Keys) {
+        $present[$key] = $false
     }
-    $found = @{
-        ServerEnabled = $false
-        IndexingEnabled = $false
-    }
-    $invalid = New-Object System.Collections.Generic.List[string]
 
-    if (Test-Path -LiteralPath $statePath -PathType Leaf) {
+    if (Test-Path -LiteralPath $Path -PathType Leaf) {
         $currentSection = ''
-        foreach ($lineValue in @(Get-Content -LiteralPath $statePath -ErrorAction Stop)) {
+        foreach ($lineValue in @(Get-Content -LiteralPath $Path -ErrorAction Stop)) {
             $line = ([string]$lineValue).Trim()
             if ([string]::IsNullOrWhiteSpace($line) -or
                 $line.StartsWith(';') -or
@@ -97,37 +107,158 @@ function Get-MonolithActivationState {
                 $currentSection = $matches['section'].Trim()
                 continue
             }
-            if ($currentSection -ine 'Monolith.Activation' -or
+            if ($currentSection -ine $Section -or
                 $line -notmatch '^(?<key>[^=]+)=(?<value>.*)$') {
                 continue
             }
 
             $key = $matches['key'].Trim()
-            if ($key -notin @('ServerEnabled', 'IndexingEnabled')) {
+            if ($key -notin $Keys) {
                 continue
             }
 
-            $found[$key] = $true
-            $parsed = $false
-            if (ConvertFrom-MonolithActivationBool -Value $matches['value'] -ParsedValue ([ref]$parsed)) {
-                $values[$key] = $parsed
-            }
-            else {
-                $values[$key] = $false
-                if (-not $invalid.Contains($key)) {
-                    $invalid.Add($key)
-                }
-            }
+            $present[$key] = $true
+            $values[$key] = $matches['value']
         }
     }
 
     return [PSCustomObject]@{
+        Path = $Path
+        Exists = (Test-Path -LiteralPath $Path -PathType Leaf)
+        Values = $values
+        Present = $present
+    }
+}
+
+function Read-MonolithActivationBool {
+    param(
+        [object]$Layer,
+        [string]$Key,
+        [bool]$Fallback,
+        [System.Collections.Generic.List[string]]$InvalidKeys
+    )
+
+    if (-not [bool]$Layer.Present[$Key]) {
+        return $Fallback
+    }
+
+    $parsed = $false
+    if (ConvertFrom-MonolithActivationBool -Value $Layer.Values[$Key] -ParsedValue ([ref]$parsed)) {
+        return [bool]$parsed
+    }
+
+    if (-not $InvalidKeys.Contains($Key)) {
+        $InvalidKeys.Add($Key)
+    }
+    return $false
+}
+
+function Get-MonolithActivationState {
+    param([string]$Root)
+
+    $resolvedRoot = Resolve-MonolithActivationProjectRoot -Root $Root
+    $pluginDefaultPath = Join-Path $resolvedRoot 'Plugins\Monolith\Config\DefaultMonolith.ini'
+    $projectDefaultPath = Join-Path $resolvedRoot 'Config\DefaultMonolith.ini'
+    $statePath = Get-MonolithActivationStatePath -Root $resolvedRoot
+    $legacyPath = Get-MonolithLegacyActivationStatePath -Root $resolvedRoot
+    $invalid = New-Object System.Collections.Generic.List[string]
+
+    $settingsSection = '/Script/MonolithCore.MonolithSettings'
+    $defaultKeys = @('bServerEnabledByDefault', 'bIndexingEnabledByDefault')
+    $pluginDefaults = Get-MonolithIniSection `
+        -Path $pluginDefaultPath `
+        -Section $settingsSection `
+        -Keys $defaultKeys
+    $projectDefaults = Get-MonolithIniSection `
+        -Path $projectDefaultPath `
+        -Section $settingsSection `
+        -Keys $defaultKeys
+
+    $serverProjectDefault = Read-MonolithActivationBool `
+        -Layer $pluginDefaults `
+        -Key 'bServerEnabledByDefault' `
+        -Fallback $true `
+        -InvalidKeys $invalid
+    $indexingProjectDefault = Read-MonolithActivationBool `
+        -Layer $pluginDefaults `
+        -Key 'bIndexingEnabledByDefault' `
+        -Fallback $true `
+        -InvalidKeys $invalid
+    $serverProjectDefault = Read-MonolithActivationBool `
+        -Layer $projectDefaults `
+        -Key 'bServerEnabledByDefault' `
+        -Fallback $serverProjectDefault `
+        -InvalidKeys $invalid
+    $indexingProjectDefault = Read-MonolithActivationBool `
+        -Layer $projectDefaults `
+        -Key 'bIndexingEnabledByDefault' `
+        -Fallback $indexingProjectDefault `
+        -InvalidKeys $invalid
+
+    $activationKeys = @('ServerEnabled', 'IndexingEnabled')
+    $userOverrides = Get-MonolithIniSection `
+        -Path $statePath `
+        -Section 'Monolith.UserActivation' `
+        -Keys $activationKeys
+    $legacyOverrides = Get-MonolithIniSection `
+        -Path $legacyPath `
+        -Section 'Monolith.Activation' `
+        -Keys $activationKeys
+
+    $serverUserPresent = [bool]$userOverrides.Present.ServerEnabled
+    $indexingUserPresent = [bool]$userOverrides.Present.IndexingEnabled
+    $serverLegacyPresent = -not $serverUserPresent -and [bool]$legacyOverrides.Present.ServerEnabled
+    $indexingLegacyPresent = -not $indexingUserPresent -and [bool]$legacyOverrides.Present.IndexingEnabled
+
+    $serverEnabled = $serverProjectDefault
+    if ($serverUserPresent) {
+        $serverEnabled = Read-MonolithActivationBool `
+            -Layer $userOverrides `
+            -Key 'ServerEnabled' `
+            -Fallback $serverProjectDefault `
+            -InvalidKeys $invalid
+    }
+    elseif ($serverLegacyPresent) {
+        $serverEnabled = Read-MonolithActivationBool `
+            -Layer $legacyOverrides `
+            -Key 'ServerEnabled' `
+            -Fallback $serverProjectDefault `
+            -InvalidKeys $invalid
+    }
+
+    $indexingEnabled = $indexingProjectDefault
+    if ($indexingUserPresent) {
+        $indexingEnabled = Read-MonolithActivationBool `
+            -Layer $userOverrides `
+            -Key 'IndexingEnabled' `
+            -Fallback $indexingProjectDefault `
+            -InvalidKeys $invalid
+    }
+    elseif ($indexingLegacyPresent) {
+        $indexingEnabled = Read-MonolithActivationBool `
+            -Layer $legacyOverrides `
+            -Key 'IndexingEnabled' `
+            -Fallback $indexingProjectDefault `
+            -InvalidKeys $invalid
+    }
+
+    return [PSCustomObject]@{
         StatePath = $statePath
-        Exists = (Test-Path -LiteralPath $statePath -PathType Leaf)
-        ServerEnabled = [bool]$values.ServerEnabled
-        IndexingEnabled = [bool]$values.IndexingEnabled
-        ServerValuePresent = [bool]$found.ServerEnabled
-        IndexingValuePresent = [bool]$found.IndexingEnabled
+        LegacyStatePath = $legacyPath
+        PluginDefaultPath = $pluginDefaultPath
+        ProjectDefaultPath = $projectDefaultPath
+        Exists = [bool]$userOverrides.Exists
+        LegacyExists = [bool]$legacyOverrides.Exists
+        ServerEnabled = [bool]$serverEnabled
+        IndexingEnabled = [bool]$indexingEnabled
+        ServerProjectDefault = [bool]$serverProjectDefault
+        IndexingProjectDefault = [bool]$indexingProjectDefault
+        ServerValuePresent = [bool]($serverUserPresent -or $serverLegacyPresent)
+        IndexingValuePresent = [bool]($indexingUserPresent -or $indexingLegacyPresent)
+        ServerUserOverridePresent = $serverUserPresent
+        IndexingUserOverridePresent = $indexingUserPresent
+        ServerLegacyOverridePresent = $serverLegacyPresent
+        IndexingLegacyOverridePresent = $indexingLegacyPresent
         InvalidKeys = @($invalid)
     }
 }

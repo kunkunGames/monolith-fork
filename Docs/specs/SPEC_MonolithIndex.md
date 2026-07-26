@@ -45,7 +45,7 @@
 
 ### Durable indexing activation
 
-`UMonolithIndexSubsystem::Initialize` always creates/opens `Saved/ProjectIndex.db` and registers the configured indexer fleet first. It starts no writer and binds no Asset Registry callback when `FMonolithActivationState::IndexingEnabled` is explicitly false or `bEnableIndex` is false. Missing activation state defaults to true, so a fresh checkout starts the cheapest correct catch-up automatically. An explicit `Monolith.StopIndexing` still preserves every existing DB-backed search, health, review, and bridge read while making later editor launches write-idle.
+`UMonolithIndexSubsystem::Initialize` always creates/opens `Saved/ProjectIndex.db` and registers the configured indexer fleet first. It starts no writer and binds no Asset Registry callback when `UMonolithSettings::IsIndexingActivationEnabled()` resolves false or `bEnableIndex` is false. A missing per-user key inherits project `bIndexingEnabledByDefault` (true in the shipped default), so a fresh checkout starts the cheapest correct catch-up automatically. An explicit `Monolith.StopIndexing` writes the user's generated Monolith config while preserving every existing DB-backed search, health, review, and bridge read and making later editor launches write-idle.
 
 `Monolith.StartIndexing` is the persistent operator entry point shared with MonolithSource. It sets `IndexingEnabled=True`, enables the subsystem's automatic hooks, and calls `StartPreferredIndex`: queue until Asset Registry load completes; otherwise run a full index for a new/incompatible database or an incremental catch-up for a compatible database. On later editor launches the persisted flag repeats the same cheapest-correct catch-up automatically.
 

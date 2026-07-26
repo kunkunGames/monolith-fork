@@ -1,6 +1,5 @@
 #include "MonolithReindexCommandlet.h"
 
-#include "MonolithActivationState.h"
 #include "MonolithIndexFreshness.h"
 #include "MonolithSourceIndexer.h"
 #include "MonolithSourceDatabase.h" // DECLARE_LOG_CATEGORY_EXTERN(LogMonolithSource)
@@ -63,7 +62,7 @@ int32 UMonolithReindexCommandlet::Main(const FString& Params)
 	const bool bAllowWhenIndexingDisabled =
 		FParse::Param(*Params, TEXT("AllowWhenIndexingDisabled"));
 
-	if (!FMonolithActivationState::IsIndexingEnabled() && !bAllowWhenIndexingDisabled)
+	if (!UMonolithSettings::IsIndexingActivationEnabled() && !bAllowWhenIndexingDisabled)
 	{
 		UE_LOG(LogMonolithSource, Error,
 			TEXT("MonolithReindex: indexing is disabled. Run Monolith.StartIndexing in the editor console, or pass -AllowWhenIndexingDisabled for an explicit one-shot maintenance override."));

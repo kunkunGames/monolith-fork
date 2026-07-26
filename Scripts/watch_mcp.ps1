@@ -21,7 +21,8 @@ daily Monolith index maintenance pass. By default this runs at 05:00 Korea
 Standard Time, starts incremental asset/source indexing through the bridge
 namespace, and waits for those indexes to go idle.
 
-Saved/Monolith/Activation.ini is the authority for operator intent. When server
+DefaultMonolith.ini supplies project defaults and
+Saved/Config/WindowsEditor/Monolith.ini supplies per-user intent. When server
 activation is off, the watchdog reports MCP_DISABLED and performs no
 probe/build/recovery mutation. When indexing activation is off, daily and
 restart indexing maintenance is skipped while DB reads remain unaffected.
