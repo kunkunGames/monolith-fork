@@ -12,6 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Action parameter hardening** — Hardened JSON parameter extraction across multiple domains (ComboGraph, StateTree, ConfigKeeper, Material, Niagara, Water, Editor) to properly validate payloads, reject wrong-type optional parameters, and return explicit invalid-parameter errors before dereferencing missing or null fields (e.g. #1557).
 - **CL902 merge hardening** — Tightened several high-risk merge seams before release: `monolith.discover`'s registered schema now includes every implemented terse/pagination parameter and rejects `mode=schema` without an action, `blueprint.set_property_at_path` preflights missing-map-key writes on a transient duplicate before mutating the live CDO, animation mutators now reject invalid/no-op input before dirtying assets where practical, animation docs now reflect the current ~210-action surface, and the release smoke test now fails when an enabled plugin module is missing its shipped Win64 DLL.
 
+### Changed
+
+- **Array Reserve performance improvements** — Optimized array allocations across multiple domains by pre-allocating known bounds using `Reserve()`, reducing runtime reallocations during graph traversal and export processes (e.g. #1926).
+
 ## [0.21.2] - 2026-07-22
 
 ### Fixed
