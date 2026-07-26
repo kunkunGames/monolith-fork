@@ -1608,6 +1608,104 @@ bool FSourceRepairCrgCacheTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceScopedMaintenanceRoutingTest,
+	"Monolith.IndexGuard.Source.ScopedMaintenanceRouting",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FSourceScopedMaintenanceRoutingTest::RunTest(const FString& Parameters)
+{
+	FTempSourceDb T;
+	TestTrue(TEXT("temp source db built"), T.Build());
+
+	TestTrue(TEXT("override version can be made stale"), ExecuteSourceSql(T.Db,
+		TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('source_override_edges_version','stale');")));
+	TSharedPtr<FJsonObject> OverrideHealth = T.Db.ComputeHealth(true, true);
+	const TSharedPtr<FJsonObject> OverrideMaintenance =
+		OverrideHealth->GetObjectField(TEXT("maintenance_recommendation"));
+	TestTrue(TEXT("override-only defect requires maintenance"),
+		OverrideMaintenance->GetBoolField(TEXT("maintenance_required")));
+	TestFalse(TEXT("override-only defect does not require full CRG repair"),
+		OverrideMaintenance->GetBoolField(TEXT("repair_crg_cache_required")));
+	TestTrue(TEXT("override-only defect requires override repair"),
+		OverrideMaintenance->GetBoolField(TEXT("repair_override_edges_required")));
+	TestFalse(TEXT("override-only defect leaves graph FTS healthy"),
+		OverrideMaintenance->GetBoolField(TEXT("repair_graph_nodes_fts_required")));
+	TestTrue(TEXT("override-only health selects the bounded scope"),
+		JsonStringArrayContains(OverrideHealth, TEXT("next_actions"),
+			TEXT("source.repair_crg_cache scope=override_edges")));
+	TestFalse(TEXT("override-only health does not widen to full CRG"),
+		JsonStringArrayContains(OverrideHealth, TEXT("next_actions"),
+			TEXT("source.repair_crg_cache scope=all")));
+
+	TSharedPtr<FJsonObject> OverrideDryRun = T.Db.RepairCrgCache(TEXT("override_edges"), false);
+	TestTrue(TEXT("override dry-run recommends only override execution"),
+		JsonStringArrayContains(OverrideDryRun, TEXT("next_actions"),
+			TEXT("source.repair_crg_cache scope=override_edges execute=true")));
+	TestFalse(TEXT("override dry-run does not recommend full execution"),
+		JsonStringArrayContains(OverrideDryRun, TEXT("next_actions"),
+			TEXT("source.repair_crg_cache scope=all execute=true")));
+	TestEqual(TEXT("override-only repair succeeds"),
+		T.Db.RepairCrgCache(TEXT("override_edges"), true)->GetStringField(TEXT("status")),
+		FString(TEXT("ok")));
+
+	TestTrue(TEXT("core metric can be made stale"), ExecuteSourceSql(T.Db,
+		FString::Printf(TEXT("DELETE FROM crg_node_metrics WHERE node_id=%lld;"), T.Sa)));
+	TestTrue(TEXT("override version can be stale with core CRG"), ExecuteSourceSql(T.Db,
+		TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('source_override_edges_version','stale');")));
+	TSharedPtr<FJsonObject> FullHealth = T.Db.ComputeHealth(true, true);
+	const TSharedPtr<FJsonObject> FullMaintenance =
+		FullHealth->GetObjectField(TEXT("maintenance_recommendation"));
+	TestTrue(TEXT("core defect requires full CRG repair"),
+		FullMaintenance->GetBoolField(TEXT("repair_crg_cache_required")));
+	TestTrue(TEXT("simultaneous override defect remains diagnosed"),
+		FullMaintenance->GetBoolField(TEXT("repair_override_edges_required")));
+	TestTrue(TEXT("full CRG health selects explicit all scope"),
+		JsonStringArrayContains(FullHealth, TEXT("next_actions"),
+			TEXT("source.repair_crg_cache scope=all")));
+	TestFalse(TEXT("full CRG health suppresses redundant override pass"),
+		JsonStringArrayContains(FullHealth, TEXT("next_actions"),
+			TEXT("source.repair_crg_cache scope=override_edges")));
+
+	TSharedPtr<FJsonObject> FullDryRun = T.Db.RepairCrgCache(TEXT("all"), false);
+	TestTrue(TEXT("full dry-run recommends only full execution"),
+		JsonStringArrayContains(FullDryRun, TEXT("next_actions"),
+			TEXT("source.repair_crg_cache scope=all execute=true")));
+	TestFalse(TEXT("full dry-run does not recommend override execution"),
+		JsonStringArrayContains(FullDryRun, TEXT("next_actions"),
+			TEXT("source.repair_crg_cache scope=override_edges execute=true")));
+	TestEqual(TEXT("full CRG repair succeeds"),
+		T.Db.RepairCrgCache(TEXT("all"), true)->GetStringField(TEXT("status")),
+		FString(TEXT("ok")));
+
+	TestTrue(TEXT("graph trigger can be made stale independently"), ExecuteSourceSql(T.Db,
+		TEXT("DROP TRIGGER source_graph_nodes_symbols_au;")));
+	TSharedPtr<FJsonObject> GraphHealth = T.Db.ComputeHealth(true, true);
+	const TSharedPtr<FJsonObject> GraphMaintenance =
+		GraphHealth->GetObjectField(TEXT("maintenance_recommendation"));
+	TestTrue(TEXT("graph defect requires graph-node FTS repair"),
+		GraphMaintenance->GetBoolField(TEXT("repair_graph_nodes_fts_required")));
+	TestFalse(TEXT("graph defect leaves full CRG healthy"),
+		GraphMaintenance->GetBoolField(TEXT("repair_crg_cache_required")));
+	TestFalse(TEXT("graph defect leaves override cache healthy"),
+		GraphMaintenance->GetBoolField(TEXT("repair_override_edges_required")));
+	TestTrue(TEXT("graph health selects only graph-node FTS"),
+		JsonStringArrayContains(GraphHealth, TEXT("next_actions"),
+			TEXT("source.repair_fts target=graph_nodes")));
+	TestFalse(TEXT("graph health does not add full CRG"),
+		JsonStringArrayContains(GraphHealth, TEXT("next_actions"),
+			TEXT("source.repair_crg_cache scope=all")));
+	TestFalse(TEXT("graph health does not add override repair"),
+		JsonStringArrayContains(GraphHealth, TEXT("next_actions"),
+			TEXT("source.repair_crg_cache scope=override_edges")));
+
+	TestEqual(TEXT("graph-node repair succeeds"),
+		T.Db.RepairFts(TEXT("graph_nodes"), true)->GetStringField(TEXT("status")),
+		FString(TEXT("ok")));
+	TestEqual(TEXT("all scoped maintenance repairs restore deep health"),
+		T.Db.ComputeHealth(true, true)->GetStringField(TEXT("status")),
+		FString(TEXT("ok")));
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourcePruneIndexedFilesUnderRootsRemovesProjectSliceTest, "Monolith.IndexGuard.Source.PruneIndexedFilesUnderRootsRemovesProjectSlice", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FSourcePruneIndexedFilesUnderRootsRemovesProjectSliceTest::RunTest(const FString& Parameters)
 {

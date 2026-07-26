@@ -375,15 +375,22 @@ private:
         bool allow_writable_recovery) {
         if (!rollback_journal_exists(path)) return true;
 
+        // --readonly is also the active-writer isolation boundary. UE's
+        // SQLiteCore writer uses the custom unreal-fs VFS, whose locks are not
+        // interoperable with this executable's native Win32 VFS. Even a native
+        // read-only probe can therefore race a live editor rollback journal and
+        // make the editor writer fail with SQLITE_IOERR. Refuse before opening
+        // either handle; a cleanly closed writer removes the DELETE journal.
+        if (!allow_writable_recovery) {
+            error = "global --readonly refuses database access while a rollback journal is present; "
+                "wait for the active writer to finish or run intentional recovery without --readonly";
+            return false;
+        }
+
         std::string probe_error;
         if (readonly_probe_ok(path, probe_error)) return true;
         if (!needs_writable_recovery(probe_error)) {
             error = probe_error;
-            return false;
-        }
-        if (!allow_writable_recovery) {
-            error = "global --readonly forbids writable rollback-journal recovery; "
-                "close the database writer and run an intentional non-readonly recovery before retrying";
             return false;
         }
 
@@ -2851,7 +2858,6 @@ LIMIT ?
                 {"source_graph_nodes_fts", graph_node_fts_cnt},
             };
         }
-        const size_t warnings_before_crg = root["warnings"].size();
         if (run_expensive_checks) {
             // RX-2: CRG projection-cache health parity (mirrors editor ComputeHealth).
             // valid edges use the symbols-joined ref count so parity matches the
@@ -2861,7 +2867,10 @@ LIMIT ?
                 "JOIN symbols fs ON fs.id = r.from_symbol_id "
                 "JOIN symbols ts ON ts.id = r.to_symbol_id;");
             int64_t inh_cnt = count_rows(db, "SELECT COUNT(*) FROM inheritance;");
-            append_crg_health_checks(db, "source", sym_cnt, valid_refs + inh_cnt, root);
+            const CrgHealthRepairNeeds crg_needs =
+                append_crg_health_checks(db, "source", sym_cnt, valid_refs + inh_cnt, root);
+            needs_crg_repair = needs_crg_repair || crg_needs.core;
+            needs_override_repair = needs_override_repair || crg_needs.override_edges;
         } else {
             bool has_core_crg = object_exists(db, "table", "crg_nodes")
                 && object_exists(db, "table", "crg_edges")
@@ -2875,9 +2884,6 @@ LIMIT ?
             check("crg:table:source_override_edges", has_override_edges,
                   has_override_edges ? "source_override_edges table present" : "source_override_edges table missing");
             info("crg:row_parity", "skipped; pass --include-deep-checks=true or --include-counts=true");
-        }
-        if (root["warnings"].size() > warnings_before_crg) {
-            needs_crg_repair = true;
         }
         if (run_expensive_checks && !source_override_edge_cache_ready(db)) {
             needs_override_repair = true;
@@ -2930,8 +2936,11 @@ LIMIT ?
             }
             next.push_back(action);
         };
-        if (needs_crg_repair) add_next_unique("source.repair_crg_cache");
-        if (needs_override_repair) add_next_unique("source.repair_crg_cache --scope=override_edges");
+        if (needs_crg_repair) {
+            add_next_unique("source.repair_crg_cache --scope=all");
+        } else if (needs_override_repair) {
+            add_next_unique("source.repair_crg_cache --scope=override_edges");
+        }
         if (needs_symbols_fts_repair) add_next_unique("source.repair_fts --target=symbols");
         if (needs_graph_node_fts_repair) add_next_unique("source.repair_fts --target=graph_nodes");
         if (needs_reindex) {

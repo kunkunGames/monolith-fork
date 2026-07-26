@@ -147,7 +147,7 @@ The WAL attempt established these constraints:
 | Area | Requirement |
 |------|-------------|
 | Source writer policy | `FMonolithSourceDatabase` and `monolith_query.exe source` write-capable opens must keep `DELETE` until the editor SQLite layer supports WAL. |
-| Read-only policy | Readers must never run `PRAGMA journal_mode=...`. They may run `PRAGMA query_only=ON` after opening and then query `PRAGMA journal_mode;` for diagnostics. |
+| Read-only policy | Readers must never run `PRAGMA journal_mode=...`. They may run `PRAGMA query_only=ON` after opening and then query `PRAGMA journal_mode;` for diagnostics. Native Query invocations with global `--readonly` must refuse before opening any handle whenever a rollback journal exists: UE SQLiteCore's custom `unreal-fs` writer locks are not interoperable with the executable's Win32 VFS, so probing through the sidecar can make the active editor writer fail with `SQLITE_IOERR`. |
 | Writer policy | Writers set the configured journal mode, `synchronous=NORMAL`, `locking_mode=NORMAL`, and a bounded `busy_timeout`. |
 | Checkpoint policy | Query-only tools never delete or truncate sidecars manually. If a future WAL-capable writer exists, that writer must own checkpoints. |
 | Health output | `source health` reports `journal_mode`; when an accidental WAL DB is opened by a WAL-capable path, it also reports WAL/SHM sizes and checkpoint counters. It also owns `source_graph_nodes` VIEW/FTS availability and parity diagnostics. `project health` continues to report `journal_mode=delete`. |
@@ -172,7 +172,7 @@ The WAL attempt established these constraints:
 
 | Gate | Required checks |
 |------|-----------------|
-| Rollback baseline | `DELETE` mode still leaves no stale hot rollback journal after clean close, and query-only CLI does not require writable opens except bounded hot-journal recovery. |
+| Rollback baseline | `DELETE` mode still leaves no stale hot rollback journal after clean close. Global `--readonly` fails closed on any rollback journal without opening the DB or modifying the sidecar; a non-`--readonly` query may perform the existing bounded hot-journal recovery. |
 | WAL read-only | Read-only CLI and MCP query paths return expected rows with `*.db-wal` and `*.db-shm` present, absent, and after clean close where possible. |
 | Read while write | A long writer transaction does not block unrelated readers in WAL mode. Readers see a stable snapshot. |
 | Write while write | A second writer waits only up to the configured `busy_timeout`, then fails clearly with `database is locked` if the first writer still owns the write lock. |

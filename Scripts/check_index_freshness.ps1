@@ -146,7 +146,9 @@ function Convert-SourceRepairAction {
     if ($actionText -match '^source\.repair_crg_cache(?<tail>.*)$') {
         $tail = $Matches['tail']
         if ([string]::IsNullOrWhiteSpace($tail)) {
-            $result.Arguments = @('source', 'repair_crg_cache', '--execute')
+            # Canonicalize the legacy/default spelling so plan comparison and
+            # logging always make the expensive full scope explicit.
+            $result.Arguments = @('source', 'repair_crg_cache', '--scope=all', '--execute')
             return $result
         }
         if ($tail -match '^\s+scope=(?<scope>all|override_edges)\s*$') {
@@ -241,11 +243,23 @@ function Get-HealthState {
                 }
             }
 
+            # Full CRG repair rebuilds source_override_edges as part of the same
+            # transaction. Accept older health payloads that list both scopes,
+            # but execute only the full superset once.
+            $hasFullCrgRepair = @($state.Repairs | Where-Object {
+                $_.Count -ge 2 -and $_[1] -eq 'repair_crg_cache' -and
+                $_ -contains '--scope=all'
+            }).Count -gt 0
+            if ($hasFullCrgRepair) {
+                $state.Repairs = @($state.Repairs | Where-Object {
+                    -not ($_.Count -ge 2 -and $_[1] -eq 'repair_crg_cache' -and
+                        $_ -contains '--scope=override_edges')
+                })
+            }
+
             $requiredChecks = @(
                 @{ Flag = 'repair_graph_nodes_fts_required'; Action = 'repair_fts'; Option = '--target=graph_nodes' },
-                @{ Flag = 'repair_symbols_fts_required'; Action = 'repair_fts'; Option = '--target=symbols' },
-                @{ Flag = 'repair_crg_cache_required'; Action = 'repair_crg_cache'; Option = $null },
-                @{ Flag = 'repair_override_edges_required'; Action = 'repair_crg_cache'; Option = '--scope=override_edges' }
+                @{ Flag = 'repair_symbols_fts_required'; Action = 'repair_fts'; Option = '--target=symbols' }
             )
             foreach ($required in $requiredChecks) {
                 $flag = Get-BooleanPropertyState -Object $maintenance -Name $required.Flag
@@ -261,6 +275,35 @@ function Get-HealthState {
                 if ($matching.Count -eq 0) {
                     $expected = if ($required.Option) { "$($required.Action) $($required.Option)" } else { $required.Action }
                     $state.RepairErrors += "source maintenance flag '$($required.Flag)' lacks exact next_action '$expected'"
+                }
+            }
+
+            $fullCrgRequired = Get-BooleanPropertyState -Object $maintenance -Name 'repair_crg_cache_required'
+            $overrideRequired = Get-BooleanPropertyState -Object $maintenance -Name 'repair_override_edges_required'
+            if (-not $fullCrgRequired.Valid) {
+                $state.RepairErrors += "source maintenance flag 'repair_crg_cache_required' is not boolean"
+            }
+            if (-not $overrideRequired.Valid) {
+                $state.RepairErrors += "source maintenance flag 'repair_override_edges_required' is not boolean"
+            }
+            if ($fullCrgRequired.Valid -and $overrideRequired.Valid) {
+                $hasFullCrgRepair = @($state.Repairs | Where-Object {
+                    $_.Count -ge 2 -and $_[1] -eq 'repair_crg_cache' -and
+                    $_ -contains '--scope=all'
+                }).Count -gt 0
+                $hasOverrideRepair = @($state.Repairs | Where-Object {
+                    $_.Count -ge 2 -and $_[1] -eq 'repair_crg_cache' -and
+                    $_ -contains '--scope=override_edges'
+                }).Count -gt 0
+
+                if ($fullCrgRequired.Value -and -not $hasFullCrgRepair) {
+                    $state.RepairErrors += "source maintenance flag 'repair_crg_cache_required' lacks exact next_action 'repair_crg_cache --scope=all'"
+                }
+                elseif (-not $fullCrgRequired.Value -and $overrideRequired.Value -and -not $hasOverrideRepair) {
+                    $state.RepairErrors += "source maintenance flag 'repair_override_edges_required' lacks exact next_action 'repair_crg_cache --scope=override_edges'"
+                }
+                elseif (-not $fullCrgRequired.Value -and -not $overrideRequired.Value -and ($hasFullCrgRepair -or $hasOverrideRepair)) {
+                    $state.RepairErrors += 'source next_actions contains an unindicated CRG repair'
                 }
             }
 

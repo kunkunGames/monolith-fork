@@ -5036,11 +5036,15 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 			NextActions.Add(Action);
 		}
 	};
+	// A full CRG rebuild also recreates source_override_edges. Keep the
+	// diagnostic flags independent above, but emit a non-overlapping execution
+	// plan so operators and automation never pay for an immediately redundant
+	// override-only pass.
 	if (bNeedsCrgRepair)
 	{
-		AddNextUnique(TEXT("source.repair_crg_cache"));
+		AddNextUnique(TEXT("source.repair_crg_cache scope=all"));
 	}
-	if (bNeedsOverrideRepair)
+	else if (bNeedsOverrideRepair)
 	{
 		AddNextUnique(TEXT("source.repair_crg_cache scope=override_edges"));
 	}
@@ -5518,7 +5522,22 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairCrgCache(const FString& S
 		Root->SetBoolField(TEXT("truncated"), false);
 		if (bRepairNeeded)
 		{
-			AddNextActions(Root, { TEXT("source.repair_crg_cache execute=true"), TEXT("source.repair_crg_cache scope=override_edges execute=true"), TEXT("source.health include_deep_checks=true"), TEXT("source.risk_score") });
+			if (NormalizedScope == TEXT("override_edges"))
+			{
+				AddNextActions(Root, {
+					TEXT("source.repair_crg_cache scope=override_edges execute=true"),
+					TEXT("source.health include_deep_checks=true"),
+					TEXT("source.find_overrides")
+				});
+			}
+			else
+			{
+				AddNextActions(Root, {
+					TEXT("source.repair_crg_cache scope=all execute=true"),
+					TEXT("source.health include_deep_checks=true"),
+					TEXT("source.risk_score")
+				});
+			}
 		}
 		else
 		{

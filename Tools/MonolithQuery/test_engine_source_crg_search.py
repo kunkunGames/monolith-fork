@@ -211,7 +211,66 @@ def invoke(
     return completed, payload
 
 
+def invoke_readonly(
+    db_path: Path,
+    action: str,
+    *arguments: str,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            str(QUERY_EXE),
+            "--readonly",
+            "source",
+            action,
+            *arguments,
+            f"--source_db={db_path}",
+            "--no-log",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+    )
+
+
 class EngineSourceCrgSearchTests(unittest.TestCase):
+    def test_readonly_refuses_active_rollback_journal_without_touching_writer(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(prefix="monolith-engine-source-crg-") as temp:
+            db_path = Path(temp) / "EngineSource.db"
+            journal_path = Path(f"{db_path}-journal")
+            create_source_db(db_path)
+
+            with closing(sqlite3.connect(db_path)) as writer:
+                writer.execute("PRAGMA journal_mode=DELETE")
+                writer.execute("BEGIN IMMEDIATE")
+                writer.execute(
+                    "UPDATE meta SET value='active-writer' "
+                    "WHERE key='schema_version'"
+                )
+                self.assertTrue(journal_path.is_file())
+
+                completed = invoke_readonly(
+                    db_path,
+                    "health",
+                    "--include-deep-checks=true",
+                )
+                self.assertNotEqual(0, completed.returncode, completed.stdout)
+                self.assertIn(
+                    "Rollback journal exists for database and could not be recovered safely:",
+                    completed.stderr,
+                )
+                self.assertIn("global --readonly refuses database access", completed.stderr)
+                self.assertTrue(
+                    journal_path.is_file(),
+                    "readonly refusal must not recover, delete, or truncate the writer journal",
+                )
+                writer.rollback()
+
+            self.assertFalse(journal_path.exists())
+
     def test_malformed_fts_query_is_structured_and_never_falls_back(self) -> None:
         with tempfile.TemporaryDirectory(prefix="monolith-engine-source-crg-") as temp:
             db_path = Path(temp) / "EngineSource.db"
@@ -1152,6 +1211,146 @@ class EngineSourceCrgSearchTests(unittest.TestCase):
                 ).fetchone()[0]
             self.assertEqual("1", marker)
             self.assertEqual("4", schema)
+
+    def test_scoped_maintenance_routing_avoids_overlapping_repairs(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="monolith-engine-source-crg-") as temp:
+            db_path = Path(temp) / "EngineSource.db"
+            create_source_db(db_path)
+
+            process, initial_repair = invoke(
+                db_path,
+                "repair_crg_cache",
+                "--scope=all",
+                "--execute=true",
+            )
+            self.assertEqual(0, process.returncode, process.stderr)
+            self.assertEqual("ok", initial_repair["status"], initial_repair)
+
+            with closing(sqlite3.connect(db_path)) as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO crg_meta(key,value) "
+                    "VALUES('source_override_edges_version','stale')"
+                )
+                conn.commit()
+
+            process, override_health = invoke(
+                db_path,
+                "health",
+                "--include-deep-checks=true",
+            )
+            self.assertEqual(0, process.returncode, process.stderr)
+            override_maintenance = override_health["maintenance_recommendation"]
+            self.assertFalse(override_maintenance["repair_crg_cache_required"])
+            self.assertTrue(override_maintenance["repair_override_edges_required"])
+            self.assertIn(
+                "source.repair_crg_cache --scope=override_edges",
+                override_health["next_actions"],
+            )
+            self.assertNotIn(
+                "source.repair_crg_cache --scope=all",
+                override_health["next_actions"],
+            )
+
+            process, override_dry_run = invoke(
+                db_path,
+                "repair_crg_cache",
+                "--scope=override_edges",
+            )
+            self.assertEqual(0, process.returncode, process.stderr)
+            self.assertIn(
+                "source.repair_crg_cache --scope=override_edges --execute",
+                override_dry_run["next_actions"],
+            )
+            self.assertNotIn(
+                "source.repair_crg_cache --scope=all --execute",
+                override_dry_run["next_actions"],
+            )
+
+            process, override_repair = invoke(
+                db_path,
+                "repair_crg_cache",
+                "--scope=override_edges",
+                "--execute=true",
+            )
+            self.assertEqual(0, process.returncode, process.stderr)
+            self.assertEqual("ok", override_repair["status"], override_repair)
+
+            with closing(sqlite3.connect(db_path)) as conn:
+                conn.execute("DELETE FROM crg_node_metrics WHERE node_id=10")
+                conn.execute(
+                    "INSERT OR REPLACE INTO crg_meta(key,value) "
+                    "VALUES('source_override_edges_version','stale')"
+                )
+                conn.commit()
+
+            process, full_health = invoke(
+                db_path,
+                "health",
+                "--include-deep-checks=true",
+            )
+            self.assertEqual(0, process.returncode, process.stderr)
+            full_maintenance = full_health["maintenance_recommendation"]
+            self.assertTrue(full_maintenance["repair_crg_cache_required"])
+            self.assertTrue(full_maintenance["repair_override_edges_required"])
+            self.assertIn(
+                "source.repair_crg_cache --scope=all",
+                full_health["next_actions"],
+            )
+            self.assertNotIn(
+                "source.repair_crg_cache --scope=override_edges",
+                full_health["next_actions"],
+            )
+
+            process, full_dry_run = invoke(
+                db_path,
+                "repair_crg_cache",
+                "--scope=all",
+            )
+            self.assertEqual(0, process.returncode, process.stderr)
+            self.assertIn(
+                "source.repair_crg_cache --scope=all --execute",
+                full_dry_run["next_actions"],
+            )
+            self.assertNotIn(
+                "source.repair_crg_cache --scope=override_edges --execute",
+                full_dry_run["next_actions"],
+            )
+
+            process, full_repair = invoke(
+                db_path,
+                "repair_crg_cache",
+                "--scope=all",
+                "--execute=true",
+            )
+            self.assertEqual(0, process.returncode, process.stderr)
+            self.assertEqual("ok", full_repair["status"], full_repair)
+
+            with closing(sqlite3.connect(db_path)) as conn:
+                conn.execute("DROP TRIGGER source_graph_nodes_symbols_au")
+                conn.commit()
+
+            process, graph_health = invoke(
+                db_path,
+                "health",
+                "--include-deep-checks=true",
+            )
+            self.assertEqual(0, process.returncode, process.stderr)
+            graph_maintenance = graph_health["maintenance_recommendation"]
+            self.assertTrue(graph_maintenance["repair_graph_nodes_fts_required"])
+            self.assertFalse(graph_maintenance["repair_crg_cache_required"])
+            self.assertFalse(graph_maintenance["repair_override_edges_required"])
+            self.assertIn(
+                "source.repair_fts --target=graph_nodes",
+                graph_health["next_actions"],
+            )
+            self.assertNotIn(
+                "source.repair_crg_cache --scope=all",
+                graph_health["next_actions"],
+            )
+            self.assertNotIn(
+                "source.repair_crg_cache --scope=override_edges",
+                graph_health["next_actions"],
+            )
 
     def test_deep_health_uses_index_owned_docsize_parity(self) -> None:
         with tempfile.TemporaryDirectory(prefix="monolith-engine-source-crg-") as temp:

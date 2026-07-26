@@ -787,9 +787,19 @@ static json crg_repair_cache_json(Database& db, const std::string& domain,
             : "Dry-run: " + domain + " CRG projection/cache is already fresh; --execute would skip the rebuild.";
         root["after"] = json::object();
         if (repair_needed) {
-            root["next_actions"] = domain == "source"
-                ? json::array({"source.repair_crg_cache --execute", "source.repair_crg_cache --scope=override_edges --execute", "source.health --include-deep-checks=true", "source.risk_score"})
-                : json::array({domain + ".repair_crg_cache --execute", domain + ".health", domain + ".risk_score"});
+            if (domain == "source" && normalized_scope == "override_edges") {
+                root["next_actions"] = json::array({
+                    "source.repair_crg_cache --scope=override_edges --execute",
+                    "source.health --include-deep-checks=true",
+                    "source.find_overrides",
+                });
+            } else {
+                root["next_actions"] = json::array({
+                    domain + ".repair_crg_cache --scope=all --execute",
+                    domain + ".health",
+                    domain + ".risk_score",
+                });
+            }
         } else {
             root["next_actions"] = domain == "source"
                 ? json::array({"source.health", "source.risk_score", "source.review_context"})
@@ -1300,35 +1310,56 @@ static json try_cached_risk(Database& db, const std::string& domain,
     return item;
 }
 
-// Appends crg:* checks mirroring the editor ComputeHealth. Cache ABSENT is
-// informational only (keeps offline `health` "ok" for pre-cache DBs, per
-// projection-cache REQ-006); cache PRESENT-but-inconsistent warns like the
-// editor. `valid_edges` lets the caller pass the dangling-ref-corrected
-// native edge count so parity matches the editor's current behavior.
-static void append_crg_health_checks(Database& db, const std::string& domain,
-                                     int64_t native_node_cnt, int64_t valid_edges,
-                                     json& root) {
+struct CrgHealthRepairNeeds {
+    bool core = false;
+    bool override_edges = false;
+};
+
+// Appends crg:* checks mirroring the editor ComputeHealth and reports which
+// independently repairable cache range is stale. Project CRG remains an
+// optional projection when absent; an absent source CRG is an actionable core
+// defect because source.health exposes its repair plan.
+static CrgHealthRepairNeeds append_crg_health_checks(
+        Database& db,
+        const std::string& domain,
+        int64_t native_node_cnt,
+        int64_t valid_edges,
+        json& root) {
+    CrgHealthRepairNeeds repair_needs;
     auto info = [&](const std::string& name, const std::string& detail) {
         root["checks"].push_back({{"check", name}, {"result", "info"}, {"detail", detail}});
     };
-    auto check = [&](const std::string& name, bool pass, const std::string& detail) {
+    auto check = [&](const std::string& name, bool pass, const std::string& detail, bool& repair_flag) {
         root["checks"].push_back({{"check", name}, {"result", pass ? "ok" : "warning"}, {"detail", detail}});
-        if (!pass) root["warnings"].push_back(detail);
+        if (!pass) {
+            repair_flag = true;
+            root["warnings"].push_back(detail);
+        }
     };
     if (!crg_cache_present(db)) {
-        info("crg:cache_absent",
-             "CRG projection cache not built (run repair_crg_cache for cached risk + parity checks)");
-        return;
+        if (domain == "source") {
+            check(
+                "crg:cache_absent",
+                false,
+                "Source CRG projection cache is missing (run source.repair_crg_cache --scope=all)",
+                repair_needs.core);
+        } else {
+            info("crg:cache_absent",
+                 "CRG projection cache not built (run repair_crg_cache for cached risk + parity checks)");
+        }
+        return repair_needs;
     }
     for (const char* t : {"crg_nodes", "crg_edges", "crg_node_metrics", "crg_meta"})
         check(std::string("crg:table:") + t, object_exists(db, "table", t),
               object_exists(db, "table", t) ? std::string("CRG table ") + t + " present"
-                                            : std::string("missing CRG table ") + t);
+                                            : std::string("missing CRG table ") + t,
+              repair_needs.core);
     if (domain == "source") {
         check("crg:table:source_override_edges", object_exists(db, "table", "source_override_edges"),
               object_exists(db, "table", "source_override_edges")
                   ? "CRG table source_override_edges present"
-                  : "missing CRG table source_override_edges (run source.repair_crg_cache)");
+                  : "missing CRG table source_override_edges (run source.repair_crg_cache --scope=override_edges)",
+              repair_needs.override_edges);
     }
     int64_t cnodes = count_rows(db, "SELECT COUNT(*) FROM crg_nodes WHERE domain = '" + domain + "';");
     int64_t cedges = count_rows(db, "SELECT COUNT(*) FROM crg_edges WHERE domain = '" + domain + "';");
@@ -1337,32 +1368,40 @@ static void append_crg_health_checks(Database& db, const std::string& domain,
         "WHERE n.domain = '" + domain + "';");
     check("crg:nodes_row_parity", cnodes == native_node_cnt,
           domain + " native=" + std::to_string(native_node_cnt) + " crg_nodes=" + std::to_string(cnodes) +
-          (cnodes == native_node_cnt ? "" : " (mismatch -> repair_crg_cache)"));
+          (cnodes == native_node_cnt ? "" : " (mismatch -> repair_crg_cache)"),
+          repair_needs.core);
     check("crg:edges_row_parity", cedges == valid_edges,
           "valid native edges=" + std::to_string(valid_edges) + " crg_edges=" + std::to_string(cedges) +
-          (cedges == valid_edges ? "" : " (mismatch -> repair_crg_cache)"));
+          (cedges == valid_edges ? "" : " (mismatch -> repair_crg_cache)"),
+          repair_needs.core);
     check("crg:metrics_row_parity", cmetrics == cnodes,
           "crg_nodes=" + std::to_string(cnodes) + " crg_node_metrics=" + std::to_string(cmetrics) +
-          (cmetrics == cnodes ? "" : " (mismatch -> repair_crg_cache)"));
+          (cmetrics == cnodes ? "" : " (mismatch -> repair_crg_cache)"),
+          repair_needs.core);
     int64_t orphan = count_rows(db,
         "SELECT COUNT(*) FROM crg_edges e WHERE e.domain = '" + domain + "' AND ("
         "e.source_node_id NOT IN (SELECT id FROM crg_nodes) OR "
         "e.target_node_id NOT IN (SELECT id FROM crg_nodes));");
     check("crg:orphan_edges", orphan == 0,
           orphan == 0 ? "no orphan CRG projection edge rows"
-                      : std::to_string(orphan) + " orphan CRG projection edge row(s)");
+                      : std::to_string(orphan) + " orphan CRG projection edge row(s)",
+          repair_needs.core);
     std::string cache_ver = scalar_str(db, "SELECT value FROM crg_meta WHERE key = 'cache_version';");
     check("crg:cache_version", !cache_ver.empty(),
           cache_ver.empty() ? "crg_meta.cache_version missing (run repair_crg_cache)"
-                            : "crg cache_version=" + cache_ver);
+                            : "crg cache_version=" + cache_ver,
+          repair_needs.core);
     std::string scoring_ver = scalar_str(db, "SELECT value FROM crg_meta WHERE key = 'scoring_version';");
     check("crg:scoring_version", scoring_ver == "3",
           scoring_ver.empty() ? "crg_meta.scoring_version missing (run repair_crg_cache)"
-                              : "crg scoring_version=" + scoring_ver + " (expected 3)");
+                              : "crg scoring_version=" + scoring_ver + " (expected 3)",
+          repair_needs.core);
     if (domain == "source") {
         std::string override_ver = scalar_str(db, "SELECT value FROM crg_meta WHERE key = 'source_override_edges_version';");
         check("crg:source_override_edges_version", override_ver == "2",
-              override_ver.empty() ? "crg_meta.source_override_edges_version missing (run source.repair_crg_cache)"
-                                   : "source override edge cache version=" + override_ver + " (expected 2)");
+              override_ver.empty() ? "crg_meta.source_override_edges_version missing (run source.repair_crg_cache --scope=override_edges)"
+                                   : "source override edge cache version=" + override_ver + " (expected 2)",
+              repair_needs.override_edges);
     }
+    return repair_needs;
 }

@@ -14,16 +14,18 @@ function New-SourceHealthJson {
     param(
         [string[]]$NextActions,
         [string]$SpecificFtsTarget,
+        [bool]$FullCrgRequired = $false,
+        [bool]$OverrideRequired = $false,
         [bool]$MaintenanceRequired = $true
     )
 
     $maintenance = [ordered]@{
         maintenance_required = $MaintenanceRequired
-        repair_fts_required = $MaintenanceRequired
+        repair_fts_required = $MaintenanceRequired -and -not [string]::IsNullOrWhiteSpace($SpecificFtsTarget)
         repair_graph_nodes_fts_required = $MaintenanceRequired -and $SpecificFtsTarget -eq 'graph_nodes'
         repair_symbols_fts_required = $MaintenanceRequired -and $SpecificFtsTarget -eq 'symbols'
-        repair_crg_cache_required = $false
-        repair_override_edges_required = $false
+        repair_crg_cache_required = $MaintenanceRequired -and $FullCrgRequired
+        repair_override_edges_required = $MaintenanceRequired -and $OverrideRequired
     }
     return ([ordered]@{
         status = $(if ($MaintenanceRequired) { 'warning' } else { 'ok' })
@@ -130,6 +132,59 @@ exit 9
         $calls[1] | Should Be 'source repair_fts --target=graph_nodes --execute'
         $calls[2] | Should Be 'source health --include-counts=true'
         ($calls -join "`n") | Should Not Match '--target=all'
+    }
+
+    It 'executes only the override-edge scope when core CRG is healthy' {
+        $env:MONOLITH_TEST_INITIAL_HEALTH_B64 = ConvertTo-TestBase64 (
+            New-SourceHealthJson `
+                -NextActions @('source.repair_crg_cache scope=override_edges') `
+                -OverrideRequired $true)
+
+        $run = Invoke-IndexFreshnessTest -Execute
+        $calls = @(Get-Content -LiteralPath $script:QueryLogPath)
+
+        $run.ExitCode | Should Be 0
+        $run.Output | Should Match 'RESULT=REPAIRED'
+        $calls.Count | Should Be 3
+        $calls[0] | Should Be 'source health --include-counts=true'
+        $calls[1] | Should Be 'source repair_crg_cache --scope=override_edges --execute'
+        $calls[2] | Should Be 'source health --include-counts=true'
+        ($calls -join "`n") | Should Not Match '--scope=all'
+    }
+
+    It 'collapses a legacy full plus override plan to one full CRG repair' {
+        $env:MONOLITH_TEST_INITIAL_HEALTH_B64 = ConvertTo-TestBase64 (
+            New-SourceHealthJson `
+                -NextActions @(
+                    'source.repair_crg_cache',
+                    'source.repair_crg_cache scope=override_edges'
+                ) `
+                -FullCrgRequired $true `
+                -OverrideRequired $true)
+
+        $run = Invoke-IndexFreshnessTest -Execute
+        $calls = @(Get-Content -LiteralPath $script:QueryLogPath)
+
+        $run.ExitCode | Should Be 0
+        $run.Output | Should Match 'RESULT=REPAIRED'
+        $calls.Count | Should Be 3
+        $calls[1] | Should Be 'source repair_crg_cache --scope=all --execute'
+        ($calls -join "`n") | Should Not Match '--scope=override_edges'
+    }
+
+    It 'fails closed instead of widening an override-only requirement to full CRG' {
+        $env:MONOLITH_TEST_INITIAL_HEALTH_B64 = ConvertTo-TestBase64 (
+            New-SourceHealthJson `
+                -NextActions @('source.repair_crg_cache scope=all') `
+                -OverrideRequired $true)
+
+        $run = Invoke-IndexFreshnessTest -Execute
+        $calls = @(Get-Content -LiteralPath $script:QueryLogPath)
+
+        $run.ExitCode | Should Be 2
+        $run.Output | Should Match 'repair_override_edges_required.*lacks exact next_action'
+        $run.Output | Should Match 'no_auto_repair_available=true'
+        $calls.Count | Should Be 1
     }
 
     It 'fails closed for missing, unknown, over-broad, or retired repair actions' {
