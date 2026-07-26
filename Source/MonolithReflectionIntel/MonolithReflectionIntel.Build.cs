@@ -23,17 +23,17 @@ public class MonolithReflectionIntel : ModuleRules
 		{
 			"Core",
 			"CoreUObject",
-			"Engine"
+			"Engine",
+			// `DeveloperSettings` is its OWN module (NOT part of Engine) — see
+			// `.claude/rules/scoped/cpp-code.md` § Module Dependencies. Required
+			// for the UDeveloperSettings-derived UMonolithReflectionIntelSettings.
+			"DeveloperSettings"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"MonolithCore",
 			"SQLiteCore",
-			// `DeveloperSettings` is its OWN module (NOT part of Engine) — see
-			// `.claude/rules/scoped/cpp-code.md` § Module Dependencies. Required
-			// for the UDeveloperSettings-derived UMonolithReflectionIntelSettings.
-			"DeveloperSettings",
 			"Json",
 			"JsonUtilities",
 			"Projects",

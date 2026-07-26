@@ -61,7 +61,14 @@ public class MonolithUI : ModuleRules
             // EditorSubsystem is Public because UMonolithUIRegistrySubsystem
             // (a UEditorSubsystem) is declared in Public/Registry/. Downstream
             // modules that include the header need the parent class visible.
-            "EditorSubsystem"
+            "EditorSubsystem",
+            // Phase G: UMonolithUISettings derives from UDeveloperSettings,
+            // which lives in the DeveloperSettings module (NOT Engine).
+            // Verified at C:\Program Files (x86)\UE_5.7\Engine\Source\Runtime\
+            // DeveloperSettings\Public\Engine\DeveloperSettings.h:23
+            // (UCLASS(Abstract, MinimalAPI) in module DeveloperSettings).
+            // Missing this dep = LNK2019 on the constructor symbol.
+            "DeveloperSettings"
         });
 
         PrivateDependencyModuleNames.AddRange(new string[]
@@ -78,13 +85,6 @@ public class MonolithUI : ModuleRules
             "AssetTools",
             "Kismet",
             "MaterialEditor",
-            // Phase G: UMonolithUISettings derives from UDeveloperSettings,
-            // which lives in the DeveloperSettings module (NOT Engine).
-            // Verified at C:\Program Files (x86)\UE_5.7\Engine\Source\Runtime\
-            // DeveloperSettings\Public\Engine\DeveloperSettings.h:23
-            // (UCLASS(Abstract, MinimalAPI) in module DeveloperSettings).
-            // Missing this dep = LNK2019 on the constructor symbol.
-            "DeveloperSettings",
             // Automation tests and editor helpers query assets generically
             // without hardcoding optional provider mount names.
             "AssetRegistry",
