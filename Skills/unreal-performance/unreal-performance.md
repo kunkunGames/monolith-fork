@@ -32,6 +32,8 @@ monolith_discover({ namespace: "config" })
 | `explain_setting` | Understand what a setting does before changing it |
 | `diff_from_default` | See all project customizations vs engine defaults |
 | `search_config` | Find settings by keyword |
+| `get_cvar` | Read one live console variable, including value and flags |
+| `find_cvars` | Search live console variables by prefix or substring (maximum 200 rows) |
 
 ### Material Performance (`material_query`)
 | Action | Purpose |
@@ -81,6 +83,13 @@ niagara_query({ action: "get_compiled_gpu_hlsl", params: { asset_path: "/Game/VF
 config_query({ action: "search_config", params: { query: "Lumen", file: "DefaultEngine" } })
 config_query({ action: "search_config", params: { query: "Shadow", file: "DefaultEngine" } })
 config_query({ action: "search_config", params: { query: "TSR", file: "DefaultEngine" } })
+```
+
+### Inspect live console variables
+```
+config_query({ action: "get_cvar", params: { name: "r.ScreenPercentage" } })
+config_query({ action: "find_cvars", params: { query: "r.Shadow", mode: "prefix", limit: 50 } })
+config_query({ action: "find_cvars", params: { query: "Nanite", mode: "contains", limit: 50 } })
 ```
 
 ## High-Impact INI Settings
