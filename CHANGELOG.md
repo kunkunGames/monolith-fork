@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- **Blueprint structural asset actions now reject malformed package paths.** Struct, enum, DataTable, DataAsset, and seeded DataAsset creation validate `save_path` before querying the Asset Registry or calling `CreatePackage`, returning a normal action error instead of passing invalid input into Unreal's package APIs.
+- **Blueprint structural asset actions now reject malformed package paths.** Struct, enum, DataTable, DataAsset, and seeded DataAsset creation validate `save_path` before querying the Asset Registry or calling `CreatePackage`, returning a normal action error instead of passing invalid input into Unreal's package APIs. The same five handlers no longer call `FullyLoad()` on the package returned by `CreatePackage`, so creating an asset never requests a redundant synchronous load of a new or already-resident package.
 
 ## [0.21.2] - 2026-07-22
 

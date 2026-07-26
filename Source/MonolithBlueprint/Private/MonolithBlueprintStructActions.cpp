@@ -145,7 +145,6 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedSt
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at path: %s"), *SavePath));
 	}
-	Package->FullyLoad();
 
 	// Create the user defined struct
 	UUserDefinedStruct* Struct = FStructureEditorUtils::CreateUserDefinedStruct(Package, FName(*AssetName), RF_Public | RF_Standalone);
@@ -312,7 +311,6 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedEn
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at path: %s"), *SavePath));
 	}
-	Package->FullyLoad();
 
 	// Create the user defined enum — returns UEnum*, cast to UUserDefinedEnum*
 	UEnum* RawEnum = FEnumEditorUtils::CreateUserDefinedEnum(Package, FName(*AssetName), RF_Public | RF_Standalone);
@@ -506,7 +504,6 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateDataTable(con
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at path: %s"), *SavePath));
 	}
-	Package->FullyLoad();
 
 	// Create the DataTable
 	UDataTable* DataTable = NewObject<UDataTable>(Package, FName(*AssetName), RF_Public | RF_Standalone);
@@ -881,7 +878,6 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateDataAsset(con
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at path: %s"), *SavePath));
 	}
-	Package->FullyLoad();
 
 	// Create the raw UObject instance
 	UObject* NewAsset = NewObject<UObject>(Package, ResolvedClass, FName(*AssetName), RF_Public | RF_Standalone);
@@ -1097,7 +1093,6 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleSeedDataAsset(const
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at path: %s"), *SavePath));
 	}
-	Package->FullyLoad();
 
 	UObject* NewAsset = NewObject<UObject>(Package, ResolvedClass, FName(*AssetName), RF_Public | RF_Standalone);
 	if (!NewAsset)
