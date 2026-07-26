@@ -11,9 +11,10 @@
  * CreatePackage asserts on such inputs in UObjectGlobals.cpp:1012. This
  * wrapper converts the assertion into a recoverable error return.
  *
- * Scope note: only wired into the immediate crash site plus the two shared
- * GetOrCreatePackage helpers (MonolithAI, MonolithGAS). The other ~77
- * CreatePackage call sites remain unguarded — follow-up task.
+ * Scope note: routing is incremental and is not yet applied to every
+ * CreatePackage call site. Docs/specs/SPEC_MonolithCore.md owns the current
+ * routed-site list and the remaining backlog; update that table when you wire
+ * a new owner, rather than tracking a count here.
  */
 namespace MonolithCore
 {
