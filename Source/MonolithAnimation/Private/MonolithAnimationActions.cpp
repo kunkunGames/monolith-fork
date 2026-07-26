@@ -6165,6 +6165,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetCompatibleSkeletons(co
 	Root->SetStringField(TEXT("asset_path"), AssetPath);
 
 	TArray<TSharedPtr<FJsonValue>> CompatArr;
+	CompatArr.Reserve(Skeleton->GetCompatibleSkeletons().Num());
 	for (const TSoftObjectPtr<USkeleton>& Compat : Skeleton->GetCompatibleSkeletons())
 	{
 		const FString CompatPath = Compat.ToSoftObjectPath().ToString();
