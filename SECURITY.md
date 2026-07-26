@@ -32,7 +32,7 @@ Only the latest tagged release is supported. Older versions do not receive backp
 ## Hardening Recommendations for Users
 
 - Keep `bAutoUpdateEnabled = false` (the default as of v0.14.6) and apply updates manually
-- Verify the engine-specific marker (`Monolith-SHA256-UE5.7:`, `Monolith-SHA256-UE5.8:`, or legacy `Monolith-SHA256:`) in the release notes against the SHA256 of the downloaded zip before extracting (auto-updater does this for you when enabled; if the marker is missing, it logs a warning and proceeds without integrity verification)
+- Verify the engine-specific marker (`Monolith-SHA256-v2-UE5.7:`, `Monolith-SHA256-v2-UE5.8:`, or legacy `Monolith-SHA256-v2:` on Windows / `Monolith-macOS-SHA256:` on macOS / `Monolith-Linux-SHA256:` on Linux) in the release notes against the SHA256 of the downloaded zip before extracting (auto-updater does this for you when enabled; if the matching platform/engine marker is missing, it aborts the installation; missing legacy markers warn and proceed)
 - For strict environments, delete the `Binaries/` directory from the downloaded release ZIP and compile the plugin and standalone executables from source to establish binary provenance
 - Do not run the editor on a machine where untrusted users have local accounts
 - The MCP server binds to all network interfaces (limitation of UE's `FHttpServerModule`). If your machine is on an untrusted LAN, either:

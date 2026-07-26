@@ -273,7 +273,7 @@ Monolith.uplugin
 
 ## Auto-updater
 
-Off by default as of v0.14.6. Opt in via **Auto Update Enabled** in Editor Preferences > Plugins > Monolith — checks GitHub Releases on editor startup, selects the matching per-engine asset, verifies the downloaded zip's SHA256 against `Monolith-SHA256-UE5.7:` / `Monolith-SHA256-UE5.8:` when present (legacy `Monolith-SHA256:` remains accepted; aborts if the matching engine marker is missing, whereas missing legacy markers warn and proceed), swaps the plugin on editor exit (after a Y/N prompt). See [Auto-Updater wiki](https://github.com/tumourlove/monolith/wiki/Auto-Updater).
+Off by default as of v0.14.6. Opt in via **Auto Update Enabled** in Editor Preferences > Plugins > Monolith — checks GitHub Releases on editor startup, selects the matching per-engine asset, verifies the downloaded zip's SHA256 against `Monolith-SHA256-v2-UE5.7:` / `Monolith-SHA256-v2-UE5.8:` when present. The legacy-asset fallback marker is platform-specific — `Monolith-SHA256-v2:` on Windows, `Monolith-macOS-SHA256:` on macOS, `Monolith-Linux-SHA256:` on Linux; if the matching platform/engine marker is missing, the auto-updater aborts the installation (the "warn and proceed" fallback only applies to legacy assets), swaps the plugin on editor exit (after a Y/N prompt). See [Auto-Updater wiki](https://github.com/tumourlove/monolith/wiki/Auto-Updater).
 
 ---
 
