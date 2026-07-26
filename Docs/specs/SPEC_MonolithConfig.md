@@ -14,10 +14,11 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithConfigModule` | Registers 6 config actions |
+| `FMonolithConfigModule` | Registers 8 config actions |
 | `FMonolithConfigActions` | Static handlers. Helpers: ResolveConfigFilePath, GetConfigHierarchy (5 layers: Base -> Default -> Project -> User -> Saved). Uses GConfig API for reliable resolution |
+| `FMonolithCVarActions` | Read-only live `IConsoleManager` CVar lookup and bounded deterministic search |
 
-### Actions (6 — namespace: "config")
+### Actions (8 — namespace: "config")
 
 | Action | Description |
 |--------|-------------|
@@ -27,5 +28,7 @@
 | `search_config` | Full-text search across all config files. Max 100 results. Optional `file` filter |
 | `get_section` | Read entire config section from a file |
 | `get_config_files` | List all .ini files with hierarchy level and sizes. Optional `category` filter |
+| `get_cvar` | Get one live console variable by exact name, including value, help, flags, read-only/cheat state, and set-by source |
+| `find_cvars` | Find live console variables by `prefix` or `contains`; validates a strict mode enum, sorts before limiting, and caps output at 200 rows |
 
 ---

@@ -1,5 +1,6 @@
 #include "MonolithConfigModule.h"
 #include "MonolithConfigActions.h"
+#include "MonolithCVarActions.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithSettings.h"
@@ -11,7 +12,8 @@ void FMonolithConfigModule::StartupModule()
 	if (!GetDefault<UMonolithSettings>()->bEnableConfig) return;
 
 	FMonolithConfigActions::RegisterActions(FMonolithToolRegistry::Get());
-	UE_LOG(LogMonolith, Log, TEXT("Monolith — Config module loaded (6 actions)"));
+	FMonolithCVarActions::RegisterActions(FMonolithToolRegistry::Get());
+	UE_LOG(LogMonolith, Log, TEXT("Monolith — Config module loaded (8 actions)"));
 }
 
 void FMonolithConfigModule::ShutdownModule()
