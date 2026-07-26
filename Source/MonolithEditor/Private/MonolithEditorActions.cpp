@@ -8712,6 +8712,7 @@ namespace MonolithEditorPieSmoke
 			if (bFull)
 			{
 				TArray<TSharedPtr<FJsonValue>> SeriesArr;
+				SeriesArr.Reserve(S.TimeseriesSamples.Num());
 				for (const FPieTimeseriesSample& TS : S.TimeseriesSamples)
 				{
 					TSharedPtr<FJsonObject> SObj = MakeShared<FJsonObject>();
