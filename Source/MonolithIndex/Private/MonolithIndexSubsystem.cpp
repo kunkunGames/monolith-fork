@@ -124,6 +124,13 @@ static FAutoConsoleCommand GMonolithStartIndexCommand(
 			return;
 		}
 
+		if (!UMonolithSettings::IsIndexingActivated())
+		{
+			UE_LOG(LogMonolithIndex, Warning,
+				TEXT("Monolith.StartIndex: durable indexing activation is off; run Monolith.StartIndexing instead"));
+			return;
+		}
+
 		UE_LOG(LogMonolithIndex, Log, TEXT("Monolith.StartIndex: manual full index requested"));
 		Subsystem->StartFullIndex();
 	}));
@@ -159,41 +166,15 @@ void UMonolithIndexSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		return;
 	}
 
-	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
+	if (!UMonolithSettings::IsIndexingActivated())
+	{
+		UE_LOG(LogMonolithIndex, Log,
+			TEXT("MonolithIndex: durable indexing activation is off; existing ProjectIndex.db remains available for reads"));
+		return;
+	}
 
-	if (ShouldAutoIndex())
-	{
-		// First-time index can be deferred for very large projects — leaves the DB
-		// empty until 'Monolith.StartIndex' is run manually (escape hatch for the
-		// GC worker-context crash class on huge / high-core-count environments).
-		if (GetDefault<UMonolithSettings>()->bDeferFirstTimeIndex)
-		{
-			UE_LOG(LogMonolithIndex, Log, TEXT("MonolithIndex: first-time index deferred via bDeferFirstTimeIndex; run Monolith.StartIndex to begin"));
-			return;
-		}
-
-		UE_LOG(LogMonolithIndex, Log, TEXT("First launch — deferring full index until AR ready"));
-		if (AR.IsLoadingAssets())
-			AR.OnFilesLoaded().AddUObject(this, &UMonolithIndexSubsystem::OnAssetRegistryFilesLoaded);
-		else
-			StartFullIndex();
-	}
-	else if (CanDoIncrementalIndex())
-	{
-		UE_LOG(LogMonolithIndex, Log, TEXT("Existing index found — deferring incremental catch-up until AR ready"));
-		if (AR.IsLoadingAssets())
-			AR.OnFilesLoaded().AddUObject(this, &UMonolithIndexSubsystem::StartIncrementalIndex);
-		else
-			StartIncrementalIndex();
-	}
-	else
-	{
-		UE_LOG(LogMonolithIndex, Log, TEXT("Schema v1 DB — forcing full reindex to populate hashes"));
-		if (AR.IsLoadingAssets())
-			AR.OnFilesLoaded().AddUObject(this, &UMonolithIndexSubsystem::OnAssetRegistryFilesLoaded);
-		else
-			StartFullIndex();
-	}
+	SetAutomaticIndexingEnabled(true);
+	StartPreferredIndex(false);
 }
 
 void UMonolithIndexSubsystem::OnAssetRegistryFilesLoaded()
@@ -202,20 +183,33 @@ void UMonolithIndexSubsystem::OnAssetRegistryFilesLoaded()
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 	AssetRegistry.OnFilesLoaded().RemoveAll(this);
 
+	if (!IsIndexingWorkEnabled())
+	{
+		UE_LOG(LogMonolithIndex, Log,
+			TEXT("Asset Registry loaded after project indexing was deactivated; queued catch-up discarded"));
+		return;
+	}
+
 	if (ShouldAutoIndex())
 	{
 		UE_LOG(LogMonolithIndex, Log, TEXT("Asset Registry fully loaded -- starting full project index"));
 		StartFullIndex();
 	}
+	else if (CanDoIncrementalIndex())
+	{
+		UE_LOG(LogMonolithIndex, Log, TEXT("Asset Registry fully loaded -- starting incremental project catch-up"));
+		StartIncrementalIndex();
+	}
 	else
 	{
-		UE_LOG(LogMonolithIndex, Log, TEXT("Asset Registry loaded but auto-index no longer needed (already indexed)"));
+		UE_LOG(LogMonolithIndex, Log, TEXT("Asset Registry fully loaded -- forcing full index for an older database schema"));
+		StartFullIndex();
 	}
 }
 
 void UMonolithIndexSubsystem::Deinitialize()
 {
-	UnregisterLiveCallbacks();
+	SetAutomaticIndexingEnabled(false);
 
 	// Unbind from Asset Registry delegate if still bound
 	if (FModuleManager::Get().IsModuleLoaded("AssetRegistry"))
@@ -316,14 +310,128 @@ void UMonolithIndexSubsystem::RegisterDefaultIndexers()
 	UE_LOG(LogMonolithIndex, Log, TEXT("Registered %d indexers"), Indexers.Num());
 }
 
-void UMonolithIndexSubsystem::StartFullIndex()
+bool UMonolithIndexSubsystem::StartPreferredIndex(bool bExplicitRequest)
 {
+	check(IsInGameThread());
+
+	if (!IsIndexingWorkEnabled())
+	{
+		UE_LOG(LogMonolithIndex, Warning,
+			TEXT("Project indexing is disabled. Run Monolith.StartIndexing to enable source and asset indexing persistently."));
+		return false;
+	}
 	if (bIsIndexing)
 	{
-		UE_LOG(LogMonolithIndex, Warning, TEXT("Indexing already in progress"));
+		UE_LOG(LogMonolithIndex, Log,
+			TEXT("Preferred project index request accepted: an index run is already in progress"));
+		return true;
+	}
+	if (!Database.IsValid() || !Database->IsOpen())
+	{
+		UE_LOG(LogMonolithIndex, Warning,
+			TEXT("Cannot start preferred project index because ProjectIndex.db is not open"));
+		return false;
+	}
+
+	const bool bFirstTimeIndex = ShouldAutoIndex();
+	const bool bNeedsFullIndex = bFirstTimeIndex || !CanDoIncrementalIndex();
+	const UMonolithSettings* Settings = GetDefault<UMonolithSettings>();
+	if (bFirstTimeIndex
+		&& !bExplicitRequest
+		&& Settings
+		&& Settings->bDeferFirstTimeIndex)
+	{
+		UE_LOG(LogMonolithIndex, Log,
+			TEXT("MonolithIndex: first-time index deferred via bDeferFirstTimeIndex; run Monolith.StartIndexing or Monolith.StartIndex to begin"));
+		return false;
+	}
+
+	IAssetRegistry& AssetRegistry =
+		FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
+	if (AssetRegistry.IsLoadingAssets())
+	{
+		AssetRegistry.OnFilesLoaded().RemoveAll(this);
+		AssetRegistry.OnFilesLoaded().AddUObject(
+			this,
+			&UMonolithIndexSubsystem::OnAssetRegistryFilesLoaded);
+		UE_LOG(LogMonolithIndex, Log,
+			TEXT("Project index activation queued until the Asset Registry finishes loading"));
+		return true;
+	}
+
+	if (bNeedsFullIndex)
+	{
+		return StartFullIndex();
+	}
+
+	return StartIncrementalIndex();
+}
+
+void UMonolithIndexSubsystem::SetAutomaticIndexingEnabled(bool bEnabled)
+{
+	check(IsInGameThread());
+
+	if (!bEnabled)
+	{
+		bAutomaticIndexingEnabled = false;
+		if (FModuleManager::Get().IsModuleLoaded("AssetRegistry"))
+		{
+			IAssetRegistry& AssetRegistry =
+				FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
+			AssetRegistry.OnFilesLoaded().RemoveAll(this);
+		}
+		UnregisterLiveCallbacks();
+		PendingChanges.Reset();
+
+		if (bIsIndexing)
+		{
+			UE_LOG(LogMonolithIndex, Log,
+				TEXT("Project indexing deactivated; automatic hooks stopped and the active run will drain safely"));
+		}
+		else
+		{
+			UE_LOG(LogMonolithIndex, Log,
+				TEXT("Project indexing deactivated; automatic hooks stopped"));
+		}
 		return;
 	}
 
+	const UMonolithSettings* Settings = GetDefault<UMonolithSettings>();
+	if ((Settings && !Settings->bEnableIndex)
+		|| !UMonolithSettings::IsIndexingActivated())
+	{
+		bAutomaticIndexingEnabled = false;
+		UE_LOG(LogMonolithIndex, Warning,
+			TEXT("Project indexing automatic hooks were not enabled because activation or project policy is off"));
+		return;
+	}
+
+	bAutomaticIndexingEnabled = true;
+}
+
+bool UMonolithIndexSubsystem::StartFullIndex()
+{
+	check(IsInGameThread());
+	if (!CanAcceptIndexRequest())
+	{
+		if (!IsIndexingWorkEnabled())
+		{
+			UE_LOG(LogMonolithIndex, Warning,
+				TEXT("Project indexing is disabled; run Monolith.StartIndexing before requesting a full index"));
+		}
+		else if (bIsIndexing)
+		{
+			UE_LOG(LogMonolithIndex, Warning, TEXT("Indexing already in progress"));
+		}
+		else
+		{
+			UE_LOG(LogMonolithIndex, Error,
+				TEXT("Cannot start full index because ProjectIndex.db is not open"));
+		}
+		return false;
+	}
+
+	UnregisterLiveCallbacks();
 	bIsIndexing = true;
 
 	// Force blocking (non-incremental) reachability GC for the whole run so the
@@ -355,8 +463,16 @@ void UMonolithIndexSubsystem::StartFullIndex()
 		0,
 		TPri_BelowNormal
 	));
+	if (!IndexingThread.IsValid())
+	{
+		UE_LOG(LogMonolithIndex, Error,
+			TEXT("Cannot start full index because the background thread could not be created"));
+		OnIndexingFinished(false);
+		return false;
+	}
 
 	UE_LOG(LogMonolithIndex, Log, TEXT("Background indexing started"));
+	return true;
 }
 
 float UMonolithIndexSubsystem::GetProgress() const
@@ -1239,6 +1355,11 @@ void UMonolithIndexSubsystem::OnIndexingFinished(bool bSuccess)
 		TaskNotification.Reset();
 	}
 
+	if (bSuccess)
+	{
+		RegisterLiveCallbacks();
+	}
+
 	OnComplete.Broadcast(bSuccess);
 	OnProgress.Clear();
 
@@ -1272,6 +1393,22 @@ bool UMonolithIndexSubsystem::ShouldAutoIndex() const
 	return true;
 }
 
+bool UMonolithIndexSubsystem::IsIndexingWorkEnabled() const
+{
+	const UMonolithSettings* Settings = GetDefault<UMonolithSettings>();
+	return bAutomaticIndexingEnabled
+		&& (!Settings || Settings->bEnableIndex)
+		&& UMonolithSettings::IsIndexingActivated();
+}
+
+bool UMonolithIndexSubsystem::CanAcceptIndexRequest() const
+{
+	return IsIndexingWorkEnabled()
+		&& !bIsIndexing
+		&& Database.IsValid()
+		&& Database->IsOpen();
+}
+
 bool UMonolithIndexSubsystem::CanDoIncrementalIndex() const
 {
 	if (!Database || !Database->IsOpen()) return false;
@@ -1284,10 +1421,22 @@ bool UMonolithIndexSubsystem::CanDoIncrementalIndex() const
 	return true;
 }
 
-void UMonolithIndexSubsystem::StartIncrementalIndex()
+bool UMonolithIndexSubsystem::StartIncrementalIndex()
 {
 	check(IsInGameThread());
-	if (bIsIndexing) return;
+	if (!IsIndexingWorkEnabled())
+	{
+		UE_LOG(LogMonolithIndex, Warning,
+			TEXT("Project indexing is disabled; run Monolith.StartIndexing before requesting an incremental index"));
+		return false;
+	}
+	if (bIsIndexing) return false;
+	if (!Database.IsValid() || !Database->IsOpen())
+	{
+		UE_LOG(LogMonolithIndex, Error,
+			TEXT("Cannot start incremental index because ProjectIndex.db is not open"));
+		return false;
+	}
 	bIsIndexing = true;
 	UnregisterLiveCallbacks();
 
@@ -1422,7 +1571,7 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 		UE_LOG(LogMonolithIndex, Log, TEXT("No changes detected. Incremental index complete."));
 		bIsIndexing = false;
 		RegisterLiveCallbacks();
-		return;
+		return true;
 	}
 
 	// PHASE 6: Apply deltas
@@ -1538,6 +1687,7 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 	UE_LOG(LogMonolithIndex, Log, TEXT("Incremental index complete."));
 	bIsIndexing = false;
 	RegisterLiveCallbacks();
+	return true;
 }
 
 // ============================================================
@@ -1595,6 +1745,21 @@ void UMonolithIndexSubsystem::RunScopedSentinels(const TSet<FString>& ChangedPat
 
 void UMonolithIndexSubsystem::RegisterLiveCallbacks()
 {
+	if (!IsIndexingWorkEnabled()
+		|| bIsIndexing
+		|| !Database.IsValid()
+		|| !Database->IsOpen())
+	{
+		return;
+	}
+	if (OnAssetsAddedHandle.IsValid()
+		|| OnAssetsRemovedHandle.IsValid()
+		|| OnAssetRenamedHandle.IsValid()
+		|| OnAssetsUpdatedOnDiskHandle.IsValid())
+	{
+		return;
+	}
+
 	IAssetRegistry& AR = IAssetRegistry::GetChecked();
 
 	OnAssetsAddedHandle = AR.OnAssetsAdded().AddUObject(this, &UMonolithIndexSubsystem::OnAssetsAddedCallback);
@@ -1615,6 +1780,12 @@ void UMonolithIndexSubsystem::RegisterLiveCallbacks()
 
 void UMonolithIndexSubsystem::UnregisterLiveCallbacks()
 {
+	const bool bHadCallbacks =
+		OnAssetsAddedHandle.IsValid()
+		|| OnAssetsRemovedHandle.IsValid()
+		|| OnAssetRenamedHandle.IsValid()
+		|| OnAssetsUpdatedOnDiskHandle.IsValid();
+
 	if (IAssetRegistry* AR = IAssetRegistry::Get())
 	{
 		AR->OnAssetsAdded().Remove(OnAssetsAddedHandle);
@@ -1622,10 +1793,18 @@ void UMonolithIndexSubsystem::UnregisterLiveCallbacks()
 		AR->OnAssetRenamed().Remove(OnAssetRenamedHandle);
 		AR->OnAssetsUpdatedOnDisk().Remove(OnAssetsUpdatedOnDiskHandle);
 	}
+	OnAssetsAddedHandle.Reset();
+	OnAssetsRemovedHandle.Reset();
+	OnAssetRenamedHandle.Reset();
+	OnAssetsUpdatedOnDiskHandle.Reset();
 
 	if (GEditor)
 	{
 		GEditor->GetTimerManager()->ClearTimer(LiveIndexTimerHandle);
+	}
+	if (bHadCallbacks)
+	{
+		UE_LOG(LogMonolithIndex, Log, TEXT("Live index callbacks unregistered."));
 	}
 }
 
@@ -1641,7 +1820,7 @@ static bool IsRedirector(const FAssetData& AssetData)
 
 void UMonolithIndexSubsystem::OnAssetsAddedCallback(TConstArrayView<FAssetData> Assets)
 {
-	if (bIsIndexing) return;
+	if (!IsIndexingWorkEnabled() || bIsIndexing) return;
 	for (const FAssetData& AssetData : Assets)
 	{
 		if (!IsRedirector(AssetData))
@@ -1651,7 +1830,7 @@ void UMonolithIndexSubsystem::OnAssetsAddedCallback(TConstArrayView<FAssetData> 
 
 void UMonolithIndexSubsystem::OnAssetsRemovedCallback(TConstArrayView<FAssetData> Assets)
 {
-	if (bIsIndexing) return;
+	if (!IsIndexingWorkEnabled() || bIsIndexing) return;
 	for (const FAssetData& AssetData : Assets)
 	{
 		if (!IsRedirector(AssetData))
@@ -1661,19 +1840,24 @@ void UMonolithIndexSubsystem::OnAssetsRemovedCallback(TConstArrayView<FAssetData
 
 void UMonolithIndexSubsystem::OnAssetRenamedCallback(const FAssetData& AssetData, const FString& OldObjectPath)
 {
-	if (bIsIndexing) return;
+	if (!IsIndexingWorkEnabled() || bIsIndexing) return;
 	PendingChanges.Add({EIndexChangeType::Renamed, AssetData, OldObjectPath});
 }
 
 void UMonolithIndexSubsystem::OnAssetsUpdatedOnDiskCallback(TConstArrayView<FAssetData> Assets)
 {
-	if (bIsIndexing) return;
+	if (!IsIndexingWorkEnabled() || bIsIndexing) return;
 	for (const FAssetData& AssetData : Assets)
 		PendingChanges.Add({EIndexChangeType::Updated, AssetData, {}});
 }
 
 void UMonolithIndexSubsystem::ProcessPendingChanges()
 {
+	if (!IsIndexingWorkEnabled())
+	{
+		PendingChanges.Reset();
+		return;
+	}
 	if (PendingChanges.Num() == 0) return;
 
 	TArray<FPendingIndexChange> RawChanges = MoveTemp(PendingChanges);

@@ -34,7 +34,7 @@ Monolith is a unified Unreal Engine editor plugin that consolidates 9 separate M
 
 ```
 Monolith.uplugin
-  MonolithCore          — HTTP server (bind retry with port probe, Restart()), tool registry, discovery, settings, auto-updater
+  MonolithCore          — HTTP server (persistent Start/Stop, bind retry with port probe, Restart()), tool registry, discovery, settings, auto-updater
   MonolithBlueprint     — Blueprint inspection, variable/component/graph CRUD, node operations, compile, spawn, variable-contract reconciliation (~120+ actions)
   MonolithMaterial      — Material inspection + graph editing + CRUD + function suite + tiling quality + texture preview (~60+ actions)
   MonolithAnimation     — Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch, IK rig / retargeting (retarget pose + op-stack tuning + per-bone translation retargeting), locomotion authoring (root-motion speed, distance-curve baking), ABP/ControlRig write, anim-graph-authoring pack, layout (~170+ actions)
@@ -75,7 +75,8 @@ All domain modules register actions with `FMonolithToolRegistry` (central single
 - **Protocol version:** Echoes client's requested version; supports both `2024-11-05` and `2025-03-26` (defaults to `2025-03-26`)
 - **Transport:** HTTP with JSON-RPC 2.0 (POST for requests, GET for SSE stub, OPTIONS for CORS). Transport type in `.mcp.json` varies by client: `"http"` for Claude Code, `"streamableHttp"` for Cursor/Cline
 - **Endpoint:** `http://localhost:{port}/mcp` (default port 9316)
-- **Bind retry:** `FMonolithHttpServer::Start()` attempts up to 5 binds with exponential backoff and TCP port probe before failing. `Restart()` method available for runtime recovery. Console command: `Monolith.Restart`
+- **Activation:** `Monolith.StartServer` / `Monolith.StopServer` persist a per-user route-activation choice; `Monolith.StartIndexing` / `Monolith.StopIndexing` do the same for source and asset writers. The server and indexing choices are independent. A one-second settings cache plus a one-second core ticker reconcile external server config or policy changes within two seconds worst-case.
+- **Bind retry:** `FMonolithHttpServer::Start()` rejects a port that already has a listener before bind, then retries transient bind failures with a TCP probe. This prevents another Editor's listener from being mistaken for this process's successful start. Monolith unbinds only its routes during stop/failure cleanup because UE 5.7/5.8 exposes listener shutdown only process-wide; the retained same-port router is reused without interrupting unrelated plugin listeners. `Monolith.Restart` recovers already-enabled routes but never bypasses an explicit stop.
 - **Batch support:** Yes (JSON-RPC arrays)
 - **Session management:** None — server is fully stateless (session tracking removed; no per-session state was ever stored)
 - **CORS:** `Access-Control-Allow-Origin: *`
@@ -148,7 +149,7 @@ Each module has its own spec file under `specs/`. The table below is the index.
 
 | # | Module | Spec | Summary |
 |---|--------|------|---------|
-| 3.1 | MonolithCore | [specs/SPEC_MonolithCore.md](specs/SPEC_MonolithCore.md) | HTTP server (bind retry, Restart(), `Monolith.Restart` console cmd), tool registry, discovery, settings, auto-updater, `monolith_guide` editorial cross-namespace guide (section-keyed), improved central error messages (15 sites carry inline recovery guidance) |
+| 3.1 | MonolithCore | [specs/SPEC_MonolithCore.md](specs/SPEC_MonolithCore.md) | HTTP server (persistent `StartServer` / `StopServer`, bind retry, activation-aware `Restart`), tool registry, discovery, settings, auto-updater, `monolith_guide` editorial cross-namespace guide (section-keyed), improved central error messages (15 sites carry inline recovery guidance) |
 | 3.2 | MonolithBlueprint | [specs/SPEC_MonolithBlueprint.md](specs/SPEC_MonolithBlueprint.md) | Blueprint inspection, variable/component/graph CRUD, node ops, compile, spawn (~120+ actions) |
 | 3.3 | MonolithMaterial | [specs/SPEC_MonolithMaterial.md](specs/SPEC_MonolithMaterial.md) | Material inspection + graph editing + CRUD + function suite (~60+ actions) |
 | 3.4 | MonolithAnimation | [specs/SPEC_MonolithAnimation.md](specs/SPEC_MonolithAnimation.md) | Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch, ABP write, ControlRig (~150+ actions) |
@@ -328,12 +329,17 @@ All skills follow a common structure: YAML frontmatter, Discovery section, Asset
 ## 7. Configuration
 
 **Settings location:** Editor Preferences > Plugins > Monolith
-**Config file:** `Config/MonolithSettings.ini` section `[/Script/MonolithCore.MonolithSettings]`
+
+**Project config:** `Config/DefaultMonolith.ini` (activation defaults) and the existing `Config/MonolithSettings.ini`, section `[/Script/MonolithCore.MonolithSettings]`
+
+**Generated user activation:** `Saved/Config/<Platform>/Monolith.ini`, section `[Monolith.UserActivation]`
 
 Setting names below match the actual `UMonolithSettings` UPROPERTY identifiers in `Source/MonolithCore/Public/MonolithSettings.h` (verified 2026-04-26 audit). The convention is `bEnable<Module>` for module toggles, `bEnableProceduralTownGen` for experimental sub-features.
 
 | Setting | Default | Description |
 |---------|---------|-------------|
+| bMcpServerEnabled | True | Hard project-policy gate for the HTTP listener. A per-user Start choice cannot override `False` |
+| bServerEnabledByDefault | True | Project default used until this user runs `Monolith.StartServer` or `Monolith.StopServer` |
 | ServerPort | 9316 | MCP HTTP server port |
 | bAutoUpdateEnabled | True | GitHub Releases auto-check on startup |
 | DatabasePathOverride | (empty) | Override default DB path (Plugins/Monolith/Saved/) |
@@ -347,6 +353,7 @@ Setting names below match the actual `UMonolithSettings` UPROPERTY identifiers i
 | bEnableConfig | True | Enable Config module |
 | bEnableIndex | True | If false, skips the indexing *run* at subsystem init (query actions stay registered, so an existing DB still answers). Escape hatch for the large-project deep-index GC-worker-exhaustion crash class |
 | bEnableSource | True | Enable Source module |
+| bIndexingEnabledByDefault | True | Project default used until this user runs `Monolith.StartIndexing` or `Monolith.StopIndexing` |
 | bEnableUI | True | Enable UI module |
 | bEnableMesh | True | Enable Mesh module (core actions) |
 | bEnableGAS | True | Enable GAS module (requires GameplayAbilities plugin; no-op if `WITH_GBA=0`) |
@@ -361,7 +368,11 @@ Setting names below match the actual `UMonolithSettings` UPROPERTY identifiers i
 | bLogMemoryStats | False | Log memory usage during indexing for debugging. Default off — enable when investigating memory pressure |
 | LogVerbosity | 3 (Log) | 0=Silent, 1=Error, 2=Warning, 3=Log, 4=Verbose |
 
-**Note:** Module enable toggles are functional — each module checks its toggle at registration time and skips action registration if disabled. **Exception — `bEnableIndex`:** the Index module always registers its query actions (so `project_query` answers from an existing DB); the toggle instead gates the indexing *run* at `UMonolithIndexSubsystem::Initialize`. `bDeferFirstTimeIndex` similarly skips only the automatic first-time index, leaving it triggerable via the `Monolith.StartIndex` console command.
+**Activation precedence:** hard project-policy gates win first. Otherwise an explicit user value in generated `Monolith.ini` wins over the project default. Missing user keys inherit independently; malformed explicit booleans fail closed to `False`. Older `Saved/Monolith/Activation.ini` values migrate once. Start/Stop writes only the selected sibling key, so stopping the server does not stop indexing and vice versa. External server edits are re-resolved and applied on the core ticker; if a Stop write fails, the process-local stop latch prevents the still-enabled durable value from immediately restarting routes.
+
+**Indexing start/stop semantics:** starting explicitly may bootstrap a missing `EngineSource.db`; inherited default activation does not surprise a new install with an engine-wide source pass, but it does keep an existing source DB current. Stopping removes queued Asset Registry work, live asset callbacks, the hot-reload source hook, and pending live changes. It does not kill an active database writer; that run drains, and the disabled state prevents completion from re-arming hooks. Existing `ProjectIndex.db` and `EngineSource.db` reads remain available.
+
+**Note:** Module enable toggles are functional — each module checks its toggle at registration time and skips action registration if disabled. **Exception — `bEnableIndex`:** the Index module always registers its query actions (so `project_query` answers from an existing DB); the toggle instead gates writer work. `bDeferFirstTimeIndex` skips only an inherited startup first-time asset index; the explicit `Monolith.StartIndexing` and legacy `Monolith.StartIndex` requests may begin it, but neither bypasses a stopped activation state.
 
 ---
 

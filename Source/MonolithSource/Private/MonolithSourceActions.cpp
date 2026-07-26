@@ -4,6 +4,7 @@
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithSettings.h"
 #include "MonolithCursorCodec.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -1540,6 +1541,18 @@ FMonolithActionResult FMonolithSourceActions::HandleReadFile(const TSharedPtr<FJ
 
 FMonolithActionResult FMonolithSourceActions::HandleTriggerReindex(const TSharedPtr<FJsonObject>& Params)
 {
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	if (Settings && !Settings->bEnableSource)
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Source indexing is disabled by project policy bEnableSource=false."));
+	}
+	if (!UMonolithSettings::IsIndexingActivated())
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Persistent indexing activation is off. Run Monolith.StartIndexing before requesting a source re-index."));
+	}
+
 	if (!GEditor)
 	{
 		return FMonolithActionResult::Error(TEXT("Editor not available."));
@@ -1556,7 +1569,11 @@ FMonolithActionResult FMonolithSourceActions::HandleTriggerReindex(const TShared
 		return FMonolithActionResult::Error(TEXT("Indexing already in progress."));
 	}
 
-	Subsystem->TriggerReindex();
+	if (!Subsystem->TriggerReindex())
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Full source indexing was not started; process-local indexing hooks are disabled or the writer could not start. Run Monolith.StartIndexing and check the editor log."));
+	}
 
 	auto ResultObj = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> ContentArr;
@@ -1574,6 +1591,18 @@ FMonolithActionResult FMonolithSourceActions::HandleTriggerReindex(const TShared
 
 FMonolithActionResult FMonolithSourceActions::HandleTriggerProjectReindex(const TSharedPtr<FJsonObject>& Params)
 {
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	if (Settings && !Settings->bEnableSource)
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Source indexing is disabled by project policy bEnableSource=false."));
+	}
+	if (!UMonolithSettings::IsIndexingActivated())
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Persistent indexing activation is off. Run Monolith.StartIndexing before requesting a source re-index."));
+	}
+
 	if (!GEditor)
 	{
 		return FMonolithActionResult::Error(TEXT("Editor not available."));
@@ -1590,7 +1619,11 @@ FMonolithActionResult FMonolithSourceActions::HandleTriggerProjectReindex(const 
 		return FMonolithActionResult::Error(TEXT("Indexing already in progress."));
 	}
 
-	Subsystem->TriggerProjectReindex();
+	if (!Subsystem->TriggerProjectReindex())
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Project source indexing was not started; process-local indexing hooks are disabled, EngineSource.db is missing, or the writer could not start. Run Monolith.StartIndexing and check the editor log."));
+	}
 
 	auto ResultObj = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> ContentArr;

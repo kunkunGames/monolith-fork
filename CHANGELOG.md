@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Persistent, independent service activation controls.** `Monolith.StartServer` / `Monolith.StopServer` activate or unbind the MCP routes immediately and remember the user's choice. An already-occupied port now fails closed before bind instead of being mistaken for this process's listener, and external edits to the generated activation file are reconciled in-process within the bounded cache/ticker interval. Accepted activation keys are reconciled into the fully merged `GConfig` file so a later settings flush cannot restore stale values or discard inherited project/platform configuration. `Monolith.StartIndexing` / `Monolith.StopIndexing` likewise control automatic source and project indexing; stopping removes queued/live hooks while an already-running writer drains safely. User choices live in generated `Saved/Config/<Platform>/Monolith.ini`, project defaults remain in `Config/DefaultMonolith.ini`, and existing databases stay readable while writers are disabled.
+
+### Changed
+
+- **Re-index entry points now respect the shared activation contract.** `Monolith.Restart`, `Monolith.StartIndex`, `monolith_reindex`, source re-index actions, hot-reload hooks, and Settings-panel buttons can no longer bypass an explicit Stop choice or the existing hard policy gates (`bMcpServerEnabled`, `bEnableIndex`, `bEnableSource`). Project/source start methods return acceptance, so MCP handlers report `reindex_not_started` or an error instead of claiming success when process-local hooks rejected the request. Settings-panel eligibility now comes from the same subsystem predicate, preventing a persist-failed process-local Stop from leaving a button enabled that the writer would reject.
+- **Activation lifecycle failure paths now recover cleanly.** Asset/source writer predicates honor externally revalidated deactivation before accepting new work, a source writer that cannot create its thread or open `EngineSource.db` for writing still completes through the read-DB recovery path, and a terminal HTTP post-bind probe failure unbinds only Monolith routes while preserving UE's process-shared listeners. UE 5.7/5.8 has no public per-port listener stop, so a retained router is safely reused on the same port instead of calling process-wide `StopAllListeners()`. An unsupported live port change is rejected before active routes or the sentinel are removed, and a transient sentinel deletion failure retains ownership so shutdown or a later Stop can retry.
+
 ## [0.21.3] - 2026-07-26
 
 This release closes out the open pull-request queue. Every fix below was reported or prototyped by a contributor — thanks to **@Thomasbehan**, **@whalemenace**, and **@kunkunGames** for the write-ups, which were detailed enough to reproduce from directly.

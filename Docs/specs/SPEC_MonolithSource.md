@@ -8,7 +8,7 @@
 
 ## MonolithSource
 
-**Dependencies:** Core, CoreUObject, Engine, MonolithCore, SQLiteCore, EditorSubsystem, UnrealEd, Json, JsonUtilities, Slate, SlateCore
+**Dependencies:** Core, CoreUObject, Engine, MonolithCore, MonolithIndex, SQLiteCore, EditorSubsystem, UnrealEd, Json, JsonUtilities, Slate, SlateCore
 
 **Note:** Module structure was flattened — the vestigial outer stub has been removed. MonolithSource registers ~19+ actions (plus `suggest_build_cs_deps`, registered onto `source` from MonolithReflectionIntel). The engine source indexer is a native C++ implementation (`UMonolithSourceSubsystem` builds `EngineSource.db` in-process). The legacy Python tree-sitter indexer (`Scripts/source_indexer/`) is no longer used.
 
@@ -16,8 +16,8 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithSourceModule` | Registers ~19+ source actions |
-| `UMonolithSourceSubsystem` | UEditorSubsystem. Owns engine source DB. Runs native C++ source indexer. Exposes `TriggerReindex()` (full engine re-index) and `TriggerProjectReindex()` (project C++ only, incremental). **F17 (2026-04-26):** Auto-binds `FCoreUObjectDelegates::ReloadCompleteDelegate` at `Initialize` to kick incremental project reindex on Live Coding / hot-reload completion (5s cooldown + `bIsIndexing` re-entrancy guard + bootstrap-DB-missing skip). Unbinds at `Deinitialize`. |
+| `FMonolithSourceModule` | Registers ~19+ source actions and owns the combined `Monolith.StartIndexing` / `Monolith.StopIndexing` console orchestration across source and project indexes |
+| `UMonolithSourceSubsystem` | UEditorSubsystem. Keeps `EngineSource.db` readable independently from writer activation. `StartPreferredIndex()` chooses project-only catch-up for a healthy existing DB; a missing DB is fully bootstrapped only for an explicit/persisted user Start choice. `CanAcceptIndexRequest()` exposes process-local/policy/active-run eligibility to the Settings UI. The F17 hot-reload hook is registered only while automatic indexing is active |
 | `FMonolithSourceDatabase` | Read-only SQLite wrapper. Thread-safe via FCriticalSection. FTS queries with prefix matching |
 | `FMonolithSourceActions` | ~14+ handlers. Helpers: IsForwardDeclaration (regex), ExtractMembers (smart class outline), DeriveIncludePath (Phase 1) |
 | ~~`UMonolithQueryCommandlet`~~ | **Removed.** Replaced by standalone `monolith_query.exe` (see Section 5.1). The exe has no UE runtime dependency and starts instantly |
@@ -28,9 +28,9 @@
 
 1. `source.trigger_reindex` — full clean rebuild (engine + shaders + project).
 2. `source.trigger_project_reindex` — incremental, project C++ only.
-3. **F17 auto-hook (2026-04-26):** `UMonolithSourceSubsystem` listens on `FCoreUObjectDelegates::ReloadCompleteDelegate`. After every Live Coding patch and after every UBT-driven editor restart that fires hot-reload, the subsystem auto-kicks `TriggerProjectReindex()` (async). Guarded by a 5-second cooldown and an in-flight `bIsIndexing` flag so multi-module reload bursts don't storm. Skips silently if `EngineSource.db` doesn't yet exist (first-install bootstrap requires a manual `source.trigger_reindex`).
+3. **F17 auto-hook (2026-04-26):** while persistent indexing activation and `bEnableSource` are both on, `UMonolithSourceSubsystem` listens on `FCoreUObjectDelegates::ReloadCompleteDelegate`. After Live Coding or hot-reload it auto-kicks `TriggerProjectReindex()` (async), guarded by a 5-second cooldown and `bIsIndexing`. `Monolith.StopIndexing` removes the hook without killing an active writer; completion does not re-arm it.
 
-After F17, agents do not need to invoke any source-reindex action manually in the common dev loop — just run UBT or Live Coding and `source_query` reflects the new symbols within ~1 second.
+At enabled startup, `StartPreferredIndex` performs the cheaper project catch-up when a healthy DB exists. A new install that merely inherits the project default does not unexpectedly begin the engine-wide bootstrap; `Monolith.StartIndexing` explicitly permits it, and that persisted user choice retries after a restart if needed. Every new-work predicate re-resolves durable activation, so an externally edited `IndexingEnabled=False` value blocks the hot-reload writer after the bounded cache interval. If background-thread creation or the writer open fails after the readable handle was closed, `FMonolithSourceIndexer` still broadcasts completion; the subsystem clears `bIsIndexing` and reopens the prior database for queries. `TriggerReindex` and `TriggerProjectReindex` return whether their background writer actually started. Explicit `source.trigger_reindex`, `source.trigger_project_reindex`, and the Settings button obey the same activation, process-local, and hard-policy gates; `CanAcceptIndexRequest` keeps the button disabled after a process-local Stop even if a failed persistence write leaves the durable value enabled. Actions return an error instead of falsely reporting success when a request is rejected. Existing source queries remain available from the last completed DB.
 
 ### Actions (~20 — namespace: "source")
 

@@ -26,15 +26,35 @@ public:
 	FMonolithSourceDatabase* GetDatabase() { return Database.IsValid() ? Database.Get() : nullptr; }
 
 	/** Full reindex: engine + shaders + project source (clean build). */
-	void TriggerReindex();
+	bool TriggerReindex();
 
 	/** Incremental project-only reindex: loads existing engine symbols, indexes only project C++ source. */
-	void TriggerProjectReindex();
+	bool TriggerProjectReindex();
+
+	/**
+	 * Enable or disable automatic writer hooks for this process. Disabling does
+	 * not cancel an active run; it prevents future hot-reload work.
+	 */
+	void SetAutomaticIndexingEnabled(bool bEnabled);
+
+	/**
+	 * Run the cheaper project catch-up for a healthy DB. A missing DB is
+	 * bootstrapped only for an explicit request, avoiding a surprise engine-wide
+	 * index on a new install that merely inherited the project default.
+	 */
+	bool StartPreferredIndex(bool bAllowFullBootstrap = true);
 
 	/** Is indexing currently running? */
 	bool IsIndexing() const { return bIsIndexing; }
 
+	/**
+	 * Whether the Settings UI can issue a new full-source-index request now.
+	 * Includes durable policy, process-local writer state, and active-run state.
+	 */
+	bool CanAcceptIndexRequest() const;
+
 private:
+	bool IsIndexingWorkEnabled() const;
 	FString GetDatabasePath() const;
 	FString GetEngineSourcePath() const;
 	FString GetEngineShaderPath() const;
@@ -54,6 +74,7 @@ private:
 	TUniquePtr<FMonolithSourceDatabase> Database;
 	FMonolithSourceIndexer* Indexer = nullptr;
 	TAtomic<bool> bIsIndexing{false};
+	bool bAutomaticIndexingEnabled = false;
 
 	/** F17: Handle into FCoreUObjectDelegates::ReloadCompleteDelegate; cleared on Deinitialize. */
 	FDelegateHandle ReloadCompleteHandle;

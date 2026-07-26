@@ -551,6 +551,22 @@ FMonolithActionResult FMonolithCoreTools::HandleReindex(const TSharedPtr<FJsonOb
 		return FMonolithActionResult::Success(Result);
 	}
 
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	if (Settings && !Settings->bEnableIndex)
+	{
+		Result->SetStringField(TEXT("status"), TEXT("indexing_disabled_by_policy"));
+		Result->SetStringField(TEXT("message"),
+			TEXT("Project indexing is disabled by bEnableIndex=false."));
+		return FMonolithActionResult::Success(Result);
+	}
+	if (!UMonolithSettings::IsIndexingActivated())
+	{
+		Result->SetStringField(TEXT("status"), TEXT("indexing_inactive"));
+		Result->SetStringField(TEXT("message"),
+			TEXT("Persistent indexing activation is off. Run Monolith.StartIndexing before requesting a re-index."));
+		return FMonolithActionResult::Success(Result);
+	}
+
 	if (!GEditor)
 	{
 		return FMonolithActionResult::Error(TEXT("GEditor not available"));
@@ -601,11 +617,26 @@ FMonolithActionResult FMonolithCoreTools::HandleReindex(const TSharedPtr<FJsonOb
 	UFunction* Func = IndexSubsystemClass->FindFunctionByName(*FuncName);
 	if (Func)
 	{
-		IndexSubsystem->ProcessEvent(Func, nullptr);
-		Result->SetStringField(TEXT("status"), TEXT("reindex_started"));
-		Result->SetStringField(TEXT("message"),
-			FString::Printf(TEXT("%s triggered successfully."),
-				FuncName == TEXT("StartFullIndex") ? TEXT("Full re-index") : TEXT("Incremental index")));
+		struct
+		{
+			bool ReturnValue = false;
+		} Parms;
+		IndexSubsystem->ProcessEvent(Func, &Parms);
+		if (Parms.ReturnValue)
+		{
+			Result->SetStringField(TEXT("status"), TEXT("reindex_started"));
+			Result->SetStringField(TEXT("message"),
+				FString::Printf(TEXT("%s triggered successfully."),
+					FuncName == TEXT("StartFullIndex") ? TEXT("Full re-index") : TEXT("Incremental index")));
+		}
+		else
+		{
+			Result->SetStringField(TEXT("status"), TEXT("reindex_not_started"));
+			Result->SetStringField(TEXT("message"),
+				FString::Printf(
+					TEXT("%s was rejected by the process-local writer state or could not start. Run Monolith.StartIndexing and check the editor log."),
+					FuncName == TEXT("StartFullIndex") ? TEXT("Full re-index") : TEXT("Incremental index")));
+		}
 	}
 	else
 	{

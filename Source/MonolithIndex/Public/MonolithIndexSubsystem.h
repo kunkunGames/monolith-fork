@@ -50,11 +50,23 @@ public:
 
 	/** Trigger a full re-index (wipes DB, re-scans everything) */
 	UFUNCTION()
-	void StartFullIndex();
+	bool StartFullIndex();
 
 	/** Trigger an incremental catch-up index (delta engine) */
 	UFUNCTION()
-	void StartIncrementalIndex();
+	bool StartIncrementalIndex();
+
+	/**
+	 * Enable or disable automatic writer hooks for this process. Disabling does
+	 * not cancel an active run; it prevents queued/live work from being armed.
+	 */
+	void SetAutomaticIndexingEnabled(bool bEnabled);
+
+	/**
+	 * Start the cheapest correct catch-up run. Explicit requests may bypass
+	 * bDeferFirstTimeIndex; startup requests continue to honor it.
+	 */
+	bool StartPreferredIndex(bool bExplicitRequest = false);
 
 	/** Can we do an incremental index? (requires schema v2+ and a prior full index) */
 	UFUNCTION()
@@ -62,6 +74,13 @@ public:
 
 	/** Is indexing currently in progress? */
 	bool IsIndexing() const { return bIsIndexing; }
+
+	/**
+	 * Whether the Settings UI can issue a new full-index request right now.
+	 * Includes durable policy, process-local writer state, active-run state,
+	 * and database readiness so UI eligibility cannot drift from StartFullIndex.
+	 */
+	bool CanAcceptIndexRequest() const;
 
 	/** Get indexing progress (0.0 - 1.0) */
 	float GetProgress() const;
@@ -111,6 +130,7 @@ private:
 	void RegisterDefaultIndexers();
 	FString GetDatabasePath() const;
 	bool ShouldAutoIndex() const;
+	bool IsIndexingWorkEnabled() const;
 
 	/** Gather mount paths for enabled marketplace plugins */
 	TArray<FIndexedPluginInfo> GatherMarketplacePluginPaths() const;
@@ -154,6 +174,7 @@ private:
 	TUniquePtr<FRunnableThread> IndexingThread;
 	TUniquePtr<FIndexingTask> IndexingTaskPtr;
 	TAtomic<bool> bIsIndexing{false};
+	bool bAutomaticIndexingEnabled = false;
 
 	FString IndexingStatusMessage;
 	TUniquePtr<FAsyncTaskNotification> TaskNotification;

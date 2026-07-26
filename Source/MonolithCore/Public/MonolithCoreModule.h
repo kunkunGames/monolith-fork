@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Containers/Ticker.h"
 #include "Modules/ModuleManager.h"
 
 #define MONOLITH_VERSION TEXT("0.21.3")
@@ -28,10 +29,23 @@ public:
 	/** Console-command target: stop and restart the HTTP server on its configured port. */
 	static void RestartHttpServer();
 
+	/** Console-command targets for persistent per-user server activation. */
+	static void StartHttpServerCommand();
+	static void StopHttpServerCommand();
+
 private:
 	TUniquePtr<FMonolithHttpServer> HttpServer;
+	bool bOwnsSentinelFile = false;
+	bool bServerStoppedForProcess = false;
+	bool bHasResolvedServerActivation = false;
+	bool bLastResolvedServerActivation = false;
+	FTSTicker::FDelegateHandle ActivationTickerHandle;
 
 	void RegisterCoreTools();
+	bool StartHttpServer();
+	void StopHttpServer();
+	bool IsHttpServerActivationDesired() const;
+	bool ReconcileHttpServerActivation(float DeltaTime);
 	void WriteSentinelFile(int32 Port);
 	void RemoveSentinelFile();
 	FString GetSentinelFilePath() const;

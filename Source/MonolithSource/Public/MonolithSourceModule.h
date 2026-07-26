@@ -7,4 +7,7 @@ class FMonolithSourceModule : public IModuleInterface
 public:
 	virtual void StartupModule() override;
 	virtual void ShutdownModule() override;
+
+	static void StartIndexingCommand();
+	static void StopIndexingCommand();
 };

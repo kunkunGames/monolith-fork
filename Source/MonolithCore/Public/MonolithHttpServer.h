@@ -24,7 +24,11 @@ public:
 	/** Start the HTTP server on the configured port */
 	bool Start(int32 Port);
 
-	/** Stop the server and unbind all routes */
+	/**
+	 * Stop serving Monolith by unbinding its routes. UE owns HTTP listeners
+	 * process-wide, so the shared transport remains available for other plugins
+	 * and can be reused by a later Start on the same port.
+	 */
 	void Stop();
 
 	/** Stop then Start — useful after a silent bind failure */
@@ -33,8 +37,20 @@ public:
 	/** Is the server currently running? */
 	bool IsRunning() const { return bIsRunning; }
 
-	/** Get the port the server is listening on */
+	/** Get the port on which Monolith routes are currently active. */
 	int32 GetPort() const { return BoundPort; }
+
+#if WITH_DEV_AUTOMATION_TESTS
+	/**
+	 * Inject a deterministic port probe and bounded retry policy for startup
+	 * failure tests. Production instances retain the normal 20-attempt policy.
+	 */
+	void ConfigureStartForTests(
+		TFunction<bool(int32)> InPortProbe,
+		int32 InMaxAttempts = 1,
+		float InRetryBackoffSeconds = 0.0f,
+		float InPostBindProbeDelaySeconds = 0.0f);
+#endif
 
 private:
 	// --- Route Handlers ---
@@ -62,13 +78,28 @@ private:
 	/** Register all HTTP routes on the current HttpRouter. */
 	void BindRoutes();
 
+	/** Unbind only Monolith routes; never stop process-wide UE HTTP listeners. */
+	void DeactivateRoutes();
+
+	/** Use the production TCP probe unless a dev automation test injected one. */
+	bool IsPortListening(int32 Port) const;
+
 	/** Probe 127.0.0.1:Port via a TCP connect to verify the listener is actually bound. */
 	static bool ProbePort(int32 Port);
 
 	// --- State ---
 	TSharedPtr<IHttpRouter> HttpRouter;
 	TArray<FHttpRouteHandle> RouteHandles;
+	/** Port of the UE-owned router retained for safe same-process reuse. */
+	int32 ListenerPort = 0;
 	int32 BoundPort = 0;
 	bool bIsRunning = false;
 	FDateTime StartTime;
+	int32 MaxStartAttempts = 20;
+	float RetryBackoffSeconds = 2.0f;
+	float PostBindProbeDelaySeconds = 0.1f;
+
+#if WITH_DEV_AUTOMATION_TESTS
+	TFunction<bool(int32)> PortProbeForTests;
+#endif
 };

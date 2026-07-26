@@ -12,6 +12,21 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 >
 > **0.15.0:** the namespace counts in the Table of Contents and the per-namespace body sections below were regenerated against live `monolith_discover()` on 2026-05-23 — the 0.14.8 → 0.15.0 additions are reflected (the `bulk_fill` / `describe` framework, the blueprint dataset read/edit pack, the UI/Blueprint gap-closure actions, `monolith_guide`, `editor` Python/PIE/console verbs, the `level_sequence` namespace, and the audio MetaSound document-introspection actions). Body sections list every action by category; deep-dive param tables cover the high-traffic ones. For the exhaustive live param schema of any action, call `describe_query("action_schema", ...)` (or pass `detail=true` to `monolith_discover("<namespace>")`).
 
+### Editor console service controls
+
+These are Unreal Editor console commands, not MCP actions:
+
+| Command | Contract |
+|---------|----------|
+| `Monolith.StartServer` | Persist the user server choice and activate the HTTP routes now, subject to `bMcpServerEnabled`; an already-occupied port is rejected rather than claimed as this process's listener |
+| `Monolith.StopServer` | Persistently disable and unbind Monolith routes now; UE's process-shared HTTP transport is left intact for unrelated plugins |
+| `Monolith.Restart` | Recover already-activated routes on the retained same-port transport; never bypasses `StopServer` |
+| `Monolith.StartIndexing` | Persistently enable source and asset writers, explicitly allowing a missing source DB to bootstrap, then run the cheapest correct catch-up |
+| `Monolith.StopIndexing` | Persistently disable queued/live writer hooks; any active run drains safely |
+| `Monolith.StartIndex` | Legacy explicit full project-index request. Honors the shared activation and `bEnableIndex` gates and does not change persistent state |
+
+User activation lives under `[Monolith.UserActivation]` in generated `Saved/Config/<Platform>/Monolith.ini`. Server and indexing keys are independent; a one-second settings cache plus a one-second core ticker reconcile external server edits in-process within two seconds worst-case, and the accepted activation keys are synchronized without replacing the fully merged `GConfig` hierarchy. Existing databases remain queryable when writer activation is off. Inherited default activation does not launch the expensive first engine-source bootstrap—the explicit Start command does. Re-index actions report acceptance from the writer itself, so a process-local stop or start failure cannot be returned as a successful start. `UMonolithIndexSubsystem::CanAcceptIndexRequest()` and `UMonolithSourceSubsystem::CanAcceptIndexRequest()` expose the same process-local eligibility contract to the Settings buttons, including active-run state and project-database readiness where applicable.
+
 ---
 
 ## Table of Contents

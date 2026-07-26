@@ -72,6 +72,7 @@ private:
 	int32 IndexCppFile(const FString& FilePath, int64 ModuleId, FMonolithSourceDatabase& DB);
 	int32 IndexShaderFile(const FString& FilePath, int64 ModuleId, FMonolithSourceDatabase& DB);
 	void Finalize(FMonolithSourceDatabase& DB);
+	void CompleteRun(const TCHAR* CompletionContext);
 
 	// Symbol tracking (accumulated during indexing)
 	void UpdateSymbolMap(const FString& Name, int64 SymId, int32 LineStart, int32 LineEnd);

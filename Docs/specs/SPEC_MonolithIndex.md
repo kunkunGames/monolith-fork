@@ -16,7 +16,7 @@
 |-------|---------------|
 | `FMonolithIndexModule` | Registers 12 project actions (7 baseline + 1 v0.17.0 cross-module `audit_orphan_assets` + 3 test/profiling harness Wave 1 + 1 (2026-06-10) `export_asset_text`, Gap 11) |
 | `FMonolithIndexDatabase` | RAII SQLite wrapper. 13 tables + 2 FTS5 + 6 triggers + 1 meta. DELETE journal mode, 64MB cache. Schema v2: `saved_hash` column (Blake3 `FIoHash` hex), `schema_version` meta key |
-| `UMonolithIndexSubsystem` | UEditorSubsystem. 3-layer indexing (startup delta, live AR callbacks, full fallback). Hash-based startup catch-up. Live batched AR delegates on 2s timer. Deep asset indexing with game-thread batching. Batches every 100 assets. Progress notifications |
+| `UMonolithIndexSubsystem` | UEditorSubsystem. Keeps the DB readable independently from writer activation. `SetAutomaticIndexingEnabled` owns queued/live hooks; `StartPreferredIndex` selects incremental catch-up or full bootstrap; `CanAcceptIndexRequest` exposes the same process-local/policy/database eligibility used by `StartFullIndex` to the Settings UI. Live batched AR delegates run on a 2s timer. Deep asset indexing uses game-thread batching |
 | `IMonolithIndexer` | Pure virtual interface: GetSupportedClasses(), IndexAsset(), GetName(), IsSentinel(), SupportsIncrementalIndex(), IndexScoped() |
 | `FBlueprintIndexer` | Blueprint, WidgetBlueprint, AnimBlueprint — graphs, nodes, variables |
 | `FMaterialIndexer` | Material, MaterialInstanceConstant, MaterialFunction — expressions, params, connections |
@@ -73,6 +73,8 @@ The project indexer uses a 3-layer architecture to keep `ProjectIndex.db` in syn
 
 **Layer 1 — Startup Catch-Up (hash-based delta)**
 
+Layer 1 runs only when the shared indexing activation and `bEnableIndex` hard policy are both on. `StartPreferredIndex` queues one Asset Registry-ready callback and selects the cheapest correct path: incremental when a schema-v2 full baseline exists, full when the DB is new or requires migration. `bDeferFirstTimeIndex` still defers inherited startup bootstrap; an explicit `Monolith.StartIndexing` or `Monolith.StartIndex` request may begin it.
+
 On editor startup, `UMonolithIndexSubsystem` runs a fast delta engine:
 1. `EnumerateAllPackages()` collects all discoverable `.uasset` packages with their `FIoHash` (Blake3).
 2. Hash comparison against the `saved_hash` column in the `assets` table identifies added, removed, and changed assets. Move detection uses a `TMultiMap<FIoHash, FString>` to match removed→added pairs with identical hashes.
@@ -82,6 +84,8 @@ On editor startup, `UMonolithIndexSubsystem` runs a fast delta engine:
 Performance: ~14K assets compared in ~20ms. <1s total startup time with no changes.
 
 **Layer 2 — Live Asset Registry Callbacks**
+
+The callbacks are registered only after a successful catch-up and only while automatic indexing remains enabled. Every writer predicate also re-resolves the cached durable activation, so an externally edited `IndexingEnabled=False` value blocks callbacks and clears pending work after the bounded revalidation interval even when the process-local hook flag was previously true. `Monolith.StopIndexing` unregisters all delegates, clears the live timer and pending changes, and removes any queued `OnFilesLoaded` callback. If a full writer is already active, it drains without re-registering callbacks at completion.
 
 Four AR delegates are registered at startup:
 - `OnAssetsAdded` — new assets
@@ -93,7 +97,7 @@ Events are batched into a pending queue and drained on a 2-second timer tick. Th
 
 **Layer 3 — Forced Full Reindex (fallback)**
 
-`monolith_reindex()` defaults to incremental mode (Layer 1 logic). Passing `force=true` triggers a full wipe-and-rebuild: drops all table data, re-enumerates, and re-indexes every asset. Used when the DB is suspected corrupt or after schema migrations.
+`monolith_reindex()` defaults to incremental mode (Layer 1 logic). Passing `force=true` triggers a full wipe-and-rebuild: drops all table data, re-enumerates, and re-indexes every asset. Both forms require active indexing and `bEnableIndex=true`; while durably stopped they return `indexing_inactive`. The underlying full/incremental entry points return acceptance, so a process-local stop after a persistence failure or another start failure returns `reindex_not_started` rather than reporting a false start.
 
 **Schema v2 Migration**
 

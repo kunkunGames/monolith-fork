@@ -19,6 +19,8 @@ FMonolithHttpServer::FMonolithHttpServer()
 FMonolithHttpServer::~FMonolithHttpServer()
 {
 	Stop();
+	HttpRouter.Reset();
+	ListenerPort = 0;
 }
 
 bool FMonolithHttpServer::Start(int32 Port)
@@ -29,52 +31,76 @@ bool FMonolithHttpServer::Start(int32 Port)
 		return true;
 	}
 
+	// UE 5.7/5.8 exposes listener startup and shutdown only at process scope.
+	// Keep the router acquired by this instance so Stop/Start can safely
+	// unbind/rebind only Monolith routes without disturbing other plugins.
+	const bool bCanReuseOwnedRouter =
+		HttpRouter.IsValid() && ListenerPort == Port;
+	if (ListenerPort != 0 && ListenerPort != Port)
+	{
+		UE_LOG(LogMonolith, Error,
+			TEXT("Cannot move the Monolith MCP server from port %d to %d in-process: UE exposes no per-port listener teardown. Restart the editor after changing ServerPort."),
+			ListenerPort,
+			Port);
+		return false;
+	}
+
 	// On a fresh editor launch, the OS keeps the port in TIME_WAIT for up to
 	// 2*MSL (~30s on macOS/Linux) after the previous editor shut down. UE's
-	// HttpServerModule also caches a broken listener internally and won't
-	// rebind until StopAllListeners() is called. Budget ~40s total so a
-	// rapid close+reopen cycle doesn't drop the MCP server on the floor.
-	constexpr int32 MaxAttempts = 20;
-	constexpr float BackoffSeconds = 2.0f;
+	// HttpServerModule replaces a failed listener on the next GetHttpRouter()
+	// call while listeners are enabled. Budget ~40s total so a rapid
+	// close+reopen cycle doesn't drop the MCP server on the floor.
+	// A post-bind TCP probe can only prove that *some* process is listening. If
+	// another editor already owns this port, treating its listener as ours would
+	// report a false start and let this process write a misleading sentinel.
+	// TIME_WAIT sockets do not accept connections, so this preflight does not
+	// interfere with the retry path for a recently closed editor. A router
+	// retained by this instance is already owned, so skip preflight when
+	// reactivating its routes.
+	if (!bCanReuseOwnedRouter && IsPortListening(Port))
+	{
+		UE_LOG(LogMonolith, Error,
+			TEXT("Cannot start Monolith MCP server: port %d already has a listener before bind"),
+			Port);
+		return false;
+	}
 
-	for (int32 Attempt = 1; Attempt <= MaxAttempts; ++Attempt)
+	for (int32 Attempt = 1; Attempt <= MaxStartAttempts; ++Attempt)
 	{
 		if (Attempt > 1)
 		{
 			UE_LOG(LogMonolith, Warning, TEXT("HTTP bind attempt %d/%d on port %d — waiting %.1fs"),
-				Attempt, MaxAttempts, Port, BackoffSeconds);
-			FPlatformProcess::Sleep(BackoffSeconds);
-
-			// Drop our router handle + routes so GetHttpRouter can evict failed listener.
-			if (HttpRouter.IsValid())
+				Attempt, MaxStartAttempts, Port, RetryBackoffSeconds);
+			if (RetryBackoffSeconds > 0.0f)
 			{
-				for (const FHttpRouteHandle& Handle : RouteHandles)
-				{
-					HttpRouter->UnbindRoute(Handle);
-				}
+				FPlatformProcess::Sleep(RetryBackoffSeconds);
 			}
-			RouteHandles.Empty();
-			HttpRouter.Reset();
-
-			// Full module reset — the HttpServerModule caches a failed listener
-			// and refuses to re-bind the same port until we explicitly stop it.
-			FHttpServerModule::Get().StopAllListeners();
 		}
 
+		// Clear routes from a previous false-negative attempt before asking the
+		// module for the current router. If the prior listener failed to bind,
+		// GetHttpRouter replaces it; if it was a probe false negative, the same
+		// active shared router is returned.
+		DeactivateRoutes();
 		HttpRouter = FHttpServerModule::Get().GetHttpRouter(Port, true);
 		if (!HttpRouter.IsValid())
 		{
 			UE_LOG(LogMonolith, Warning, TEXT("GetHttpRouter failed on port %d (attempt %d)"), Port, Attempt);
+			ListenerPort = 0;
 			continue;
 		}
+		ListenerPort = Port;
 
 		BindRoutes();
 		FHttpServerModule::Get().StartAllListeners();
 
 		// Brief wait for OS to complete bind before probing
-		FPlatformProcess::Sleep(0.1f);
+		if (PostBindProbeDelaySeconds > 0.0f)
+		{
+			FPlatformProcess::Sleep(PostBindProbeDelaySeconds);
+		}
 
-		if (ProbePort(Port))
+		if (IsPortListening(Port))
 		{
 			bIsRunning = true;
 			BoundPort = Port;
@@ -84,11 +110,37 @@ bool FMonolithHttpServer::Start(int32 Port)
 		}
 
 		UE_LOG(LogMonolith, Warning, TEXT("Port %d not listening after StartAllListeners (attempt %d)"), Port, Attempt);
+		// A bounded probe may report a false negative even though UE bound the
+		// listener. Unbind only Monolith routes and retain the UE-owned router;
+		// the next attempt can safely reuse it without stopping unrelated
+		// listeners through the process-wide StopAllListeners API.
+		DeactivateRoutes();
 	}
 
 	UE_LOG(LogMonolith, Error, TEXT("Failed to bind Monolith MCP server on port %d after %d attempts (~%ds total)"),
-		Port, MaxAttempts, static_cast<int32>(MaxAttempts * BackoffSeconds));
-	// Clean up
+		Port,
+		MaxStartAttempts,
+		static_cast<int32>(MaxStartAttempts * RetryBackoffSeconds));
+	return false;
+}
+
+void FMonolithHttpServer::Stop()
+{
+	const bool bHadServerState =
+		bIsRunning
+		|| RouteHandles.Num() > 0
+		|| BoundPort != 0;
+	if (!bHadServerState)
+	{
+		return;
+	}
+
+	DeactivateRoutes();
+	UE_LOG(LogMonolith, Log, TEXT("Monolith MCP server stopped"));
+}
+
+void FMonolithHttpServer::DeactivateRoutes()
+{
 	if (HttpRouter.IsValid())
 	{
 		for (const FHttpRouteHandle& Handle : RouteHandles)
@@ -97,31 +149,10 @@ bool FMonolithHttpServer::Start(int32 Port)
 		}
 	}
 	RouteHandles.Empty();
-	HttpRouter.Reset();
-	return false;
-}
-
-void FMonolithHttpServer::Stop()
-{
-	if (!bIsRunning)
-	{
-		return;
-	}
-
-	if (HttpRouter.IsValid())
-	{
-		for (const FHttpRouteHandle& Handle : RouteHandles)
-		{
-			HttpRouter->UnbindRoute(Handle);
-		}
-		RouteHandles.Empty();
-	}
-
-	FHttpServerModule::Get().StopAllListeners();
-	HttpRouter.Reset();
 
 	bIsRunning = false;
-	UE_LOG(LogMonolith, Log, TEXT("Monolith MCP server stopped"));
+	BoundPort = 0;
+	StartTime = FDateTime::MinValue();
 }
 
 void FMonolithHttpServer::BindRoutes()
@@ -173,8 +204,24 @@ bool FMonolithHttpServer::ProbePort(int32 Port)
 	FSocket* Socket = SocketSubsystem->CreateSocket(NAME_Stream, TEXT("MonolithProbe"), false);
 	if (!Socket) return false;
 
-	Socket->SetNonBlocking(false);
-	const bool bConnected = Socket->Connect(*Addr);
+	// A blocking connect to a closed Windows loopback port can stall editor
+	// startup for roughly two seconds. The probe only targets localhost, so a
+	// bounded non-blocking connect is enough to distinguish an active listener
+	// without adding an unbounded startup delay.
+	const bool bNonBlocking = Socket->SetNonBlocking(true);
+	if (bNonBlocking)
+	{
+		// A non-blocking connect commonly reports false while the connection is
+		// still pending. WaitForWrite + GetConnectionState is authoritative.
+		Socket->Connect(*Addr);
+	}
+	const bool bConnected =
+		bNonBlocking
+		&& (Socket->GetConnectionState() == SCS_Connected
+			|| (Socket->Wait(
+					ESocketWaitConditions::WaitForWrite,
+					FTimespan::FromMilliseconds(100))
+				&& Socket->GetConnectionState() == SCS_Connected));
 	Socket->Close();
 	SocketSubsystem->DestroySocket(Socket);
 	return bConnected;
@@ -182,23 +229,41 @@ bool FMonolithHttpServer::ProbePort(int32 Port)
 
 bool FMonolithHttpServer::Restart(int32 Port)
 {
-	// Unbind our routes
-	if (HttpRouter.IsValid())
+	if (ListenerPort != 0 && ListenerPort != Port)
 	{
-		for (const FHttpRouteHandle& Handle : RouteHandles)
-		{
-			HttpRouter->UnbindRoute(Handle);
-		}
+		UE_LOG(LogMonolith, Error,
+			TEXT("Cannot restart the Monolith MCP server on port %d while the retained UE listener is on port %d. Restart the editor after changing ServerPort."),
+			Port,
+			ListenerPort);
+		return false;
 	}
-	RouteHandles.Empty();
-	HttpRouter.Reset();
-
-	// Full stop — safe here because we own the listener
-	FHttpServerModule::Get().StopAllListeners();
-
-	bIsRunning = false;
-	BoundPort = 0;
+	Stop();
 	return Start(Port);
+}
+
+#if WITH_DEV_AUTOMATION_TESTS
+void FMonolithHttpServer::ConfigureStartForTests(
+	TFunction<bool(int32)> InPortProbe,
+	int32 InMaxAttempts,
+	float InRetryBackoffSeconds,
+	float InPostBindProbeDelaySeconds)
+{
+	PortProbeForTests = MoveTemp(InPortProbe);
+	MaxStartAttempts = FMath::Max(1, InMaxAttempts);
+	RetryBackoffSeconds = FMath::Max(0.0f, InRetryBackoffSeconds);
+	PostBindProbeDelaySeconds = FMath::Max(0.0f, InPostBindProbeDelaySeconds);
+}
+#endif
+
+bool FMonolithHttpServer::IsPortListening(int32 Port) const
+{
+#if WITH_DEV_AUTOMATION_TESTS
+	if (PortProbeForTests)
+	{
+		return PortProbeForTests(Port);
+	}
+#endif
+	return ProbePort(Port);
 }
 
 // ============================================================================
@@ -949,4 +1014,3 @@ void FMonolithHttpServer::AddCorsHeaders(FHttpServerResponse& Response, const FH
 	// read by the requesting page. Same-origin and non-browser callers
 	// (Claude Code via the proxy) are unaffected.
 }
-

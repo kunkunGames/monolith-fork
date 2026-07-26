@@ -38,7 +38,7 @@ void FMonolithSettingsCustomization::CustomizeDetails(IDetailLayoutBuilder& Deta
 				{
 					if (auto* Sub = GEditor->GetEditorSubsystem<UMonolithIndexSubsystem>())
 					{
-						return !Sub->IsIndexing();
+						return Sub->CanAcceptIndexRequest();
 					}
 				}
 				return false;
@@ -74,7 +74,7 @@ void FMonolithSettingsCustomization::CustomizeDetails(IDetailLayoutBuilder& Deta
 				{
 					if (auto* Sub = GEditor->GetEditorSubsystem<UMonolithSourceSubsystem>())
 					{
-						return !Sub->IsIndexing();
+						return Sub->CanAcceptIndexRequest();
 					}
 				}
 				return false;
