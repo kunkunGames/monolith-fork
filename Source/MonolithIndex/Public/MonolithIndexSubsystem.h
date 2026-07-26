@@ -74,6 +74,13 @@ public:
 
 	// --- Query API (called by MCP actions) ---
 	TArray<FSearchResult> Search(const FString& Query, int32 Limit = 50);
+
+	/** Preserve invalid-query versus internal-index failure classification. */
+	EMonolithProjectSearchStatus Search(
+		const FString& Query,
+		int32 Limit,
+		TArray<FSearchResult>& OutResults,
+		FString& OutError);
 	TSharedPtr<FJsonObject> FindReferences(const FString& PackagePath);
 	TArray<FIndexedAsset> FindByType(const FString& AssetClass, int32 Limit = 100, int32 Offset = 0);
 	TSharedPtr<FJsonObject> GetStats();

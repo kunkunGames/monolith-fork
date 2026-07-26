@@ -29,7 +29,8 @@ All asset paths follow UE content browser format (no .uasset extension):
 
 | Action | Params | Purpose |
 |--------|--------|---------|
-| `search` | `query` (string) | Full-text search across all indexed assets, nodes, variables, parameters |
+| `search` | `query` (string), `limit`? (integer) | Fail-closed full-text search across the existing asset and graph-node indexes, with match provenance |
+| `repair_fts` | `target`? (`all`/`assets`/`nodes`), `execute`? (boolean) | Dry-run or rebuild only a stale existing FTS index; live-editor only |
 | `find_references` | `asset_path` (string) | Find all assets that reference a given asset |
 | `find_by_type` | `asset_type` (string), `module`? (string) | List all assets of a specific type, optionally filtered by plugin/module |
 | `get_asset_details` | `asset_path` (string) | Detailed metadata for a specific asset |
@@ -46,7 +47,14 @@ The `search` action uses SQLite FTS5 under the hood. Key syntax:
 | `"BP_Enemy Health"` | Exact phrase |
 | `BP_Enemy OR BP_Ally` | Either term |
 | `BP_Enemy NOT Health` | Exclude term |
-| `BP_Enemy NEAR/3 Health` | Terms within 3 tokens |
+| `NEAR(BP_Enemy Health, 3)` | Terms within 3 tokens |
+| `"node_name":Branch` | Match only the graph-node name column |
+| `{asset_name description}:Enemy` | Match either listed asset column |
+
+Mixed asset/node expressions are projected onto the two existing FTS tables.
+For example, `asset_name:BP_Enemy OR node_name:Branch` can return both kinds of
+hit. A valid conjunction that no single table can satisfy returns a successful
+zero-result response; malformed syntax and storage failures remain errors.
 
 ## Common Workflows
 
@@ -80,14 +88,20 @@ project_query({ action: "get_asset_details", params: { asset_path: "/Game/Bluepr
 project_query({ action: "get_stats", params: {} })
 ```
 
+### Inspect and repair stale FTS parity
+```
+project_query({ action: "repair_fts", params: { target: "all" } })
+project_query({ action: "repair_fts", params: { target: "assets", execute: true } })
+```
+
 ### Find all Niagara systems
 ```
 project_query({ action: "find_by_type", params: { asset_type: "NiagaraSystem" } })
 ```
 
-### Find assets by variable or parameter name
+### Find assets by indexed asset metadata or graph-node name
 ```
-project_query({ action: "search", params: { query: "Health" } })
+project_query({ action: "search", params: { query: "node_name:Health*" } })
 ```
 
 ## Supported Asset Types
@@ -111,7 +125,9 @@ The index covers these types for `find_by_type`:
 ## Tips
 
 - The index is built on first launch and auto-updates — use `monolith_reindex()` to force rebuild
-- FTS5 search covers asset names, node names, variable names, parameter names, and comments
+- FTS5 search covers indexed asset name/class/description/path/module fields and graph-node name/class/type fields
+- Inspect `match_source`, `match_table`, `match_field`, `match_object_path`, and `match_value` before treating a content match as an asset-identity match
+- Invalid FTS syntax fails explicitly. `match_context` comes from the reported `match_field`, and both `match_context` and `match_value` are bounded to 240 Unicode code points; use the length/truncation fields to detect projection
 - Use `find_references` to understand dependency chains before deleting or renaming assets
 - Combine with domain-specific tools: search first, then inspect with `blueprint_query`, `material_query`, etc.
 - `get_stats` shows last index time — if stale, trigger `monolith_reindex()`

@@ -2,6 +2,7 @@
 #include "MonolithIndexDatabase.h"
 #include "MonolithToolRegistry.h"
 #include "Actions/ProjectSearchAction.h"
+#include "Actions/ProjectRepairFtsAction.h"
 #include "Actions/ProjectFindReferencesAction.h"
 #include "Actions/ProjectFindByTypeAction.h"
 #include "Actions/ProjectGetStatsAction.h"
@@ -17,7 +18,7 @@
 
 void FMonolithIndexModule::StartupModule()
 {
-	UE_LOG(LogMonolithIndex, Verbose, TEXT("Monolith -- Index module loaded (10 actions, SQLite+FTS5)"));
+	UE_LOG(LogMonolithIndex, Verbose, TEXT("Monolith -- Index module loaded (12 actions, SQLite+FTS5)"));
 
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 
@@ -25,6 +26,11 @@ void FMonolithIndexModule::StartupModule()
 		FProjectSearchAction::GetDescription(),
 		FMonolithActionHandler::CreateStatic(&FProjectSearchAction::Execute),
 		FProjectSearchAction::GetSchema());
+
+	Registry.RegisterAction(TEXT("project"), FProjectRepairFtsAction::GetName(),
+		FProjectRepairFtsAction::GetDescription(),
+		FMonolithActionHandler::CreateStatic(&FProjectRepairFtsAction::Execute),
+		FProjectRepairFtsAction::GetSchema());
 
 	Registry.RegisterAction(TEXT("project"), FProjectFindReferencesAction::GetName(),
 		FProjectFindReferencesAction::GetDescription(),

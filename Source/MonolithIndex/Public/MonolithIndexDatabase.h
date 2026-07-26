@@ -134,7 +134,28 @@ struct FSearchResult
 	FString AssetClass;
 	FString ModuleName;
 	FString MatchContext; // snippet around the match
-	float Rank = 0.0f;
+	int32 MatchContextLength = 0;
+	bool bMatchContextTruncated = false;
+	FString MatchSource;
+	FString MatchTable;
+	FString MatchField;
+	FString MatchObjectPath;
+	FString MatchValue;
+	int32 MatchValueLength = 0;
+	bool bMatchValueTruncated = false;
+	double Rank = 0.0;
+};
+
+enum class EMonolithProjectSearchStatus : uint8
+{
+	/** Search completed, including the valid zero-result case. */
+	Succeeded,
+
+	/** The caller supplied malformed FTS5 syntax or an unknown column. */
+	InvalidQuery,
+
+	/** The project index could not execute the valid query. */
+	InternalError
 };
 
 /**
@@ -217,6 +238,23 @@ public:
 
 	// --- FTS5 Search ---
 	TArray<FSearchResult> FullTextSearch(const FString& Query, int32 Limit = 50);
+
+	/**
+	 * Search both project FTS tables without conflating caller syntax errors
+	 * with index/storage failures. OutResults is empty for every failure.
+	 */
+	EMonolithProjectSearchStatus FullTextSearch(
+		const FString& Query,
+		int32 Limit,
+		TArray<FSearchResult>& OutResults,
+		FString& OutError);
+
+	/** Dry-run or rebuild the existing asset/node FTS indexes. */
+	bool RepairFullTextIndexes(
+		const FString& Target,
+		bool bExecute,
+		TSharedPtr<FJsonObject>& OutReport,
+		FString& OutError);
 
 	// --- Stats ---
 	TSharedPtr<FJsonObject> GetStats();

@@ -116,6 +116,686 @@ def escape_fts(query: str) -> str:
     return " ".join(f'"{t}"*' for t in tokens)
 
 
+def _fts_bareword_character(character: str) -> bool:
+    codepoint = ord(character)
+    return (
+        codepoint > 127
+        or codepoint == 0x1A
+        or character == "_"
+        or "a" <= character <= "z"
+        or "A" <= character <= "Z"
+        or "0" <= character <= "9"
+    )
+
+
+def _fts_space_character(character: str) -> bool:
+    return character in " \t\n\r\v\f"
+
+
+def _trim_fts_space(value: str) -> str:
+    begin = 0
+    end = len(value)
+    while begin < end and _fts_space_character(value[begin]):
+        begin += 1
+    while end > begin and _fts_space_character(value[end - 1]):
+        end -= 1
+    return value[begin:end]
+
+
+def _normalize_fts_identifier(value: str) -> str:
+    return "".join(
+        chr(ord(character) - ord("A") + ord("a"))
+        if "A" <= character <= "Z" else character
+        for character in value
+    )
+
+
+class _FtsNode:
+    def __init__(
+        self,
+        kind,
+        text="",
+        left=None,
+        right=None,
+        fields=None,
+        exclude=False,
+        parenthesized=False,
+    ):
+        self.kind = kind
+        self.text = text
+        self.left = left
+        self.right = right
+        self.fields = fields or []
+        self.exclude = exclude
+        self.parenthesized = parenthesized
+
+
+class _FtsProjectionParser:
+    # Mirrors the bounded recursive-descent ceiling in the native/live core.
+    MAX_DEPTH = 256
+
+    def __init__(self, query):
+        self.query = query
+        self.position = 0
+        self.error = ""
+
+    def fail(self, message):
+        if not self.error:
+            self.error = message
+
+    def fail_at(self, message, position):
+        self.fail(f"{message} at character {position}")
+
+    def at_end(self):
+        return self.position >= len(self.query)
+
+    def skip_whitespace(self):
+        start = self.position
+        while (
+            not self.at_end()
+            and _fts_space_character(self.query[self.position])
+        ):
+            self.position += 1
+        return self.position != start
+
+    def keyword_at(self, position, keyword):
+        if not self.query.startswith(keyword, position):
+            return False
+        end = position + len(keyword)
+        return (
+            (position == 0 or not _fts_bareword_character(
+                self.query[position - 1]
+            ))
+            and (end >= len(self.query) or not _fts_bareword_character(
+                self.query[end]
+            ))
+        )
+
+    def consume_keyword(self, keyword):
+        saved = self.position
+        self.skip_whitespace()
+        if not self.keyword_at(self.position, keyword):
+            self.position = saved
+            return False
+        self.position += len(keyword)
+        return True
+
+    def next_is_operator(self):
+        return any(
+            self.keyword_at(self.position, keyword)
+            for keyword in ("AND", "OR", "NOT")
+        )
+
+    def parse(self):
+        self.skip_whitespace()
+        if self.at_end():
+            self.fail("FTS5 query must not be empty")
+            return None
+        result = self.parse_disjunction(0)
+        if result is None:
+            return None
+        self.skip_whitespace()
+        if not self.at_end():
+            self.fail_at("Unexpected token in FTS5 query", self.position)
+            return None
+        return result
+
+    def parse_disjunction(self, depth):
+        if depth > self.MAX_DEPTH:
+            self.fail("FTS5 query nesting exceeds the supported depth")
+            return None
+        left = self.parse_conjunction(depth + 1)
+        if left is None:
+            return None
+        while self.consume_keyword("OR"):
+            right = self.parse_conjunction(depth + 1)
+            if right is None:
+                self.fail("FTS5 OR requires an expression on both sides")
+                return None
+            left = _FtsNode("or", left=left, right=right)
+        return left
+
+    def parse_conjunction(self, depth):
+        left = self.parse_negation(depth + 1)
+        if left is None:
+            return None
+        while self.consume_keyword("AND"):
+            right = self.parse_negation(depth + 1)
+            if right is None:
+                self.fail("FTS5 AND requires an expression on both sides")
+                return None
+            left = _FtsNode("and", left=left, right=right)
+        return left
+
+    def parse_negation(self, depth):
+        left = self.parse_implicit_conjunction(depth + 1)
+        if left is None:
+            return None
+        while self.consume_keyword("NOT"):
+            right = self.parse_implicit_conjunction(depth + 1)
+            if right is None:
+                self.fail("FTS5 NOT requires an expression on both sides")
+                return None
+            left = _FtsNode("not", left=left, right=right)
+        return left
+
+    def parse_implicit_conjunction(self, depth):
+        left = self.parse_atom(depth + 1)
+        if left is None:
+            return None
+        while True:
+            separator = self.position
+            if (
+                not self.skip_whitespace()
+                or self.at_end()
+                or self.query[self.position] == ")"
+                or self.next_is_operator()
+            ):
+                self.position = separator
+                break
+            right = self.parse_atom(depth + 1)
+            if right is None:
+                return None
+            if left.parenthesized or right.parenthesized:
+                self.fail_at(
+                    "FTS5 does not allow implicit AND next to "
+                    "a parenthesized expression",
+                    separator,
+                )
+                return None
+            left = _FtsNode("and", left=left, right=right)
+        return left
+
+    def parse_atom(self, depth):
+        if depth > self.MAX_DEPTH:
+            self.fail("FTS5 query nesting exceeds the supported depth")
+            return None
+        self.skip_whitespace()
+        if self.at_end() or self.query[self.position] == ")":
+            return None
+        if self.next_is_operator():
+            self.fail_at("Unexpected FTS5 boolean operator", self.position)
+            return None
+
+        filter_status, fields, exclude = self.try_parse_filter()
+        if filter_status == "invalid":
+            return None
+        has_filter = filter_status == "parsed"
+        if has_filter:
+            self.skip_whitespace()
+
+        expression_start = self.position
+        has_anchor = False
+        if not self.at_end() and self.query[self.position] == "^":
+            has_anchor = True
+            self.position += 1
+            self.skip_whitespace()
+
+        if not self.at_end() and self.query[self.position] == "(":
+            if has_anchor:
+                self.fail_at(
+                    "FTS5 initial-token anchor may only prefix a phrase",
+                    expression_start,
+                )
+                return None
+            self.position += 1
+            child = self.parse_disjunction(depth + 1)
+            if child is None:
+                return None
+            self.skip_whitespace()
+            if self.at_end() or self.query[self.position] != ")":
+                self.fail_at(
+                    "Unterminated parenthesized FTS5 expression",
+                    expression_start,
+                )
+                return None
+            self.position += 1
+            result = _FtsNode(
+                "group",
+                left=child,
+                parenthesized=True,
+            )
+        else:
+            near_saved = self.position
+            near_text = self.try_parse_near_group()
+            if near_text is not None:
+                if has_anchor:
+                    self.fail_at(
+                        "FTS5 initial-token anchor is not valid on a NEAR group",
+                        expression_start,
+                    )
+                    return None
+                result = _FtsNode("leaf", text=near_text)
+            else:
+                self.position = near_saved
+                ok, _ = self.parse_string_token()
+                if not ok:
+                    self.fail_at("Expected an FTS5 phrase", self.position)
+                    return None
+                self.consume_optional_star()
+                while True:
+                    plus_saved = self.position
+                    self.skip_whitespace()
+                    if self.at_end() or self.query[self.position] != "+":
+                        self.position = plus_saved
+                        break
+                    self.position += 1
+                    self.skip_whitespace()
+                    ok, _ = self.parse_string_token()
+                    if not ok:
+                        self.fail_at(
+                            "FTS5 phrase '+' requires a following string",
+                            self.position,
+                        )
+                        return None
+                    self.consume_optional_star()
+                result = _FtsNode(
+                    "leaf",
+                    text=_trim_fts_space(
+                        self.query[expression_start:self.position]
+                    ),
+                )
+
+        if has_filter:
+            result = _FtsNode(
+                "filter",
+                left=result,
+                fields=fields,
+                exclude=exclude,
+                parenthesized=result.parenthesized,
+            )
+        return result
+
+    def try_parse_filter(self):
+        saved = self.position
+        exclude = False
+        fields = []
+        if not self.at_end() and self.query[self.position] == "-":
+            exclude = True
+            self.position += 1
+            self.skip_whitespace()
+        if self.at_end():
+            self.position = saved
+            return "none", [], False
+
+        if self.query[self.position] == "{":
+            self.position += 1
+            while True:
+                self.skip_whitespace()
+                if not self.at_end() and self.query[self.position] == "}":
+                    if not fields:
+                        self.fail_at(
+                            "FTS5 column set must contain at least one name",
+                            saved,
+                        )
+                        return "invalid", [], False
+                    self.position += 1
+                    break
+                ok, field = self.parse_string_token()
+                if not ok:
+                    if self.error:
+                        return "invalid", [], False
+                    self.position = saved
+                    return "none", [], False
+                fields.append(_normalize_fts_identifier(field))
+                field_end = self.position
+                had_space = self.skip_whitespace()
+                if (
+                    not had_space
+                    and (self.at_end() or self.query[self.position] != "}")
+                ):
+                    self.position = saved
+                    return "none", [], False
+                if (
+                    self.position == field_end
+                    and not self.at_end()
+                    and self.query[self.position] != "}"
+                ):
+                    self.position = saved
+                    return "none", [], False
+        else:
+            ok, field = self.parse_string_token()
+            if not ok:
+                if self.error:
+                    return "invalid", [], False
+                self.position = saved
+                return "none", [], False
+            fields.append(_normalize_fts_identifier(field))
+
+        self.skip_whitespace()
+        if self.at_end() or self.query[self.position] != ":":
+            self.position = saved
+            return "none", [], False
+        self.position += 1
+        return "parsed", fields, exclude
+
+    def parse_string_token(self):
+        if self.at_end():
+            return False, ""
+        if self.query[self.position] == '"':
+            self.position += 1
+            value = []
+            while not self.at_end():
+                character = self.query[self.position]
+                self.position += 1
+                if character != '"':
+                    value.append(character)
+                    continue
+                if (
+                    not self.at_end()
+                    and self.query[self.position] == '"'
+                ):
+                    value.append('"')
+                    self.position += 1
+                    continue
+                return True, "".join(value)
+            self.fail("Unterminated quoted FTS5 string")
+            return False, ""
+
+        start = self.position
+        while (
+            not self.at_end()
+            and _fts_bareword_character(self.query[self.position])
+        ):
+            self.position += 1
+        if self.position == start:
+            return False, ""
+        return True, self.query[start:self.position]
+
+    def consume_optional_star(self):
+        saved = self.position
+        self.skip_whitespace()
+        if not self.at_end() and self.query[self.position] == "*":
+            self.position += 1
+        else:
+            self.position = saved
+
+    def try_parse_near_group(self):
+        start = self.position
+        if not self.keyword_at(self.position, "NEAR"):
+            return None
+        self.position += 4
+        self.skip_whitespace()
+        if self.at_end() or self.query[self.position] != "(":
+            self.position = start
+            return None
+
+        depth = 0
+        in_quote = False
+        while self.position < len(self.query):
+            character = self.query[self.position]
+            if character == '"':
+                if (
+                    in_quote
+                    and self.position + 1 < len(self.query)
+                    and self.query[self.position + 1] == '"'
+                ):
+                    self.position += 2
+                    continue
+                in_quote = not in_quote
+            elif not in_quote:
+                if character == "(":
+                    depth += 1
+                elif character == ")":
+                    depth -= 1
+                    if depth == 0:
+                        self.position += 1
+                        return _trim_fts_space(
+                            self.query[start:self.position]
+                        )
+            self.position += 1
+        self.fail_at("Unterminated FTS5 NEAR group", start)
+        return None
+
+
+class _ProjectedFtsNode:
+    DISJUNCTION = 1
+    CONJUNCTION = 2
+    NEGATION = 3
+    ATOM = 4
+
+    def __init__(
+        self,
+        result,
+        query="",
+        error="",
+        precedence=ATOM,
+    ):
+        self.result = result
+        self.query = query
+        self.error = error
+        self.precedence = precedence
+
+
+def _render_fts_child(child, parent_precedence, parenthesize_equal=False):
+    needs_parentheses = (
+        child.precedence < parent_precedence
+        or (
+            parenthesize_equal
+            and child.precedence == parent_precedence
+        )
+    )
+    return f"({child.query})" if needs_parentheses else child.query
+
+
+def _project_fts_node(
+    node,
+    allowed_fields,
+    enabled_fields,
+    current_field_order,
+    depth=0,
+):
+    if depth > _FtsProjectionParser.MAX_DEPTH:
+        return _ProjectedFtsNode(
+            "invalid",
+            error="FTS5 query projection exceeds the supported depth",
+        )
+    if node.kind == "leaf":
+        if not allowed_fields:
+            return _ProjectedFtsNode("inapplicable")
+        return _ProjectedFtsNode("applicable", node.text)
+    if node.kind == "group":
+        child = _project_fts_node(
+            node.left,
+            allowed_fields,
+            enabled_fields,
+            current_field_order,
+            depth + 1,
+        )
+        if child.result == "applicable":
+            child.query = f"({child.query})"
+            child.precedence = _ProjectedFtsNode.ATOM
+        return child
+    if node.kind == "filter":
+        requested = set()
+        for raw_field in node.fields:
+            field = _normalize_fts_identifier(raw_field)
+            if field not in enabled_fields:
+                return _ProjectedFtsNode(
+                    "invalid",
+                    error=(
+                        "Unknown FTS5 column qualifier: "
+                        f"{raw_field}"
+                    ),
+                )
+            requested.add(field)
+        if node.exclude:
+            next_fields = set(allowed_fields) - requested
+        else:
+            next_fields = set(allowed_fields) & requested
+        if not next_fields:
+            return _ProjectedFtsNode("inapplicable")
+        child = _project_fts_node(
+            node.left,
+            next_fields,
+            enabled_fields,
+            current_field_order,
+            depth + 1,
+        )
+        if child.result != "applicable":
+            return child
+        if next_fields != allowed_fields:
+            ordered = [
+                field for field in current_field_order
+                if field in next_fields
+            ]
+            spec = (
+                ordered[0]
+                if len(ordered) == 1
+                else "{" + " ".join(ordered) + "}"
+            )
+            child.query = f"{spec} : ({child.query})"
+            child.precedence = _ProjectedFtsNode.ATOM
+        return child
+    if node.kind == "and":
+        left = _project_fts_node(
+            node.left,
+            allowed_fields,
+            enabled_fields,
+            current_field_order,
+            depth + 1,
+        )
+        if left.result != "applicable":
+            return left
+        right = _project_fts_node(
+            node.right,
+            allowed_fields,
+            enabled_fields,
+            current_field_order,
+            depth + 1,
+        )
+        if right.result != "applicable":
+            return right
+        precedence = _ProjectedFtsNode.CONJUNCTION
+        return _ProjectedFtsNode(
+            "applicable",
+            (
+                f"{_render_fts_child(left, precedence)} AND "
+                f"{_render_fts_child(right, precedence)}"
+            ),
+            precedence=precedence,
+        )
+    if node.kind == "or":
+        left = _project_fts_node(
+            node.left,
+            allowed_fields,
+            enabled_fields,
+            current_field_order,
+            depth + 1,
+        )
+        if left.result == "invalid":
+            return left
+        right = _project_fts_node(
+            node.right,
+            allowed_fields,
+            enabled_fields,
+            current_field_order,
+            depth + 1,
+        )
+        if right.result == "invalid":
+            return right
+        if left.result == "inapplicable":
+            return right
+        if right.result == "inapplicable":
+            return left
+        precedence = _ProjectedFtsNode.DISJUNCTION
+        return _ProjectedFtsNode(
+            "applicable",
+            (
+                f"{_render_fts_child(left, precedence)} OR "
+                f"{_render_fts_child(right, precedence)}"
+            ),
+            precedence=precedence,
+        )
+    if node.kind == "not":
+        left = _project_fts_node(
+            node.left,
+            allowed_fields,
+            enabled_fields,
+            current_field_order,
+            depth + 1,
+        )
+        if left.result != "applicable":
+            return left
+        right = _project_fts_node(
+            node.right,
+            allowed_fields,
+            enabled_fields,
+            current_field_order,
+            depth + 1,
+        )
+        if right.result == "invalid":
+            return right
+        if right.result == "inapplicable":
+            return left
+        precedence = _ProjectedFtsNode.NEGATION
+        return _ProjectedFtsNode(
+            "applicable",
+            (
+                f"{_render_fts_child(left, precedence)} NOT "
+                f"{_render_fts_child(right, precedence, True)}"
+            ),
+            precedence=precedence,
+        )
+    return _ProjectedFtsNode(
+        "invalid",
+        error="Unknown FTS5 projection node",
+    )
+
+
+def _validate_fts_fields(node, enabled_fields, depth=0):
+    if depth > _FtsProjectionParser.MAX_DEPTH:
+        return "FTS5 query validation exceeds the supported depth"
+    if node.kind == "filter":
+        for raw_field in node.fields:
+            field = _normalize_fts_identifier(raw_field)
+            if field not in enabled_fields:
+                return f"Unknown FTS5 column qualifier: {raw_field}"
+    if node.left is not None:
+        error = _validate_fts_fields(
+            node.left,
+            enabled_fields,
+            depth + 1,
+        )
+        if error:
+            return error
+    if node.right is not None:
+        error = _validate_fts_fields(
+            node.right,
+            enabled_fields,
+            depth + 1,
+        )
+        if error:
+            return error
+    return ""
+
+
+def _project_fts_query(query, current_fields, enabled_fields):
+    parser = _FtsProjectionParser(query)
+    root = parser.parse()
+    if root is None:
+        return "invalid", "", parser.error or "Malformed FTS5 query"
+    current_order = [
+        _normalize_fts_identifier(field)
+        for field in current_fields
+    ]
+    current_set = set(current_order)
+    enabled_set = {
+        _normalize_fts_identifier(field)
+        for field in enabled_fields
+    }
+    validation_error = _validate_fts_fields(root, enabled_set)
+    if validation_error:
+        return "invalid", "", validation_error
+    projected = _project_fts_node(
+        root,
+        current_set,
+        enabled_set,
+        current_order,
+    )
+    return projected.result, projected.query, projected.error
+
+
 # ============================================================
 # UE hash replication — produce byte-identical cursors to the live
 # C++ adapters + the C++ exe sibling. The HARD-GATE parity test diffs the
@@ -1507,8 +2187,11 @@ class SourceActions:
 
 
 # ============================================================
-# Project actions (UNCHANGED — do not touch)
+# Project actions
 # ============================================================
+
+PROJECT_SEARCH_PREVIEW_CODEPOINTS = 240
+
 
 class ProjectActions:
     def __init__(self):
@@ -1517,56 +2200,196 @@ class ProjectActions:
         self.db = open_db(PROJECT_DB)
 
     def search(self, args):
-        query = args.query
-        limit = args.limit
+        query = _trim_fts_space(args.query)
+        if not query:
+            print(json.dumps({
+                "success": False,
+                "error": "search requires a non-empty query argument",
+            }, indent=2))
+            return
+
+        limit = max(1, min(args.limit, 1000))
         sqlite3 = self._sqlite3
 
         results = []
-        try:
-            rows = self.db.execute(
-                f"""SELECT a.package_path, a.asset_name, a.asset_class, a.module_name,
-                           snippet(fts_assets, 2, '>>>', '<<<', '...', 32) as ctx, rank
-                    FROM fts_assets f JOIN assets a ON a.id = f.rowid
-                    WHERE fts_assets MATCH ? ORDER BY rank LIMIT {limit}""",
-                (query,)
-            ).fetchall()
-            for r in rows:
-                results.append({
-                    "asset_path": r["package_path"],
-                    "asset_name": r["asset_name"],
-                    "asset_class": r["asset_class"],
-                    "module_name": r["module_name"],
-                    "match_context": r["ctx"],
-                    "rank": r["rank"],
-                })
-        except sqlite3.OperationalError:
-            pass
+        asset_fields = (
+            "asset_name", "asset_class", "description",
+            "package_path", "module_name",
+        )
+        node_fields = ("node_name", "node_class", "node_type")
+        enabled_fields = set(asset_fields + node_fields)
 
-        try:
-            node_rows = self.db.execute(
-                f"""SELECT a.package_path, a.asset_name, a.asset_class, a.module_name,
-                           snippet(fts_nodes, 0, '>>>', '<<<', '...', 32) as ctx, f.rank
-                    FROM fts_nodes f JOIN nodes n ON n.id = f.rowid
-                    JOIN assets a ON a.id = n.asset_id
-                    WHERE fts_nodes MATCH ? ORDER BY f.rank LIMIT {limit}""",
-                (query,)
-            ).fetchall()
-            for r in node_rows:
-                results.append({
-                    "asset_path": r["package_path"],
-                    "asset_name": r["asset_name"],
-                    "asset_class": r["asset_class"],
-                    "module_name": r["module_name"],
-                    "match_context": r["ctx"],
-                    "rank": r["rank"],
-                })
-        except sqlite3.OperationalError:
-            pass
+        def run_search(
+            sql,
+            search_query,
+            match_source,
+            match_table,
+            object_kind,
+            snippet_field,
+            fields,
+        ):
+            try:
+                rows = self.db.execute(
+                    sql,
+                    (search_query, limit),
+                ).fetchall()
+            except sqlite3.OperationalError as error:
+                print(json.dumps({
+                    "success": False,
+                    "error": (
+                        f"Invalid or failed FTS5 query for "
+                        f"{match_table}: {error}"
+                    ),
+                }, indent=2))
+                return False
 
-        results.sort(key=lambda x: x["rank"])
+            for row in rows:
+                match_field = ""
+                match_value = ""
+                snippet_context = row["ctx"] or ""
+                match_context = ""
+                for index, field in enumerate(fields):
+                    raw_value = row[f"raw{index}"] or ""
+                    highlighted_value = row[f"h{index}"] or ""
+                    if not match_field and highlighted_value != raw_value:
+                        match_field = field
+                        match_value = raw_value
+                        # The fixed-column snippet is valid only when that same
+                        # field supplied match_field; otherwise show this
+                        # field's own highlighted value.
+                        match_context = (
+                            snippet_context
+                            if field == snippet_field and snippet_context
+                            else highlighted_value
+                        )
+
+                if not match_field:
+                    match_field = fields[0]
+                    match_value = row["raw0"] or ""
+                    match_context = match_value
+
+                match_context_length = len(match_context)
+                match_context_truncated = (
+                    match_context_length > PROJECT_SEARCH_PREVIEW_CODEPOINTS
+                )
+                match_value_length = len(match_value)
+                match_value_truncated = (
+                    match_value_length > PROJECT_SEARCH_PREVIEW_CODEPOINTS
+                )
+
+                object_path = row["package_path"]
+                if object_kind:
+                    object_path += f"::{object_kind}:{row['object_name']}"
+
+                results.append({
+                    "asset_path": row["package_path"],
+                    "asset_name": row["asset_name"],
+                    "asset_class": row["asset_class"],
+                    "module_name": row["module_name"],
+                    "match_context": (
+                        match_context[:PROJECT_SEARCH_PREVIEW_CODEPOINTS]
+                        if match_context_truncated else match_context
+                    ),
+                    "match_context_length": match_context_length,
+                    "match_context_truncated": match_context_truncated,
+                    "match_source": match_source,
+                    "match_table": match_table,
+                    "match_field": match_field,
+                    "match_object_path": object_path,
+                    "match_value": (
+                        match_value[:PROJECT_SEARCH_PREVIEW_CODEPOINTS]
+                        if match_value_truncated else match_value
+                    ),
+                    "match_value_length": match_value_length,
+                    "match_value_truncated": match_value_truncated,
+                    "rank": row["rank"],
+                })
+
+            return True
+
+        asset_projection, asset_query, asset_projection_error = (
+            _project_fts_query(
+                query,
+                asset_fields,
+                enabled_fields,
+            )
+        )
+        node_projection, node_query, node_projection_error = (
+            _project_fts_query(
+                query,
+                node_fields,
+                enabled_fields,
+            )
+        )
+        if "invalid" in (asset_projection, node_projection):
+            print(json.dumps({
+                "success": False,
+                "error": (
+                    asset_projection_error
+                    or node_projection_error
+                    or "Malformed FTS5 query"
+                ),
+            }, indent=2))
+            return
+
+        if asset_projection == "applicable" and not run_search(
+            """SELECT a.package_path, a.asset_name, a.asset_class, a.module_name,
+                      a.asset_name AS object_name,
+                      snippet(fts_assets, 2, '>>>', '<<<', '...', 32) AS ctx,
+                      a.asset_name AS raw0, a.asset_class AS raw1,
+                      a.description AS raw2, a.package_path AS raw3,
+                      a.module_name AS raw4,
+                      highlight(fts_assets, 0, '>>>', '<<<') AS h0,
+                      highlight(fts_assets, 1, '>>>', '<<<') AS h1,
+                      highlight(fts_assets, 2, '>>>', '<<<') AS h2,
+                      highlight(fts_assets, 3, '>>>', '<<<') AS h3,
+                      highlight(fts_assets, 4, '>>>', '<<<') AS h4,
+                      bm25(fts_assets) AS rank
+               FROM fts_assets JOIN assets a ON a.id = fts_assets.rowid
+               WHERE fts_assets MATCH ?
+               ORDER BY bm25(fts_assets) LIMIT ?""",
+            asset_query,
+            "asset", "assets", "", "description", asset_fields,
+        ):
+            return
+
+        if node_projection == "applicable" and not run_search(
+            """SELECT a.package_path, a.asset_name, a.asset_class, a.module_name,
+                      'row-' || n.id || ':' || n.node_name || '@' ||
+                      n.node_class || '[' || n.pos_x || ',' || n.pos_y ||
+                      ']' AS object_name,
+                      snippet(fts_nodes, 0, '>>>', '<<<', '...', 32) AS ctx,
+                      n.node_name AS raw0, n.node_class AS raw1,
+                      n.node_type AS raw2,
+                      highlight(fts_nodes, 0, '>>>', '<<<') AS h0,
+                      highlight(fts_nodes, 1, '>>>', '<<<') AS h1,
+                      highlight(fts_nodes, 2, '>>>', '<<<') AS h2,
+                      bm25(fts_nodes) AS rank
+               FROM fts_nodes JOIN nodes n ON n.id = fts_nodes.rowid
+               JOIN assets a ON a.id = n.asset_id
+               WHERE fts_nodes MATCH ?
+               ORDER BY bm25(fts_nodes) LIMIT ?""",
+            node_query,
+            "node", "nodes", "node", "node_name", node_fields,
+        ):
+            return
+
+        results.sort(key=lambda item: (
+            item["rank"],
+            item["match_source"],
+            item["asset_path"],
+            item["match_object_path"],
+        ))
         results = results[:limit]
 
-        print(json.dumps({"success": True, "count": len(results), "results": results}, indent=2))
+        print(json.dumps({
+            "success": True,
+            "count": len(results),
+            "results": results,
+            "limit": limit,
+            "match_value_preview_chars": PROJECT_SEARCH_PREVIEW_CODEPOINTS,
+            "match_context_preview_chars": PROJECT_SEARCH_PREVIEW_CODEPOINTS,
+        }, indent=2))
 
     def find_by_type(self, args):
         asset_class = args.asset_class

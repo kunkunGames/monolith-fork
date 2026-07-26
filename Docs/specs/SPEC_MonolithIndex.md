@@ -14,7 +14,7 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithIndexModule` | Registers 12 project actions (7 baseline + 1 v0.17.0 cross-module `audit_orphan_assets` + 3 test/profiling harness Wave 1 + 1 (2026-06-10) `export_asset_text`, Gap 11) |
+| `FMonolithIndexModule` | Registers 12 project actions (8 baseline including `repair_fts` + 3 test/profiling harness Wave 1 + 1 (2026-06-10) `export_asset_text`, Gap 11). The `project` namespace also receives the v0.17.0 cross-module `audit_orphan_assets`, for 13 discoverable actions total |
 | `FMonolithIndexDatabase` | RAII SQLite wrapper. 13 tables + 2 FTS5 + 6 triggers + 1 meta. DELETE journal mode, 64MB cache. Schema v2: `saved_hash` column (Blake3 `FIoHash` hex), `schema_version` meta key |
 | `UMonolithIndexSubsystem` | UEditorSubsystem. 3-layer indexing (startup delta, live AR callbacks, full fallback). Hash-based startup catch-up. Live batched AR delegates on 2s timer. Deep asset indexing with game-thread batching. Batches every 100 assets. Progress notifications |
 | `IMonolithIndexer` | Pure virtual interface: GetSupportedClasses(), IndexAsset(), GetName(), IsSentinel(), SupportsIncrementalIndex(), IndexScoped() |
@@ -35,11 +35,12 @@
 
 > **`FUserDefinedStructIndexer` `<unresolved>` field guard (issue #70).** `FUserDefinedStructIndexer::IndexAsset` (`Indexers/UserDefinedStructIndexer.cpp`) previously called `FProperty::GetCPPType()` unconditionally while indexing UDS fields. Several property subclasses dereference their inner type pointer inside `GetCPPType()` with no null guard, so a field whose type can no longer resolve — e.g. a `TSubclassOf<X>` pointing at a deleted Blueprint, leaving `MetaClass` null — asserted (`check(MetaClass)`, `PropertyClass.cpp:160`) and took the editor down mid deep-index. A file-local `SafeGetCPPType` helper now returns `GetCPPType()` for every well-formed property and a `<unresolved>` placeholder only when the inner pointer the assert would dereference is null. It covers the verified asserting paths: `FObjectProperty`/`FSoftObjectProperty` (`PropertyClass`), `FClassProperty`/`FSoftClassProperty` (`MetaClass`/`PropertyClass`), `FStructProperty` (`Struct`), and `FEnumProperty` (`GetEnum()`); `FByteProperty` already null-guards internally. Both the JSON `type` field and the indexed-variable `VarType` route through the helper, so a broken field indexes as `<unresolved>` instead of crashing. Behavior is identical for all well-formed properties.
 
-### Actions (12 — namespace: "project")
+### Actions (13 — namespace: "project")
 
 | Action | Params | Description |
 |--------|--------|-------------|
-| `search` | `query` (required), `limit` (50) | FTS5 full-text search across all indexed assets, nodes, variables, parameters |
+| `search` | `query` (required), `limit` (50, clamped 1–1000) | Fail-closed FTS5 search across the existing asset/node indexes. Recursively projects boolean expressions and bare/quoted/grouped column filters per table, returns match provenance and bounded Unicode-safe context/value projections, and distinguishes invalid input (`-32602`) from index/storage failure (`-32603`) |
+| `repair_fts` | `target` (`all`, `assets`, `nodes`; default `all`), `execute` (default `false`) | Dry-run or transactionally rebuild only the selected existing FTS index from its authoritative content table. Executed repair is rejected while indexing is active |
 | `find_references` | `asset_path` (required) | Bidirectional dependency lookup |
 | `find_by_type` | `asset_type` (required), `limit` (100), `offset` (0) | Filter assets by class with pagination |
 | `get_stats` | none | Row counts for all 13 tables + asset class breakdown (top 20) |
@@ -62,10 +63,14 @@
 **13 Tables:** assets, nodes, connections, variables, parameters, dependencies, actors, tags, tag_references, configs, cpp_symbols, datatable_rows, meta
 
 **2 FTS5 Virtual Tables:**
-- `fts_assets` — content=assets, tokenize='porter unicode61', columns: asset_name, asset_class, description, package_path
+- `fts_assets` — content=assets, tokenize='porter unicode61', columns: asset_name, asset_class, description, package_path, module_name
 - `fts_nodes` — content=nodes, tokenize='porter unicode61', columns: node_name, node_class, node_type
 
 **DB Location:** `Plugins/Monolith/Saved/ProjectIndex.db`
+
+**Search/repair contract:** `FullTextSearch` binds both the FTS query and the clamped result limit, distinguishes `Row`/`Done` from SQLite step failures, and returns `EMonolithProjectSearchStatus` so the action maps malformed syntax or an unknown column to JSON-RPC `-32602` and database availability, schema, corruption, prepare, bind, or non-syntax step failures to `-32603`. The shared live/native C++ parser follows FTS5 boolean precedence and recursively projects every expression onto the columns present in each table. It recognizes bare, quoted, grouped, and negative column specifications, validates all qualifiers before table-specific simplification, and intersects nested filters with the active table. Thus `asset_name:Foo OR node_name:Bar` can return both sources, `asset_name:Foo OR Bar` still evaluates `Bar` against nodes, and `Common AND (asset_name:Foo OR node_name:Bar)` retains the compatible nested branch on each table. Native token boundaries are decoded as UTF-8 code points, matching live/Python handling for non-ASCII FTS5 barewords. Mixed conjunctions that require fields from both independent indexes are valid zero-result searches rather than parameter errors. Every failure clears partial results; successful results, including zero-result searches, are deterministically ordered by rank, source, asset path, and match object path. `repair_fts` never creates a new schema or content source: dry-run reports row counts, and execute issues the FTS5 `rebuild` command for `fts_assets` and/or `fts_nodes` inside a caller-owned transaction.
+
+**Matched-context contract:** `match_context` is taken from the same highlighted field reported by `match_field`. Description and node-name matches use their respective token-bounded FTS snippet; matches in any other field use that field's highlighted value, so unrelated description or node-name text cannot explain the hit.
 
 ### Incremental Indexing
 

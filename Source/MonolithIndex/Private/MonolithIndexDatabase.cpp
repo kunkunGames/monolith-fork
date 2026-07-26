@@ -1,4 +1,6 @@
 #include "MonolithIndexDatabase.h"
+#include "ProjectSearchQueryProjection.h"
+#include "ProjectSearchTextProjection.h"
 #include "SQLiteDatabase.h"
 #include "Misc/Paths.h"
 #include "HAL/PlatformFileManager.h"
@@ -1017,65 +1019,407 @@ bool FMonolithIndexDatabase::UpdateSavedHash(const FString& PackagePath, const F
 TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Query, int32 Limit)
 {
 	TArray<FSearchResult> Results;
-	if (!IsOpen()) return Results;
-
-	// Search assets FTS
-	FString SQL = FString::Printf(
-		TEXT("SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, snippet(fts_assets, 2, '>>>', '<<<', '...', 32) as ctx, rank FROM fts_assets f JOIN assets a ON a.id = f.rowid WHERE fts_assets MATCH ? ORDER BY rank LIMIT %d;"),
-		Limit
-	);
-
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, *SQL);
-	Stmt.SetBindingValueByIndex(1, Query);
-
-	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	FString Error;
+	if (FullTextSearch(Query, Limit, Results, Error)
+		!= EMonolithProjectSearchStatus::Succeeded)
 	{
-		FSearchResult R;
-		Stmt.GetColumnValueByIndex(0, R.AssetPath);
-		Stmt.GetColumnValueByIndex(1, R.AssetName);
-		Stmt.GetColumnValueByIndex(2, R.AssetClass);
-		Stmt.GetColumnValueByIndex(3, R.ModuleName);
-		Stmt.GetColumnValueByIndex(4, R.MatchContext);
-		double RankD = 0.0;
-		Stmt.GetColumnValueByIndex(5, RankD);
-		R.Rank = static_cast<float>(RankD);
-		Results.Add(MoveTemp(R));
+		UE_LOG(LogMonolithIndex, Error, TEXT("Project search failed: %s"), *Error);
 	}
-
-	// Also search nodes FTS
-	FString NodeSQL = FString::Printf(
-		TEXT("SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, snippet(fts_nodes, 0, '>>>', '<<<', '...', 32) as ctx, f.rank FROM fts_nodes f JOIN nodes n ON n.id = f.rowid JOIN assets a ON a.id = n.asset_id WHERE fts_nodes MATCH ? ORDER BY f.rank LIMIT %d;"),
-		Limit
-	);
-
-	FSQLitePreparedStatement Stmt2;
-	Stmt2.Create(*Database, *NodeSQL);
-	Stmt2.SetBindingValueByIndex(1, Query);
-
-	while (Stmt2.Step() == ESQLitePreparedStatementStepResult::Row)
-	{
-		FSearchResult R;
-		Stmt2.GetColumnValueByIndex(0, R.AssetPath);
-		Stmt2.GetColumnValueByIndex(1, R.AssetName);
-		Stmt2.GetColumnValueByIndex(2, R.AssetClass);
-		Stmt2.GetColumnValueByIndex(3, R.ModuleName);
-		Stmt2.GetColumnValueByIndex(4, R.MatchContext);
-		double RankD = 0.0;
-		Stmt2.GetColumnValueByIndex(5, RankD);
-		R.Rank = static_cast<float>(RankD);
-		Results.Add(MoveTemp(R));
-	}
-
-	// Sort combined results by rank (lower = better in FTS5)
-	Results.Sort([](const FSearchResult& A, const FSearchResult& B) { return A.Rank < B.Rank; });
-
-	if (Results.Num() > Limit)
-	{
-		Results.SetNum(Limit);
-	}
-
 	return Results;
+}
+
+static bool IsFts5QuerySyntaxError(const FString& Error)
+{
+	// These diagnostics are emitted by the MATCH expression parser, not by
+	// storage/schema access. Everything else remains an internal index failure.
+	return Error.Contains(TEXT("fts5: syntax error"), ESearchCase::IgnoreCase)
+		|| Error.Contains(TEXT("unterminated string"), ESearchCase::IgnoreCase)
+		|| Error.Contains(TEXT("malformed MATCH"), ESearchCase::IgnoreCase)
+		|| Error.Contains(TEXT("unknown special query"), ESearchCase::IgnoreCase);
+}
+
+EMonolithProjectSearchStatus FMonolithIndexDatabase::FullTextSearch(
+	const FString& Query,
+	int32 Limit,
+	TArray<FSearchResult>& OutResults,
+	FString& OutError)
+{
+	OutResults.Reset();
+	OutError.Reset();
+	if (!IsOpen())
+	{
+		OutError = TEXT("Project index database is not open");
+		return EMonolithProjectSearchStatus::InternalError;
+	}
+
+	const int32 ClampedLimit = FMath::Clamp(Limit, 1, 1000);
+	const TArray<FString> AssetFields = {
+		TEXT("asset_name"),
+		TEXT("asset_class"),
+		TEXT("description"),
+		TEXT("package_path"),
+		TEXT("module_name"),
+	};
+	const TArray<FString> NodeFields = {
+		TEXT("node_name"),
+		TEXT("node_class"),
+		TEXT("node_type"),
+	};
+	TSet<FString> EnabledFields;
+	for (const FString& Field : AssetFields)
+	{
+		EnabledFields.Add(Field);
+	}
+	for (const FString& Field : NodeFields)
+	{
+		EnabledFields.Add(Field);
+	}
+
+	enum class ESearchAttemptResult : uint8
+	{
+		Completed,
+		InvalidQuery,
+		InternalError,
+	};
+
+	auto RunSearch = [
+		this,
+		&OutResults,
+		&OutError,
+		ClampedLimit](
+		const TCHAR* SQL,
+		const FString& SearchQuery,
+		const FString& MatchSource,
+		const FString& MatchTable,
+		const FString& ObjectKind,
+		const FString& SnippetField,
+		const TArray<FString>& FieldNames) -> ESearchAttemptResult
+	{
+		FSQLitePreparedStatement Stmt;
+		if (!Stmt.Create(*Database, SQL))
+		{
+			const FString DatabaseError = Database->GetLastError();
+			OutError = FString::Printf(
+				TEXT("Failed to prepare %s FTS query: %s"),
+				*MatchTable,
+				*DatabaseError);
+			return ESearchAttemptResult::InternalError;
+		}
+		if (!Stmt.SetBindingValueByIndex(1, SearchQuery))
+		{
+			OutError = FString::Printf(TEXT("Failed to bind %s FTS query"), *MatchTable);
+			return ESearchAttemptResult::InternalError;
+		}
+		if (!Stmt.SetBindingValueByIndex(2, ClampedLimit))
+		{
+			OutError = FString::Printf(TEXT("Failed to bind %s FTS result limit"), *MatchTable);
+			return ESearchAttemptResult::InternalError;
+		}
+
+		TArray<FSearchResult> SearchResults;
+		for (;;)
+		{
+			const ESQLitePreparedStatementStepResult StepResult = Stmt.Step();
+			if (StepResult == ESQLitePreparedStatementStepResult::Done)
+			{
+				break;
+			}
+			if (StepResult != ESQLitePreparedStatementStepResult::Row)
+			{
+				const FString DatabaseError = Database->GetLastError();
+				OutError = FString::Printf(
+					TEXT("%s FTS query failed: %s"),
+					*MatchTable,
+					DatabaseError.IsEmpty() ? TEXT("database operation failed") : *DatabaseError);
+				return IsFts5QuerySyntaxError(DatabaseError)
+					? ESearchAttemptResult::InvalidQuery
+					: ESearchAttemptResult::InternalError;
+			}
+
+			FSearchResult Result;
+			Stmt.GetColumnValueByIndex(0, Result.AssetPath);
+			Stmt.GetColumnValueByIndex(1, Result.AssetName);
+			Stmt.GetColumnValueByIndex(2, Result.AssetClass);
+			Stmt.GetColumnValueByIndex(3, Result.ModuleName);
+
+			FString ObjectName;
+			Stmt.GetColumnValueByIndex(4, ObjectName);
+			FString SnippetContext;
+			Stmt.GetColumnValueByIndex(5, SnippetContext);
+
+			const int32 RawFieldStart = 6;
+			const int32 HighlightFieldStart = RawFieldStart + FieldNames.Num();
+			for (int32 FieldIndex = 0; FieldIndex < FieldNames.Num(); ++FieldIndex)
+			{
+				FString RawValue;
+				FString HighlightedValue;
+				Stmt.GetColumnValueByIndex(RawFieldStart + FieldIndex, RawValue);
+				Stmt.GetColumnValueByIndex(HighlightFieldStart + FieldIndex, HighlightedValue);
+				if (Result.MatchField.IsEmpty() && HighlightedValue != RawValue)
+				{
+					Result.MatchField = FieldNames[FieldIndex];
+					Result.MatchValue = MoveTemp(RawValue);
+					// A token-bounded snippet is useful only when it came from
+					// the same field selected for provenance. Other fields use
+					// their own highlighted value so context cannot drift.
+					Result.MatchContext = FieldNames[FieldIndex] == SnippetField
+						&& !SnippetContext.IsEmpty()
+						? MoveTemp(SnippetContext)
+						: MoveTemp(HighlightedValue);
+				}
+			}
+
+			if (Result.MatchField.IsEmpty() && FieldNames.Num() > 0)
+			{
+				Result.MatchField = FieldNames[0];
+				Stmt.GetColumnValueByIndex(RawFieldStart, Result.MatchValue);
+				Result.MatchContext = Result.MatchValue;
+			}
+
+			Stmt.GetColumnValueByIndex(
+				HighlightFieldStart + FieldNames.Num(),
+				Result.Rank);
+			Result.MatchSource = MatchSource;
+			Result.MatchTable = MatchTable;
+			Result.MatchObjectPath = ObjectKind.IsEmpty()
+				? Result.AssetPath
+				: FString::Printf(
+					TEXT("%s::%s:%s"),
+					*Result.AssetPath,
+					*ObjectKind,
+					*ObjectName);
+			Result.MatchContext = MonolithProjectSearchText::ProjectPreview(
+				Result.MatchContext,
+				Result.MatchContextLength,
+				Result.bMatchContextTruncated);
+			Result.MatchValue = MonolithProjectSearchText::ProjectPreview(
+				Result.MatchValue,
+				Result.MatchValueLength,
+				Result.bMatchValueTruncated);
+			SearchResults.Add(MoveTemp(Result));
+		}
+
+		OutResults.Append(MoveTemp(SearchResults));
+		return ESearchAttemptResult::Completed;
+	};
+
+	FString AssetQuery;
+	FString NodeQuery;
+	FString AssetProjectionError;
+	FString NodeProjectionError;
+	const MonolithProjectSearchQuery::EProjectionResult AssetProjection =
+		MonolithProjectSearchQuery::Project(
+			Query,
+			AssetFields,
+			EnabledFields,
+			AssetQuery,
+			&AssetProjectionError);
+	const MonolithProjectSearchQuery::EProjectionResult NodeProjection =
+		MonolithProjectSearchQuery::Project(
+			Query,
+			NodeFields,
+			EnabledFields,
+			NodeQuery,
+			&NodeProjectionError);
+	if (AssetProjection == MonolithProjectSearchQuery::EProjectionResult::Invalid
+		|| NodeProjection == MonolithProjectSearchQuery::EProjectionResult::Invalid)
+	{
+		OutError = !AssetProjectionError.IsEmpty()
+			? AssetProjectionError
+			: (!NodeProjectionError.IsEmpty()
+				? NodeProjectionError
+				: TEXT("Malformed FTS5 query"));
+		return EMonolithProjectSearchStatus::InvalidQuery;
+	}
+
+	const TCHAR* AssetSQL = TEXT(
+		"SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, a.asset_name, "
+		"snippet(fts_assets, 2, '>>>', '<<<', '...', 32), "
+		"a.asset_name, a.asset_class, a.description, a.package_path, a.module_name, "
+		"highlight(fts_assets, 0, '>>>', '<<<'), highlight(fts_assets, 1, '>>>', '<<<'), "
+		"highlight(fts_assets, 2, '>>>', '<<<'), highlight(fts_assets, 3, '>>>', '<<<'), "
+		"highlight(fts_assets, 4, '>>>', '<<<'), bm25(fts_assets) "
+		"FROM fts_assets JOIN assets a ON a.id = fts_assets.rowid "
+		"WHERE fts_assets MATCH ? ORDER BY bm25(fts_assets) LIMIT ?;");
+	if (AssetProjection == MonolithProjectSearchQuery::EProjectionResult::Applicable)
+	{
+		const ESearchAttemptResult SearchResult = RunSearch(
+			AssetSQL,
+			AssetQuery,
+			TEXT("asset"),
+			TEXT("assets"),
+			TEXT(""),
+			TEXT("description"),
+			AssetFields);
+		if (SearchResult != ESearchAttemptResult::Completed)
+		{
+			OutResults.Reset();
+			return SearchResult == ESearchAttemptResult::InvalidQuery
+				? EMonolithProjectSearchStatus::InvalidQuery
+				: EMonolithProjectSearchStatus::InternalError;
+		}
+	}
+
+	const TCHAR* NodeSQL = TEXT(
+		"SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
+		"'row-' || n.id || ':' || n.node_name || '@' || n.node_class || "
+		"'[' || n.pos_x || ',' || n.pos_y || ']', "
+		"snippet(fts_nodes, 0, '>>>', '<<<', '...', 32), "
+		"n.node_name, n.node_class, n.node_type, "
+		"highlight(fts_nodes, 0, '>>>', '<<<'), highlight(fts_nodes, 1, '>>>', '<<<'), "
+		"highlight(fts_nodes, 2, '>>>', '<<<'), bm25(fts_nodes) "
+		"FROM fts_nodes JOIN nodes n ON n.id = fts_nodes.rowid "
+		"JOIN assets a ON a.id = n.asset_id "
+		"WHERE fts_nodes MATCH ? ORDER BY bm25(fts_nodes) LIMIT ?;");
+	if (NodeProjection == MonolithProjectSearchQuery::EProjectionResult::Applicable)
+	{
+		const ESearchAttemptResult SearchResult = RunSearch(
+			NodeSQL,
+			NodeQuery,
+			TEXT("node"),
+			TEXT("nodes"),
+			TEXT("node"),
+			TEXT("node_name"),
+			NodeFields);
+		if (SearchResult != ESearchAttemptResult::Completed)
+		{
+			OutResults.Reset();
+			return SearchResult == ESearchAttemptResult::InvalidQuery
+				? EMonolithProjectSearchStatus::InvalidQuery
+				: EMonolithProjectSearchStatus::InternalError;
+		}
+	}
+
+	OutResults.Sort([](const FSearchResult& A, const FSearchResult& B)
+	{
+		if (A.Rank != B.Rank)
+		{
+			return A.Rank < B.Rank;
+		}
+		const int32 SourceCompare = A.MatchSource.Compare(B.MatchSource, ESearchCase::CaseSensitive);
+		if (SourceCompare != 0)
+		{
+			return SourceCompare < 0;
+		}
+		const int32 PathCompare = A.AssetPath.Compare(B.AssetPath, ESearchCase::CaseSensitive);
+		if (PathCompare != 0)
+		{
+			return PathCompare < 0;
+		}
+		return A.MatchObjectPath.Compare(B.MatchObjectPath, ESearchCase::CaseSensitive) < 0;
+	});
+
+	if (OutResults.Num() > ClampedLimit)
+	{
+		OutResults.SetNum(ClampedLimit);
+	}
+	return EMonolithProjectSearchStatus::Succeeded;
+}
+
+bool FMonolithIndexDatabase::RepairFullTextIndexes(
+	const FString& Target,
+	bool bExecute,
+	TSharedPtr<FJsonObject>& OutReport,
+	FString& OutError)
+{
+	OutReport = MakeShared<FJsonObject>();
+	OutError.Reset();
+	if (!IsOpen())
+	{
+		OutError = TEXT("Project index database is not open");
+		return false;
+	}
+
+	struct FRepairTarget
+	{
+		const TCHAR* Name;
+		const TCHAR* SourceTable;
+		const TCHAR* FtsTable;
+	};
+	static const FRepairTarget SupportedTargets[] = {
+		{ TEXT("assets"), TEXT("assets"), TEXT("fts_assets") },
+		{ TEXT("nodes"), TEXT("nodes"), TEXT("fts_nodes") },
+	};
+
+	FString NormalizedTarget = Target.TrimStartAndEnd().ToLower();
+	if (NormalizedTarget.IsEmpty())
+	{
+		NormalizedTarget = TEXT("all");
+	}
+
+	TArray<const FRepairTarget*> SelectedTargets;
+	for (const FRepairTarget& Candidate : SupportedTargets)
+	{
+		if (NormalizedTarget == TEXT("all") || NormalizedTarget == Candidate.Name)
+		{
+			SelectedTargets.Add(&Candidate);
+		}
+	}
+	if (SelectedTargets.Num() == 0)
+	{
+		OutError = FString::Printf(
+			TEXT("Unknown FTS target '%s'; expected all, assets, or nodes"),
+			*Target);
+		return false;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> TargetReports;
+	for (const FRepairTarget* Selected : SelectedTargets)
+	{
+		const FString CountSQL = FString::Printf(
+			TEXT("SELECT COUNT(*) FROM %s;"),
+			Selected->SourceTable);
+		FSQLitePreparedStatement CountStmt;
+		if (!CountStmt.Create(*Database, *CountSQL))
+		{
+			OutError = FString::Printf(
+				TEXT("Failed to inspect %s before FTS repair: %s"),
+				Selected->SourceTable,
+				*Database->GetLastError());
+			return false;
+		}
+
+		int64 SourceRows = 0;
+		if (CountStmt.Step() != ESQLitePreparedStatementStepResult::Row
+			|| !CountStmt.GetColumnValueByIndex(0, SourceRows))
+		{
+			OutError = FString::Printf(
+				TEXT("Failed to count %s before FTS repair: %s"),
+				Selected->SourceTable,
+				*Database->GetLastError());
+			return false;
+		}
+
+		if (bExecute)
+		{
+			const FString RebuildSQL = FString::Printf(
+				TEXT("INSERT INTO %s(%s) VALUES('rebuild');"),
+				Selected->FtsTable,
+				Selected->FtsTable);
+			if (!ExecuteSQL(RebuildSQL))
+			{
+				OutError = FString::Printf(
+					TEXT("Failed to rebuild %s: %s"),
+					Selected->FtsTable,
+					*Database->GetLastError());
+				return false;
+			}
+		}
+
+		auto TargetReport = MakeShared<FJsonObject>();
+		TargetReport->SetStringField(TEXT("target"), Selected->Name);
+		TargetReport->SetStringField(TEXT("source_table"), Selected->SourceTable);
+		TargetReport->SetStringField(TEXT("fts_table"), Selected->FtsTable);
+		TargetReport->SetNumberField(TEXT("source_rows"), SourceRows);
+		TargetReport->SetStringField(TEXT("status"), bExecute ? TEXT("rebuilt") : TEXT("planned"));
+		TargetReports.Add(MakeShared<FJsonValueObject>(TargetReport));
+	}
+
+	OutReport->SetBoolField(TEXT("success"), true);
+	OutReport->SetBoolField(TEXT("execute"), bExecute);
+	OutReport->SetStringField(TEXT("target"), NormalizedTarget);
+	OutReport->SetArrayField(TEXT("indexes"), TargetReports);
+	return true;
 }
 
 // ============================================================

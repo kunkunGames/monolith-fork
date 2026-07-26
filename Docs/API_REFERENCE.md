@@ -687,16 +687,31 @@ List all config files with their hierarchy level.
 
 ## project
 
-Project-wide asset index backed by SQLite + FTS5. **7 actions.**
+Project-wide asset index backed by SQLite + FTS5. **13 actions** (12 from `MonolithIndex`, plus the cross-module `audit_orphan_assets` action).
 
 ### `project.search`
 
-Full-text search across all indexed project assets, nodes, variables, and parameters.
+Full-text search across the existing indexed asset and graph-node FTS tables. Invalid FTS5 syntax and database failures are explicit, separately classified errors. Malformed syntax or an unknown column uses JSON-RPC `-32602`, while an unavailable database, missing/corrupt FTS storage, or a failed database operation uses `-32603`. A syntactically valid query that matches nothing—including a conjunction whose asset-only and node-only predicates cannot be satisfied by either independent table—succeeds with `count: 0`.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `query` | string | **required** | FTS5 search query (supports `AND`, `OR`, `NOT`, `prefix*`) |
-| `limit` | integer | optional | Default: `50` |
+| `query` | string | **required** | Non-empty FTS5 search query (supports `AND`, `OR`, `NOT`, quoted phrases, field qualifiers, and `prefix*`) |
+| `limit` | integer | optional | Default: `50`; clamped to `1..1000` |
+
+Every hit retains the compatibility fields (`asset_path`, `asset_name`, `asset_class`, `module_name`, `match_context`, `rank`) and adds provenance: `match_source`, `match_table`, `match_field`, `match_object_path`, and `match_value`. `match_context` is derived from the reported `match_field`: description/node-name matches use a bounded FTS snippet, while matches in another field use that field's highlighted value instead of unrelated description or node-name text. `match_context` and `match_value` are always bounded to 240 Unicode code points, with their original `*_length` and `*_truncated` fields.
+
+The query is parsed once per search surface and recursively projected onto the compatible columns of each table. Bare, quoted, grouped, and negative column specifications are supported, including `"node_name":Branch`, `{node_name node_class}:Branch`, and mixed-table groups. Nested boolean expressions preserve FTS5 precedence, so `Common AND (asset_name:Foo OR node_name:Bar)` searches the compatible branch on each table. All column names are validated before projection, including branches that become inapplicable to a particular table. Native projection decodes UTF-8 code points before identifying boolean boundaries; international barewords such as `éORé` remain one term in the live, native, and Python paths.
+
+### `project.repair_fts`
+
+Inspect or rebuild the existing asset/node FTS5 indexes from their authoritative content tables. This action is live-editor only because execution mutates `ProjectIndex.db`; offline readers remain read-only.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `target` | string | optional | `all`, `assets`, or `nodes`. Default: `all` |
+| `execute` | boolean | optional | `false` returns the rebuild plan; `true` performs it transactionally. Default: `false` |
+
+Executed repair is rejected while project indexing is active. The response lists each selected source table, FTS table, source-row count, and `planned`/`rebuilt` status.
 
 ### `project.find_references`
 
@@ -1680,7 +1695,7 @@ Both invoke the same SQLite indexes the live MCP uses.
 
 **Reflection Intelligence offline parity.** All four RI namespaces are now fully servable offline — `cppreflect` (6 actions), `network` (4), `decision` (5), `risk` (5) — and emit JSON **byte-identical to the live MCP server** (same field names, types, ordering, row data, `%.17g` float formatting, and base64 cursor tokens). Earlier builds covered only 4 of the 20 with divergent shapes; the phantom `risk.list_hotspots` action has been removed. Two intentional, documented differences from the live payload remain (not bugs): the offline CLI adds a top-level `success` flag (its in-band status channel — the live MCP carries success/error out-of-band, so live has no `success` key; the nested DATA payload is byte-identical), and wall-clock fields (`cutoff_unix` / `since_unix` and the `risk.get_release_window_hotspots` cursor whose filter-hash includes them) differ by the run-time gap across process invocations on both live and offline.
 
-`Scripts/verify_offline_parity.py` byte-diffs exe vs py across all 20 RI actions as a ship-blocking gate in `make_release.ps1`; `Scripts/check_offline_exe_fresh.py` flags a stale exe by comparing its `--version` `source_hash` against a fresh hash of `monolith_query.cpp`.
+`Scripts/verify_offline_parity.py` byte-diffs exe vs py across all 20 RI actions as a ship-blocking gate in `make_release.ps1`; `Scripts/check_offline_exe_fresh.py` flags a stale exe by comparing its `--version` `source_hash` against the ordered bytes of `monolith_query.cpp` and its shared project-search projection core.
 
 ---
 

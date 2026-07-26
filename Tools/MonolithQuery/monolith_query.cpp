@@ -33,6 +33,7 @@
 
 #include "sqlite3.h"
 #include <nlohmann/json.hpp>
+#include "../../Source/MonolithIndex/Private/ProjectSearchQueryProjectionCore.h"
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
@@ -44,6 +45,52 @@ using json = nlohmann::json;
 static void die(const std::string& msg) {
     std::cerr << "ERROR: " << msg << std::endl;
     std::exit(1);
+}
+
+// Parse a signed base-10 integer while saturating before machine-width
+// overflow. This keeps the native CLI aligned with Python's arbitrary-width
+// integer parsing before applying the documented clamp.
+static bool try_parse_clamped_decimal(
+        const std::string& raw,
+        int minimum,
+        int maximum,
+        int& out_value) {
+    if (minimum > maximum) return false;
+
+    size_t begin = 0;
+    size_t end = raw.size();
+    while (begin < end && std::isspace(static_cast<unsigned char>(raw[begin])))
+        ++begin;
+    while (end > begin && std::isspace(static_cast<unsigned char>(raw[end - 1])))
+        --end;
+    if (begin == end) return false;
+
+    bool negative = false;
+    if (raw[begin] == '+' || raw[begin] == '-') {
+        negative = raw[begin] == '-';
+        ++begin;
+    }
+    if (begin == end) return false;
+
+    int value = 0;
+    bool saturated = false;
+    for (size_t index = begin; index < end; ++index) {
+        const unsigned char ch = static_cast<unsigned char>(raw[index]);
+        if (!std::isdigit(ch)) return false;
+        if (!saturated) {
+            const int digit = ch - static_cast<unsigned char>('0');
+            if (value > maximum / 10
+                || (value == maximum / 10 && digit > maximum % 10)) {
+                value = maximum;
+                saturated = true;
+            } else {
+                value = value * 10 + digit;
+            }
+        }
+    }
+
+    out_value = negative ? minimum : std::clamp(value, minimum, maximum);
+    return true;
 }
 
 // ============================================================
@@ -320,6 +367,87 @@ static Rows query(Database& db, const std::string& sql, const std::vector<std::s
     }
     sqlite3_finalize(stmt);
     return rows;
+}
+
+static bool query_checked(Database& db,
+                          const std::string& sql,
+                          const std::vector<Bind>& params,
+                          Rows& out_rows,
+                          std::string& out_error) {
+    out_rows.clear();
+    out_error.clear();
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(db.db, sql.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        out_error = sqlite3_errmsg(db.db);
+        if (stmt) sqlite3_finalize(stmt);
+        return false;
+    }
+
+    for (int i = 0; i < static_cast<int>(params.size()); ++i) {
+        if (params[i].kind == Bind::Kind::Int)
+            rc = sqlite3_bind_int64(stmt, i + 1, params[i].i);
+        else
+            rc = sqlite3_bind_text(
+                stmt, i + 1, params[i].text.c_str(), -1, SQLITE_TRANSIENT);
+        if (rc != SQLITE_OK) {
+            out_error = sqlite3_errmsg(db.db);
+            sqlite3_finalize(stmt);
+            return false;
+        }
+    }
+
+    const int ncols = sqlite3_column_count(stmt);
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        Row row;
+        for (int c = 0; c < ncols; ++c) {
+            const char* name = sqlite3_column_name(stmt, c);
+            const std::string key = name ? name : "";
+            if (sqlite3_column_type(stmt, c) == SQLITE_FLOAT)
+                row.doubles[key] = sqlite3_column_double(stmt, c);
+            const char* val =
+                reinterpret_cast<const char*>(sqlite3_column_text(stmt, c));
+            row.cols[key] = val ? val : "";
+        }
+        out_rows.push_back(std::move(row));
+    }
+
+    if (rc != SQLITE_DONE) {
+        out_error = sqlite3_errmsg(db.db);
+        sqlite3_finalize(stmt);
+        out_rows.clear();
+        return false;
+    }
+
+    sqlite3_finalize(stmt);
+    return true;
+}
+
+static constexpr size_t PROJECT_SEARCH_PREVIEW_CODEPOINTS = 240;
+
+static size_t utf8_codepoint_count(const std::string& value) {
+    size_t count = 0;
+    for (unsigned char byte : value) {
+        if ((byte & 0xC0) != 0x80)
+            ++count;
+    }
+    return count;
+}
+
+static std::string left_utf8_codepoints(
+        const std::string& value,
+        size_t max_codepoints) {
+    size_t count = 0;
+    for (size_t index = 0; index < value.size(); ++index) {
+        const unsigned char byte = static_cast<unsigned char>(value[index]);
+        if ((byte & 0xC0) != 0x80) {
+            if (count == max_codepoints)
+                return value.substr(0, index);
+            ++count;
+        }
+    }
+    return value;
 }
 
 // ============================================================
@@ -1789,60 +1917,247 @@ public:
 
     // --- search ---
     void search(const Args& args) {
-        if (args.positional.empty()) die("search requires a query argument");
-        std::string q = args.positional[0];
-        int limit = args.opt_int("limit", 50);
+        auto emit_failure = [](const std::string& message) {
+            json out = {{"success", false}, {"error", message}};
+            std::cout << out.dump(2) << std::endl;
+        };
+
+        if (args.positional.empty()) {
+            emit_failure("search requires a non-empty query argument");
+            return;
+        }
+        const std::string& raw_query = args.positional[0];
+        size_t query_begin = 0;
+        size_t query_end = raw_query.size();
+        while (query_begin < query_end
+               && std::isspace(
+                   static_cast<unsigned char>(raw_query[query_begin])))
+            ++query_begin;
+        while (query_end > query_begin
+               && std::isspace(
+                   static_cast<unsigned char>(raw_query[query_end - 1])))
+            --query_end;
+        if (query_begin == query_end) {
+            emit_failure("search requires a non-empty query argument");
+            return;
+        }
+        const std::string q =
+            raw_query.substr(query_begin, query_end - query_begin);
+
+        int limit = 50;
+        auto limit_it = args.options.find("limit");
+        if (limit_it != args.options.end()
+            && !try_parse_clamped_decimal(limit_it->second, 1, 1000, limit)) {
+            emit_failure("--limit must be an integer");
+            return;
+        }
 
         json results = json::array();
+        const std::vector<std::string> asset_fields = {
+            "asset_name", "asset_class", "description",
+            "package_path", "module_name"};
+        const std::vector<std::string> node_fields = {
+            "node_name", "node_class", "node_type"};
+        std::set<std::string> enabled_fields(
+            asset_fields.begin(), asset_fields.end());
+        enabled_fields.insert(node_fields.begin(), node_fields.end());
 
-        // Search assets FTS
-        {
-            auto rows = query(db,
-                "SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
-                "snippet(fts_assets, 2, '>>>', '<<<', '...', 32) as ctx, rank "
-                "FROM fts_assets f JOIN assets a ON a.id = f.rowid "
-                "WHERE fts_assets MATCH ? ORDER BY rank LIMIT " + std::to_string(limit),
-                {q});
-            for (auto& r : rows) {
+        enum class SearchAttemptResult {
+            Completed,
+            Failed,
+        };
+
+        auto run_search = [
+            this,
+            &results,
+            &emit_failure,
+            limit](
+            const std::string& sql,
+            const std::string& search_query,
+             const std::string& match_source,
+             const std::string& match_table,
+             const std::string& object_kind,
+             const std::string& snippet_field,
+             const std::vector<std::string>& fields) -> SearchAttemptResult {
+            Rows rows;
+            std::string error;
+            if (!query_checked(
+                    db,
+                    sql,
+                    {Bind(search_query), Bind::Integer(limit)},
+                    rows,
+                    error)) {
+                emit_failure(
+                    "Invalid or failed FTS5 query for "
+                    + match_table + ": " + error);
+                return SearchAttemptResult::Failed;
+            }
+
+            for (auto& row : rows) {
+                std::string match_field;
+                std::string match_value;
+                const std::string snippet_context = row.get("ctx");
+                std::string match_context;
+                for (size_t index = 0; index < fields.size(); ++index) {
+                    const std::string raw_value =
+                        row.get("raw" + std::to_string(index));
+                    const std::string highlighted_value =
+                        row.get("h" + std::to_string(index));
+                    if (match_field.empty()
+                        && highlighted_value != raw_value) {
+                        match_field = fields[index];
+                        match_value = raw_value;
+                        // Keep the context source aligned with match_field.
+                        // The token-bounded snippet belongs only to its
+                        // explicitly named FTS column.
+                        match_context =
+                            fields[index] == snippet_field
+                                && !snippet_context.empty()
+                            ? snippet_context
+                            : highlighted_value;
+                    }
+                }
+                if (match_field.empty() && !fields.empty()) {
+                    match_field = fields[0];
+                    match_value = row.get("raw0");
+                    match_context = match_value;
+                }
+
+                const size_t match_context_length =
+                    utf8_codepoint_count(match_context);
+                const bool match_context_truncated =
+                    match_context_length > PROJECT_SEARCH_PREVIEW_CODEPOINTS;
+                const size_t match_value_length =
+                    utf8_codepoint_count(match_value);
+                const bool match_value_truncated =
+                    match_value_length > PROJECT_SEARCH_PREVIEW_CODEPOINTS;
+
+                std::string object_path = row.get("package_path");
+                if (!object_kind.empty())
+                    object_path +=
+                        "::" + object_kind + ":" + row.get("object_name");
+
                 results.push_back({
-                    {"asset_path", r.get("package_path")},
-                    {"asset_name", r.get("asset_name")},
-                    {"asset_class", r.get("asset_class")},
-                    {"module_name", r.get("module_name")},
-                    {"match_context", r.get("ctx")},
-                    {"rank", r.get_double("rank")},
+                    {"asset_path", row.get("package_path")},
+                    {"asset_name", row.get("asset_name")},
+                    {"asset_class", row.get("asset_class")},
+                    {"module_name", row.get("module_name")},
+                    {"match_context", match_context_truncated
+                        ? left_utf8_codepoints(
+                            match_context,
+                            PROJECT_SEARCH_PREVIEW_CODEPOINTS)
+                        : match_context},
+                    {"match_context_length", match_context_length},
+                    {"match_context_truncated", match_context_truncated},
+                    {"match_source", match_source},
+                    {"match_table", match_table},
+                    {"match_field", match_field},
+                    {"match_object_path", object_path},
+                    {"match_value", match_value_truncated
+                        ? left_utf8_codepoints(
+                            match_value,
+                            PROJECT_SEARCH_PREVIEW_CODEPOINTS)
+                        : match_value},
+                    {"match_value_length", match_value_length},
+                    {"match_value_truncated", match_value_truncated},
+                    {"rank", row.get_double("rank")},
                 });
             }
+            return SearchAttemptResult::Completed;
+        };
+
+        const monolith_project_search_query::projection asset_projection =
+            monolith_project_search_query::project(
+                q, asset_fields, enabled_fields);
+        const monolith_project_search_query::projection node_projection =
+            monolith_project_search_query::project(
+                q, node_fields, enabled_fields);
+        if (asset_projection.result
+                == monolith_project_search_query::projection_result::invalid
+            || node_projection.result
+                == monolith_project_search_query::projection_result::invalid) {
+            emit_failure(
+                !asset_projection.error.empty()
+                    ? asset_projection.error
+                    : node_projection.error);
+            return;
         }
 
-        // Search nodes FTS
-        {
-            auto rows = query(db,
-                "SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
-                "snippet(fts_nodes, 0, '>>>', '<<<', '...', 32) as ctx, f.rank "
-                "FROM fts_nodes f JOIN nodes n ON n.id = f.rowid "
-                "JOIN assets a ON a.id = n.asset_id "
-                "WHERE fts_nodes MATCH ? ORDER BY f.rank LIMIT " + std::to_string(limit),
-                {q});
-            for (auto& r : rows) {
-                results.push_back({
-                    {"asset_path", r.get("package_path")},
-                    {"asset_name", r.get("asset_name")},
-                    {"asset_class", r.get("asset_class")},
-                    {"module_name", r.get("module_name")},
-                    {"match_context", r.get("ctx")},
-                    {"rank", r.get_double("rank")},
-                });
-            }
+        if (asset_projection.result
+                == monolith_project_search_query::projection_result::applicable
+            && run_search(
+            "SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
+            "a.asset_name AS object_name, "
+            "snippet(fts_assets, 2, '>>>', '<<<', '...', 32) AS ctx, "
+            "a.asset_name AS raw0, a.asset_class AS raw1, "
+            "a.description AS raw2, a.package_path AS raw3, "
+            "a.module_name AS raw4, "
+            "highlight(fts_assets, 0, '>>>', '<<<') AS h0, "
+            "highlight(fts_assets, 1, '>>>', '<<<') AS h1, "
+            "highlight(fts_assets, 2, '>>>', '<<<') AS h2, "
+            "highlight(fts_assets, 3, '>>>', '<<<') AS h3, "
+            "highlight(fts_assets, 4, '>>>', '<<<') AS h4, "
+            "bm25(fts_assets) AS rank "
+            "FROM fts_assets JOIN assets a ON a.id = fts_assets.rowid "
+            "WHERE fts_assets MATCH ? "
+            "ORDER BY bm25(fts_assets) LIMIT ?",
+            asset_projection.query,
+            "asset", "assets", "", "description", asset_fields)
+            == SearchAttemptResult::Failed) {
+            return;
         }
 
-        // Sort by rank, truncate
+        if (node_projection.result
+                == monolith_project_search_query::projection_result::applicable
+            && run_search(
+            "SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
+            "'row-' || n.id || ':' || n.node_name || '@' || n.node_class || "
+            "'[' || n.pos_x || ',' || n.pos_y || ']' AS object_name, "
+            "snippet(fts_nodes, 0, '>>>', '<<<', '...', 32) AS ctx, "
+            "n.node_name AS raw0, n.node_class AS raw1, n.node_type AS raw2, "
+            "highlight(fts_nodes, 0, '>>>', '<<<') AS h0, "
+            "highlight(fts_nodes, 1, '>>>', '<<<') AS h1, "
+            "highlight(fts_nodes, 2, '>>>', '<<<') AS h2, "
+            "bm25(fts_nodes) AS rank "
+            "FROM fts_nodes JOIN nodes n ON n.id = fts_nodes.rowid "
+            "JOIN assets a ON a.id = n.asset_id "
+            "WHERE fts_nodes MATCH ? "
+            "ORDER BY bm25(fts_nodes) LIMIT ?",
+            node_projection.query,
+            "node", "nodes", "node", "node_name", node_fields)
+            == SearchAttemptResult::Failed) {
+            return;
+        }
+
         std::sort(results.begin(), results.end(),
-                  [](const json& a, const json& b) { return a["rank"].get<double>() < b["rank"].get<double>(); });
+                  [](const json& a, const json& b) {
+                      const double ar = a["rank"].get<double>();
+                      const double br = b["rank"].get<double>();
+                      if (ar != br) return ar < br;
+                      const std::string as =
+                          a["match_source"].get<std::string>();
+                      const std::string bs =
+                          b["match_source"].get<std::string>();
+                      if (as != bs) return as < bs;
+                      const std::string ap =
+                          a["asset_path"].get<std::string>();
+                      const std::string bp =
+                          b["asset_path"].get<std::string>();
+                      if (ap != bp) return ap < bp;
+                      return a["match_object_path"].get<std::string>()
+                          < b["match_object_path"].get<std::string>();
+                  });
         if ((int)results.size() > limit)
             results = json(std::vector<json>(results.begin(), results.begin() + limit));
 
-        json out = {{"success", true}, {"count", results.size()}, {"results", results}};
+        json out = {
+            {"success", true},
+            {"count", results.size()},
+            {"results", results},
+            {"limit", limit},
+            {"match_value_preview_chars", PROJECT_SEARCH_PREVIEW_CODEPOINTS},
+            {"match_context_preview_chars", PROJECT_SEARCH_PREVIEW_CODEPOINTS},
+        };
         std::cout << out.dump(2) << std::endl;
     }
 

@@ -582,8 +582,8 @@ if (-not $SkipBuild) {
 }
 
 # --- Offline CLI build + parity gate (engine-agnostic; tracked source, runs ONCE) ---
-# The offline tool Binaries/monolith_query.exe is built from tracked source
-# Tools/MonolithQuery/monolith_query.cpp via a standalone cl.exe build (NOT UBT).
+# The offline tool Binaries/monolith_query.exe is built from the tracked native
+# source manifest owned by Tools/MonolithQuery/build.bat via cl.exe (NOT UBT).
 # Binaries/ is gitignored, so without this step the release would ship whatever
 # stale exe happened to sit on disk. Rebuild it here so the shipped exe matches
 # the shipped source, then hard-gate the exe-vs-py parity guard. A drifted exe

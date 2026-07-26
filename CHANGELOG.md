@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`project repair_fts` rebuilds only the existing asset/node FTS indexes.** The action is dry-run by default, accepts `target: all|assets|nodes`, refuses mutation while project indexing is active, and performs an executed rebuild in one transaction.
+
+### Changed
+
+- **`project search` now fails closed and explains every match.** Invalid FTS5 syntax and database failures are returned as distinct errors instead of masquerading as zero results or both becoming `Invalid params`; a valid query with no compatible asset/node row remains a successful zero-result search. Inputs are validated, `limit` is clamped to `1..1000`, and each existing asset/node hit reports its source table, matched field, stable object path, bounded match value/context, original code-point lengths, and truncation flags. Context comes from the reported matched field rather than a fixed description/node-name column. A recursive FTS5 projector handles boolean precedence plus bare, quoted, grouped, negative, and nested column filters per table, so `asset_name:Foo OR node_name:Bar` and `Common AND (asset_name:Foo OR node_name:Bar)` retain every compatible branch. Native UTF-8 token boundaries match live/Python behavior for international text such as `éORé`; the native freshness hash now covers the shared parser as well as the executable translation unit.
+
 ## [0.21.3] - 2026-07-26
 
 This release closes out the open pull-request queue. Every fix below was reported or prototyped by a contributor — thanks to **@Thomasbehan**, **@whalemenace**, and **@kunkunGames** for the write-ups, which were detailed enough to reproduce from directly.

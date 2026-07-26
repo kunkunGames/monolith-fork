@@ -375,6 +375,21 @@ TArray<FSearchResult> UMonolithIndexSubsystem::Search(const FString& Query, int3
 	return Database->FullTextSearch(Query, Limit);
 }
 
+EMonolithProjectSearchStatus UMonolithIndexSubsystem::Search(
+	const FString& Query,
+	int32 Limit,
+	TArray<FSearchResult>& OutResults,
+	FString& OutError)
+{
+	if (!Database.IsValid() || !Database->IsOpen())
+	{
+		OutResults.Reset();
+		OutError = TEXT("Project index database is not open");
+		return EMonolithProjectSearchStatus::InternalError;
+	}
+	return Database->FullTextSearch(Query, Limit, OutResults, OutError);
+}
+
 TSharedPtr<FJsonObject> UMonolithIndexSubsystem::FindReferences(const FString& PackagePath)
 {
 	if (!Database.IsValid() || !Database->IsOpen()) return nullptr;

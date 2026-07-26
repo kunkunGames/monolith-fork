@@ -2,9 +2,10 @@
 """
 check_offline_exe_fresh.py -- staleness guard for the offline Monolith CLI.
 
-The offline tool monolith_query.exe is built from Tools/MonolithQuery/monolith_query.cpp
-by Tools/MonolithQuery/build.bat. That build injects the SHA256-first-16 of the source
-as a /DSOURCE_HASH define, which the exe echoes back under --version as "source_hash".
+The offline tool monolith_query.exe is built from an ordered manifest of C++ inputs
+by Tools/MonolithQuery/build.bat. That build injects the SHA256-first-16 of their
+concatenated bytes as a /DSOURCE_HASH define, which the exe echoes back under
+--version as "source_hash".
 
 This script recomputes that same hash from the on-disk source, asks the exe what it was
 built from, and exits non-zero if they disagree -- i.e. the shipped exe is stale relative
@@ -33,19 +34,27 @@ from pathlib import Path
 # Script lives in <MonolithRoot>/Scripts/, so the plugin root is parent.parent.
 SCRIPT_DIR = Path(__file__).resolve().parent
 MONO_ROOT = SCRIPT_DIR.parent
-SRC_PATH = MONO_ROOT / "Tools" / "MonolithQuery" / "monolith_query.cpp"
+SRC_PATHS = (
+    MONO_ROOT / "Tools" / "MonolithQuery" / "monolith_query.cpp",
+    MONO_ROOT
+    / "Source"
+    / "MonolithIndex"
+    / "Private"
+    / "ProjectSearchQueryProjectionCore.h",
+)
 EXE_PATH = MONO_ROOT / "Binaries" / "monolith_query.exe"
 
-# Must match build.bat: first 16 hex chars of the source's SHA256.
+# Must match build.bat: first 16 hex chars of the ordered sources' SHA256.
 HASH_PREFIX_LEN = 16
 
 
-def compute_source_hash(path):
-    """SHA256 of the file bytes, lowercase hex, first HASH_PREFIX_LEN chars."""
+def compute_source_hash(paths):
+    """SHA256 of concatenated input bytes, lowercase hex, first prefix chars."""
     h = hashlib.sha256()
-    with open(path, "rb") as fh:
-        for chunk in iter(lambda: fh.read(65536), b""):
-            h.update(chunk)
+    for path in paths:
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(65536), b""):
+                h.update(chunk)
     return h.hexdigest()[:HASH_PREFIX_LEN]
 
 
@@ -75,14 +84,15 @@ def read_exe_source_hash(exe_path):
 
 
 def main():
-    if not SRC_PATH.exists():
-        print("FATAL: source not found at {0}".format(SRC_PATH))
-        return 4
+    for src_path in SRC_PATHS:
+        if not src_path.exists():
+            print("FATAL: source not found at {0}".format(src_path))
+            return 4
     if not EXE_PATH.exists():
         print("FATAL: exe not found at {0}".format(EXE_PATH))
         return 4
 
-    src_hash = compute_source_hash(SRC_PATH)
+    src_hash = compute_source_hash(SRC_PATHS)
 
     try:
         exe_hash = read_exe_source_hash(EXE_PATH)
@@ -91,7 +101,9 @@ def main():
         return 4
 
     print("Offline exe freshness check")
-    print("  source = {0}".format(SRC_PATH))
+    print("  sources:")
+    for src_path in SRC_PATHS:
+        print("    - {0}".format(src_path))
     print("  exe    = {0}".format(EXE_PATH))
     print("  source SHA256[:{0}] = {1}".format(HASH_PREFIX_LEN, src_hash))
     print("  exe   source_hash  = {0}".format(exe_hash))

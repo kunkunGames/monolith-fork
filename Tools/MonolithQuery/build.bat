@@ -2,18 +2,27 @@
 REM Build monolith_query.exe — standalone SQLite query tool
 REM Run from VS Developer Command Prompt, or let it find cl.exe via vswhere
 
-REM Compute a SHA256 of the source and inject its first 16 hex chars as
-REM /DSOURCE_HASH so --version reports a hash the staleness guard can match.
-REM certutil is built into Windows; its second output line is the bare hash.
-REM Statements are kept un-nested so plain (non-delayed) %VAR% expansion works.
+REM Compute a SHA256 over every C++ input owned by this executable and inject
+REM its first 16 hex chars as /DSOURCE_HASH. Keep this ordered source manifest
+REM in sync with Scripts/check_offline_exe_fresh.py.
 set SOURCE_HASH=dev
 set SRCHASH_RAW=
-for /f "skip=1 tokens=*" %%H in ('certutil -hashfile monolith_query.cpp SHA256') do if not defined SRCHASH_RAW set SRCHASH_RAW=%%H
-if not defined SRCHASH_RAW goto :hashdone
+set HASH_INPUT=%TEMP%\monolith_query_hash_%RANDOM%_%RANDOM%.bin
+copy /b monolith_query.cpp+..\..\Source\MonolithIndex\Private\ProjectSearchQueryProjectionCore.h "%HASH_INPUT%" >nul
+if %ERRORLEVEL% neq 0 (
+    echo Failed to assemble the native source manifest for hashing.
+    if exist "%HASH_INPUT%" del /q "%HASH_INPUT%"
+    exit /b 1
+)
+for /f "skip=1 tokens=*" %%H in ('certutil -hashfile "%HASH_INPUT%" SHA256') do if not defined SRCHASH_RAW set SRCHASH_RAW=%%H
+if exist "%HASH_INPUT%" del /q "%HASH_INPUT%"
+if not defined SRCHASH_RAW (
+    echo Failed to compute the native source-manifest hash.
+    exit /b 1
+)
 REM Strip spaces certutil may insert between hex byte groups, take first 16 chars.
 set SRCHASH_NOSPACE=%SRCHASH_RAW: =%
 set SOURCE_HASH=%SRCHASH_NOSPACE:~0,16%
-:hashdone
 echo Source hash: %SOURCE_HASH%
 
 where cl >nul 2>&1

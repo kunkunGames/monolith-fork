@@ -270,7 +270,7 @@ python Scripts/monolith_offline.py <namespace> <action> [args...]
 
 | Action | Positional | Key Options | Description |
 |--------|-----------|-------------|-------------|
-| `search` | `query` | `--limit` | FTS across assets FTS + nodes FTS, BM25 ranked |
+| `search` | `query` | `--limit` | Fail-closed FTS across assets + nodes, BM25 ranked; returns field/object provenance and bounded 240-code-point match projections |
 | `find_by_type` | `asset_class` | `--limit`, `--offset` | Filter assets by class with pagination |
 | `find_references` | `asset_path` | — | Bidirectional: depends_on + referenced_by |
 | `get_stats` | — | — | Row counts for all tables + top 20 asset class breakdown |
@@ -290,8 +290,8 @@ python Scripts/monolith_offline.py <namespace> <action> [args...]
 | Script | Role |
 |--------|------|
 | `Scripts/verify_offline_parity.py` | HARD-GATE parity guard — byte-diffs exe vs py across all 20 RI actions; exits non-zero on any diff. `make_release.ps1` runs it as a ship gate. |
-| `Scripts/check_offline_exe_fresh.py` | Staleness guard — compares the exe's `--version` `source_hash` against a fresh hash of `monolith_query.cpp`; flags a stale exe. |
-| `Tools/MonolithQuery/build.bat` | Injects `SOURCE_HASH` (certutil SHA256 of the source) into the exe via `/DSOURCE_HASH`. |
+| `Scripts/check_offline_exe_fresh.py` | Staleness guard — compares the exe's `--version` `source_hash` against a fresh ordered-manifest hash of `monolith_query.cpp` plus its shared project-search projection core; flags a stale exe when either input changes. |
+| `Tools/MonolithQuery/build.bat` | Injects `SOURCE_HASH` (SHA256 of the ordered native source manifest) into the exe via `/DSOURCE_HASH`. |
 
 `make_release.ps1` now builds the exe fresh (vcvars + `build.bat`) before the Binaries copy, then runs the parity guard — a stale or drifted exe can never ship. The 20-action RI parity is the scope verified this sprint; the source/project namespaces share the same engine but were not re-audited for byte-parity in this pass.
 
