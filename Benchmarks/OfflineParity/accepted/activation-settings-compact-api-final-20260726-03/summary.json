@@ -1,6 +1,6 @@
 {
-  "label": "activation-settings-rebase-20260726-01",
-  "created_at": "2026-07-26T03:52:16.975087+00:00",
+  "label": "activation-settings-compact-api-final-20260726-03",
+  "created_at": "2026-07-26T05:15:34.258560+00:00",
   "ignore_cursor_bytes": false,
   "run_environment": {
     "status": "valid",
@@ -201,10 +201,10 @@
         "kind": "database",
         "path": "Saved/EngineSource.db",
         "exists": true,
-        "size_bytes": 3822317568,
-        "mtime_ns": 1784976829246478900,
-        "signature": "3822317568:1784976829246478900",
-        "sha256": "31ec8697f5c3561c5912acdd42c20c949bfddca73b6a24ed8b216bf5d890c45f"
+        "size_bytes": 3825901568,
+        "mtime_ns": 1785042837082217000,
+        "signature": "3825901568:1785042837082217000",
+        "sha256": "6901fec982e40b57623193d78fd7008ba975485d19282e5f480752ff1d52eba3"
       }
     ],
     "mcp_catalog": {
@@ -212,7 +212,7 @@
         "generated_at": "2026-06-18T00:00:00+00:00"
       }
     },
-    "fingerprint_sha256": "4ad876e8d1840c63d2a9be2e6e14d4982b1ed017fe0b48ddae0cbd9a1afddc64"
+    "fingerprint_sha256": "1846a1a51c66e1346c3b7c7ebf6f285c937c82803f9afff49ffd2f482c09dfe5"
   },
-  "input_fingerprint": "4ad876e8d1840c63d2a9be2e6e14d4982b1ed017fe0b48ddae0cbd9a1afddc64"
+  "input_fingerprint": "1846a1a51c66e1346c3b7c7ebf6f285c937c82803f9afff49ffd2f482c09dfe5"
 }

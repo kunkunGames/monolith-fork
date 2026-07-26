@@ -1,6 +1,6 @@
 # Offline Parity Benchmark Results
 
-## 2026-07-26 activation-settings-rebase-20260726-01
+## 2026-07-26 activation-settings-compact-api-final-20260726-03
 
 | Item | Value |
 | --- | ---: |
@@ -9,14 +9,15 @@
 | MATCH / DIFF / real ERROR | 311 / 0 / 0 |
 | Expected-error cases | 5 (0 problems) |
 | `version_parity_score` | 1.0 (`2026-05-29.1` on both implementations) |
-| Input fingerprint | `4ad876e8d1840c63d2a9be2e6e14d4982b1ed017fe0b48ddae0cbd9a1afddc64` |
-| Accepted evidence | `Benchmarks\OfflineParity\accepted\activation-settings-rebase-20260726-01` |
+| Input fingerprint | `1846a1a51c66e1346c3b7c7ebf6f285c937c82803f9afff49ffd2f482c09dfe5` |
+| Accepted evidence | `Benchmarks\OfflineParity\accepted\activation-settings-compact-api-final-20260726-03` |
 
-This full run refreshes the accepted input fingerprint after the activation
-settings series was rebased onto the latest `origin/master`. Native Query and
-Python matched every comparable action against the same verified 3.82 GB
-single-writer `EngineSource.db`; the rebase introduced no offline behavior
-drift.
+This full run refreshes the accepted input fingerprint after consolidating
+activation state into the compact `UMonolithSettings` API, making the cache
+project-default-aware, and adding a shared C++/PowerShell parity fixture.
+Native Query and Python matched every comparable action against the same
+verified 3.83 GB single-writer `EngineSource.db` after the final native cache
+regression run; the activation changes introduced no offline behavior drift.
 
 ## 2026-07-25 activation-controls-20260725-01
 

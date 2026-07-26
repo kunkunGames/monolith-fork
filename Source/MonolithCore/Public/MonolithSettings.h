@@ -19,12 +19,12 @@ enum class EMonolithLogVerbosity : uint8
  * Project defaults come from Config/DefaultMonolith.ini. Explicit console
  * choices are per-user overrides in Saved/Config/<Platform>/Monolith.ini.
  */
-struct MONOLITHCORE_API FMonolithServiceActivation
+struct MONOLITHCORE_API FMonolithActivation
 {
 	bool bServerEnabled = true;
 	bool bIndexingEnabled = true;
-	bool bServerOverriddenByUser = false;
-	bool bIndexingOverriddenByUser = false;
+	bool bServerUserSet = false;
+	bool bIndexingUserSet = false;
 };
 
 UCLASS(config=Monolith, defaultconfig, meta=(DisplayName="Monolith"))
@@ -586,23 +586,23 @@ public:
 	 * Resolve the project defaults plus this user's explicit activation
 	 * overrides. A legacy Saved/Monolith/Activation.ini is migrated once.
 	 */
-	static FMonolithServiceActivation GetServiceActivation();
+	static FMonolithActivation GetActivation();
 
-	static bool IsServerActivationEnabled();
-	static bool IsIndexingActivationEnabled();
+	static bool IsServerActivated();
+	static bool IsIndexingActivated();
 
 	/**
 	 * Persist an explicit per-user choice in the generated Monolith.ini
 	 * without modifying Config/DefaultMonolith.ini.
 	 */
-	static bool SetServerActivationEnabled(bool bEnabled, FString* OutError = nullptr);
-	static bool SetIndexingActivationEnabled(bool bEnabled, FString* OutError = nullptr);
+	static bool SetServerActivated(bool bActivated, FString* OutError = nullptr);
+	static bool SetIndexingActivated(bool bActivated, FString* OutError = nullptr);
 
 	/** Absolute per-user generated config path (Saved/Config/<Platform>/Monolith.ini). */
-	static FString GetUserActivationConfigFilePath();
+	static FString GetUserActivationPath();
 
 	/** Absolute path accepted only for one-time migration from older builds. */
-	static FString GetLegacyActivationConfigFilePath();
+	static FString GetLegacyActivationPath();
 
 	/** Returns /Game plus all AdditionalContentPaths as FName array for FARFilter usage */
 	static TArray<FName> GetIndexedContentPaths();
@@ -614,18 +614,24 @@ public:
 	virtual FName GetCategoryName() const override { return FName(TEXT("Plugins")); }
 
 #if WITH_DEV_AUTOMATION_TESTS
-	static FMonolithServiceActivation LoadServiceActivationFromFilesForTests(
-		const FString& UserConfigFilePath,
-		const FString& LegacyConfigFilePath,
-		bool bServerEnabledByProjectDefault,
-		bool bIndexingEnabledByProjectDefault);
-	static bool SetServerActivationInFileForTests(
-		const FString& UserConfigFilePath,
-		bool bEnabled,
+	static FMonolithActivation LoadActivationForTests(
+		const FString& UserPath,
+		const FString& LegacyPath,
+		bool bServerDefault,
+		bool bIndexingDefault);
+	static FMonolithActivation GetCachedActivationForTests(
+		const FString& UserPath,
+		const FString& LegacyPath,
+		bool bServerDefault,
+		bool bIndexingDefault,
+		double NowSeconds);
+	static bool SetServerActivatedForTests(
+		const FString& UserPath,
+		bool bActivated,
 		FString* OutError = nullptr);
-	static bool SetIndexingActivationInFileForTests(
-		const FString& UserConfigFilePath,
-		bool bEnabled,
+	static bool SetIndexingActivatedForTests(
+		const FString& UserPath,
+		bool bActivated,
 		FString* OutError = nullptr);
 #endif
 };

@@ -83,7 +83,7 @@ void FMonolithCoreModule::StartupModule()
 		return;
 	}
 
-	if (!UMonolithSettings::IsServerActivationEnabled())
+	if (!UMonolithSettings::IsServerActivated())
 	{
 		UE_LOG(LogMonolith, Log,
 			TEXT("Monolith — HTTP server activation is off; run Monolith.StartServer to enable it persistently"));
@@ -284,7 +284,7 @@ void FMonolithCoreModule::RestartHttpServer()
 	}
 
 	FMonolithCoreModule& Module = Get();
-	if (!UMonolithSettings::IsServerActivationEnabled())
+	if (!UMonolithSettings::IsServerActivated())
 	{
 		UE_LOG(LogMonolith, Warning,
 			TEXT("Monolith.Restart: server activation is off; run Monolith.StartServer instead"));
@@ -349,7 +349,7 @@ void FMonolithCoreModule::StartHttpServerCommand()
 	}
 
 	FString Error;
-	if (!UMonolithSettings::SetServerActivationEnabled(true, &Error))
+	if (!UMonolithSettings::SetServerActivated(true, &Error))
 	{
 		UE_LOG(LogMonolith, Error, TEXT("Monolith.StartServer: %s"), *Error);
 		return;
@@ -360,7 +360,7 @@ void FMonolithCoreModule::StartHttpServerCommand()
 	{
 		UE_LOG(LogMonolith, Log,
 			TEXT("Monolith.StartServer: server enabled persistently in %s"),
-			*UMonolithSettings::GetUserActivationConfigFilePath());
+			*UMonolithSettings::GetUserActivationPath());
 	}
 	else
 	{
@@ -378,7 +378,7 @@ void FMonolithCoreModule::StopHttpServerCommand()
 	}
 
 	FString Error;
-	const bool bPersisted = UMonolithSettings::SetServerActivationEnabled(false, &Error);
+	const bool bPersisted = UMonolithSettings::SetServerActivated(false, &Error);
 
 	FMonolithCoreModule& Module = Get();
 	Module.StopHttpServer();
@@ -387,7 +387,7 @@ void FMonolithCoreModule::StopHttpServerCommand()
 	{
 		UE_LOG(LogMonolith, Log,
 			TEXT("Monolith.StopServer: server stopped and disabled persistently in %s"),
-			*UMonolithSettings::GetUserActivationConfigFilePath());
+			*UMonolithSettings::GetUserActivationPath());
 	}
 	else
 	{

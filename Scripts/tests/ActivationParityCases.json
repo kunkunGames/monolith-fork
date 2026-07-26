@@ -1,0 +1,61 @@
+{
+  "comment": "Shared activation precedence matrix. UMonolithSettings (C++) and monolith_activation_state.ps1 (offline scripts) must resolve every case identically; the scripts exist because they run with no editor, so the rule is necessarily implemented twice. Only the layer both implement is covered here: per-user override vs legacy migration source vs resolved project default. The plugin-vs-project DefaultMonolith.ini layering is script-only and stays in MonolithActivationState.Tests.ps1. Expected serverUserSet/indexingUserSet mean the value came from a user or legacy key rather than the project default.",
+  "cases": [
+    {
+      "name": "no override inherits the project default",
+      "projectDefault": { "server": false, "indexing": true },
+      "user": null,
+      "legacy": null,
+      "expect": { "server": false, "indexing": true, "serverUserSet": false, "indexingUserSet": false }
+    },
+    {
+      "name": "user override wins over the project default",
+      "projectDefault": { "server": false, "indexing": false },
+      "user": { "server": "True", "indexing": "True" },
+      "legacy": null,
+      "expect": { "server": true, "indexing": true, "serverUserSet": true, "indexingUserSet": true }
+    },
+    {
+      "name": "legacy value is honoured when no user key exists",
+      "projectDefault": { "server": true, "indexing": true },
+      "user": null,
+      "legacy": { "server": "False", "indexing": "False" },
+      "expect": { "server": false, "indexing": false, "serverUserSet": true, "indexingUserSet": true }
+    },
+    {
+      "name": "user key wins over a conflicting legacy key",
+      "projectDefault": { "server": false, "indexing": false },
+      "user": { "server": "True", "indexing": "True" },
+      "legacy": { "server": "False", "indexing": "False" },
+      "expect": { "server": true, "indexing": true, "serverUserSet": true, "indexingUserSet": true }
+    },
+    {
+      "name": "partial user override leaves the sibling on project policy",
+      "projectDefault": { "server": true, "indexing": true },
+      "user": { "server": "False", "indexing": null },
+      "legacy": null,
+      "expect": { "server": false, "indexing": true, "serverUserSet": true, "indexingUserSet": false }
+    },
+    {
+      "name": "malformed user value fails closed without touching the sibling",
+      "projectDefault": { "server": true, "indexing": false },
+      "user": { "server": "banana", "indexing": "True" },
+      "legacy": null,
+      "expect": { "server": false, "indexing": true, "serverUserSet": true, "indexingUserSet": true }
+    },
+    {
+      "name": "a pre-default-on Stop choice is not silently re-enabled",
+      "projectDefault": { "server": true, "indexing": true },
+      "user": null,
+      "legacy": { "server": "False", "indexing": null },
+      "expect": { "server": false, "indexing": true, "serverUserSet": true, "indexingUserSet": false }
+    },
+    {
+      "name": "partial legacy key migrates only its own feature",
+      "projectDefault": { "server": false, "indexing": false },
+      "user": { "server": "True", "indexing": null },
+      "legacy": { "server": "False", "indexing": "True" },
+      "expect": { "server": true, "indexing": true, "serverUserSet": true, "indexingUserSet": true }
+    }
+  ]
+}

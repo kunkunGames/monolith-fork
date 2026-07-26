@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "snapshot_id": "activation-settings-rebase-20260726-01",
+  "snapshot_id": "activation-settings-compact-api-final-20260726-03",
   "suites": {
     "OfflineParity": {
       "state": "accepted",
-      "evidence": "Benchmarks/OfflineParity/accepted/activation-settings-rebase-20260726-01/summary.json",
-      "evidence_bundle_sha256": "118588dd7b49e965dcfdc66a24bbf38a3da652e8710cbae97b606efb05b1bccc",
-      "input_fingerprint": "4ad876e8d1840c63d2a9be2e6e14d4982b1ed017fe0b48ddae0cbd9a1afddc64",
-      "diagnostic": "Rebased UMonolithSettings activation hierarchy and final single-writer EngineSource baseline: 311 MATCH, 0 DIFF, 0 ERROR, 6 explicit decision_id-dependent SKIP. The accepted bundle fingerprints the post-rebase benchmark inputs plus the verified 3.82 GB EngineSource.db content SHA-256.",
+      "evidence": "Benchmarks/OfflineParity/accepted/activation-settings-compact-api-final-20260726-03/summary.json",
+      "evidence_bundle_sha256": "055cef23f3fc8299b093772c2d493fdd91ab5806fc8a22db85f4b94b023f546f",
+      "input_fingerprint": "1846a1a51c66e1346c3b7c7ebf6f285c937c82803f9afff49ffd2f482c09dfe5",
+      "diagnostic": "Compact UMonolithSettings activation API, project-default-aware cache, and shared parity fixture against the final single-writer EngineSource baseline: 311 MATCH, 0 DIFF, 0 ERROR, 6 explicit decision_id-dependent SKIP. The accepted bundle fingerprints the verified 3.83 GB EngineSource.db content SHA-256.",
       "namespace_results": {
         "cppreflect": {"pass": 96, "fail": 0, "expected_skip": 0},
         "decision": {"pass": 44, "fail": 0, "expected_skip": 6},

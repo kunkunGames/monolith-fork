@@ -2951,7 +2951,7 @@ FMonolithActionResult FMonolithCoreTools::HandleReindex(const TSharedPtr<FJsonOb
 		}
 	}
 
-	if (!UMonolithSettings::IsIndexingActivationEnabled())
+	if (!UMonolithSettings::IsIndexingActivated())
 	{
 		Result->SetStringField(TEXT("status"), TEXT("indexing_disabled"));
 		Result->SetStringField(

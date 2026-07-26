@@ -131,7 +131,7 @@ void UMonolithSourceSubsystem::SetAutomaticIndexingEnabled(bool bEnabled)
 
 	const UMonolithSettings* Settings = GetDefault<UMonolithSettings>();
 	if ((Settings && !Settings->bEnableSource)
-		|| !UMonolithSettings::IsIndexingActivationEnabled())
+		|| !UMonolithSettings::IsIndexingActivated())
 	{
 		bAutomaticIndexingEnabled = false;
 		UE_LOG(LogMonolithSource, Log,

@@ -1,6 +1,7 @@
 #include "MonolithSettings.h"
 
 #include "HAL/FileManager.h"
+#include "HAL/PlatformTime.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/Paths.h"
 #include "Misc/ScopeLock.h"
@@ -14,6 +15,46 @@ namespace
 	const TCHAR* IndexingEnabledKey = TEXT("IndexingEnabled");
 
 	FCriticalSection ActivationConfigLock;
+
+	// Activation is queried from per-frame Slate attributes, so the resolved
+	// value is cached instead of re-parsing config on every call. Our own
+	// setters invalidate it; paths and project defaults are part of the cache
+	// key. Externally edited user or legacy migration files use the bounded
+	// timestamp revalidation below because no script writes activation state.
+	constexpr double ActivationRevalidateIntervalSeconds = 1.0;
+
+	struct FActivationCache
+	{
+		bool bValid = false;
+		FMonolithActivation Value;
+		double LastCheckSeconds = 0.0;
+		FDateTime UserStamp = FDateTime::MinValue();
+		FDateTime LegacyStamp = FDateTime::MinValue();
+		FString UserPath;
+		FString LegacyPath;
+		bool bServerDefault = true;
+		bool bIndexingDefault = true;
+
+		bool MatchesRequest(
+			const FString& CurrentUserPath,
+			const FString& CurrentLegacyPath,
+			bool bCurrentServerDefault,
+			bool bCurrentIndexingDefault) const
+		{
+			return bValid
+				&& UserPath == CurrentUserPath
+				&& LegacyPath == CurrentLegacyPath
+				&& bServerDefault == bCurrentServerDefault
+				&& bIndexingDefault == bCurrentIndexingDefault;
+		}
+
+		void Invalidate()
+		{
+			bValid = false;
+		}
+	};
+
+	FActivationCache ActivationCache;
 
 	enum class EActivationFeature : uint8
 	{
@@ -126,39 +167,39 @@ namespace
 		return true;
 	}
 
-	FMonolithServiceActivation LoadServiceActivationUnlocked(
-		const FString& UserConfigFilePath,
-		const FString& LegacyConfigFilePath,
-		bool bServerEnabledByProjectDefault,
-		bool bIndexingEnabledByProjectDefault)
+	FMonolithActivation ResolveActivationUnlocked(
+		const FString& UserPath,
+		const FString& LegacyPath,
+		bool bServerDefault,
+		bool bIndexingDefault)
 	{
-		FConfigFile UserConfig = ReadConfigFile(UserConfigFilePath);
+		FConfigFile UserConfig = ReadConfigFile(UserPath);
 		const FParsedActivationValue UserServer =
-			ReadActivationValue(UserConfig, UserActivationSection, ServerEnabledKey, UserConfigFilePath);
+			ReadActivationValue(UserConfig, UserActivationSection, ServerEnabledKey, UserPath);
 		const FParsedActivationValue UserIndexing =
-			ReadActivationValue(UserConfig, UserActivationSection, IndexingEnabledKey, UserConfigFilePath);
+			ReadActivationValue(UserConfig, UserActivationSection, IndexingEnabledKey, UserPath);
 
-		FConfigFile LegacyConfig = ReadConfigFile(LegacyConfigFilePath);
-		const bool bLegacyFileExists = IFileManager::Get().FileExists(*LegacyConfigFilePath);
+		FConfigFile LegacyConfig = ReadConfigFile(LegacyPath);
+		const bool bLegacyFileExists = IFileManager::Get().FileExists(*LegacyPath);
 		const FParsedActivationValue LegacyServer =
-			ReadActivationValue(LegacyConfig, LegacyActivationSection, ServerEnabledKey, LegacyConfigFilePath);
+			ReadActivationValue(LegacyConfig, LegacyActivationSection, ServerEnabledKey, LegacyPath);
 		const FParsedActivationValue LegacyIndexing =
-			ReadActivationValue(LegacyConfig, LegacyActivationSection, IndexingEnabledKey, LegacyConfigFilePath);
+			ReadActivationValue(LegacyConfig, LegacyActivationSection, IndexingEnabledKey, LegacyPath);
 
-		FMonolithServiceActivation Activation;
-		Activation.bServerEnabled = bServerEnabledByProjectDefault;
-		Activation.bIndexingEnabled = bIndexingEnabledByProjectDefault;
+		FMonolithActivation Activation;
+		Activation.bServerEnabled = bServerDefault;
+		Activation.bIndexingEnabled = bIndexingDefault;
 
 		bool bMigrationNeeded = false;
 		if (UserServer.bPresent)
 		{
 			Activation.bServerEnabled = UserServer.bValue;
-			Activation.bServerOverriddenByUser = true;
+			Activation.bServerUserSet = true;
 		}
 		else if (LegacyServer.bPresent)
 		{
 			Activation.bServerEnabled = LegacyServer.bValue;
-			Activation.bServerOverriddenByUser = true;
+			Activation.bServerUserSet = true;
 			UserConfig.SetBool(UserActivationSection, ServerEnabledKey, LegacyServer.bValue);
 			bMigrationNeeded = true;
 		}
@@ -166,12 +207,12 @@ namespace
 		if (UserIndexing.bPresent)
 		{
 			Activation.bIndexingEnabled = UserIndexing.bValue;
-			Activation.bIndexingOverriddenByUser = true;
+			Activation.bIndexingUserSet = true;
 		}
 		else if (LegacyIndexing.bPresent)
 		{
 			Activation.bIndexingEnabled = LegacyIndexing.bValue;
-			Activation.bIndexingOverriddenByUser = true;
+			Activation.bIndexingUserSet = true;
 			UserConfig.SetBool(UserActivationSection, IndexingEnabledKey, LegacyIndexing.bValue);
 			bMigrationNeeded = true;
 		}
@@ -180,41 +221,41 @@ namespace
 		{
 			FString MigrationError;
 			const bool bMigrationWriteSucceeded =
-				!bMigrationNeeded || WriteConfigFile(UserConfigFilePath, UserConfig, &MigrationError);
+				!bMigrationNeeded || WriteConfigFile(UserPath, UserConfig, &MigrationError);
 			if (!bMigrationWriteSucceeded)
 			{
 				UE_LOG(LogMonolith, Error,
 					TEXT("Monolith could not migrate legacy activation state from %s: %s"),
-					*LegacyConfigFilePath, *MigrationError);
+					*LegacyPath, *MigrationError);
 			}
 			else
 			{
 				if (!UserServer.bPresent && LegacyServer.bPresent)
 				{
 					SyncCachedActivationValue(
-						UserConfigFilePath,
+						UserPath,
 						ServerEnabledKey,
 						LegacyServer.bValue);
 				}
 				if (!UserIndexing.bPresent && LegacyIndexing.bPresent)
 				{
 					SyncCachedActivationValue(
-						UserConfigFilePath,
+						UserPath,
 						IndexingEnabledKey,
 						LegacyIndexing.bValue);
 				}
 
-				if (!IFileManager::Get().Delete(*LegacyConfigFilePath))
+				if (!IFileManager::Get().Delete(*LegacyPath))
 				{
 					UE_LOG(LogMonolith, Warning,
 						TEXT("Monolith migrated legacy activation state but could not remove %s; generated Monolith.ini overrides remain authoritative"),
-						*LegacyConfigFilePath);
+						*LegacyPath);
 				}
 				else
 				{
 					UE_LOG(LogMonolith, Log,
 						TEXT("Monolith migrated legacy activation state to %s"),
-						*UserConfigFilePath);
+						*UserPath);
 				}
 			}
 		}
@@ -222,23 +263,70 @@ namespace
 		return Activation;
 	}
 
+	FMonolithActivation GetCachedActivationUnlocked(
+		FActivationCache& Cache,
+		const FString& UserPath,
+		const FString& LegacyPath,
+		bool bServerDefault,
+		bool bIndexingDefault,
+		double NowSeconds)
+	{
+		const bool bRequestMatches = Cache.MatchesRequest(
+			UserPath,
+			LegacyPath,
+			bServerDefault,
+			bIndexingDefault);
+		if (bRequestMatches &&
+			NowSeconds - Cache.LastCheckSeconds < ActivationRevalidateIntervalSeconds)
+		{
+			return Cache.Value;
+		}
+
+		Cache.LastCheckSeconds = NowSeconds;
+		const FDateTime UserStamp = IFileManager::Get().GetTimeStamp(*UserPath);
+		const FDateTime LegacyStamp = IFileManager::Get().GetTimeStamp(*LegacyPath);
+		if (bRequestMatches &&
+			UserStamp == Cache.UserStamp &&
+			LegacyStamp == Cache.LegacyStamp)
+		{
+			return Cache.Value;
+		}
+
+		Cache.Value = ResolveActivationUnlocked(
+			UserPath,
+			LegacyPath,
+			bServerDefault,
+			bIndexingDefault);
+		// Re-stamp after resolving: a one-time legacy migration writes the user
+		// file and removes the legacy file.
+		Cache.UserStamp = IFileManager::Get().GetTimeStamp(*UserPath);
+		Cache.LegacyStamp = IFileManager::Get().GetTimeStamp(*LegacyPath);
+		Cache.UserPath = UserPath;
+		Cache.LegacyPath = LegacyPath;
+		Cache.bServerDefault = bServerDefault;
+		Cache.bIndexingDefault = bIndexingDefault;
+		Cache.bValid = true;
+		return Cache.Value;
+	}
+
 	bool SetActivationInFileUnlocked(
-		const FString& UserConfigFilePath,
+		const FString& UserPath,
 		EActivationFeature Feature,
-		bool bEnabled,
+		bool bActivated,
 		FString* OutError)
 	{
-		FConfigFile UserConfig = ReadConfigFile(UserConfigFilePath);
+		FConfigFile UserConfig = ReadConfigFile(UserPath);
 		const TCHAR* Key = Feature == EActivationFeature::Server
 			? ServerEnabledKey
 			: IndexingEnabledKey;
-		UserConfig.SetBool(UserActivationSection, Key, bEnabled);
-		if (!WriteConfigFile(UserConfigFilePath, UserConfig, OutError))
+		UserConfig.SetBool(UserActivationSection, Key, bActivated);
+		if (!WriteConfigFile(UserPath, UserConfig, OutError))
 		{
 			return false;
 		}
 
-		SyncCachedActivationValue(UserConfigFilePath, Key, bEnabled);
+		SyncCachedActivationValue(UserPath, Key, bActivated);
+		ActivationCache.Invalidate();
 		return true;
 	}
 }
@@ -252,51 +340,55 @@ const UMonolithSettings* UMonolithSettings::Get()
 	return GetDefault<UMonolithSettings>();
 }
 
-FMonolithServiceActivation UMonolithSettings::GetServiceActivation()
+FMonolithActivation UMonolithSettings::GetActivation()
 {
 	const UMonolithSettings* Settings = Get();
 	const bool bServerDefault = !Settings || Settings->bServerEnabledByDefault;
 	const bool bIndexingDefault = !Settings || Settings->bIndexingEnabledByDefault;
+	const FString UserPath = GetUserActivationPath();
+	const FString LegacyPath = GetLegacyActivationPath();
 
 	FScopeLock Lock(&ActivationConfigLock);
-	return LoadServiceActivationUnlocked(
-		GetUserActivationConfigFilePath(),
-		GetLegacyActivationConfigFilePath(),
+	return GetCachedActivationUnlocked(
+		ActivationCache,
+		UserPath,
+		LegacyPath,
 		bServerDefault,
-		bIndexingDefault);
+		bIndexingDefault,
+		FPlatformTime::Seconds());
 }
 
-bool UMonolithSettings::IsServerActivationEnabled()
+bool UMonolithSettings::IsServerActivated()
 {
-	return GetServiceActivation().bServerEnabled;
+	return GetActivation().bServerEnabled;
 }
 
-bool UMonolithSettings::IsIndexingActivationEnabled()
+bool UMonolithSettings::IsIndexingActivated()
 {
-	return GetServiceActivation().bIndexingEnabled;
+	return GetActivation().bIndexingEnabled;
 }
 
-bool UMonolithSettings::SetServerActivationEnabled(bool bEnabled, FString* OutError)
+bool UMonolithSettings::SetServerActivated(bool bActivated, FString* OutError)
 {
 	FScopeLock Lock(&ActivationConfigLock);
 	return SetActivationInFileUnlocked(
-		GetUserActivationConfigFilePath(),
+		GetUserActivationPath(),
 		EActivationFeature::Server,
-		bEnabled,
+		bActivated,
 		OutError);
 }
 
-bool UMonolithSettings::SetIndexingActivationEnabled(bool bEnabled, FString* OutError)
+bool UMonolithSettings::SetIndexingActivated(bool bActivated, FString* OutError)
 {
 	FScopeLock Lock(&ActivationConfigLock);
 	return SetActivationInFileUnlocked(
-		GetUserActivationConfigFilePath(),
+		GetUserActivationPath(),
 		EActivationFeature::Indexing,
-		bEnabled,
+		bActivated,
 		OutError);
 }
 
-FString UMonolithSettings::GetUserActivationConfigFilePath()
+FString UMonolithSettings::GetUserActivationPath()
 {
 	return FPaths::ConvertRelativePathToFull(
 		FConfigCacheIni::GetDestIniFilename(
@@ -305,7 +397,7 @@ FString UMonolithSettings::GetUserActivationConfigFilePath()
 			*FPaths::GeneratedConfigDir()));
 }
 
-FString UMonolithSettings::GetLegacyActivationConfigFilePath()
+FString UMonolithSettings::GetLegacyActivationPath()
 {
 	return FPaths::ConvertRelativePathToFull(
 		FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Monolith"), TEXT("Activation.ini")));
@@ -352,43 +444,60 @@ bool UMonolithSettings::IsIndexedContentPath(const FString& PackagePath)
 }
 
 #if WITH_DEV_AUTOMATION_TESTS
-FMonolithServiceActivation UMonolithSettings::LoadServiceActivationFromFilesForTests(
-	const FString& UserConfigFilePath,
-	const FString& LegacyConfigFilePath,
-	bool bServerEnabledByProjectDefault,
-	bool bIndexingEnabledByProjectDefault)
+FMonolithActivation UMonolithSettings::LoadActivationForTests(
+	const FString& UserPath,
+	const FString& LegacyPath,
+	bool bServerDefault,
+	bool bIndexingDefault)
 {
 	FScopeLock Lock(&ActivationConfigLock);
-	return LoadServiceActivationUnlocked(
-		FPaths::ConvertRelativePathToFull(UserConfigFilePath),
-		FPaths::ConvertRelativePathToFull(LegacyConfigFilePath),
-		bServerEnabledByProjectDefault,
-		bIndexingEnabledByProjectDefault);
+	return ResolveActivationUnlocked(
+		FPaths::ConvertRelativePathToFull(UserPath),
+		FPaths::ConvertRelativePathToFull(LegacyPath),
+		bServerDefault,
+		bIndexingDefault);
 }
 
-bool UMonolithSettings::SetServerActivationInFileForTests(
-	const FString& UserConfigFilePath,
-	bool bEnabled,
+FMonolithActivation UMonolithSettings::GetCachedActivationForTests(
+	const FString& UserPath,
+	const FString& LegacyPath,
+	bool bServerDefault,
+	bool bIndexingDefault,
+	double NowSeconds)
+{
+	FScopeLock Lock(&ActivationConfigLock);
+	return GetCachedActivationUnlocked(
+		ActivationCache,
+		FPaths::ConvertRelativePathToFull(UserPath),
+		FPaths::ConvertRelativePathToFull(LegacyPath),
+		bServerDefault,
+		bIndexingDefault,
+		NowSeconds);
+}
+
+bool UMonolithSettings::SetServerActivatedForTests(
+	const FString& UserPath,
+	bool bActivated,
 	FString* OutError)
 {
 	FScopeLock Lock(&ActivationConfigLock);
 	return SetActivationInFileUnlocked(
-		FPaths::ConvertRelativePathToFull(UserConfigFilePath),
+		FPaths::ConvertRelativePathToFull(UserPath),
 		EActivationFeature::Server,
-		bEnabled,
+		bActivated,
 		OutError);
 }
 
-bool UMonolithSettings::SetIndexingActivationInFileForTests(
-	const FString& UserConfigFilePath,
-	bool bEnabled,
+bool UMonolithSettings::SetIndexingActivatedForTests(
+	const FString& UserPath,
+	bool bActivated,
 	FString* OutError)
 {
 	FScopeLock Lock(&ActivationConfigLock);
 	return SetActivationInFileUnlocked(
-		FPaths::ConvertRelativePathToFull(UserConfigFilePath),
+		FPaths::ConvertRelativePathToFull(UserPath),
 		EActivationFeature::Indexing,
-		bEnabled,
+		bActivated,
 		OutError);
 }
 #endif

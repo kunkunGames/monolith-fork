@@ -206,7 +206,7 @@ void UMonolithIndexSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		return;
 	}
 
-	if (!UMonolithSettings::IsIndexingActivationEnabled())
+	if (!UMonolithSettings::IsIndexingActivated())
 	{
 		UE_LOG(LogMonolithIndex, Log,
 			TEXT("MonolithIndex: durable indexing activation is off; existing ProjectIndex.db remains available for reads"));
@@ -516,7 +516,7 @@ void UMonolithIndexSubsystem::SetAutomaticIndexingEnabled(bool bEnabled)
 
 	const UMonolithSettings* Settings = GetDefault<UMonolithSettings>();
 	if ((Settings && !Settings->bEnableIndex)
-		|| !UMonolithSettings::IsIndexingActivationEnabled())
+		|| !UMonolithSettings::IsIndexingActivated())
 	{
 		bAutomaticIndexingEnabled = false;
 		UE_LOG(LogMonolithIndex, Warning,

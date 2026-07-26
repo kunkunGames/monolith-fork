@@ -557,7 +557,7 @@ bool FMonolithHttpServer::HandleHealthCheck(const FHttpServerRequest& Request, c
 	Health->SetNumberField(TEXT("port"), BoundPort);
 	Health->SetNumberField(TEXT("pid"), FPlatformProcess::GetCurrentProcessId());
 	Health->SetStringField(TEXT("version"), MONOLITH_VERSION);
-	const FMonolithServiceActivation Activation = UMonolithSettings::GetServiceActivation();
+	const FMonolithActivation Activation = UMonolithSettings::GetActivation();
 	Health->SetBoolField(TEXT("server_activation_enabled"), Activation.bServerEnabled);
 	Health->SetBoolField(TEXT("indexing_activation_enabled"), Activation.bIndexingEnabled);
 

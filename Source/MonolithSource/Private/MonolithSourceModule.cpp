@@ -67,7 +67,7 @@ void FMonolithSourceModule::StartIndexingCommand()
 	}
 
 	FString Error;
-	if (!UMonolithSettings::SetIndexingActivationEnabled(true, &Error))
+	if (!UMonolithSettings::SetIndexingActivated(true, &Error))
 	{
 		UE_LOG(LogMonolith, Error, TEXT("Monolith.StartIndexing: %s"), *Error);
 		return;
@@ -107,13 +107,13 @@ void FMonolithSourceModule::StartIndexingCommand()
 		TEXT("Monolith.StartIndexing: activation enabled persistently (source_accepted=%s asset_accepted=%s state=%s)"),
 		bSourceAccepted ? TEXT("true") : TEXT("false"),
 		bAssetAccepted ? TEXT("true") : TEXT("false"),
-		*UMonolithSettings::GetUserActivationConfigFilePath());
+		*UMonolithSettings::GetUserActivationPath());
 }
 
 void FMonolithSourceModule::StopIndexingCommand()
 {
 	FString Error;
-	const bool bPersisted = UMonolithSettings::SetIndexingActivationEnabled(false, &Error);
+	const bool bPersisted = UMonolithSettings::SetIndexingActivated(false, &Error);
 
 	bool bSourceDraining = false;
 	bool bAssetDraining = false;
@@ -139,7 +139,7 @@ void FMonolithSourceModule::StopIndexingCommand()
 			TEXT("Monolith.StopIndexing: activation disabled persistently (source_draining=%s asset_draining=%s state=%s)"),
 			bSourceDraining ? TEXT("true") : TEXT("false"),
 			bAssetDraining ? TEXT("true") : TEXT("false"),
-			*UMonolithSettings::GetUserActivationConfigFilePath());
+			*UMonolithSettings::GetUserActivationPath());
 	}
 	else
 	{

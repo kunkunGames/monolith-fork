@@ -139,6 +139,17 @@ These releases added the `level_sequence` namespace, the `bulk_fill` / `describe
 | `Monolith.StartIndexing` | Writes `IndexingEnabled=True` | Enables source hot-reload and asset-registry hooks, starts project-source incremental/full bootstrap as needed, and starts the cheapest correct asset catch-up mode |
 | `Monolith.StopIndexing` | Writes `IndexingEnabled=False` | Removes queued/automatic source and asset hooks immediately; an active run drains to its normal transaction/completion boundary |
 
+The native consumers share one compact `UMonolithSettings` API:
+
+| C++ API | Contract |
+|---------|----------|
+| `GetActivation()` | Returns `FMonolithActivation`, containing the resolved server/indexing values and whether each value came from user intent rather than project policy |
+| `IsServerActivated()` / `IsIndexingActivated()` | Cheap effective-state predicates used by the server, source, asset, recovery, and editor surfaces |
+| `SetServerActivated()` / `SetIndexingActivated()` | Persist one per-user choice without replacing the sibling choice or changing `DefaultMonolith.ini` |
+| `GetUserActivationPath()` / `GetLegacyActivationPath()` | Return the generated user config and one-time legacy migration paths |
+
+`GetActivation()` caches the resolved value because some consumers are per-frame Slate attributes. Its request key contains both config paths and both project-default values; Start/Stop setters invalidate immediately, project-policy changes refresh immediately, and external edits to either generated `Monolith.ini` or the one-time legacy migration file are detected by bounded one-second timestamp checks.
+
 A missing user key inherits its matching project default; malformed user values fail closed to `false`. An explicit Stop therefore survives editor restarts and is local to that checkout/user, while project teams can change the initial policy without manufacturing user state. Older `Saved/Monolith/Activation.ini` choices migrate once into the generated config. `UMonolithSettings::bMcpServerEnabled`, `bEnableSource`, and `bEnableIndex` remain hard project-policy gates and cannot be overridden by a Start command.
 
 Index deactivation never blocks existing `ProjectIndex.db` or `EngineSource.db` reads. An active source reindex still owns the source DB until it completes because that writer intentionally closes and atomically reopens the database. The compatibility command `Monolith.StartIndex` does not enable indexing; it can request a full asset index only after `Monolith.StartIndexing`.

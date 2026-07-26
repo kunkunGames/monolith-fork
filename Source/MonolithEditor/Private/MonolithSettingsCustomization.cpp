@@ -37,7 +37,7 @@ void FMonolithSettingsCustomization::CustomizeDetails(IDetailLayoutBuilder& Deta
 				"Requires persistent indexing activation. Run Monolith.StartIndexing in the editor console first."))
 			.IsEnabled_Lambda([]()
 			{
-				if (!UMonolithSettings::IsIndexingActivationEnabled())
+				if (!UMonolithSettings::IsIndexingActivated())
 				{
 					return false;
 				}
@@ -80,7 +80,7 @@ void FMonolithSettingsCustomization::CustomizeDetails(IDetailLayoutBuilder& Deta
 				"Requires persistent indexing activation. Run Monolith.StartIndexing in the editor console first."))
 			.IsEnabled_Lambda([]()
 			{
-				if (!UMonolithSettings::IsIndexingActivationEnabled())
+				if (!UMonolithSettings::IsIndexingActivated())
 				{
 					return false;
 				}

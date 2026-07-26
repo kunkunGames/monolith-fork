@@ -62,7 +62,7 @@ int32 UMonolithReindexCommandlet::Main(const FString& Params)
 	const bool bAllowWhenIndexingDisabled =
 		FParse::Param(*Params, TEXT("AllowWhenIndexingDisabled"));
 
-	if (!UMonolithSettings::IsIndexingActivationEnabled() && !bAllowWhenIndexingDisabled)
+	if (!UMonolithSettings::IsIndexingActivated() && !bAllowWhenIndexingDisabled)
 	{
 		UE_LOG(LogMonolithSource, Error,
 			TEXT("MonolithReindex: indexing is disabled. Run Monolith.StartIndexing in the editor console, or pass -AllowWhenIndexingDisabled for an explicit one-shot maintenance override."));

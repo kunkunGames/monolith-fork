@@ -569,7 +569,7 @@ FMonolithActionResult FMonolithSourceContextActions::HandleGetIndexStatus(const 
 	Result->SetBoolField(TEXT("embedding_provider_settings_supported"), false);
 	Result->SetBoolField(
 		TEXT("indexing_activation_enabled"),
-		UMonolithSettings::IsIndexingActivationEnabled());
+		UMonolithSettings::IsIndexingActivated());
 
 	TSharedPtr<FJsonObject> ProjectObj = MakeShared<FJsonObject>();
 	ProjectObj->SetBoolField(TEXT("available"), ProjectIndex != nullptr);
@@ -627,7 +627,7 @@ FMonolithActionResult FMonolithSourceContextActions::HandleStartIndexing(const T
 		return FMonolithActionResult::Error(TEXT("'scope' must be 'all', 'assets', or 'source'"), -32602);
 	}
 
-	if (!UMonolithSettings::IsIndexingActivationEnabled())
+	if (!UMonolithSettings::IsIndexingActivated())
 	{
 		return FMonolithActionResult::Error(
 			TEXT("Monolith indexing is disabled. Run Monolith.StartIndexing in the editor console before calling bridge.start_indexing."));
