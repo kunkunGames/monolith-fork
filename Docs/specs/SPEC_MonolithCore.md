@@ -40,14 +40,31 @@
 
 | Action | MCP Tool | Description |
 |--------|----------|-------------|
-| `discover` | `monolith_discover` | List available tool namespaces and their actions. Optional `namespace` filter. **Per-namespace branch is terse by default** (action name + one-line description; param schemas omitted). Optional params: `detail` (bool, default false — `true` inlines every action's full `params` schema), `verbose` (alias for `detail`), `filter` (case-insensitive substring on name OR full description), `offset`/`limit` (opt-in pagination; `limit=0` = ALL). See "Terse per-namespace discover" below |
+| `discover` | `monolith_discover` | List available tool namespaces and their actions. Optional `namespace` filter. **Action results are terse by default** (action name + one-line description; param schemas omitted). `filter` without `namespace` returns matching actions across the live registry, preserving registry order so the MCP client can rank the bounded candidates. Optional params: `detail` (bool, default false — `true` inlines every action's full `params` schema), `verbose` (alias for `detail`), `filter` (case-insensitive substring on name OR full description), `offset`/`limit` (opt-in pagination; `limit=0` = ALL). See "Discover action projection" below |
 | `status` | `monolith_status` | Server health: version, uptime, port, action count, engine_version, project_name |
 | `update` | `monolith_update` | Check/install updates from GitHub Releases. `action`: "check" or "install" |
 | `reindex` | `monolith_reindex` | Trigger project re-index. Defaults to incremental (hash-based delta); pass `force=true` for full wipe-and-rebuild (via reflection to MonolithIndex, no hard dependency) |
 
-#### Terse per-namespace discover
+#### Discover action projection
 
 `monolith_discover(namespace)` is **terse by default**: for each action it returns `action` (name) + a one-line `description` only. The full per-action `params` JSON-Schema is NOT emitted by default — fetch a single action's schema with `describe_query action_schema` (the lazy-fetch target, ~54 tokens) or inline every action's schema with `detail=true`. Terse mode cuts per-namespace discover payload by ≥70% vs the pre-change shape (the win is dropping the eager `params` object, not truncating the action list).
+
+`monolith_discover(filter="<substring>", limit=N)` omits `namespace` and applies the same action-name/full-description predicate across every registered namespace. It returns a flat `actions` list with each row's `namespace`, `action`, bounded `description`, optional `category`, and optional detailed `params`. Registry order is retained; no hand-tuned semantic ranking or alias database is introduced. No-argument discovery remains the namespace inventory.
+
+When the Editor is unavailable, both `Scripts/monolith_proxy.py` and
+`Tools/MonolithProxy/monolith_proxy.cpp` expose a seeded
+`monolith_discover` descriptor. That seed mirrors the live
+`namespace`/`category`/`detail`/`verbose`/`filter`/`offset`/`limit` parameters
+and the universal `_fields`/`_omit`/`_row_fields`/`_path_fields`/
+`_compact_json` response-shaping parameters, so schema-driven clients can
+construct and project the same request before the first live `tools/list`
+refresh. If an older `tools/list` cache exists, each proxy overlays
+the current seed fields onto the cached `monolith_discover` descriptor. The
+description and input schema are refreshed, cached live fields such as MCP
+`annotations` and `title` survive, duplicate discovery entries collapse to one,
+and every unrelated cached Editor tool is preserved. Plugin upgrades therefore
+cannot strand cold-start clients on a stale discovery schema or strip its safety
+metadata.
 
 **One-line description trim (terse only).** Each `description` is trimmed to its first sentence (sentence terminator at index ≥25 followed by a space or end-of-string), else hard-capped at 150 chars on a word boundary, with an ASCII `"..."` suffix appended when trimmed; already-short descriptions are returned verbatim (no suffix). The FULL untrimmed description is preserved in detail mode and via `describe_query action_schema`.
 
@@ -57,13 +74,13 @@
 |-------|------|---------|---------|
 | `detail` | bool | `false` (terse) | `true` inlines every action's full `params` schema — reproduces the pre-change response shape byte-for-byte (`action`/`description`/`category`/`params` per action). Canonical flag. |
 | `verbose` | bool | unset | Accepted ALIAS for `detail` (read only when `detail` is unset). `verbose=true` == `detail=true`. |
-| `filter` | string | — | Case-insensitive substring matched against the action name OR the FULL description. Applied after any `category` filter, before pagination. |
+| `filter` | string | — | Case-insensitive substring matched against the action name OR the FULL description. Applied after any `category` filter in one-namespace mode, or across the live registry when `namespace` is absent. |
 | `offset` | int | `0` | Opt-in pagination start, clamped to `[0, total]`. Only meaningful with `limit > 0`. |
 | `limit` | int | `0` (= ALL) | `0` = no cap (the COMPLETE post-filter action list — no action hidden). Any `limit > 0` clamps to `[0, total]`. Pagination is purely OPT-IN. |
 
-**Top-level response fields:** `total` (always; post-filter count); `next_offset` (only when a positive `limit` was supplied AND more remain); `schema_hint` (terse only). The `schema_hint` string is: `Param schemas omitted. Call describe_query(action_schema, target_namespace="<ns>", target_action="<name>") for one action's full schema, or pass detail=true to inline all.`
+**Top-level response fields for action-list modes:** `actions`; `total` (post-filter count); `next_offset` (only when a positive `limit` was supplied AND more remain); `schema_hint` (terse only). Per-namespace rows omit the redundant namespace; cross-namespace rows include it.
 
-**Unchanged:** the full `discover()` (no namespace) response is untouched. `describe_query action_schema` is the unchanged lazy-fetch target for a single action's full schema.
+**Unchanged:** `discover()` with no namespace, filter, or positive limit still returns the namespace inventory. `describe_query action_schema` remains the lazy-fetch target for a single action's full schema.
 
 ### Actions (2 — namespace: "bulk_fill")
 

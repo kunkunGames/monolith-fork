@@ -6,7 +6,8 @@
 //   - Per-namespace discover is terse by default: action + description, NO `params`.
 //   - `detail=true` (canonical) inlines the full per-action param schema.
 //   - `verbose=true` is an accepted alias for `detail=true`.
-//   - `filter` substring-matches name OR description (case-insensitive).
+//   - `filter` substring-matches name OR description (case-insensitive), both
+//     within one namespace and across the live registry when namespace is absent.
 //   - Default (no limit) returns the FULL action list (discoverability gate).
 //   - Pagination (offset/limit) is opt-in; limit=0 = ALL; out-of-range clamps.
 //   - Unknown namespace still errors.
@@ -61,6 +62,24 @@ namespace MonolithDiscoverTerseTestDetail
 	static int32 FullActionCount()
 	{
 		return FMonolithToolRegistry::Get().GetActions(TEXT("monolith")).Num();
+	}
+
+	static int32 GlobalFilteredActionCount(const FString& Filter)
+	{
+		FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+		int32 Count = 0;
+		for (const FString& Namespace : Registry.GetNamespaces())
+		{
+			for (const FMonolithActionInfo& Action : Registry.GetActions(Namespace))
+			{
+				if (Action.Action.Contains(Filter, ESearchCase::IgnoreCase)
+					|| Action.Description.Contains(Filter, ESearchCase::IgnoreCase))
+				{
+					++Count;
+				}
+			}
+		}
+		return Count;
 	}
 
 	/** Pull the `actions` array out of a successful discover result, or null. */
@@ -146,16 +165,37 @@ bool FMonolithDiscoverDetailOptInTest::RunTest(const FString& /*Parameters*/)
 		// `params`. At least one monolith action (discover/update) has a schema, so
 		// assert at least one action obj carries params.
 		bool bAnyHasParams = false;
+		bool bDiscoverHasResponseShapingParams = false;
 		for (const TSharedPtr<FJsonValue>& Val : *Arr)
 		{
 			const TSharedPtr<FJsonObject>* Obj = nullptr;
 			if (Val.IsValid() && Val->TryGetObject(Obj) && Obj && (*Obj)->HasField(TEXT("params")))
 			{
 				bAnyHasParams = true;
-				break;
+
+				FString ActionName;
+				if ((*Obj)->TryGetStringField(TEXT("action"), ActionName)
+					&& ActionName == TEXT("discover"))
+				{
+					const TSharedPtr<FJsonObject>* DiscoverParams = nullptr;
+					if ((*Obj)->TryGetObjectField(TEXT("params"), DiscoverParams)
+						&& DiscoverParams
+						&& DiscoverParams->IsValid())
+					{
+						bDiscoverHasResponseShapingParams =
+							(*DiscoverParams)->HasField(TEXT("_fields"))
+							&& (*DiscoverParams)->HasField(TEXT("_omit"))
+							&& (*DiscoverParams)->HasField(TEXT("_row_fields"))
+							&& (*DiscoverParams)->HasField(TEXT("_path_fields"))
+							&& (*DiscoverParams)->HasField(TEXT("_compact_json"));
+					}
+				}
 			}
 		}
 		TestTrue(TEXT("detail mode inlines params on at least one action"), bAnyHasParams);
+		TestTrue(
+			TEXT("discover schema exposes all response shaping parameters"),
+			bDiscoverHasResponseShapingParams);
 	}
 
 	if (R.bSuccess && R.Result.IsValid())
@@ -256,7 +296,114 @@ bool FMonolithDiscoverFilterTest::RunTest(const FString& /*Parameters*/)
 }
 
 // ---------------------------------------------------------------------------
-// Test 5: default returns FULL list — no limit => array length == total ==
+// Test 5: a filter without namespace returns bounded cross-namespace action
+// candidates and reuses the existing offset/limit contract. No-arg discovery
+// remains the namespace inventory.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithDiscoverCrossNamespaceFilterTest,
+	"Monolith.Discover.CrossNamespace.FilterAndPagination",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithDiscoverCrossNamespaceFilterTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MonolithDiscoverTerseTestDetail;
+
+	const FString Filter = TEXT("server health");
+	const int32 ExpectedTotal = GlobalFilteredActionCount(Filter);
+	TestTrue(TEXT("fixture has at least one cross-namespace match"), ExpectedTotal > 0);
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("filter"), Filter);
+	Params->SetNumberField(TEXT("limit"), 1);
+
+	const FMonolithActionResult R = Discover(Params);
+	TestTrue(TEXT("cross-namespace filtered discover succeeds"), R.bSuccess);
+
+	const TArray<TSharedPtr<FJsonValue>>* Arr = GetActionsArray(R);
+	TestNotNull(TEXT("cross-namespace actions array present"), Arr);
+	if (Arr)
+	{
+		TestEqual(
+			TEXT("limit:1 returns one match when the fixture has matches"),
+			Arr->Num(),
+			FMath::Min(1, ExpectedTotal));
+
+		for (const TSharedPtr<FJsonValue>& Value : *Arr)
+		{
+			const TSharedPtr<FJsonObject>* Object = nullptr;
+			if (Value.IsValid() && Value->TryGetObject(Object) && Object)
+			{
+				FString Namespace;
+				FString Action;
+				FString Description;
+				(*Object)->TryGetStringField(TEXT("namespace"), Namespace);
+				(*Object)->TryGetStringField(TEXT("action"), Action);
+				(*Object)->TryGetStringField(TEXT("description"), Description);
+				TestFalse(TEXT("candidate carries namespace"), Namespace.IsEmpty());
+				TestFalse(TEXT("candidate carries action"), Action.IsEmpty());
+				TestTrue(
+					TEXT("candidate matches the cross-namespace filter"),
+					Action.Contains(Filter, ESearchCase::IgnoreCase)
+						|| Description.Contains(Filter, ESearchCase::IgnoreCase));
+			}
+		}
+	}
+
+	if (R.Result.IsValid())
+	{
+		int32 Total = -1;
+		R.Result->TryGetNumberField(TEXT("total"), Total);
+		TestEqual(TEXT("total reports every registry match"), Total, ExpectedTotal);
+		TestEqual(
+			TEXT("next_offset presence follows the existing pagination contract"),
+			R.Result->HasField(TEXT("next_offset")),
+			ExpectedTotal > 1);
+	}
+
+	const FMonolithActionResult Inventory = Discover(MakeShared<FJsonObject>());
+	TestTrue(TEXT("no-arg namespace inventory still succeeds"), Inventory.bSuccess);
+	if (Inventory.Result.IsValid())
+	{
+		TestTrue(TEXT("no-arg result still carries namespaces"), Inventory.Result->HasField(TEXT("namespaces")));
+		TestFalse(TEXT("no-arg result does not switch to candidate mode"), Inventory.Result->HasField(TEXT("actions")));
+	}
+
+	TSharedPtr<FJsonObject> LimitOnlyParams = MakeShared<FJsonObject>();
+	LimitOnlyParams->SetNumberField(TEXT("limit"), 1);
+	const FMonolithActionResult LimitOnlyInventory = Discover(LimitOnlyParams);
+	TestTrue(TEXT("limit without a filter preserves namespace inventory"), LimitOnlyInventory.bSuccess);
+	if (LimitOnlyInventory.Result.IsValid())
+	{
+		TestTrue(
+			TEXT("limit-only result still carries namespaces"),
+			LimitOnlyInventory.Result->HasField(TEXT("namespaces")));
+		TestFalse(
+			TEXT("limit-only result does not expose the global action catalog"),
+			LimitOnlyInventory.Result->HasField(TEXT("actions")));
+	}
+
+	TSharedPtr<FJsonObject> WhitespaceFilterParams = MakeShared<FJsonObject>();
+	WhitespaceFilterParams->SetStringField(TEXT("filter"), TEXT("   \t"));
+	const FMonolithActionResult WhitespaceFilterInventory =
+		Discover(WhitespaceFilterParams);
+	TestTrue(
+		TEXT("whitespace-only filter preserves namespace inventory"),
+		WhitespaceFilterInventory.bSuccess);
+	if (WhitespaceFilterInventory.Result.IsValid())
+	{
+		TestTrue(
+			TEXT("whitespace-only filter still carries namespaces"),
+			WhitespaceFilterInventory.Result->HasField(TEXT("namespaces")));
+		TestFalse(
+			TEXT("whitespace-only filter does not expand the global action catalog"),
+			WhitespaceFilterInventory.Result->HasField(TEXT("actions")));
+	}
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Test 6: default returns FULL list — no limit => array length == total ==
 // full action count; NO next_offset (nothing truncated).
 // ---------------------------------------------------------------------------
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -294,7 +441,7 @@ bool FMonolithDiscoverFullListTest::RunTest(const FString& /*Parameters*/)
 }
 
 // ---------------------------------------------------------------------------
-// Test 6: opt-in pagination — offset:1,limit:1 => exactly 1 action, total=full
+// Test 7: opt-in pagination — offset:1,limit:1 => exactly 1 action, total=full
 // count, next_offset present when more remain; limit:0 returns ALL; out-of-range
 // offset/limit clamp without error.
 // ---------------------------------------------------------------------------
@@ -400,7 +547,8 @@ bool FMonolithDiscoverPaginationTest::RunTest(const FString& /*Parameters*/)
 // and (b) the terse description with any trailing "..." removed is a prefix of
 // the full (detail) description. AND at least one action whose full description
 // exceeds HardCap must have a terse description ending in "..." (proves trimming
-// actually fires). HardCap mirrors MonolithTerseOneLineDescription (150).
+// actually fires). HardCap mirrors MonolithToolText::TerseOneLineDescription
+// (150).
 // ---------------------------------------------------------------------------
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FMonolithDiscoverTerseTrimInvariantTest,

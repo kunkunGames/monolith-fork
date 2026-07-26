@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`monolith_discover` can search actions across namespaces without a new ranking tool.** Pass `filter` without `namespace` to receive a terse candidate list from the live registry; the existing `offset`/`limit` contract bounds the result. No-argument discovery still returns the unchanged namespace inventory, while MCP clients remain responsible for semantic ranking. The live action and native/Python editor-offline seeds advertise the same discovery and response-shaping parameters, including `_row_fields` and `_path_fields`, so schema-driven cold-start clients can project the `actions` list. On a stale cache, the proxies overlay current seed fields onto the cached discovery descriptor, preserving live MCP annotations and every unrelated cached Editor tool.
+
 ## [0.21.3] - 2026-07-26
 
 This release closes out the open pull-request queue. Every fix below was reported or prototyped by a contributor — thanks to **@Thomasbehan**, **@whalemenace**, and **@kunkunGames** for the write-ups, which were detailed enough to reproduce from directly.

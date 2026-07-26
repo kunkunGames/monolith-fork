@@ -94,14 +94,19 @@ Core server management and introspection.
 
 ### `monolith.discover`
 
-List available tool namespaces and their actions. Pass `namespace` to filter; pass `category` to narrow further (e.g. `"CommonUI"` inside `ui`).
+List available tool namespaces and their actions. Pass `namespace` to inspect one namespace and optionally use `category` to narrow it (e.g. `"CommonUI"` inside `ui`). Pass `filter` without `namespace` to obtain matching actions across the live registry without introducing a separate ranking tool.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `namespace` | string | optional | Filter to a specific namespace |
 | `category` | string | optional | Filter actions within the namespace by category |
+| `detail` | boolean | optional | Inline full param schemas instead of terse descriptions |
+| `verbose` | boolean | optional | Alias for `detail` |
+| `filter` | string | optional | Case-insensitive substring on action name or full description; searches across all namespaces when `namespace` is absent |
+| `offset` | integer | optional | Pagination start index; meaningful when `limit > 0` |
+| `limit` | integer | optional | Maximum actions to return; `0` means all post-filter actions |
 
-**Returns:** Per-action param schemas for every registered action. AI clients also receive these in `tools/list` at session start, so most callers never need to call `discover` explicitly.
+**Returns:** With no `namespace`, `filter`, or positive `limit`, the namespace inventory remains unchanged. Supplying `filter` without `namespace` returns an `actions` candidate list whose rows include `namespace`, `action`, and a bounded `description`; `total` is the pre-page match count and `next_offset` appears only when more rows remain. Supplying `namespace` returns that namespace's action list. Param schemas are terse by default and available with `detail=true` or `describe_query("action_schema", ...)`.
 
 ---
 

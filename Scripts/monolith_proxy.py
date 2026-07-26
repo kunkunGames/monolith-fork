@@ -72,6 +72,15 @@ CORE_QUERY_TOOLS = [
     "level_sequence_query",
 ]
 
+# Cached manifests originate in an older Editor process and can outlive a
+# plugin/proxy upgrade. Keep the descriptors whose offline contract is owned by
+# this proxy authoritative while preserving every other cached, editor-provided
+# tool. Add names here only when the proxy can supply the complete descriptor
+# without consulting the Editor.
+REFRESHED_CACHED_SEED_TOOLS = frozenset({
+    "monolith_discover",
+})
+
 
 def _log(msg: str) -> None:
     """Log to stderr (visible in Claude Code debug mode, never interferes with stdio)."""
@@ -364,12 +373,32 @@ def _seed_tools() -> list[dict]:
 
     tools.append(_make_tool(
         "monolith_discover",
-        "List available tool namespaces and their actions. Pass namespace and optional category to filter.",
+        "List available tool namespaces and their actions. Pass namespace (and optional category) for one namespace, or pass filter without namespace for a cross-namespace candidate list. Action output is terse by default; pass detail=true to inline param schemas. Supports opt-in offset/limit pagination.",
         {
             "type": "object",
             "properties": {
                 "namespace": {"type": "string", "description": "Optional: filter to a specific namespace"},
-                "category": {"type": "string", "description": "Optional: filter actions within the namespace by category"},
+                "category": {"type": "string", "description": "Optional: filter actions within the namespace by category (e.g. 'CommonUI' inside 'ui')"},
+                "detail": {
+                    "type": "boolean",
+                    "description": "Optional: inline the full param schema for every action (default false = terse). 'verbose' is an accepted alias. Prefer describe_query action_schema for a single action's schema.",
+                },
+                "verbose": {
+                    "type": "boolean",
+                    "description": "Alias for detail; inline full param schemas. Prefer detail.",
+                },
+                "filter": {
+                    "type": "string",
+                    "description": "Optional: case-insensitive substring matched against each action's name or description. Without namespace, returns matching actions across the live registry.",
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "Optional: pagination start index (default 0). Only meaningful when limit > 0.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Optional: max actions to return (default 0 = ALL — no cap). Pagination is opt-in; with no limit the full action list is returned.",
+                },
                 "_fields": {
                     "type": "array",
                     "items": {"type": "string"},
@@ -379,6 +408,16 @@ def _seed_tools() -> list[dict]:
                     "type": "array",
                     "items": {"type": "string"},
                     "description": "Optional top-level blacklist — remove these top-level fields from the response. Mutually exclusive with _fields.",
+                },
+                "_row_fields": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional per-row whitelist for the returned actions list.",
+                },
+                "_path_fields": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional dotted-path whitelist for nested response fields.",
                 },
                 "_compact_json": {
                     "type": "boolean",
@@ -428,6 +467,38 @@ def _seed_tools() -> list[dict]:
     return tools
 
 
+def _refresh_cached_seed_descriptors(cached_tools: list[dict]) -> list[dict]:
+    """Overlay proxy-owned seed descriptors without discarding cached tools."""
+    current_seed_tools = {
+        tool["name"]: tool
+        for tool in _seed_tools()
+        if tool.get("name") in REFRESHED_CACHED_SEED_TOOLS
+    }
+    refreshed_tools = []
+    refreshed_names = set()
+
+    for cached_tool in cached_tools:
+        name = cached_tool.get("name") if isinstance(cached_tool, dict) else None
+        if name in current_seed_tools:
+            if name not in refreshed_names:
+                # The proxy owns the shipped descriptor fields, while a live
+                # Editor response may add MCP metadata such as annotations and
+                # title. Overlay the current seed instead of replacing the
+                # cached object so an offline refresh keeps that safety data.
+                refreshed_tool = dict(cached_tool)
+                refreshed_tool.update(current_seed_tools[name])
+                refreshed_tools.append(refreshed_tool)
+                refreshed_names.add(name)
+            continue
+        refreshed_tools.append(cached_tool)
+
+    for name, seed_tool in current_seed_tools.items():
+        if name not in refreshed_names:
+            refreshed_tools.append(seed_tool)
+
+    return refreshed_tools
+
+
 def _write_tools_cache(resp: str) -> None:
     try:
         payload = json.loads(resp)
@@ -454,8 +525,8 @@ def _read_tools_cache() -> list[dict] | None:
 def _fallback_tools_list(msg: dict) -> str:
     cached = _read_tools_cache()
     if cached:
-        _log("Monolith down during tools/list — returning cached tools")
-        return _result(msg.get("id"), {"tools": cached})
+        _log("Monolith down during tools/list — returning cached tools with current proxy-owned seed descriptors")
+        return _result(msg.get("id"), {"tools": _refresh_cached_seed_descriptors(cached)})
 
     _log("Monolith down during tools/list — returning seed tools")
     return _result(msg.get("id"), {"tools": _seed_tools()})

@@ -129,6 +129,15 @@ static const std::vector<std::string> CORE_QUERY_TOOLS = {
     "level_sequence_query",
 };
 
+// Cached manifests originate in an older Editor process and can outlive a
+// plugin/proxy upgrade. Keep the descriptors whose offline contract is owned by
+// this proxy authoritative while preserving every other cached, editor-provided
+// tool. Add names here only when the proxy can supply the complete descriptor
+// without consulting the Editor.
+static const std::set<std::string> REFRESHED_CACHED_SEED_TOOLS = {
+    "monolith_discover",
+};
+
 // ============================================================================
 // Logging
 // ============================================================================
@@ -821,7 +830,7 @@ static json make_seed_tools()
 
     tools.push_back(make_tool(
         "monolith_discover",
-        "List available tool namespaces and their actions. Pass namespace and optional category to filter.",
+        "List available tool namespaces and their actions. Pass namespace (and optional category) for one namespace, or pass filter without namespace for a cross-namespace candidate list. Action output is terse by default; pass detail=true to inline param schemas. Supports opt-in offset/limit pagination.",
         {
             {"type", "object"},
             {"properties", {
@@ -831,7 +840,27 @@ static json make_seed_tools()
                 }},
                 {"category", {
                     {"type", "string"},
-                    {"description", "Optional: filter actions within the namespace by category"}
+                    {"description", "Optional: filter actions within the namespace by category (e.g. 'CommonUI' inside 'ui')"}
+                }},
+                {"detail", {
+                    {"type", "boolean"},
+                    {"description", "Optional: inline the full param schema for every action (default false = terse). 'verbose' is an accepted alias. Prefer describe_query action_schema for a single action's schema."}
+                }},
+                {"verbose", {
+                    {"type", "boolean"},
+                    {"description", "Alias for detail; inline full param schemas. Prefer detail."}
+                }},
+                {"filter", {
+                    {"type", "string"},
+                    {"description", "Optional: case-insensitive substring matched against each action's name or description. Without namespace, returns matching actions across the live registry."}
+                }},
+                {"offset", {
+                    {"type", "integer"},
+                    {"description", "Optional: pagination start index (default 0). Only meaningful when limit > 0."}
+                }},
+                {"limit", {
+                    {"type", "integer"},
+                    {"description", "Optional: max actions to return (default 0 = ALL — no cap). Pagination is opt-in; with no limit the full action list is returned."}
                 }},
                 {"_fields", {
                     {"type", "array"},
@@ -842,6 +871,16 @@ static json make_seed_tools()
                     {"type", "array"},
                     {"items", {{"type", "string"}}},
                     {"description", "Optional top-level blacklist — remove these top-level fields from the response. Mutually exclusive with _fields."}
+                }},
+                {"_row_fields", {
+                    {"type", "array"},
+                    {"items", {{"type", "string"}}},
+                    {"description", "Optional per-row whitelist for the returned actions list."}
+                }},
+                {"_path_fields", {
+                    {"type", "array"},
+                    {"items", {{"type", "string"}}},
+                    {"description", "Optional dotted-path whitelist for nested response fields."}
                 }},
                 {"_compact_json", {
                     {"type", "boolean"},
@@ -889,6 +928,58 @@ static json make_seed_tools()
         make_empty_object_schema()));
 
     return tools;
+}
+
+static json refresh_cached_seed_descriptors(const json& cached_tools)
+{
+    std::map<std::string, json> current_seed_tools;
+    for (const json& seed_tool : make_seed_tools())
+    {
+        if (!seed_tool.is_object())
+            continue;
+
+        const std::string name = seed_tool.value("name", "");
+        if (REFRESHED_CACHED_SEED_TOOLS.count(name) > 0)
+            current_seed_tools.emplace(name, seed_tool);
+    }
+
+    json refreshed_tools = json::array();
+    std::set<std::string> refreshed_names;
+    for (const json& cached_tool : cached_tools)
+    {
+        const std::string name = cached_tool.is_object()
+            ? cached_tool.value("name", "")
+            : "";
+        const auto seed_it = current_seed_tools.find(name);
+        if (seed_it != current_seed_tools.end())
+        {
+            if (refreshed_names.insert(name).second)
+            {
+                // The proxy owns the shipped descriptor fields, while a live
+                // Editor response may add MCP metadata such as annotations and
+                // title. Overlay the current seed instead of replacing the
+                // cached object so an offline refresh keeps that safety data.
+                json refreshed_tool = cached_tool;
+                for (auto field_it = seed_it->second.cbegin();
+                     field_it != seed_it->second.cend();
+                     ++field_it)
+                {
+                    refreshed_tool[field_it.key()] = field_it.value();
+                }
+                refreshed_tools.push_back(std::move(refreshed_tool));
+            }
+            continue;
+        }
+        refreshed_tools.push_back(cached_tool);
+    }
+
+    for (const auto& [name, seed_tool] : current_seed_tools)
+    {
+        if (refreshed_names.insert(name).second)
+            refreshed_tools.push_back(seed_tool);
+    }
+
+    return refreshed_tools;
 }
 
 static void write_tools_cache(const std::string& response)
@@ -940,8 +1031,10 @@ static std::string make_fallback_tools_list_response(const json& msg)
 {
     if (auto cached = read_tools_cache())
     {
-        log_msg("Monolith down during tools/list -- returning cached tools");
-        return make_result(msg.value("id", json()), {{"tools", cached.value()}});
+        log_msg("Monolith down during tools/list -- returning cached tools with current proxy-owned seed descriptors");
+        return make_result(
+            msg.value("id", json()),
+            {{"tools", refresh_cached_seed_descriptors(cached.value())}});
     }
 
     log_msg("Monolith down during tools/list -- returning seed tools");
