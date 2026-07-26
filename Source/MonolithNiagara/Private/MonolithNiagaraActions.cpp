@@ -10059,6 +10059,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleExportSystemSpec(const TSha
 					if (StaticSwitchPins.Num() > 0)
 					{
 						TArray<TSharedPtr<FJsonValue>> SwitchArr;
+						SwitchArr.Reserve(StaticSwitchPins.Num());
 						for (UEdGraphPin* SwitchPin : StaticSwitchPins)
 						{
 							if (!SwitchPin) continue;
