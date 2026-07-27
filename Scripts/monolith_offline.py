@@ -356,9 +356,8 @@ class _FtsProjectionParser:
                 parenthesized=True,
             )
         else:
-            near_saved = self.position
-            near_text = self.try_parse_near_group()
-            if near_text is not None:
+            near_status, near_text = self.try_parse_near_group()
+            if near_status == "parsed":
                 if has_anchor:
                     self.fail_at(
                         "FTS5 initial-token anchor is not valid on a NEAR group",
@@ -366,8 +365,9 @@ class _FtsProjectionParser:
                     )
                     return None
                 result = _FtsNode("leaf", text=near_text)
+            elif near_status == "invalid":
+                return None
             else:
-                self.position = near_saved
                 ok, _ = self.parse_string_token()
                 if not ok:
                     self.fail_at("Expected an FTS5 phrase", self.position)
@@ -510,42 +510,162 @@ class _FtsProjectionParser:
         else:
             self.position = saved
 
+    def parse_near_phrase(self):
+        if (
+            self.at_end()
+            or self.query[self.position] in "),"
+        ):
+            self.fail_at(
+                "FTS5 NEAR group requires at least one phrase",
+                self.position,
+            )
+            return False
+        if self.query[self.position] == "^":
+            self.fail_at(
+                "FTS5 initial-token anchor is not valid inside a NEAR group",
+                self.position,
+            )
+            return False
+        if self.next_is_operator():
+            self.fail_at(
+                "FTS5 boolean operators are not valid inside a NEAR group",
+                self.position,
+            )
+            return False
+
+        ok, _ = self.parse_string_token()
+        if not ok:
+            self.fail_at(
+                "Expected an FTS5 phrase inside a NEAR group",
+                self.position,
+            )
+            return False
+        self.consume_optional_star()
+
+        while True:
+            plus_saved = self.position
+            self.skip_whitespace()
+            if self.at_end() or self.query[self.position] != "+":
+                self.position = plus_saved
+                break
+
+            self.position += 1
+            self.skip_whitespace()
+            if (
+                self.at_end()
+                or self.query[self.position] in "),^"
+                or self.next_is_operator()
+            ):
+                self.fail_at(
+                    "FTS5 NEAR phrase '+' requires a following string",
+                    self.position,
+                )
+                return False
+            ok, _ = self.parse_string_token()
+            if not ok:
+                self.fail_at(
+                    "FTS5 NEAR phrase '+' requires a following string",
+                    self.position,
+                )
+                return False
+            self.consume_optional_star()
+        return True
+
     def try_parse_near_group(self):
         start = self.position
         if not self.keyword_at(self.position, "NEAR"):
-            return None
+            return "none", ""
         self.position += 4
         self.skip_whitespace()
         if self.at_end() or self.query[self.position] != "(":
             self.position = start
-            return None
+            return "none", ""
 
-        depth = 0
-        in_quote = False
-        while self.position < len(self.query):
-            character = self.query[self.position]
-            if character == '"':
+        self.position += 1
+        self.skip_whitespace()
+        if self.at_end():
+            self.fail_at("Unterminated FTS5 NEAR group", start)
+            return "invalid", ""
+        if self.query[self.position] == ")":
+            self.fail_at(
+                "FTS5 NEAR group requires at least one phrase",
+                self.position,
+            )
+            return "invalid", ""
+
+        while True:
+            if not self.parse_near_phrase():
+                return "invalid", ""
+
+            separator = self.position
+            has_separator = self.skip_whitespace()
+            if self.at_end():
+                self.fail_at("Unterminated FTS5 NEAR group", start)
+                return "invalid", ""
+            if self.query[self.position] == ")":
+                self.position += 1
+                return (
+                    "parsed",
+                    _trim_fts_space(self.query[start:self.position]),
+                )
+            if self.query[self.position] == ",":
+                distance_comma = self.position
+                self.position += 1
+                self.skip_whitespace()
                 if (
-                    in_quote
-                    and self.position + 1 < len(self.query)
-                    and self.query[self.position + 1] == '"'
+                    not self.at_end()
+                    and self.query[self.position] == ","
                 ):
-                    self.position += 2
-                    continue
-                in_quote = not in_quote
-            elif not in_quote:
-                if character == "(":
-                    depth += 1
-                elif character == ")":
-                    depth -= 1
-                    if depth == 0:
-                        self.position += 1
-                        return _trim_fts_space(
-                            self.query[start:self.position]
-                        )
-            self.position += 1
-        self.fail_at("Unterminated FTS5 NEAR group", start)
-        return None
+                    self.fail_at(
+                        "FTS5 NEAR accepts at most one distance parameter",
+                        self.position,
+                    )
+                    return "invalid", ""
+
+                distance_start = self.position
+                while (
+                    not self.at_end()
+                    and "0" <= self.query[self.position] <= "9"
+                ):
+                    self.position += 1
+                if self.position == distance_start:
+                    self.fail_at(
+                        "FTS5 NEAR distance must be an unsigned decimal integer",
+                        distance_comma + 1,
+                    )
+                    return "invalid", ""
+
+                self.skip_whitespace()
+                if (
+                    not self.at_end()
+                    and self.query[self.position] == ","
+                ):
+                    self.fail_at(
+                        "FTS5 NEAR accepts at most one distance parameter",
+                        self.position,
+                    )
+                    return "invalid", ""
+                if self.at_end():
+                    self.fail_at("Unterminated FTS5 NEAR group", start)
+                    return "invalid", ""
+                if self.query[self.position] != ")":
+                    self.fail_at(
+                        "FTS5 NEAR distance must be an unsigned decimal integer",
+                        distance_comma + 1,
+                    )
+                    return "invalid", ""
+
+                self.position += 1
+                return (
+                    "parsed",
+                    _trim_fts_space(self.query[start:self.position]),
+                )
+            if not has_separator:
+                self.fail_at(
+                    "FTS5 NEAR phrases must be separated by whitespace",
+                    separator,
+                )
+                return "invalid", ""
 
 
 class _ProjectedFtsNode:
@@ -2233,7 +2353,7 @@ class ProjectActions:
                     sql,
                     (search_query, limit),
                 ).fetchall()
-            except sqlite3.OperationalError as error:
+            except sqlite3.DatabaseError as error:
                 print(json.dumps({
                     "success": False,
                     "error": (

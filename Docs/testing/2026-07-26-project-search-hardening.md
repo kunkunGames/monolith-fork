@@ -1,6 +1,6 @@
 # Project Search Hardening and FTS Repair Verification
 
-**Date:** 2026-07-26 (review-fix reruns: 2026-07-27)
+**Date:** 2026-07-26 (review-fix reruns: 2026-07-27 and 2026-07-28)
 **Scope:** Existing `fts_assets` / `fts_nodes` search contract, recursive FTS5 projection, provenance, bounded output, failure classification, and focused `repair_fts`
 **Hosts:** Disposable UE 5.8 and UE 5.7 projects outside the plugin checkout
 
@@ -16,8 +16,10 @@ Verify the maintainer-requested high-ROI slice without introducing a new index s
 - fail closed on malformed queries or SQLite failures;
 - preserve compatible branches in top-level and nested asset/node-spanning boolean expressions;
 - recognize bare, quoted, grouped, negative, and mixed-table column filters;
+- validate complete `NEAR(...)` phrase grammar before table-specific projection;
 - preserve non-ASCII FTS5 barewords at decoded Unicode boundaries;
 - distinguish invalid caller input from index/storage failures at the JSON-RPC boundary;
+- preserve the Python CLI's structured failure envelope for SQLite corruption;
 - support dry-run-first repair of only the affected FTS table;
 - keep the native executable and Python offline query paths behaviorally aligned;
 - compile on both Unreal Engine 5.8 and 5.7.
@@ -28,17 +30,20 @@ Verify the maintainer-requested high-ROI slice without introducing a new index s
 
 | Gate | Result | Evidence |
 |---|---|---|
-| Python syntax | PASS | `python -m py_compile Scripts\monolith_offline.py Scripts\check_offline_exe_fresh.py` |
+| Python syntax | PASS | `python -m py_compile Scripts\monolith_offline.py Scripts\check_offline_exe_fresh.py Scripts\tests\test_monolith_offline_project_search.py` |
+| Python focused regression | PASS, 4/4 | `python -m unittest discover -s Scripts\tests -p 'test_*.py' -v`; covers valid and malformed NEAR grammar, validation before field projection, and `sqlite3.DatabaseError` structured output |
 | Native offline query build | PASS | `Tools\MonolithQuery\build.bat` from the Visual Studio x64 developer environment |
-| Native executable freshness | PASS | `python Scripts\check_offline_exe_fresh.py`, ordered source-manifest hash `db8c4142cf4471cd` covers `monolith_query.cpp` and `ProjectSearchQueryProjectionCore.h` |
-| Native/Python fixture parity | PASS, 25/25 | Deep-equal result payloads plus explicit asset-name/node-class matched-context assertions; also covers quoted/grouped/mixed filters, nested `AND`/`OR`, repeated `NOT`, precedence, long flat boolean chains, `éORé`, Unicode whitespace, anchors, valid zero results, malformed structure, and unknown columns |
-| SQLite FTS5 grammar acceptance | PASS, 45/45 | Shared projector output prepared successfully against SQLite for the supported phrase, prefix, anchor, `NEAR(...)`, column-filter, grouping, and boolean forms |
-| Generated semantic differential | PASS, 250/250 | Projected table-specific queries preserved both result membership and ranking against equivalent per-table reference queries |
+| Native build failure injection | PASS | Forced `cl.exe` include failure returned exit 1 at the first translation unit, did not compile/link/copy later stages, and left the last known-good `Binaries\monolith_query.exe` SHA-256 unchanged |
+| Native executable freshness | PASS | `python Scripts\check_offline_exe_fresh.py`, ordered source-manifest hash `2cc5d9c574f46623` covers `monolith_query.cpp` and `ProjectSearchQueryProjectionCore.h` |
+| Native/Python general fixture parity | PASS, 25/25 (2026-07-27 hardening round) | Deep-equal result payloads plus explicit asset-name/node-class matched-context assertions; also covers quoted/grouped/mixed filters, nested `AND`/`OR`, repeated `NOT`, precedence, long flat boolean chains, `éORé`, Unicode whitespace, anchors, valid zero results, malformed structure, and unknown columns |
+| SQLite/native/Python NEAR parity | PASS, 45/45 | SQLite acceptance, native CLI structured result, and Python CLI structured result matched for valid and invalid NEAR phrase, prefix, concatenation, anchor, boolean, comma, and distance forms |
+| Generated semantic differential | PASS, 250/250 (2026-07-27 hardening round) | Projected table-specific queries preserved both result membership and ranking against equivalent per-table reference queries |
+| Release-wide RI/source offline parity | FIXTURE UNAVAILABLE | The isolated PR worktree has no `Saved\EngineSource.db`, so the unrelated 27-action guard could not obtain its source/RI corpus or chained decision IDs; both executable revisions still reported the same `parity_spec_rev`. Project-search parity is covered by the general 25/25 round and final focused 45/45 gate above. |
 | Static policy differential | PASS | Newer Speed static policy reported 36 blockers on both clean upstream and this branch; this branch introduced zero blockers |
 | UE 5.8 editor build | PASS | Protected `ActivationHostEditor Win64 Development` build in `D:\P4\MonolithPR113ReviewUE58Host`; exact review source recompiled/linked `UnrealEditor-MonolithIndex.dll`, exit 0 |
-| UE 5.8 focused automation | PASS, 1/1 | Review-fix rerun under `-RenderOffscreen`; report: `D:\P4\MonolithPR113ReviewUE58Host\Saved\Automation\PR113NearDistanceFinalUE58\index.json`; log: `D:\P4\MonolithPR113ReviewUE58Host\Saved\Logs\PR113NearDistanceFinalUE58.log`; one succeeded test, zero test warnings/errors, process exit 0 |
-| UE 5.7 editor build | PASS | Detached exact production/test source snapshot; protected build recompiled/linked the affected `MonolithIndex` sources and `UnrealEditor-MonolithIndex.dll`, exit 0; isolated UBT log: `D:\P4\MonolithPR113FinalUE57Host\Saved\Logs\PR113NearDistanceBuildUE57-UBT.log` |
-| UE 5.7 focused automation | PASS, 1/1 | `-RenderOffscreen`; report: `D:\P4\MonolithPR113FinalUE57Host\Saved\Automation\PR113NearDistanceFinalUE57\index.json`; log: `D:\P4\MonolithPR113FinalUE57Host\Saved\Logs\PR113NearDistanceFinalUE57.log`; one succeeded test, zero test warnings/errors, process exit 0 |
+| UE 5.8 focused automation | PASS, 1/1 | Final review-fix rerun under `-RenderOffscreen`; report: `D:\P4\MonolithPR113ReviewUE58Host\Saved\Automation\PR113NearGrammarFinalUE58\index.json`; log: `D:\P4\MonolithPR113ReviewUE58Host\Saved\Logs\PR113NearGrammarFinalUE58.log`; one succeeded test, zero test warnings/errors, process exit 0 |
+| UE 5.7 editor build | PASS | Detached exact production/test source snapshot; protected build recompiled/linked the affected `MonolithIndex` sources and `UnrealEditor-MonolithIndex.dll`, exit 0; isolated UBT log: `D:\P4\MonolithPR113FinalUE57Host\Saved\Logs\PR113NearGrammarBuildUE57-UBT.log` |
+| UE 5.7 focused automation | PASS, 1/1 | Final `-RenderOffscreen` rerun; report: `D:\P4\MonolithPR113FinalUE57Host\Saved\Automation\PR113NearGrammarFinalUE57\index.json`; log: `D:\P4\MonolithPR113FinalUE57Host\Saved\Logs\PR113NearGrammarFinalUE57.log`; one succeeded test, zero test warnings/errors, process exit 0 |
 | Screenshot / Discord upload | N/A | Search/index infrastructure has no visual or asset-presentation change |
 
 ---
@@ -67,12 +72,22 @@ Verify the maintainer-requested high-ROI slice without introducing a new index s
 10. a syntactically valid cross-table conjunction that no single table can
    satisfy succeeds with zero results and no error;
 11. malformed syntax and unknown columns—including an unknown qualifier behind
-   an otherwise inapplicable conjunction and a non-numeric `NEAR` distance—return
-   `InvalidQuery` with no partial result set;
-12. a deliberately missing FTS table returns `InternalError`, with the expected
+   an otherwise inapplicable conjunction, malformed NEAR phrases/operators,
+   and an invalid or repeated NEAR distance—return `InvalidQuery` with no
+   partial result set;
+12. malformed NEAR syntax is rejected even when mutually exclusive asset/node
+   filters would otherwise drop every branch before SQLite execution;
+13. a deliberately missing FTS table returns `InternalError`, with the expected
    SQLite diagnostic accounted for and no partial results;
-13. `repair_fts` defaults to dry-run and reports the selected table;
-14. explicit execution repairs only the selected FTS table.
+14. `repair_fts` defaults to dry-run and reports the selected table;
+15. explicit execution repairs only the selected FTS table.
+
+The stdlib Python regression suite independently verifies the same valid and
+invalid NEAR forms on both table field sets. It creates a real in-memory FTS5
+index, corrupts an `fts_assets_data` shadow block, confirms SQLite raises
+`sqlite3.DatabaseError("database disk image is malformed")`, and then asserts
+that `project search` emits parseable `success:false` JSON rather than
+propagating a traceback.
 
 The final UE 5.8 and UE 5.7 reports each contain one succeeded test, zero
 warnings, and zero errors.

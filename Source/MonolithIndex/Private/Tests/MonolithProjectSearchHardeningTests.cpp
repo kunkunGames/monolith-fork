@@ -409,6 +409,107 @@ bool FMonolithProjectSearchHardeningTest::RunTest(const FString& /*Parameters*/)
 		TEXT("Database search preserves the explicit NEAR distance error"),
 		Error.Contains(TEXT("NEAR distance")));
 
+	FString ValidNearProjection;
+	FString ValidNearProjectionError;
+	TestEqual(
+		TEXT("Valid NEAR phrase grammar is accepted by the shared projector"),
+		MonolithProjectSearchQuery::Project(
+			TEXT("NEAR(\"CommonSearchFixture\" BranchSearchFixture* + Tail, 8)"),
+			AssetProjectionFields,
+			EnabledProjectionFields,
+			ValidNearProjection,
+			&ValidNearProjectionError),
+		MonolithProjectSearchQuery::EProjectionResult::Applicable);
+	TestEqual(
+		TEXT("Valid NEAR phrase grammar is preserved byte-for-byte"),
+		ValidNearProjection,
+		FString(TEXT("NEAR(\"CommonSearchFixture\" BranchSearchFixture* + Tail, 8)")));
+	TestTrue(
+		TEXT("Valid NEAR phrase grammar has no projection error"),
+		ValidNearProjectionError.IsEmpty());
+
+	const FString HiddenInvalidNearQuery = TEXT(
+		"asset_name:BP_SearchFixture AND "
+		"node_name:NEAR(CommonSearchFixture OR BranchSearchFixture)");
+	FString HiddenInvalidNearProjection;
+	FString HiddenInvalidNearProjectionError;
+	TestEqual(
+		TEXT("Malformed NEAR syntax is validated before table projection"),
+		MonolithProjectSearchQuery::Project(
+			HiddenInvalidNearQuery,
+			AssetProjectionFields,
+			EnabledProjectionFields,
+			HiddenInvalidNearProjection,
+			&HiddenInvalidNearProjectionError),
+		MonolithProjectSearchQuery::EProjectionResult::Invalid);
+	TestTrue(
+		TEXT("Hidden malformed NEAR reports the forbidden boolean operator"),
+		HiddenInvalidNearProjectionError.Contains(
+			TEXT("boolean operators")));
+
+	Results.Reset();
+	Error.Reset();
+	TestEqual(
+		TEXT("Malformed NEAR in mutually exclusive fields is invalid params"),
+		Database.FullTextSearch(
+			HiddenInvalidNearQuery,
+			50,
+			Results,
+			Error),
+		EMonolithProjectSearchStatus::InvalidQuery);
+	TestTrue(
+		TEXT("Database search preserves the hidden NEAR grammar error"),
+		Error.Contains(TEXT("boolean operators")));
+	TestEqual(
+		TEXT("Hidden malformed NEAR never returns partial results"),
+		Results.Num(),
+		0);
+
+	const TArray<TPair<FString, FString>> InvalidNearGrammarCases = {
+		{
+			TEXT("NEAR(^CommonSearchFixture BranchSearchFixture)"),
+			TEXT("initial-token anchor"),
+		},
+		{
+			TEXT("NEAR(CommonSearchFixture +, 8)"),
+			TEXT("requires a following string"),
+		},
+		{
+			TEXT("NEAR(CommonSearchFixture, 1, 2)"),
+			TEXT("at most one distance"),
+		},
+		{
+			TEXT("NEAR()"),
+			TEXT("at least one phrase"),
+		},
+	};
+	for (int32 CaseIndex = 0;
+		 CaseIndex < InvalidNearGrammarCases.Num();
+		 ++CaseIndex)
+	{
+		FString InvalidGrammarProjection;
+		FString InvalidGrammarError;
+		const FString CaseLabel = FString::Printf(
+			TEXT("Invalid NEAR grammar case %d is rejected"),
+			CaseIndex);
+		TestEqual(
+			*CaseLabel,
+			MonolithProjectSearchQuery::Project(
+				InvalidNearGrammarCases[CaseIndex].Key,
+				AssetProjectionFields,
+				EnabledProjectionFields,
+				InvalidGrammarProjection,
+				&InvalidGrammarError),
+			MonolithProjectSearchQuery::EProjectionResult::Invalid);
+		const FString ErrorLabel = FString::Printf(
+			TEXT("Invalid NEAR grammar case %d reports its contract"),
+			CaseIndex);
+		TestTrue(
+			*ErrorLabel,
+			InvalidGrammarError.Contains(
+				InvalidNearGrammarCases[CaseIndex].Value));
+	}
+
 	Results.Reset();
 	Error.Reset();
 	TestEqual(

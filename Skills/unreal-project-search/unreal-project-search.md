@@ -54,7 +54,11 @@ The `search` action uses SQLite FTS5 under the hood. Key syntax:
 Mixed asset/node expressions are projected onto the two existing FTS tables.
 For example, `asset_name:BP_Enemy OR node_name:Branch` can return both kinds of
 hit. A valid conjunction that no single table can satisfy returns a successful
-zero-result response; malformed syntax and storage failures remain errors.
+zero-result response. The complete contents of every `NEAR(...)` group are
+validated before field-specific branches are projected away, so boolean
+operators, anchors, malformed `+` phrases, extra distance arguments, and
+non-decimal distances remain explicit syntax errors. Storage failures,
+including SQLite corruption in the Python fallback, remain structured errors.
 
 ## Common Workflows
 

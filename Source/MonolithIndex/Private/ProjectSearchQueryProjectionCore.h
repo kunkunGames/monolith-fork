@@ -861,6 +861,71 @@ namespace monolith_project_search_query
 				}
 			}
 
+			bool parse_near_phrase()
+			{
+				if (at_end()
+					|| query_[position_] == ')'
+					|| query_[position_] == ',')
+				{
+					fail_at(
+						"FTS5 NEAR group requires at least one phrase",
+						position_);
+					return false;
+				}
+				if (query_[position_] == '^')
+				{
+					fail_at(
+						"FTS5 initial-token anchor is not valid inside a NEAR group",
+						position_);
+					return false;
+				}
+				if (next_is_explicit_operator())
+				{
+					fail_at(
+						"FTS5 boolean operators are not valid inside a NEAR group",
+						position_);
+					return false;
+				}
+
+				std::string ignored;
+				if (!parse_string_token(ignored))
+				{
+					fail_at(
+						"Expected an FTS5 phrase inside a NEAR group",
+						position_);
+					return false;
+				}
+				consume_optional_star();
+
+				for (;;)
+				{
+					const size_t plus_saved = position_;
+					skip_whitespace();
+					if (at_end() || query_[position_] != '+')
+					{
+						position_ = plus_saved;
+						break;
+					}
+
+					++position_;
+					skip_whitespace();
+					if (at_end()
+						|| query_[position_] == ')'
+						|| query_[position_] == ','
+						|| query_[position_] == '^'
+						|| next_is_explicit_operator()
+						|| !parse_string_token(ignored))
+					{
+						fail_at(
+							"FTS5 NEAR phrase '+' requires a following string",
+							position_);
+						return false;
+					}
+					consume_optional_star();
+				}
+				return true;
+			}
+
 			near_parse_result try_parse_near_group(std::string& out_text)
 			{
 				out_text.clear();
@@ -877,81 +942,105 @@ namespace monolith_project_search_query
 					return near_parse_result::none;
 				}
 
-				int depth = 0;
-				bool in_quote = false;
-				size_t distance_comma = std::string::npos;
-				for (; position_ < query_.size(); ++position_)
+				++position_;
+				skip_whitespace();
+				if (at_end())
 				{
-					const char character = query_[position_];
-					if (character == '"')
+					fail_at("Unterminated FTS5 NEAR group", start);
+					return near_parse_result::invalid;
+				}
+				if (query_[position_] == ')')
+				{
+					fail_at(
+						"FTS5 NEAR group requires at least one phrase",
+						position_);
+					return near_parse_result::invalid;
+				}
+
+				for (;;)
+				{
+					if (!parse_near_phrase())
 					{
-						if (in_quote
-							&& position_ + 1 < query_.size()
-							&& query_[position_ + 1] == '"')
-						{
-							++position_;
-							continue;
-						}
-						in_quote = !in_quote;
-						continue;
+						return near_parse_result::invalid;
 					}
-					if (in_quote)
+
+					const size_t separator = position_;
+					const bool has_separator = skip_whitespace();
+					if (at_end())
 					{
-						continue;
+						fail_at("Unterminated FTS5 NEAR group", start);
+						return near_parse_result::invalid;
 					}
-					if (character == ',' && depth == 1)
+					if (query_[position_] == ')')
 					{
-						if (distance_comma != std::string::npos)
+						++position_;
+						out_text = trim(query_.substr(
+							start,
+							position_ - start));
+						return near_parse_result::parsed;
+					}
+					if (query_[position_] == ',')
+					{
+						const size_t distance_comma = position_++;
+						skip_whitespace();
+						if (!at_end() && query_[position_] == ',')
 						{
 							fail_at(
 								"FTS5 NEAR accepts at most one distance parameter",
 								position_);
 							return near_parse_result::invalid;
 						}
-						distance_comma = position_;
-						continue;
-					}
-					if (character == '(')
-					{
-						++depth;
-					}
-					else if (character == ')')
-					{
-						--depth;
-						if (depth == 0)
+
+						const size_t distance_start = position_;
+						while (!at_end()
+							   && query_[position_] >= '0'
+							   && query_[position_] <= '9')
 						{
-							if (distance_comma != std::string::npos)
-							{
-								const std::string distance = trim(query_.substr(
-									distance_comma + 1,
-									position_ - distance_comma - 1));
-								const bool valid_distance =
-									!distance.empty()
-									&& std::all_of(
-										distance.begin(),
-										distance.end(),
-										[](char value)
-										{
-											return value >= '0' && value <= '9';
-										});
-								if (!valid_distance)
-								{
-									fail_at(
-										"FTS5 NEAR distance must be an unsigned decimal integer",
-										distance_comma + 1);
-									return near_parse_result::invalid;
-								}
-							}
 							++position_;
-							out_text = trim(query_.substr(
-								start,
-								position_ - start));
-							return near_parse_result::parsed;
 						}
+						if (position_ == distance_start)
+						{
+							fail_at(
+								"FTS5 NEAR distance must be an unsigned decimal integer",
+								distance_comma + 1);
+							return near_parse_result::invalid;
+						}
+
+						skip_whitespace();
+						if (!at_end() && query_[position_] == ',')
+						{
+							fail_at(
+								"FTS5 NEAR accepts at most one distance parameter",
+								position_);
+							return near_parse_result::invalid;
+						}
+						if (at_end())
+						{
+							fail_at("Unterminated FTS5 NEAR group", start);
+							return near_parse_result::invalid;
+						}
+						if (query_[position_] != ')')
+						{
+							fail_at(
+								"FTS5 NEAR distance must be an unsigned decimal integer",
+								distance_comma + 1);
+							return near_parse_result::invalid;
+						}
+
+						++position_;
+						out_text = trim(query_.substr(
+							start,
+							position_ - start));
+						return near_parse_result::parsed;
+					}
+					if (!has_separator)
+					{
+						fail_at(
+							"FTS5 NEAR phrases must be separated by whitespace",
+							separator);
+						return near_parse_result::invalid;
 					}
 				}
-				fail_at("Unterminated FTS5 NEAR group", start);
-				return near_parse_result::invalid;
 			}
 		};
 
