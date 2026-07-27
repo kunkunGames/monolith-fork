@@ -89,7 +89,7 @@ void FMonolithSourceModule::StartIndexingCommand()
 			GEditor->GetEditorSubsystem<UMonolithSourceSubsystem>())
 		{
 			Source->SetAutomaticIndexingEnabled(true);
-			bSourceAccepted = Source->StartPreferredIndex();
+			bSourceAccepted = Source->StartPreferredIndex(true);
 		}
 	}
 
@@ -99,7 +99,7 @@ void FMonolithSourceModule::StartIndexingCommand()
 			GEditor->GetEditorSubsystem<UMonolithIndexSubsystem>())
 		{
 			Asset->SetAutomaticIndexingEnabled(true);
-			bAssetAccepted = Asset->StartPreferredIndex();
+			bAssetAccepted = Asset->StartPreferredIndex(true);
 		}
 	}
 

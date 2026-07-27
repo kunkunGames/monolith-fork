@@ -1,6 +1,7 @@
 #include "MonolithCoreModule.h"
 #include "MonolithHttpServer.h"
 #include "MonolithMcpHostRole.h"
+#include "MonolithSentinelFile.h"
 #include "MonolithSettings.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithResourceRegistry.h"
@@ -83,20 +84,27 @@ void FMonolithCoreModule::StartupModule()
 		return;
 	}
 
-	if (!UMonolithSettings::IsServerActivated())
-	{
-		UE_LOG(LogMonolith, Log,
-			TEXT("Monolith — HTTP server activation is off; run Monolith.StartServer to enable it persistently"));
-		return;
-	}
+	// Establish a baseline before the ticker exists. The ticker then reacts
+	// only to durable activation or project-policy changes after startup.
+	bLastResolvedServerActivation = IsHttpServerActivationDesired();
+	ActivationTickerHandle = FTSTicker::GetCoreTicker().AddTicker(
+		FTickerDelegate::CreateRaw(
+			this,
+			&FMonolithCoreModule::ReconcileHttpServerActivation),
+		1.0f);
 
-	// bMcpServerEnabled remains the hard project-policy kill switch. The
-	// resolved project-default/per-user activation cannot override this gate.
-	const UMonolithSettings* Settings = UMonolithSettings::Get();
-	if (Settings && !Settings->bMcpServerEnabled)
+	if (!bLastResolvedServerActivation)
 	{
-		UE_LOG(LogMonolith, Log,
-			TEXT("Monolith — MCP server disabled in settings (bMcpServerEnabled=false), skipping HTTP listener startup"));
+		if (!UMonolithSettings::IsServerActivated())
+		{
+			UE_LOG(LogMonolith, Log,
+				TEXT("Monolith — HTTP server activation is off; run Monolith.StartServer to enable it persistently"));
+		}
+		else
+		{
+			UE_LOG(LogMonolith, Log,
+				TEXT("Monolith — MCP server disabled in settings (bMcpServerEnabled=false), skipping HTTP listener startup"));
+		}
 		return;
 	}
 
@@ -105,6 +113,12 @@ void FMonolithCoreModule::StartupModule()
 
 void FMonolithCoreModule::ShutdownModule()
 {
+	if (ActivationTickerHandle.IsValid())
+	{
+		FTSTicker::GetCoreTicker().RemoveTicker(ActivationTickerHandle);
+		ActivationTickerHandle.Reset();
+	}
+
 	StopHttpServer();
 
 	if (HttpServer.IsValid())
@@ -163,13 +177,45 @@ bool FMonolithCoreModule::StartHttpServer()
 	return true;
 }
 
+bool FMonolithCoreModule::IsHttpServerActivationDesired() const
+{
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	return !bServerStoppedForProcess
+		&& UMonolithSettings::IsServerActivated()
+		&& (!Settings || Settings->bMcpServerEnabled);
+}
+
+bool FMonolithCoreModule::ReconcileHttpServerActivation(float /*DeltaTime*/)
+{
+	const bool bResolvedActivation = IsHttpServerActivationDesired();
+	if (bResolvedActivation == bLastResolvedServerActivation)
+	{
+		return true;
+	}
+
+	bLastResolvedServerActivation = bResolvedActivation;
+	if (bResolvedActivation)
+	{
+		UE_LOG(LogMonolith, Log,
+			TEXT("Monolith — activation changed externally to enabled; starting HTTP routes"));
+		StartHttpServer();
+	}
+	else
+	{
+		UE_LOG(LogMonolith, Log,
+			TEXT("Monolith — activation or project policy changed externally to disabled; stopping HTTP routes"));
+		StopHttpServer();
+	}
+	return true;
+}
+
 void FMonolithCoreModule::StopHttpServer()
 {
-	RemoveSentinelFile();
 	if (HttpServer.IsValid())
 	{
 		HttpServer->Stop();
 	}
+	RemoveSentinelFile();
 }
 
 void FMonolithCoreModule::RegisterCoreTools()
@@ -222,18 +268,22 @@ void FMonolithCoreModule::WriteSentinelFile(int32 Port)
 
 void FMonolithCoreModule::RemoveSentinelFile()
 {
-	if (!GMonolithOwnsSentinelFile)
+	const FString Path = GetSentinelFilePath();
+	switch (MonolithSentinelFile::RemoveOwned(
+		Path,
+		GMonolithOwnsSentinelFile))
 	{
+	case MonolithSentinelFile::ERemoveResult::Removed:
+		UE_LOG(LogMonolith, Log, TEXT("Sentinel file removed: %s"), *Path);
+		return;
+	case MonolithSentinelFile::ERemoveResult::Failed:
+		UE_LOG(LogMonolith, Warning, TEXT("Failed to remove sentinel file: %s"), *Path);
+		return;
+	case MonolithSentinelFile::ERemoveResult::NotOwned:
+	case MonolithSentinelFile::ERemoveResult::AlreadyAbsent:
+	default:
 		return;
 	}
-
-	const FString Path = GetSentinelFilePath();
-	if (FPaths::FileExists(Path))
-	{
-		IFileManager::Get().Delete(*Path);
-		UE_LOG(LogMonolith, Log, TEXT("Sentinel file removed: %s"), *Path);
-	}
-	GMonolithOwnsSentinelFile = false;
 }
 
 void FMonolithCoreModule::NormalizeFutureMtimesIfNeeded()
@@ -284,6 +334,12 @@ void FMonolithCoreModule::RestartHttpServer()
 	}
 
 	FMonolithCoreModule& Module = Get();
+	if (Module.bServerStoppedForProcess)
+	{
+		UE_LOG(LogMonolith, Warning,
+			TEXT("Monolith.Restart: server is stopped for this process; run Monolith.StartServer to retry persistent activation"));
+		return;
+	}
 	if (!UMonolithSettings::IsServerActivated())
 	{
 		UE_LOG(LogMonolith, Warning,
@@ -309,9 +365,6 @@ void FMonolithCoreModule::RestartHttpServer()
 	}
 
 	UE_LOG(LogMonolith, Log, TEXT("Monolith.Restart: restarting HTTP server on port %d"), Port);
-	// Drop the old ownership marker before unbinding. A failed restart must not
-	// leave a stale sentinel, and a later process must never inherit our marker.
-	Module.RemoveSentinelFile();
 	if (Module.HttpServer->Restart(Port))
 	{
 		Module.WriteSentinelFile(Port);
@@ -319,6 +372,10 @@ void FMonolithCoreModule::RestartHttpServer()
 	}
 	else
 	{
+		if (!Module.HttpServer->IsRunning())
+		{
+			Module.RemoveSentinelFile();
+		}
 		UE_LOG(LogMonolith, Error, TEXT("Monolith.Restart: failed to rebind port %d"), Port);
 	}
 }
@@ -356,6 +413,8 @@ void FMonolithCoreModule::StartHttpServerCommand()
 	}
 
 	FMonolithCoreModule& Module = Get();
+	Module.bServerStoppedForProcess = false;
+	Module.bLastResolvedServerActivation = true;
 	if (Module.StartHttpServer())
 	{
 		UE_LOG(LogMonolith, Log,
@@ -381,6 +440,8 @@ void FMonolithCoreModule::StopHttpServerCommand()
 	const bool bPersisted = UMonolithSettings::SetServerActivated(false, &Error);
 
 	FMonolithCoreModule& Module = Get();
+	Module.bServerStoppedForProcess = !bPersisted;
+	Module.bLastResolvedServerActivation = false;
 	Module.StopHttpServer();
 
 	if (bPersisted)

@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Persistent server/indexing activation now reports and preserves the real lifecycle outcome.** External activation edits are reconciled by durable editor hosts, unreadable user activation files fail closed instead of inheriting enabled defaults, and a failed sentinel delete retains ownership for a later retry. HTTP shutdown removes only Monolith routes while retaining UE's process-owned listener for same-port restart/reload; a foreign listener can no longer be mistaken for a successful Monolith bind. Source and asset reindex entry points return whether work was actually accepted, automatic source startup never turns a locked existing `EngineSource.db` into a destructive clean rebuild, first-time deferral honors an explicit persisted Start, and failed/cancelled asset runs re-arm live callbacks only when effective activation still permits them.
+
 - **Auto-updater source and unrelated ZIP archives are rejected.** Update discovery now accepts only explicit `Monolith-*.zip` release assets and fails closed when a release exposes only GitHub's `zipball_url` or another ZIP, because repository source archives and unrelated artifacts do not carry the precompiled plugin binaries required by Blueprint-only installations.
 
 - **Project search pagination and compact text are fail-closed at their boundaries.** Live `project.search` now rejects fractional or non-finite `limit`/`offset` values before touching the editor subsystem, and its compact result projection counts Unicode code points without splitting UTF-16 surrogate pairs. The native offline query path applies the same 240-code-point boundary without cutting a UTF-8 sequence.

@@ -50,11 +50,11 @@ public:
 
 	/** Trigger a full re-index (wipes DB, re-scans everything) */
 	UFUNCTION()
-	void StartFullIndex();
+	bool StartFullIndex();
 
 	/** Trigger an incremental catch-up index (delta engine) */
 	UFUNCTION()
-	void StartIncrementalIndex();
+	bool StartIncrementalIndex();
 
 	/** Trigger a full re-index and drive an existing async job row to a terminal state. */
 	UFUNCTION()
@@ -71,12 +71,15 @@ public:
 	/** Is indexing currently in progress? */
 	bool IsIndexing() const { return bIsIndexing; }
 
+	/** Whether a new full-index request can be accepted by the current writer. */
+	bool CanAcceptIndexRequest() const;
+
 	/**
 	 * Start the cheapest correct catch-up mode: incremental when the current DB
 	 * supports it, otherwise full. If the Asset Registry is still loading, the
 	 * request is queued until OnFilesLoaded.
 	 */
-	bool StartPreferredIndex();
+	bool StartPreferredIndex(bool bExplicitRequest);
 
 	/**
 	 * Enable or disable automatic Asset Registry hooks. Disabling is graceful:

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Containers/Ticker.h"
 #include "Modules/ModuleManager.h"
 
 #define MONOLITH_VERSION TEXT("0.21.3")
@@ -38,9 +39,14 @@ public:
 
 private:
 	TUniquePtr<FMonolithHttpServer> HttpServer;
+	bool bServerStoppedForProcess = false;
+	bool bLastResolvedServerActivation = false;
+	FTSTicker::FDelegateHandle ActivationTickerHandle;
 
 	bool StartHttpServer();
 	void StopHttpServer();
+	bool IsHttpServerActivationDesired() const;
+	bool ReconcileHttpServerActivation(float DeltaTime);
 	void RegisterCoreTools();
 	void WriteSentinelFile(int32 Port);
 	void RemoveSentinelFile();

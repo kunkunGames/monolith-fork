@@ -69,8 +69,12 @@ void UMonolithSourceSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	// DB reads stay available regardless of indexing activation. Writer hooks
 	// and the startup catch-up run are conditional.
+	const FMonolithActivation Activation = UMonolithSettings::GetActivation();
 	SetAutomaticIndexingEnabled(true);
-	StartPreferredIndex();
+	if (IsIndexingWorkEnabled())
+	{
+		StartPreferredIndex(Activation.bIndexingUserSet);
+	}
 }
 
 void UMonolithSourceSubsystem::Deinitialize()
@@ -84,6 +88,7 @@ void UMonolithSourceSubsystem::Deinitialize()
 	// Stop any running indexer
 	if (Indexer)
 	{
+		Indexer->OnComplete.Clear();
 		Indexer->RequestStop();
 		delete Indexer;
 		Indexer = nullptr;
@@ -109,7 +114,13 @@ bool UMonolithSourceSubsystem::IsIndexingWorkEnabled() const
 {
 	const UMonolithSettings* Settings = GetDefault<UMonolithSettings>();
 	return bAutomaticIndexingEnabled
-		&& (!Settings || Settings->bEnableSource);
+		&& (!Settings || Settings->bEnableSource)
+		&& UMonolithSettings::IsIndexingActivated();
+}
+
+bool UMonolithSourceSubsystem::CanAcceptIndexRequest() const
+{
+	return IsIndexingWorkEnabled() && !bIsIndexing;
 }
 
 void UMonolithSourceSubsystem::SetAutomaticIndexingEnabled(bool bEnabled)
@@ -149,7 +160,7 @@ void UMonolithSourceSubsystem::SetAutomaticIndexingEnabled(bool bEnabled)
 	}
 }
 
-bool UMonolithSourceSubsystem::StartPreferredIndex()
+bool UMonolithSourceSubsystem::StartPreferredIndex(bool bAllowFullBootstrap)
 {
 	check(IsInGameThread());
 
@@ -168,11 +179,27 @@ bool UMonolithSourceSubsystem::StartPreferredIndex()
 	}
 
 	const FString DbPath = GetDatabasePath();
-	if (FPlatformFileManager::Get().GetPlatformFile().FileExists(*DbPath))
+	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+	const bool bDatabaseFileExists = PlatformFile.FileExists(*DbPath);
+	if (bDatabaseFileExists && Database.IsValid() && Database->IsOpen())
 	{
 		return TriggerProjectReindexInternal();
 	}
-	return TriggerReindexInternal();
+	if (bDatabaseFileExists)
+	{
+		UE_LOG(LogMonolithSource, Error,
+			TEXT("EngineSource.db exists at %s but could not be opened; refusing an automatic clean rebuild that would discard the existing engine index. Resolve the open failure, then run source.trigger_reindex explicitly if a rebuild is genuinely wanted."),
+			*DbPath);
+		return false;
+	}
+	if (bAllowFullBootstrap)
+	{
+		return TriggerReindexInternal();
+	}
+
+	UE_LOG(LogMonolithSource, Log,
+		TEXT("EngineSource.db is not available; inherited activation does not start an engine-wide bootstrap. Run Monolith.StartIndexing to create it explicitly."));
+	return false;
 }
 
 // ============================================================
@@ -230,17 +257,19 @@ void UMonolithSourceSubsystem::OnReloadComplete(EReloadCompleteReason Reason)
 	UE_LOG(LogMonolithSource, Log,
 		TEXT("[F17] Hot-reload detected — kicking incremental project reindex (auto)"));
 
-	LastReindexTimeSeconds = Now;
-	TriggerProjectReindex(); // Already async via Indexer->StartAsync(); returns immediately.
+	if (TriggerProjectReindex())
+	{
+		LastReindexTimeSeconds = Now;
+	}
 }
 
 // ============================================================
 // Full reindex: engine + shaders + project (clean build)
 // ============================================================
 
-void UMonolithSourceSubsystem::TriggerReindex()
+bool UMonolithSourceSubsystem::TriggerReindex()
 {
-	TriggerReindexInternal();
+	return TriggerReindexInternal();
 }
 
 bool UMonolithSourceSubsystem::TriggerReindexInternal()
@@ -318,9 +347,9 @@ bool UMonolithSourceSubsystem::TriggerReindexInternal()
 // Incremental project-only reindex
 // ============================================================
 
-void UMonolithSourceSubsystem::TriggerProjectReindex()
+bool UMonolithSourceSubsystem::TriggerProjectReindex()
 {
-	TriggerProjectReindexInternal();
+	return TriggerProjectReindexInternal();
 }
 
 bool UMonolithSourceSubsystem::TriggerProjectReindexInternal()

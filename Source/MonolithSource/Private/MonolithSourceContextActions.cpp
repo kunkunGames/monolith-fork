@@ -651,13 +651,25 @@ FMonolithActionResult FMonolithSourceContextActions::HandleStartIndexing(const T
 		{
 			if (bFull)
 			{
-				ProjectIndex->StartFullIndex();
-				Started.Add(MakeShared<FJsonValueString>(TEXT("assets: full index")));
+				if (ProjectIndex->StartFullIndex())
+				{
+					Started.Add(MakeShared<FJsonValueString>(TEXT("assets: full index")));
+				}
+				else
+				{
+					Skipped.Add(MakeShared<FJsonValueString>(TEXT("assets: full index not accepted")));
+				}
 			}
 			else
 			{
-				ProjectIndex->StartIncrementalIndex();
-				Started.Add(MakeShared<FJsonValueString>(TEXT("assets: incremental index")));
+				if (ProjectIndex->StartIncrementalIndex())
+				{
+					Started.Add(MakeShared<FJsonValueString>(TEXT("assets: incremental index")));
+				}
+				else
+				{
+					Skipped.Add(MakeShared<FJsonValueString>(TEXT("assets: incremental index not accepted")));
+				}
 			}
 		}
 	}
@@ -677,13 +689,18 @@ FMonolithActionResult FMonolithSourceContextActions::HandleStartIndexing(const T
 		{
 			if (bFull)
 			{
-				Source->TriggerReindex();
-				Started.Add(MakeShared<FJsonValueString>(TEXT("source: full index")));
+				if (Source->TriggerReindex())
+				{
+					Started.Add(MakeShared<FJsonValueString>(TEXT("source: full index")));
+				}
+				else
+				{
+					Skipped.Add(MakeShared<FJsonValueString>(TEXT("source: full index not accepted")));
+				}
 			}
 			else
 			{
-				Source->TriggerProjectReindex();
-				if (Source->IsIndexing())
+				if (Source->TriggerProjectReindex())
 				{
 					Started.Add(MakeShared<FJsonValueString>(TEXT("source: project index")));
 				}

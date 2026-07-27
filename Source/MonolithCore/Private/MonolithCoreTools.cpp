@@ -3128,6 +3128,16 @@ FMonolithActionResult FMonolithCoreTools::HandleReindex(const TSharedPtr<FJsonOb
 				FString::Printf(TEXT("Function %s not found."), *JobFuncName));
 			return FMonolithActionResult::Success(Result);
 		}
+		if (!CastField<FBoolProperty>(JobFunc->GetReturnProperty()))
+		{
+			const FString Error = FString::Printf(
+				TEXT("%s does not return a bool; MonolithCore cannot determine whether the re-index was accepted. MonolithIndex and MonolithCore are out of sync."),
+				*JobFuncName);
+			JobRegistry.FailJob(JobId, Error);
+			Result->SetStringField(TEXT("status"), TEXT("module_contract_mismatch"));
+			Result->SetStringField(TEXT("message"), Error);
+			return FMonolithActionResult::Success(Result);
+		}
 
 		struct FStartIndexWithAsyncJobParams
 		{
@@ -3159,13 +3169,32 @@ FMonolithActionResult FMonolithCoreTools::HandleReindex(const TSharedPtr<FJsonOb
 		UFunction* Func = IndexSubsystemClass->FindFunctionByName(*FuncName);
 		if (Func)
 		{
-			IndexSubsystem->ProcessEvent(Func, nullptr);
-			// Contract preservation (§9): the existing "reindex_started" status and
-			// message stay byte-identical for legacy callers; async fields only appear
-			// when the feature flag is on.
-			Result->SetStringField(TEXT("status"), TEXT("reindex_started"));
-			Result->SetStringField(TEXT("message"),
-				FString::Printf(TEXT("%s triggered successfully."), *TriggerLabel));
+			if (!CastField<FBoolProperty>(Func->GetReturnProperty()))
+			{
+				return FMonolithActionResult::Error(
+					FString::Printf(
+						TEXT("%s does not return a bool; MonolithCore cannot determine whether the re-index was accepted. MonolithIndex and MonolithCore are out of sync."),
+						*FuncName));
+			}
+
+			struct
+			{
+				bool ReturnValue = false;
+			} Parms;
+			FMemory::Memzero(&Parms, sizeof(Parms));
+			IndexSubsystem->ProcessEvent(Func, &Parms);
+			if (Parms.ReturnValue)
+			{
+				Result->SetStringField(TEXT("status"), TEXT("reindex_started"));
+				Result->SetStringField(TEXT("message"),
+					FString::Printf(TEXT("%s triggered successfully."), *TriggerLabel));
+			}
+			else
+			{
+				Result->SetStringField(TEXT("status"), TEXT("reindex_not_started"));
+				Result->SetStringField(TEXT("message"),
+					FString::Printf(TEXT("%s did not start."), *TriggerLabel));
+			}
 		}
 		else
 		{

@@ -26,19 +26,25 @@ public:
 	FMonolithSourceDatabase* GetDatabase();
 
 	/** Full reindex: engine + shaders + project source (clean build). */
-	void TriggerReindex();
+	bool TriggerReindex();
 
 	/** Incremental project-only reindex: loads existing engine symbols, indexes only project C++ source. */
-	void TriggerProjectReindex();
+	bool TriggerProjectReindex();
 
-	/** Start project-only indexing when the DB exists, otherwise bootstrap a full source index. */
-	bool StartPreferredIndex();
+	/**
+	 * Start project-only indexing when the DB exists. A missing DB is
+	 * bootstrapped only for an explicit request.
+	 */
+	bool StartPreferredIndex(bool bAllowFullBootstrap);
 
 	/** Enable/disable hot-reload auto-index hooks without closing the read database. */
 	void SetAutomaticIndexingEnabled(bool bEnabled);
 
 	/** Is indexing currently running? */
 	bool IsIndexing() const { return bIsIndexing; }
+
+	/** Whether the current process-local writer can accept a new request. */
+	bool CanAcceptIndexRequest() const;
 
 	/** Absolute path of the authoritative EngineSource database, including any configured override. */
 	FString GetDatabasePath() const;

@@ -4,6 +4,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Misc/ScopeExit.h"
+#include "MonolithSentinelFile.h"
 #include "MonolithSettings.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -164,6 +165,32 @@ bool FMonolithSettingsActivationPersistenceTest::RunTest(const FString& Paramete
 		false);
 	TestFalse(TEXT("migrated server choice remains authoritative"), Activation.bServerEnabled);
 	TestTrue(TEXT("migrated indexing choice remains authoritative"), Activation.bIndexingEnabled);
+
+	const FString SentinelFile =
+		FPaths::Combine(TestDirectory, TEXT("sentinel"));
+	TestTrue(
+		TEXT("sentinel ownership fixture writes"),
+		FFileHelper::SaveStringToFile(TEXT("{}"), *SentinelFile));
+	bool bOwnsSentinel = true;
+	TestEqual(
+		TEXT("a failed sentinel delete reports failure"),
+		MonolithSentinelFile::CompleteRemovalAttempt(
+			false,
+			true,
+			bOwnsSentinel),
+		MonolithSentinelFile::ERemoveResult::Failed);
+	TestTrue(
+		TEXT("a failed sentinel delete retains ownership for retry"),
+		bOwnsSentinel);
+	TestEqual(
+		TEXT("a later sentinel delete succeeds"),
+		MonolithSentinelFile::RemoveOwned(
+			SentinelFile,
+			bOwnsSentinel),
+		MonolithSentinelFile::ERemoveResult::Removed);
+	TestFalse(
+		TEXT("successful sentinel deletion releases ownership"),
+		bOwnsSentinel);
 
 	const FString ExternalUserFile = FPaths::Combine(
 		TestDirectory,

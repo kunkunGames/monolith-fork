@@ -206,7 +206,8 @@ void UMonolithIndexSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		return;
 	}
 
-	if (!UMonolithSettings::IsIndexingActivated())
+	const FMonolithActivation Activation = UMonolithSettings::GetActivation();
+	if (!Activation.bIndexingEnabled)
 	{
 		UE_LOG(LogMonolithIndex, Log,
 			TEXT("MonolithIndex: durable indexing activation is off; existing ProjectIndex.db remains available for reads"));
@@ -214,7 +215,7 @@ void UMonolithIndexSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	}
 
 	SetAutomaticIndexingEnabled(true);
-	StartPreferredIndex();
+	StartPreferredIndex(Activation.bIndexingUserSet);
 }
 
 void UMonolithIndexSubsystem::OnAssetRegistryFilesLoaded()
@@ -437,7 +438,7 @@ void UMonolithIndexSubsystem::RegisterDefaultIndexers()
 	UE_LOG(LogMonolithIndex, Log, TEXT("Registered %d indexers"), Indexers.Num());
 }
 
-bool UMonolithIndexSubsystem::StartPreferredIndex()
+bool UMonolithIndexSubsystem::StartPreferredIndex(bool bExplicitRequest)
 {
 	check(IsInGameThread());
 
@@ -462,6 +463,19 @@ bool UMonolithIndexSubsystem::StartPreferredIndex()
 		return false;
 	}
 
+	const bool bFirstTimeIndex = ShouldAutoIndex();
+	const bool bNeedsFullIndex = bFirstTimeIndex || !CanDoIncrementalIndex();
+	const UMonolithSettings* Settings = GetDefault<UMonolithSettings>();
+	if (bFirstTimeIndex
+		&& !bExplicitRequest
+		&& Settings
+		&& Settings->bDeferFirstTimeIndex)
+	{
+		UE_LOG(LogMonolithIndex, Log,
+			TEXT("MonolithIndex: first-time index deferred via bDeferFirstTimeIndex; run Monolith.StartIndexing or Monolith.StartIndex to begin"));
+		return false;
+	}
+
 	IAssetRegistry& AssetRegistry =
 		FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 	if (AssetRegistry.IsLoadingAssets())
@@ -474,15 +488,11 @@ bool UMonolithIndexSubsystem::StartPreferredIndex()
 		return true;
 	}
 
-	if (ShouldAutoIndex())
+	if (bNeedsFullIndex)
 	{
 		return StartFullIndexInternal(FString());
 	}
-	if (CanDoIncrementalIndex())
-	{
-		return StartIncrementalIndexInternal(FString());
-	}
-	return StartFullIndexInternal(FString());
+	return StartIncrementalIndexInternal(FString());
 }
 
 void UMonolithIndexSubsystem::SetAutomaticIndexingEnabled(bool bEnabled)
@@ -531,9 +541,9 @@ void UMonolithIndexSubsystem::SetAutomaticIndexingEnabled(bool bEnabled)
 	// so a StopIndexing command during the run cannot re-arm the hooks.
 }
 
-void UMonolithIndexSubsystem::StartFullIndex()
+bool UMonolithIndexSubsystem::StartFullIndex()
 {
-	StartFullIndexInternal(FString());
+	return StartFullIndexInternal(FString());
 }
 
 bool UMonolithIndexSubsystem::StartFullIndexWithAsyncJob(const FString& JobId)
@@ -891,9 +901,13 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 	FMonolithIndexDatabase* DB = Owner->Database.Get();
 	if (!DB || !DB->IsOpen())
 	{
-		AsyncTask(ENamedThreads::GameThread, [this]()
+		TWeakObjectPtr<UMonolithIndexSubsystem> WeakOwner(Owner);
+		AsyncTask(ENamedThreads::GameThread, [WeakOwner]()
 		{
-			Owner->OnIndexingFinished(false);
+			if (UMonolithIndexSubsystem* Subsystem = WeakOwner.Get())
+			{
+				Subsystem->OnIndexingFinished(false);
+			}
 		});
 		return 1;
 	}
@@ -1665,9 +1679,14 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 		FMonolithMemoryHelper::LogMemoryStats(TEXT("Full index complete"));
 	}
 
-	AsyncTask(ENamedThreads::GameThread, [this]()
+	TWeakObjectPtr<UMonolithIndexSubsystem> WeakOwner(Owner);
+	const bool bFinishedSuccessfully = !bShouldStop;
+	AsyncTask(ENamedThreads::GameThread, [WeakOwner, bFinishedSuccessfully]()
 	{
-		Owner->OnIndexingFinished(!bShouldStop);
+		if (UMonolithIndexSubsystem* Subsystem = WeakOwner.Get())
+		{
+			Subsystem->OnIndexingFinished(bFinishedSuccessfully);
+		}
 	});
 
 	return 0;
@@ -1742,10 +1761,10 @@ void UMonolithIndexSubsystem::OnIndexingFinished(bool bSuccess)
 		}
 	}
 
-	if (bSuccess)
-	{
-		RegisterLiveCallbacks();
-	}
+	// Full indexing detaches live callbacks while the writer owns the database.
+	// Re-arm on every outcome; the helper itself remains activation-, state-,
+	// and database-aware, so a genuine stop still leaves callbacks detached.
+	RegisterLiveCallbacks();
 	OnComplete.Broadcast(bSuccess);
 	OnProgress.Clear();
 	FinishActiveAsyncJob(bSuccess);
@@ -1784,7 +1803,16 @@ bool UMonolithIndexSubsystem::IsIndexingWorkEnabled() const
 {
 	const UMonolithSettings* Settings = GetDefault<UMonolithSettings>();
 	return bAutomaticIndexingEnabled
-		&& (!Settings || Settings->bEnableIndex);
+		&& (!Settings || Settings->bEnableIndex)
+		&& UMonolithSettings::IsIndexingActivated();
+}
+
+bool UMonolithIndexSubsystem::CanAcceptIndexRequest() const
+{
+	return IsIndexingWorkEnabled()
+		&& !bIsIndexing
+		&& Database.IsValid()
+		&& Database->IsOpen();
 }
 
 bool UMonolithIndexSubsystem::CanDoIncrementalIndex() const
@@ -1806,9 +1834,9 @@ bool UMonolithIndexSubsystem::CanDoIncrementalIndex() const
 	return true;
 }
 
-void UMonolithIndexSubsystem::StartIncrementalIndex()
+bool UMonolithIndexSubsystem::StartIncrementalIndex()
 {
-	StartIncrementalIndexInternal(FString());
+	return StartIncrementalIndexInternal(FString());
 }
 
 bool UMonolithIndexSubsystem::StartIncrementalIndexInternal(const FString& JobId)

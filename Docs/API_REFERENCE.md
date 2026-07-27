@@ -134,9 +134,9 @@ These releases added the `level_sequence` namespace, the `bulk_fill` / `describe
 
 | Command | Persistent effect | Immediate effect |
 |---------|-------------------|------------------|
-| `Monolith.StartServer` | Writes `[Monolith.UserActivation] ServerEnabled=True` to generated `Saved/Config/WindowsEditor/Monolith.ini` | Starts Monolith's `/mcp` and `/health` routes on the configured port |
-| `Monolith.StopServer` | Writes `ServerEnabled=False` | Removes the Monolith routes and sentinel immediately; unrelated UE HTTP routes/listeners are not globally stopped |
-| `Monolith.StartIndexing` | Writes `IndexingEnabled=True` | Enables source hot-reload and asset-registry hooks, starts project-source incremental/full bootstrap as needed, and starts the cheapest correct asset catch-up mode |
+| `Monolith.StartServer` | Writes `[Monolith.UserActivation] ServerEnabled=True` to generated `Saved/Config/WindowsEditor/Monolith.ini` | Starts Monolith's `/mcp` and `/health` routes on the configured port; an already-listening foreign process is rejected rather than accepted through a TCP-only probe |
+| `Monolith.StopServer` | Writes `ServerEnabled=False` | Removes the Monolith routes and caller-owned sentinel immediately; UE's process-owned listener may remain for unrelated routes and same-port restart/reload |
+| `Monolith.StartIndexing` | Writes `IndexingEnabled=True` | Enables source hot-reload and asset-registry hooks, explicitly permits a missing source DB bootstrap, and starts the cheapest correct asset catch-up mode |
 | `Monolith.StopIndexing` | Writes `IndexingEnabled=False` | Removes queued/automatic source and asset hooks immediately; an active run drains to its normal transaction/completion boundary |
 
 The native consumers share one compact `UMonolithSettings` API:
@@ -150,9 +150,9 @@ The native consumers share one compact `UMonolithSettings` API:
 
 `GetActivation()` caches the resolved value because some consumers are per-frame Slate attributes. Its request key contains both config paths and both project-default values; Start/Stop setters invalidate immediately, project-policy changes refresh immediately, and external edits to either generated `Monolith.ini` or the one-time legacy migration file are detected by bounded one-second timestamp checks.
 
-A missing user key inherits its matching project default; malformed user values fail closed to `false`. An explicit Stop therefore survives editor restarts and is local to that checkout/user, while project teams can change the initial policy without manufacturing user state. Older `Saved/Monolith/Activation.ini` choices migrate once into the generated config. `UMonolithSettings::bMcpServerEnabled`, `bEnableSource`, and `bEnableIndex` remain hard project-policy gates and cannot be overridden by a Start command.
+A missing user key inherits its matching project default; malformed or unreadable user state fails closed to `false`. Writes refuse to overwrite an unreadable existing file because doing so could discard the sibling activation key. An explicit Stop therefore survives editor restarts and is local to that checkout/user, while project teams can change the initial policy without manufacturing user state. Older readable `Saved/Monolith/Activation.ini` choices migrate once into the generated config; an unreadable legacy file is retained for an operator to repair. Durable editor hosts reconcile externally edited server activation after the bounded cache revalidation interval. `UMonolithSettings::bMcpServerEnabled`, `bEnableSource`, and `bEnableIndex` remain hard project-policy gates and cannot be overridden by a Start command.
 
-Index deactivation never blocks existing `ProjectIndex.db` or `EngineSource.db` reads. An active source reindex still owns the source DB until it completes because that writer intentionally closes and atomically reopens the database. The compatibility command `Monolith.StartIndex` does not enable indexing; it can request a full asset index only after `Monolith.StartIndexing`.
+Index deactivation never blocks existing `ProjectIndex.db` or `EngineSource.db` reads. Reindex entry points return whether the writer actually accepted the request, and callers report a rejected start instead of optimistic success. Inherited default-on activation can run a project-source catch-up against a healthy existing DB but does not silently bootstrap a missing engine-wide DB; `Monolith.StartIndexing` is the explicit bootstrap request. An existing DB that cannot be opened is preserved rather than converted into an automatic clean rebuild. An active source reindex still owns the source DB until it completes because that writer intentionally closes and atomically reopens the database. The compatibility command `Monolith.StartIndex` does not enable indexing; it can request a full asset index only after `Monolith.StartIndexing`.
 
 ---
 

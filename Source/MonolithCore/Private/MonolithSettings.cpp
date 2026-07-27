@@ -3,6 +3,7 @@
 #include "HAL/FileManager.h"
 #include "HAL/PlatformTime.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Misc/ScopeLock.h"
 #include "MonolithJsonUtils.h"
@@ -108,14 +109,34 @@ namespace
 		return Parsed;
 	}
 
-	FConfigFile ReadConfigFile(const FString& FilePath)
+	enum class EActivationFileState : uint8
 	{
-		FConfigFile Config;
-		if (IFileManager::Get().FileExists(*FilePath))
+		Absent,
+		Read,
+		Unreadable
+	};
+
+	EActivationFileState ReadConfigFile(
+		const FString& FilePath,
+		FConfigFile& OutConfig)
+	{
+		OutConfig = FConfigFile();
+		if (!IFileManager::Get().FileExists(*FilePath))
 		{
-			Config.Read(FilePath);
+			return EActivationFileState::Absent;
 		}
-		return Config;
+
+		// FConfigFile::Read does not report failure on supported engines. Probe
+		// readability first so an existing but inaccessible user choice cannot
+		// collapse into "no override" and inherit enabled defaults.
+		FString Contents;
+		if (!FFileHelper::LoadFileToString(Contents, *FilePath))
+		{
+			return EActivationFileState::Unreadable;
+		}
+
+		OutConfig.Read(FilePath);
+		return EActivationFileState::Read;
 	}
 
 	void SyncCachedActivationValue(
@@ -173,14 +194,38 @@ namespace
 		bool bServerDefault,
 		bool bIndexingDefault)
 	{
-		FConfigFile UserConfig = ReadConfigFile(UserPath);
+		FConfigFile UserConfig;
+		const EActivationFileState UserFileState =
+			ReadConfigFile(UserPath, UserConfig);
+		if (UserFileState == EActivationFileState::Unreadable)
+		{
+			UE_LOG(LogMonolith, Error,
+				TEXT("Monolith could not read the activation config at %s; failing closed with server and indexing disabled until it is readable"),
+				*UserPath);
+
+			FMonolithActivation FailedClosed;
+			FailedClosed.bServerEnabled = false;
+			FailedClosed.bIndexingEnabled = false;
+			FailedClosed.bServerUserSet = true;
+			FailedClosed.bIndexingUserSet = true;
+			return FailedClosed;
+		}
 		const FParsedActivationValue UserServer =
 			ReadActivationValue(UserConfig, UserActivationSection, ServerEnabledKey, UserPath);
 		const FParsedActivationValue UserIndexing =
 			ReadActivationValue(UserConfig, UserActivationSection, IndexingEnabledKey, UserPath);
 
-		FConfigFile LegacyConfig = ReadConfigFile(LegacyPath);
-		const bool bLegacyFileExists = IFileManager::Get().FileExists(*LegacyPath);
+		FConfigFile LegacyConfig;
+		const EActivationFileState LegacyFileState =
+			ReadConfigFile(LegacyPath, LegacyConfig);
+		const bool bLegacyFileExists =
+			LegacyFileState != EActivationFileState::Absent;
+		if (LegacyFileState == EActivationFileState::Unreadable)
+		{
+			UE_LOG(LogMonolith, Warning,
+				TEXT("Monolith could not read legacy activation state at %s; it will not be migrated or removed"),
+				*LegacyPath);
+		}
 		const FParsedActivationValue LegacyServer =
 			ReadActivationValue(LegacyConfig, LegacyActivationSection, ServerEnabledKey, LegacyPath);
 		const FParsedActivationValue LegacyIndexing =
@@ -217,7 +262,7 @@ namespace
 			bMigrationNeeded = true;
 		}
 
-		if (bLegacyFileExists)
+		if (bLegacyFileExists && LegacyFileState == EActivationFileState::Read)
 		{
 			FString MigrationError;
 			const bool bMigrationWriteSucceeded =
@@ -315,7 +360,17 @@ namespace
 		bool bActivated,
 		FString* OutError)
 	{
-		FConfigFile UserConfig = ReadConfigFile(UserPath);
+		FConfigFile UserConfig;
+		if (ReadConfigFile(UserPath, UserConfig) == EActivationFileState::Unreadable)
+		{
+			if (OutError)
+			{
+				*OutError = FString::Printf(
+					TEXT("Refusing to write activation state: the existing config at %s could not be read, and overwriting it would discard the other activation key."),
+					*UserPath);
+			}
+			return false;
+		}
 		const TCHAR* Key = Feature == EActivationFeature::Server
 			? ServerEnabledKey
 			: IndexingEnabledKey;
