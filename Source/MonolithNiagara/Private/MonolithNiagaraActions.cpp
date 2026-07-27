@@ -4074,7 +4074,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRequestCompile(const TShare
 
 FMonolithActionResult FMonolithNiagaraActions::HandleCreateSystem(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
+	FString SavePath;
+	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'save_path' must be a non-empty string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
 		return FMonolithActionResult::Error(ValidationError);
 
@@ -4139,7 +4143,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateStatelessEmitter(cons
 	// NiagaraSystemViewModel.cpp:653/:672). We mirror `HandleCreateSystem`'s
 	// package + NewObject pattern to author a standalone .uasset whose top-level
 	// object is the stateless emitter itself.
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
+	FString SavePath;
+	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'save_path' must be a non-empty string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	if (const FString PathError = MonolithCore::ValidatePackagePath(SavePath); !PathError.IsEmpty())
 	{
@@ -5024,8 +5032,16 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveModule(const TSharedP
 FMonolithActionResult FMonolithNiagaraActions::HandleMoveModule(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString ModuleNodeGuid;
+	if (!Params->TryGetStringField(TEXT("module_node"), ModuleNodeGuid))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'module_node' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	double NewIndex_Double;
 	if (!Params->TryGetNumberField(TEXT("new_index"), NewIndex_Double))
 		return FMonolithActionResult::Error(TEXT("Missing or invalid numeric field: new_index"));
