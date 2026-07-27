@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **A guarded `input` namespace now covers Enhanced Input assets.** Ten actions list, inspect, create, update, validate, and edit `UInputAction` / `UInputMappingContext` assets. All five writers require `dry_run=true` or `confirm=true`, default to `save=false`, reject malformed `/Game` paths and JSON types, preserve clean no-op calls, and support deterministic mapping modifier/trigger cloning without depending on the `bEnableGAS` setting.
+
 ## [0.21.3] - 2026-07-26
 
 This release closes out the open pull-request queue. Every fix below was reported or prototyped by a contributor — thanks to **@Thomasbehan**, **@whalemenace**, and **@kunkunGames** for the write-ups, which were detailed enough to reproduce from directly.
