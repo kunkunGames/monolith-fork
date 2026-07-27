@@ -58,9 +58,18 @@ void UMonolithSourceSubsystem::Deinitialize()
 	// reload signal during shutdown can't re-enter into a half-destroyed subsystem.
 	SetAutomaticIndexingEnabled(false);
 
+	// Reject any completion that is already in flight. The indexer broadcasts
+	// from its worker thread and the handler hops to the game thread, so a run
+	// still active here can otherwise land on a closed database after teardown.
+	bIsShuttingDown = true;
+
 	// Stop any running indexer
 	if (Indexer)
 	{
+		// Unbind first: after this no further broadcast can reach the handler,
+		// and anything already queued is rejected by the weak-pointer and
+		// shutdown checks inside it.
+		Indexer->OnComplete.Clear();
 		Indexer->RequestStop();
 		delete Indexer;
 		Indexer = nullptr;
@@ -147,22 +156,33 @@ bool UMonolithSourceSubsystem::StartPreferredIndex(bool bAllowFullBootstrap)
 
 	const FString DbPath = GetDatabasePath();
 	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
-	if (PlatformFile.FileExists(*DbPath)
-		&& Database.IsValid()
-		&& Database->IsOpen())
+	const bool bDatabaseFileExists = PlatformFile.FileExists(*DbPath);
+	if (bDatabaseFileExists && Database.IsValid() && Database->IsOpen())
 	{
 		return TriggerProjectReindex();
 	}
-	else if (bAllowFullBootstrap)
+
+	if (bDatabaseFileExists)
+	{
+		// The file is present but this process could not open it — most often a
+		// transient lock held by another editor. A full bootstrap is a CLEAN
+		// build: it calls ResetDatabase() and drops the existing engine index.
+		// Turning a temporary open failure into a destructive multi-minute
+		// rebuild is never the right automatic recovery, so report it instead.
+		UE_LOG(LogMonolithSource, Error,
+			TEXT("EngineSource.db exists at %s but could not be opened; refusing an automatic clean rebuild that would discard the existing engine index. Resolve the open failure, then run source.trigger_reindex explicitly if a rebuild is genuinely wanted."),
+			*DbPath);
+		return false;
+	}
+
+	if (bAllowFullBootstrap)
 	{
 		return TriggerReindex();
 	}
-	else
-	{
-		UE_LOG(LogMonolithSource, Log,
-			TEXT("EngineSource.db is not available; inherited activation does not start an engine-wide bootstrap. Run Monolith.StartIndexing to create it explicitly."));
-		return false;
-	}
+
+	UE_LOG(LogMonolithSource, Log,
+		TEXT("EngineSource.db is not available; inherited activation does not start an engine-wide bootstrap. Run Monolith.StartIndexing to create it explicitly."));
+	return false;
 }
 
 void UMonolithSourceSubsystem::OnReloadComplete(EReloadCompleteReason Reason)
@@ -268,13 +288,22 @@ bool UMonolithSourceSubsystem::TriggerReindex()
 	Indexer->SetCleanBuild(true);
 	Indexer->SetIndexProjectSource(true);
 
-	Indexer->OnComplete.AddLambda([this, DbPath](int32 Files, int32 Symbols, int32 Errors)
+	// The indexer broadcasts from its worker thread and this hops to the game
+	// thread, so the subsystem can be torn down in between. Hold a weak
+	// reference and re-check shutdown rather than capturing raw `this`.
+	TWeakObjectPtr<UMonolithSourceSubsystem> WeakThis(this);
+	Indexer->OnComplete.AddLambda([WeakThis, DbPath](int32 Files, int32 Symbols, int32 Errors)
 	{
-		AsyncTask(ENamedThreads::GameThread, [this, DbPath, Files, Symbols, Errors]()
+		AsyncTask(ENamedThreads::GameThread, [WeakThis, DbPath, Files, Symbols, Errors]()
 		{
-			bIsIndexing = false;
+			UMonolithSourceSubsystem* Self = WeakThis.Get();
+			if (!Self || Self->bIsShuttingDown)
+			{
+				return;
+			}
+			Self->bIsIndexing = false;
 			UE_LOG(LogMonolithSource, Log, TEXT("C++ source indexing complete: %d files, %d symbols, %d errors"), Files, Symbols, Errors);
-			ReopenDatabase(DbPath);
+			Self->ReopenDatabase(DbPath);
 		});
 	});
 
@@ -326,13 +355,21 @@ bool UMonolithSourceSubsystem::TriggerProjectReindex()
 	Indexer->SetCleanBuild(false);   // Incremental — keep existing engine symbols
 	Indexer->SetIndexProjectSource(true);
 
-	Indexer->OnComplete.AddLambda([this, DbPath](int32 Files, int32 Symbols, int32 Errors)
+	// See TriggerReindex: weak reference, not raw `this`, so a completion that
+	// lands after Deinitialize cannot reopen a closed database.
+	TWeakObjectPtr<UMonolithSourceSubsystem> WeakThis(this);
+	Indexer->OnComplete.AddLambda([WeakThis, DbPath](int32 Files, int32 Symbols, int32 Errors)
 	{
-		AsyncTask(ENamedThreads::GameThread, [this, DbPath, Files, Symbols, Errors]()
+		AsyncTask(ENamedThreads::GameThread, [WeakThis, DbPath, Files, Symbols, Errors]()
 		{
-			bIsIndexing = false;
+			UMonolithSourceSubsystem* Self = WeakThis.Get();
+			if (!Self || Self->bIsShuttingDown)
+			{
+				return;
+			}
+			Self->bIsIndexing = false;
 			UE_LOG(LogMonolithSource, Log, TEXT("Project source indexing complete: %d files, %d symbols, %d errors"), Files, Symbols, Errors);
-			ReopenDatabase(DbPath);
+			Self->ReopenDatabase(DbPath);
 		});
 	});
 

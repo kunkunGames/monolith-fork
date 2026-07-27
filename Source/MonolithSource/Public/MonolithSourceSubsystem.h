@@ -76,6 +76,13 @@ private:
 	TAtomic<bool> bIsIndexing{false};
 	bool bAutomaticIndexingEnabled = false;
 
+	/**
+	 * Set in Deinitialize before the indexer is destroyed. A completion queued
+	 * from the worker thread before teardown must not reopen the database on a
+	 * subsystem that has already closed it.
+	 */
+	TAtomic<bool> bIsShuttingDown{false};
+
 	/** F17: Handle into FCoreUObjectDelegates::ReloadCompleteDelegate; cleared on Deinitialize. */
 	FDelegateHandle ReloadCompleteHandle;
 
