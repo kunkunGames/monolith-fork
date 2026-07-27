@@ -51,20 +51,12 @@
 
 `monolith_discover(filter="<substring>", limit=N)` omits `namespace` and applies the same action-name/full-description predicate across every registered namespace. It returns a flat `actions` list with each row's `namespace`, `action`, bounded `description`, optional `category`, and optional detailed `params`. Registry order is retained; no hand-tuned semantic ranking or alias database is introduced. No-argument discovery remains the namespace inventory.
 
-When the Editor is unavailable, both `Scripts/monolith_proxy.py` and
-`Tools/MonolithProxy/monolith_proxy.cpp` expose a seeded
-`monolith_discover` descriptor. That seed mirrors the live
-`namespace`/`category`/`detail`/`verbose`/`filter`/`offset`/`limit` parameters
-and the universal `_fields`/`_omit`/`_row_fields`/`_path_fields`/
-`_compact_json` response-shaping parameters, so schema-driven clients can
-construct and project the same request before the first live `tools/list`
-refresh. If an older `tools/list` cache exists, each proxy overlays
-the current seed fields onto the cached `monolith_discover` descriptor. The
-description and input schema are refreshed, cached live fields such as MCP
-`annotations` and `title` survive, duplicate discovery entries collapse to one,
-and every unrelated cached Editor tool is preserved. Plugin upgrades therefore
-cannot strand cold-start clients on a stale discovery schema or strip its safety
-metadata.
+The editor-offline `monolith_discover` seed schemas in `Scripts/monolith_proxy.py`
+and `Tools/MonolithProxy/monolith_proxy.cpp` are unchanged by this path and
+already lag the live registration (they predate `filter`/`offset`/`limit`).
+A cold-start client that has never seen a live `tools/list` therefore cannot
+construct the cross-namespace call until the Editor is reachable. Refreshing the
+proxy seeds is tracked separately from this discovery contract.
 
 **One-line description trim (terse only).** Each `description` is trimmed to its first sentence (sentence terminator at index ≥25 followed by a space or end-of-string), else hard-capped at 150 chars on a word boundary, with an ASCII `"..."` suffix appended when trimmed; already-short descriptions are returned verbatim (no suffix). The FULL untrimmed description is preserved in detail mode and via `describe_query action_schema`.
 

@@ -10,24 +10,6 @@
 #include "Misc/App.h"
 #include "Editor.h"
 
-namespace
-{
-	void AddStringArraySchemaProperty(
-		const TSharedPtr<FJsonObject>& Schema,
-		const TCHAR* Name,
-		const TCHAR* Description)
-	{
-		TSharedPtr<FJsonObject> Property = MakeShared<FJsonObject>();
-		Property->SetStringField(TEXT("type"), TEXT("array"));
-
-		TSharedPtr<FJsonObject> Item = MakeShared<FJsonObject>();
-		Item->SetStringField(TEXT("type"), TEXT("string"));
-		Property->SetObjectField(TEXT("items"), Item);
-		Property->SetStringField(TEXT("description"), Description);
-		Schema->SetObjectField(Name, Property);
-	}
-}
-
 // Known optional modules — namespaces that may not have registered actions
 // depending on settings or missing plugin dependencies.
 struct FKnownOptionalModule
@@ -98,28 +80,6 @@ void FMonolithCoreTools::RegisterAll()
 		LimitProp->SetStringField(TEXT("type"), TEXT("integer"));
 		LimitProp->SetStringField(TEXT("description"), TEXT("Optional: max actions to return (default 0 = ALL — no cap). Pagination is opt-in; with no limit the full action list is returned."));
 		Schema->SetObjectField(TEXT("limit"), LimitProp);
-
-		AddStringArraySchemaProperty(
-			Schema,
-			TEXT("_fields"),
-			TEXT("Optional top-level whitelist — return only these top-level fields of the response. Mutually exclusive with _omit."));
-		AddStringArraySchemaProperty(
-			Schema,
-			TEXT("_omit"),
-			TEXT("Optional top-level blacklist — remove these top-level fields from the response. Mutually exclusive with _fields."));
-		AddStringArraySchemaProperty(
-			Schema,
-			TEXT("_row_fields"),
-			TEXT("Optional per-row whitelist for the returned actions list."));
-		AddStringArraySchemaProperty(
-			Schema,
-			TEXT("_path_fields"),
-			TEXT("Optional dotted-path whitelist for nested response fields."));
-
-		TSharedPtr<FJsonObject> CompactJsonProp = MakeShared<FJsonObject>();
-		CompactJsonProp->SetStringField(TEXT("type"), TEXT("boolean"));
-		CompactJsonProp->SetStringField(TEXT("description"), TEXT("Optional — when true, drop top-level fields whose value is null, empty string, empty array, or empty object."));
-		Schema->SetObjectField(TEXT("_compact_json"), CompactJsonProp);
 
 		Registry.RegisterAction(
 			TEXT("monolith"), TEXT("discover"),

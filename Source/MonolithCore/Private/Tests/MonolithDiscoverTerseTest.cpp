@@ -165,7 +165,7 @@ bool FMonolithDiscoverDetailOptInTest::RunTest(const FString& /*Parameters*/)
 		// `params`. At least one monolith action (discover/update) has a schema, so
 		// assert at least one action obj carries params.
 		bool bAnyHasParams = false;
-		bool bDiscoverHasResponseShapingParams = false;
+		bool bDiscoverAdvertisesCrossNamespaceFilter = false;
 		for (const TSharedPtr<FJsonValue>& Val : *Arr)
 		{
 			const TSharedPtr<FJsonObject>* Obj = nullptr;
@@ -182,20 +182,22 @@ bool FMonolithDiscoverDetailOptInTest::RunTest(const FString& /*Parameters*/)
 						&& DiscoverParams
 						&& DiscoverParams->IsValid())
 					{
-						bDiscoverHasResponseShapingParams =
-							(*DiscoverParams)->HasField(TEXT("_fields"))
-							&& (*DiscoverParams)->HasField(TEXT("_omit"))
-							&& (*DiscoverParams)->HasField(TEXT("_row_fields"))
-							&& (*DiscoverParams)->HasField(TEXT("_path_fields"))
-							&& (*DiscoverParams)->HasField(TEXT("_compact_json"));
+						// The cross-namespace path reuses the existing filter /
+						// offset / limit parameters. Assert the schema still
+						// carries exactly those, so the advertised contract
+						// cannot drift from the handler.
+						bDiscoverAdvertisesCrossNamespaceFilter =
+							(*DiscoverParams)->HasField(TEXT("filter"))
+							&& (*DiscoverParams)->HasField(TEXT("offset"))
+							&& (*DiscoverParams)->HasField(TEXT("limit"));
 					}
 				}
 			}
 		}
 		TestTrue(TEXT("detail mode inlines params on at least one action"), bAnyHasParams);
 		TestTrue(
-			TEXT("discover schema exposes all response shaping parameters"),
-			bDiscoverHasResponseShapingParams);
+			TEXT("discover schema advertises the reused filter/offset/limit contract"),
+			bDiscoverAdvertisesCrossNamespaceFilter);
 	}
 
 	if (R.bSuccess && R.Result.IsValid())
