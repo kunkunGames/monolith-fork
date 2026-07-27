@@ -5,7 +5,7 @@
 
 /**
  * Config/INI domain action handlers for Monolith.
- * 6 read actions using GConfig/FConfigCacheIni for config hierarchy resolution,
+ * 10 read actions using GConfig/FConfigCacheIni, IPluginManager, and IConsoleManager,
  * plus 1 dev-gated (#if WITH_EDITOR) write action — `set_developer_setting`.
  */
 class FMonolithConfigActions

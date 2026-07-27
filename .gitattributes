@@ -1,4 +1,6 @@
 * text=auto eol=lf
+*.sh text eol=lf
+*.ps1 text eol=crlf
 
 # Keep generated and binary Unreal/editor artifacts out of text normalization.
 *.a binary

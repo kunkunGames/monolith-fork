@@ -1556,9 +1556,9 @@ bool FMonolithLogicDriverSetTransitionConditionFunctionalTest::RunTest(const FSt
 		AddStateParams->SetStringField(TEXT("state_name"), TEXT("StateA"));
 		FMonolithActionResult AddResult = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_state"), AddStateParams);
 		TestTrue(TEXT("add_state A should succeed"), AddResult.bSuccess);
-		if (AddResult.bSuccess && AddResult.ReturnData.IsValid())
+		if (AddResult.bSuccess && AddResult.Payload.IsValid())
 		{
-			AddResult.ReturnData->TryGetStringField(TEXT("node_guid"), StateA_Guid);
+			AddResult.Payload->TryGetStringField(TEXT("node_guid"), StateA_Guid);
 		}
 	}
 
@@ -1570,9 +1570,9 @@ bool FMonolithLogicDriverSetTransitionConditionFunctionalTest::RunTest(const FSt
 		AddStateParams->SetStringField(TEXT("state_name"), TEXT("StateB"));
 		FMonolithActionResult AddResult = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_state"), AddStateParams);
 		TestTrue(TEXT("add_state B should succeed"), AddResult.bSuccess);
-		if (AddResult.bSuccess && AddResult.ReturnData.IsValid())
+		if (AddResult.bSuccess && AddResult.Payload.IsValid())
 		{
-			AddResult.ReturnData->TryGetStringField(TEXT("node_guid"), StateB_Guid);
+			AddResult.Payload->TryGetStringField(TEXT("node_guid"), StateB_Guid);
 		}
 	}
 
@@ -1582,13 +1582,13 @@ bool FMonolithLogicDriverSetTransitionConditionFunctionalTest::RunTest(const FSt
 	{
 		TSharedPtr<FJsonObject> AddTransParams = MakeShared<FJsonObject>();
 		AddTransParams->SetStringField(TEXT("asset_path"), AssetPath);
-		AddTransParams->SetStringField(TEXT("from_guid"), StateA_Guid);
-		AddTransParams->SetStringField(TEXT("to_guid"), StateB_Guid);
+		AddTransParams->SetStringField(TEXT("source_guid"), StateA_Guid);
+		AddTransParams->SetStringField(TEXT("target_guid"), StateB_Guid);
 		FMonolithActionResult TransResult = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_transition"), AddTransParams);
 		TestTrue(TEXT("add_transition should succeed"), TransResult.bSuccess);
-		if (TransResult.bSuccess && TransResult.ReturnData.IsValid())
+		if (TransResult.bSuccess && TransResult.Payload.IsValid())
 		{
-			TransResult.ReturnData->TryGetStringField(TEXT("transition_guid"), Transition_Guid);
+			TransResult.Payload->TryGetStringField(TEXT("node_guid"), Transition_Guid);
 		}
 	}
 
@@ -1597,7 +1597,7 @@ bool FMonolithLogicDriverSetTransitionConditionFunctionalTest::RunTest(const FSt
 	{
 		TSharedPtr<FJsonObject> SetCondParams = MakeShared<FJsonObject>();
 		SetCondParams->SetStringField(TEXT("asset_path"), AssetPath);
-		SetCondParams->SetStringField(TEXT("transition_guid"), Transition_Guid);
+		SetCondParams->SetStringField(TEXT("node_guid"), Transition_Guid);
 		SetCondParams->SetStringField(TEXT("condition_type"), TEXT("time_delay"));
 
 		TSharedPtr<FJsonObject> CondArgs = MakeShared<FJsonObject>();

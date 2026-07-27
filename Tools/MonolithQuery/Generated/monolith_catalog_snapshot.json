@@ -16758,7 +16758,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1314,
+      "source_line": 1418,
       "summary": "Add a comment box to a Blueprint graph, optionally enclosing a set of nodes. If node_ids is provided, the comment box auto-sizes to contain those nodes with 50px padding.",
       "supports_progress": false,
       "writes_logs": true
@@ -16932,7 +16932,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1302,
+      "source_line": 1406,
       "summary": "Add a native parent or implemented-interface override event node (BeginPlay, Tick, interface BlueprintEvent, etc.) or custom event to a Blueprint event graph. Alias table: BeginPlay->ReceiveBeginPlay, Tick->ReceiveTick, EndPlay->ReceiveEndPlay, BeginOverlap->ReceiveActorBeginOverlap, EndOverlap->ReceiveActorEndOverlap, Hit->ReceiveHit, Destroyed->ReceiveDestroyed, AnyDamage->ReceiveAnyDamage, PointDamage->ReceivePointDamage, RadialDamage->ReceiveRadialDamage.",
       "supports_progress": false,
       "writes_logs": true
@@ -17048,7 +17048,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1087,
+      "source_line": 1191,
       "summary": "Add a new node to a Blueprint graph. Supports CallFunction, VariableGet, VariableSet, CustomEvent, Branch, Sequence, MacroInstance, SpawnActorFromClass, DynamicCast, Self, Return, MakeStruct, BreakStruct, SwitchOnEnum, SwitchOnInt, SwitchOnString, FormatText, MakeArray, Select node types. Also supports shorthand aliases: ForEachLoop, ForLoop, ForLoopWithBreak, DoOnce, FlipFlop, Gate (macro shortcuts), IsValid, Delay, RetriggerableDelay (function shortcuts), make_struct, break_struct, switch_enum, switch_int, switch_string, format_text, make_array, select. ComponentBoundEvent (binds an event entry node to a component's BlueprintAssignable multicast delegate; requires component_name + delegate_property_name), AddDelegate (binds an event to a BlueprintAssignable multicast delegate; \"Bind Event to ...\" node), RemoveDelegate (\"Unbind Event from ...\" \u2014 removes one previously bound event), ClearDelegate (\"Unbind all Events from ...\" \u2014 clears every bound listener), CallDelegate (\"Call ...\" \u2014 broadcasts a BP-resident multicast delegate to all listeners)",
       "supports_progress": false,
       "writes_logs": true
@@ -17077,7 +17077,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1260,
+      "source_line": 1364,
       "summary": "Place multiple nodes in one transaction. Returns a temp_id -> node_id mapping so callers can immediately reference created nodes in connect_pins_bulk. Each entry: { temp_id, node_type, function_name?, target_class?, variable_name?, position? }.",
       "supports_progress": false,
       "writes_logs": true
@@ -17135,7 +17135,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1379,
+      "source_line": 1483,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -17164,7 +17164,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1397,
+      "source_line": 1501,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -17222,7 +17222,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1290,
+      "source_line": 1394,
       "summary": "Create a Timeline node in a Blueprint event graph. Handles both the UTimelineTemplate (data) and UK2Node_Timeline (graph node) creation with GUID linkage validation. Only works in event graphs (ubergraph pages), not function graphs.",
       "supports_progress": false,
       "writes_logs": true
@@ -17251,7 +17251,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1340,
+      "source_line": 1444,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -17454,7 +17454,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1247,
+      "source_line": 1351,
       "summary": "Execute multiple Blueprint write operations on a single asset in one transaction. Each operation is { \"op\": \"action_name\", ...action_params_minus_asset_path }. Supported ops: add_node, remove_node, connect_pins, disconnect_pins, set_pin_default, set_node_position, add_variable, remove_variable, rename_variable, set_variable_type, set_variable_defaults, add_local_variable, remove_local_variable, add_component, remove_component, rename_component, reparent_component, set_component_property, duplicate_component, add_function, remove_function, rename_function, add_macro, remove_macro, rename_macro, add_event_dispatcher, set_function_params, implement_interface, remove_interface, scaffold_interface_implementation, add_timeline, add_event_node, add_comment_node, promote_pin_to_variable, add_replicated_variable, save_asset.",
       "supports_progress": false,
       "writes_logs": true
@@ -17541,7 +17541,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1234,
+      "source_line": 1338,
       "summary": "Clear session-local Blueprint node aliases by asset, graph, or all aliases.",
       "supports_progress": false,
       "writes_logs": true
@@ -17686,7 +17686,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1122,
+      "source_line": 1226,
       "summary": "Connect two pins in a Blueprint graph. Source pin must be an output, target pin must be an input (or vice versa \u2014 the schema will sort it out).",
       "supports_progress": false,
       "writes_logs": true
@@ -17715,7 +17715,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1270,
+      "source_line": 1374,
       "summary": "Wire multiple pin connections in one transaction. Each entry: { source_node, source_pin, target_node, target_pin }. Returns per-connection success/error.",
       "supports_progress": false,
       "writes_logs": true
@@ -17976,7 +17976,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1242,
+      "source_line": 1346,
       "summary": "Report selected Blueprint graph-node context availability. Current Monolith action surface does not yet bind to the active graph editor selection.",
       "supports_progress": false,
       "writes_logs": true
@@ -18005,7 +18005,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1134,
+      "source_line": 1238,
       "summary": "Disconnect a pin on a Blueprint node. If target_node and target_pin are omitted, all connections on the pin are broken.",
       "supports_progress": false,
       "writes_logs": true
@@ -18846,7 +18846,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1331,
+      "source_line": 1435,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -19049,7 +19049,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1364,
+      "source_line": 1468,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -19194,7 +19194,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1214,
+      "source_line": 1318,
       "summary": "Bind a friendly alias to an existing graph node ID for this editor session.",
       "supports_progress": false,
       "writes_logs": true
@@ -19455,7 +19455,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1113,
+      "source_line": 1217,
       "summary": "Remove a node from a Blueprint graph by node ID.",
       "supports_progress": false,
       "writes_logs": true
@@ -19774,7 +19774,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1171,
+      "source_line": 1275,
       "summary": "Dry-run node creation \u2014 returns resolved type, class, function, and all pins with types/defaults/direction without modifying any asset. Useful for discovering what pins a node will have before adding it.",
       "supports_progress": false,
       "writes_logs": true
@@ -19803,7 +19803,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1225,
+      "source_line": 1329,
       "summary": "Resolve a friendly alias to the current node ID and graph for this editor session.",
       "supports_progress": false,
       "writes_logs": true
@@ -20093,7 +20093,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1187,
+      "source_line": 1291,
       "summary": "Search session-local spawnable Blueprint node templates and return cache IDs usable by spawn_cached_node. Covers Monolith add_node templates and Blueprint-callable functions.",
       "supports_progress": false,
       "writes_logs": true
@@ -20412,7 +20412,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1161,
+      "source_line": 1265,
       "summary": "Move a Blueprint graph node to a new position.",
       "supports_progress": false,
       "writes_logs": true
@@ -20441,7 +20441,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1146,
+      "source_line": 1250,
       "summary": "Set the default value of a pin on a Blueprint node.",
       "supports_progress": false,
       "writes_logs": true
@@ -20470,7 +20470,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1279,
+      "source_line": 1383,
       "summary": "Set multiple pin default values in one transaction. Each entry: { node_id, pin_name, value }. Returns per-entry success/error.",
       "supports_progress": false,
       "writes_logs": true
@@ -20557,7 +20557,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1351,
+      "source_line": 1455,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -20673,7 +20673,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1197,
+      "source_line": 1301,
       "summary": "Spawn a Blueprint node from a cache ID returned by search_spawnable_nodes. Delegates to blueprint.add_node and keeps the cache session-local.",
       "supports_progress": false,
       "writes_logs": true
@@ -20789,7 +20789,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1207,
+      "source_line": 1311,
       "summary": "Validate session-local Blueprint node template cache and optional node aliases. Reports stale function templates or aliases whose target nodes no longer exist.",
       "supports_progress": false,
       "writes_logs": true
@@ -22443,7 +22443,7 @@
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithConfig/Private/MonolithConfigActions.cpp",
       "source_line": 107,
-      "summary": "Find console variables by prefix or substring. Read-only.",
+      "summary": "Find live console variables by prefix or substring with deterministic, bounded results. Read-only.",
       "supports_progress": false,
       "writes_logs": true
     },
@@ -22501,7 +22501,7 @@
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithConfig/Private/MonolithConfigActions.cpp",
       "source_line": 100,
-      "summary": "Get one console variable value and flags. Read-only.",
+      "summary": "Get one live console variable value, help text, flags, and set-by source. Read-only.",
       "supports_progress": false,
       "writes_logs": true
     },
@@ -22674,7 +22674,7 @@
       "skill": "config",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithConfig/Private/MonolithConfigActions.cpp",
-      "source_line": 121,
+      "source_line": 128,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -41652,7 +41652,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1703,
+      "source_line": 1702,
       "summary": "Request cooperative cancellation of an async Monolith job by job_id and return its current row. Reports disabled when async jobs are off.",
       "supports_progress": false,
       "writes_logs": true
@@ -41739,7 +41739,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1779,
+      "source_line": 1778,
       "summary": "Return one Monolith domain's profile-filtered actions and schemas without changing tools/list.",
       "supports_progress": false,
       "writes_logs": true
@@ -41768,7 +41768,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1576,
+      "source_line": 1575,
       "summary": "List available tool namespaces, actions, or an exact action schema. Pass namespace/action/mode to narrow the live registry output.",
       "supports_progress": false,
       "writes_logs": true
@@ -41826,7 +41826,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1550,
+      "source_line": 1549,
       "summary": "Find profile-allowed Monolith actions by task, namespace, category, action name, or description. Use this before monolith_discover when the exact action is unclear.",
       "supports_progress": false,
       "writes_logs": true
@@ -41855,7 +41855,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1747,
+      "source_line": 1746,
       "summary": "Measure factual discovery-planning metadata coverage across profile-allowed actions without fabricating outputs or next-action predictions.",
       "supports_progress": false,
       "writes_logs": true
@@ -41942,7 +41942,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1689,
+      "source_line": 1688,
       "summary": "Return one async Monolith job's status, progress, and result by job_id. Reports disabled when async jobs are off.",
       "supports_progress": false,
       "writes_logs": true
@@ -42000,7 +42000,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1799,
+      "source_line": 1798,
       "summary": "Return process/profile-scoped loaded domain state for the deferred domain catalog.",
       "supports_progress": false,
       "writes_logs": true
@@ -42029,7 +42029,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1738,
+      "source_line": 1737,
       "summary": "Return the current live registry discovery snapshot and refresh semantics.",
       "supports_progress": false,
       "writes_logs": true
@@ -42058,7 +42058,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1663,
+      "source_line": 1662,
       "summary": "Return Monolith MCP transport status, CORS/header policy, protocol support, route state, and request limits.",
       "supports_progress": false,
       "writes_logs": true
@@ -42087,7 +42087,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1849,
+      "source_line": 1848,
       "summary": "Return local Monolith notification preferences.",
       "supports_progress": false,
       "writes_logs": true
@@ -42116,7 +42116,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1809,
+      "source_line": 1808,
       "summary": "Return local Monolith onboarding progress, skipped steps, and next recommended setup step.",
       "supports_progress": false,
       "writes_logs": true
@@ -42145,7 +42145,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1839,
+      "source_line": 1838,
       "summary": "Return safe help text for Monolith readiness check failures without running installers.",
       "supports_progress": false,
       "writes_logs": true
@@ -42174,7 +42174,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1830,
+      "source_line": 1829,
       "summary": "Run read-only Monolith readiness checks for server, registry, index, optional modules, and settings gates.",
       "supports_progress": false,
       "writes_logs": true
@@ -42290,7 +42290,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1769,
+      "source_line": 1768,
       "summary": "Return cheap profile-filtered Monolith domain metadata without per-action schemas.",
       "supports_progress": false,
       "writes_logs": true
@@ -42319,7 +42319,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1672,
+      "source_line": 1671,
       "summary": "Report MCP session tracking availability. Current Monolith streamable HTTP mode does not persist per-client sessions.",
       "supports_progress": false,
       "writes_logs": true
@@ -42435,7 +42435,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1789,
+      "source_line": 1788,
       "summary": "Mark a Monolith domain loaded for discovery scope without exposing additional tools by default.",
       "supports_progress": false,
       "writes_logs": true
@@ -42464,7 +42464,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1642,
+      "source_line": 1641,
       "summary": "Re-index the Monolith project database. Incremental by default (delta only). Pass force=true for full wipe+rebuild.",
       "supports_progress": true,
       "writes_logs": true
@@ -42609,7 +42609,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1728,
+      "source_line": 1727,
       "summary": "Set safe MCP compatibility options. Supports browser_access=loopback_only|disabled; legacy routes remain unsupported.",
       "supports_progress": false,
       "writes_logs": true
@@ -42667,7 +42667,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1858,
+      "source_line": 1857,
       "summary": "Persist local Monolith notification preferences with boolean validation.",
       "supports_progress": false,
       "writes_logs": true
@@ -42696,7 +42696,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1818,
+      "source_line": 1817,
       "summary": "Mark a Monolith onboarding step completed, skipped, reopened, or reset.",
       "supports_progress": false,
       "writes_logs": true
@@ -42725,7 +42725,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1609,
+      "source_line": 1608,
       "summary": "Get Monolith server health: version, uptime, port, registered action count, module status.",
       "supports_progress": false,
       "writes_logs": true
@@ -42754,7 +42754,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1718,
+      "source_line": 1717,
       "summary": "Report MCP session termination availability without inventing session state.",
       "supports_progress": false,
       "writes_logs": true
@@ -42783,7 +42783,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1868,
+      "source_line": 1867,
       "summary": "Trigger a harmless local Monolith notification test when editor toasts are enabled.",
       "supports_progress": false,
       "writes_logs": true
@@ -42812,7 +42812,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1625,
+      "source_line": 1624,
       "summary": "Check for or install Monolith updates from GitHub Releases.",
       "supports_progress": false,
       "writes_logs": true
@@ -43073,7 +43073,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3187,
+      "source_line": 3188,
       "summary": "Attach a dynamic input script to a module input pin",
       "supports_progress": false,
       "writes_logs": true
@@ -43131,7 +43131,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3214,
+      "source_line": 3215,
       "summary": "Add an inter-emitter event handler (death, collision, location events). This only creates the handler and its ParticleEventScript container. It does NOT auto-add ReceiveDeathEvent/ReceiveLocationEvent modules. source_emitter is required for inter-emitter event handlers; unresolved handlers are rejected instead of being created with an empty SourceEmitterID. If the handler must consume source payloads such as Position/Velocity/Color, add the matching Receive<Event> module to the particle_event script and set the needed payload fields to Apply. For death-triggered bursts like fireworks, Position usually must be Apply.",
       "supports_progress": false,
       "writes_logs": true
@@ -43160,7 +43160,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2812,
+      "source_line": 2813,
       "summary": "Add a module to a script stage",
       "supports_progress": false,
       "writes_logs": true
@@ -43189,7 +43189,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3426,
+      "source_line": 3427,
       "summary": "Add a parameter to a Niagara Parameter Collection",
       "supports_progress": false,
       "writes_logs": true
@@ -43218,7 +43218,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2959,
+      "source_line": 2960,
       "summary": "Add a renderer to an emitter",
       "supports_progress": false,
       "writes_logs": true
@@ -43247,7 +43247,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3230,
+      "source_line": 3231,
       "summary": "Add a simulation stage to an emitter",
       "supports_progress": false,
       "writes_logs": true
@@ -43276,7 +43276,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2927,
+      "source_line": 2928,
       "summary": "Add a user parameter",
       "supports_progress": false,
       "writes_logs": true
@@ -43363,7 +43363,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3038,
+      "source_line": 3039,
       "summary": "Execute multiple operations in one transaction",
       "supports_progress": false,
       "writes_logs": true
@@ -43392,7 +43392,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3545,
+      "source_line": 3546,
       "summary": "Remove all modules from an emitter, optionally filtered by stage",
       "supports_progress": false,
       "writes_logs": true
@@ -43421,7 +43421,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3506,
+      "source_line": 3507,
       "summary": "Copy inline value overrides and bindings from one module to another (same script required)",
       "supports_progress": false,
       "writes_logs": true
@@ -43450,7 +43450,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3130,
+      "source_line": 3131,
       "summary": "Set keys on a DataInterface curve input (NiagaraDataInterfaceCurve/ColorCurve). For plain float inputs use set_curve_value instead",
       "supports_progress": false,
       "writes_logs": true
@@ -43479,7 +43479,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3140,
+      "source_line": 3141,
       "summary": "Set arbitrary properties on a DI attached to a module input via reflection",
       "supports_progress": false,
       "writes_logs": true
@@ -43508,7 +43508,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3324,
+      "source_line": 3325,
       "summary": "High-level ribbon/trail/beam setup with presets (trail, beam, lightning, tube)",
       "supports_progress": false,
       "writes_logs": true
@@ -43537,7 +43537,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3342,
+      "source_line": 3343,
       "summary": "Set up SubUV/flipbook animation on a sprite renderer",
       "supports_progress": false,
       "writes_logs": true
@@ -43566,7 +43566,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3448,
+      "source_line": 3449,
       "summary": "Create a UNiagaraEffectType asset with optional initial settings",
       "supports_progress": false,
       "writes_logs": true
@@ -43595,7 +43595,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3172,
+      "source_line": 3173,
       "summary": "Add a minimal empty emitter to a system (no template needed)",
       "supports_progress": false,
       "writes_logs": true
@@ -43624,7 +43624,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2886,
+      "source_line": 2887,
       "summary": "Create a Niagara function script from custom HLSL",
       "supports_progress": false,
       "writes_logs": true
@@ -43653,7 +43653,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2876,
+      "source_line": 2877,
       "summary": "Create a Niagara module script from custom HLSL",
       "supports_progress": false,
       "writes_logs": true
@@ -43682,7 +43682,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3415,
+      "source_line": 3416,
       "summary": "Create a Niagara Parameter Collection (NPC) asset",
       "supports_progress": false,
       "writes_logs": true
@@ -43769,7 +43769,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3044,
+      "source_line": 3045,
       "summary": "Create a full system from JSON spec",
       "supports_progress": false,
       "writes_logs": true
@@ -43798,7 +43798,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3492,
+      "source_line": 3493,
       "summary": "Compare two Niagara systems and return structured diff of emitters, modules, inputs, renderers, parameters, properties",
       "supports_progress": false,
       "writes_logs": true
@@ -43856,7 +43856,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3577,
+      "source_line": 3578,
       "summary": "Duplicate a module within or across emitters (copies script + all overrides)",
       "supports_progress": false,
       "writes_logs": true
@@ -43885,7 +43885,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3151,
+      "source_line": 3152,
       "summary": "Clone an entire Niagara system to a new path",
       "supports_progress": false,
       "writes_logs": true
@@ -43914,7 +43914,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3179,
+      "source_line": 3180,
       "summary": "Reverse-engineer an existing system into create_system_from_spec-compatible JSON",
       "supports_progress": false,
       "writes_logs": true
@@ -43943,7 +43943,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3653,
+      "source_line": 3654,
       "summary": "Find all assets that reference a given Niagara asset, via the Asset Registry referencer graph (IAssetRegistry::GetReferencers).",
       "supports_progress": false,
       "writes_logs": true
@@ -43972,7 +43972,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3633,
+      "source_line": 3634,
       "summary": "Rank systems by structural similarity to a reference system. Score = weighted blend of emitter-count proximity, renderer-class-set Jaccard, and module-name-set Jaccard. Reference scores 1.0 against itself.",
       "supports_progress": false,
       "writes_logs": true
@@ -44001,7 +44001,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2898,
+      "source_line": 2899,
       "summary": "Get all parameters in a system",
       "supports_progress": false,
       "writes_logs": true
@@ -44030,7 +44030,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3470,
+      "source_line": 3471,
       "summary": "List all parameters available for binding in a system (user, engine, particle, emitter, system attributes)",
       "supports_progress": false,
       "writes_logs": true
@@ -44059,7 +44059,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3059,
+      "source_line": 3060,
       "summary": "Get compiled GPU HLSL for an emitter",
       "supports_progress": false,
       "writes_logs": true
@@ -44088,7 +44088,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2799,
+      "source_line": 2800,
       "summary": "Read the Custom HLSL source text from a Niagara script's CustomHlsl node",
       "supports_progress": false,
       "writes_logs": true
@@ -44117,7 +44117,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3052,
+      "source_line": 3053,
       "summary": "Get data interface function signatures",
       "supports_progress": false,
       "writes_logs": true
@@ -44146,7 +44146,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3540,
+      "source_line": 3541,
       "summary": "Inspect editable properties on a Niagara DataInterface class (CDO reflection)",
       "supports_progress": false,
       "writes_logs": true
@@ -44175,7 +44175,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3285,
+      "source_line": 3286,
       "summary": "Discover inputs on an unattached dynamic input script",
       "supports_progress": false,
       "writes_logs": true
@@ -44204,7 +44204,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3260,
+      "source_line": 3261,
       "summary": "Get recursive tree of all inputs on a module showing dynamic input structure",
       "supports_progress": false,
       "writes_logs": true
@@ -44233,7 +44233,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3277,
+      "source_line": 3278,
       "summary": "Read a value from a dynamic input sub-pin",
       "supports_progress": false,
       "writes_logs": true
@@ -44262,7 +44262,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3456,
+      "source_line": 3457,
       "summary": "Read all settings from a UNiagaraEffectType asset",
       "supports_progress": false,
       "writes_logs": true
@@ -44291,7 +44291,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3590,
+      "source_line": 3591,
       "summary": "Get the parent emitter asset of an emitter in a system (read-only)",
       "supports_progress": false,
       "writes_logs": true
@@ -44320,7 +44320,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3299,
+      "source_line": 3300,
       "summary": "Read a single emitter property by name",
       "supports_progress": false,
       "writes_logs": true
@@ -44349,7 +44349,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3107,
+      "source_line": 3108,
       "summary": "Deep view of a single emitter, including modules per stage, renderers, event flow, spawn-location semantics, and role hints. AI guidance: use full when this emitter may send or receive Niagara events from other emitters.",
       "supports_progress": false,
       "writes_logs": true
@@ -44407,7 +44407,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3358,
+      "source_line": 3359,
       "summary": "Read all event handlers on an emitter with full properties",
       "supports_progress": false,
       "writes_logs": true
@@ -44465,7 +44465,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3120,
+      "source_line": 3121,
       "summary": "Read the current override value for a specific module input",
       "supports_progress": false,
       "writes_logs": true
@@ -44523,7 +44523,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3406,
+      "source_line": 3407,
       "summary": "Discover what particle attributes a module writes to (output variables)",
       "supports_progress": false,
       "writes_logs": true
@@ -44552,7 +44552,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3552,
+      "source_line": 3553,
       "summary": "Introspect a module script's inputs WITHOUT adding it to an emitter",
       "supports_progress": false,
       "writes_logs": true
@@ -44581,7 +44581,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3421,
+      "source_line": 3422,
       "summary": "Read all parameters and defaults from a Niagara Parameter Collection",
       "supports_progress": false,
       "writes_logs": true
@@ -44639,7 +44639,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2916,
+      "source_line": 2917,
       "summary": "Get info about a Niagara type",
       "supports_progress": false,
       "writes_logs": true
@@ -44668,7 +44668,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2910,
+      "source_line": 2911,
       "summary": "Get a parameter value",
       "supports_progress": false,
       "writes_logs": true
@@ -44697,7 +44697,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2990,
+      "source_line": 2991,
       "summary": "Get renderer attribute bindings",
       "supports_progress": false,
       "writes_logs": true
@@ -44726,7 +44726,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3557,
+      "source_line": 3558,
       "summary": "Read scalability settings from a NiagaraEffectType asset",
       "supports_progress": false,
       "writes_logs": true
@@ -44755,7 +44755,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3382,
+      "source_line": 3383,
       "summary": "Read all simulation stages on an emitter with full properties",
       "supports_progress": false,
       "writes_logs": true
@@ -44784,7 +44784,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3523,
+      "source_line": 3524,
       "summary": "Get static switch value(s) on a module \u2014 omit input to list all switches",
       "supports_progress": false,
       "writes_logs": true
@@ -44813,7 +44813,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3067,
+      "source_line": 3068,
       "summary": "Get compile errors, warnings, renderer issues, and script stats",
       "supports_progress": false,
       "writes_logs": true
@@ -44842,7 +44842,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3075,
+      "source_line": 3076,
       "summary": "Read a system-level property (WarmupTime, bDeterminism, RandomSeed, etc.)",
       "supports_progress": false,
       "writes_logs": true
@@ -44871,7 +44871,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3101,
+      "source_line": 3102,
       "summary": "One-call overview of an entire Niagara system, including emitter topology, event flow, location semantics, role hints, params, renderers, and module counts. AI guidance: start with compact for orientation; if emitters may be linked by events, switch to full before reasoning about where particles spawn or explode.",
       "supports_progress": false,
       "writes_logs": true
@@ -44929,7 +44929,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2905,
+      "source_line": 2906,
       "summary": "Get user-exposed parameters",
       "supports_progress": false,
       "writes_logs": true
@@ -44958,7 +44958,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3531,
+      "source_line": 3532,
       "summary": "Overwrite an existing Niagara system with a JSON spec (removes all emitters/params, applies spec fresh)",
       "supports_progress": false,
       "writes_logs": true
@@ -44987,7 +44987,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3308,
+      "source_line": 3309,
       "summary": "List all available Niagara renderer types with descriptions",
       "supports_progress": false,
       "writes_logs": true
@@ -45016,7 +45016,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3253,
+      "source_line": 3254,
       "summary": "List dynamic inputs attached to a module's inputs",
       "supports_progress": false,
       "writes_logs": true
@@ -45045,7 +45045,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3114,
+      "source_line": 3115,
       "summary": "List all editable properties on FVersionedNiagaraEmitterData with current values",
       "supports_progress": false,
       "writes_logs": true
@@ -45074,7 +45074,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3008,
+      "source_line": 3009,
       "summary": "List all emitters in a Niagara system",
       "supports_progress": false,
       "writes_logs": true
@@ -45103,7 +45103,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3021,
+      "source_line": 3022,
       "summary": "Search available Niagara module scripts by keyword",
       "supports_progress": false,
       "writes_logs": true
@@ -45132,7 +45132,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3029,
+      "source_line": 3030,
       "summary": "List editable properties on a renderer",
       "supports_progress": false,
       "writes_logs": true
@@ -45161,7 +45161,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3013,
+      "source_line": 3014,
       "summary": "List all renderers on a specific emitter",
       "supports_progress": false,
       "writes_logs": true
@@ -45190,7 +45190,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3661,
+      "source_line": 3662,
       "summary": "Enumerate the Data Interfaces actually USED BY a given system (per-system traversal via FNiagaraDataInterfaceUtilities::ForEachDataInterface). Distinct from get_di_properties (CDO-class reflection only).",
       "supports_progress": false,
       "writes_logs": true
@@ -45219,7 +45219,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3568,
+      "source_line": 3569,
       "summary": "Search/list Niagara system assets in the project",
       "supports_progress": false,
       "writes_logs": true
@@ -45248,7 +45248,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2832,
+      "source_line": 2833,
       "summary": "Move a module to a new index",
       "supports_progress": false,
       "writes_logs": true
@@ -45277,7 +45277,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3479,
+      "source_line": 3480,
       "summary": "Capture a preview screenshot of a Niagara system via editor preview scene",
       "supports_progress": false,
       "writes_logs": true
@@ -45306,7 +45306,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3624,
+      "source_line": 3625,
       "summary": "Structured-filter query over all systems. Conditions joined by AND, comma- or AND-separated: emitters>N / emitters<N / emitters=N, sim_target=GPU|CPU, has_renderer=<name>. Deterministic DSL, NOT natural language.",
       "supports_progress": false,
       "writes_logs": true
@@ -45335,7 +45335,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3268,
+      "source_line": 3269,
       "summary": "Remove a dynamic input from a module pin, cleaning up sub-nodes",
       "supports_progress": false,
       "writes_logs": true
@@ -45393,7 +45393,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3374,
+      "source_line": 3375,
       "summary": "Remove an event handler from an emitter",
       "supports_progress": false,
       "writes_logs": true
@@ -45422,7 +45422,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2825,
+      "source_line": 2826,
       "summary": "Remove a module from a script stage",
       "supports_progress": false,
       "writes_logs": true
@@ -45451,7 +45451,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3433,
+      "source_line": 3434,
       "summary": "Remove a parameter from a Niagara Parameter Collection",
       "supports_progress": false,
       "writes_logs": true
@@ -45480,7 +45480,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2966,
+      "source_line": 2967,
       "summary": "Remove a renderer from an emitter",
       "supports_progress": false,
       "writes_logs": true
@@ -45509,7 +45509,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3398,
+      "source_line": 3399,
       "summary": "Remove a simulation stage from an emitter",
       "supports_progress": false,
       "writes_logs": true
@@ -45538,7 +45538,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2935,
+      "source_line": 2936,
       "summary": "Remove a user parameter",
       "supports_progress": false,
       "writes_logs": true
@@ -45567,7 +45567,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3292,
+      "source_line": 3293,
       "summary": "Rename an emitter in a system",
       "supports_progress": false,
       "writes_logs": true
@@ -45596,7 +45596,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3596,
+      "source_line": 3597,
       "summary": "Rename a user parameter and update all module bindings that reference it",
       "supports_progress": false,
       "writes_logs": true
@@ -45683,7 +45683,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3499,
+      "source_line": 3500,
       "summary": "Extract a configured emitter from a system and save as standalone emitter asset",
       "supports_progress": false,
       "writes_logs": true
@@ -45712,7 +45712,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3517,
+      "source_line": 3518,
       "summary": "Save a Niagara asset (system, script, NPC, effect type) to disk",
       "supports_progress": false,
       "writes_logs": true
@@ -45741,7 +45741,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3615,
+      "source_line": 3616,
       "summary": "Find Niagara systems using a Data Interface whose class name (case-insensitive) contains the query. Per-system traversal via FNiagaraDataInterfaceUtilities::ForEachDataInterface.",
       "supports_progress": false,
       "writes_logs": true
@@ -45770,7 +45770,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3644,
+      "source_line": 3645,
       "summary": "Find Niagara systems whose emitter renderers reference a given material. Walks each system's emitters' renderers' material bindings (Sprite/Ribbon/Mesh).",
       "supports_progress": false,
       "writes_logs": true
@@ -45799,7 +45799,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3605,
+      "source_line": 3606,
       "summary": "Find Niagara systems exposing a user parameter whose name (case-insensitive) contains the query. Optional type filter.",
       "supports_progress": false,
       "writes_logs": true
@@ -45828,7 +45828,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3205,
+      "source_line": 3206,
       "summary": "Browse available dynamic input scripts with optional type filtering",
       "supports_progress": false,
       "writes_logs": true
@@ -45857,7 +45857,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2948,
+      "source_line": 2949,
       "summary": "Set curve keys on a module input",
       "supports_progress": false,
       "writes_logs": true
@@ -45886,7 +45886,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2805,
+      "source_line": 2806,
       "summary": "Overwrite the Custom HLSL source text on a Niagara script's CustomHlsl node",
       "supports_progress": false,
       "writes_logs": true
@@ -45915,7 +45915,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3196,
+      "source_line": 3197,
       "summary": "Set an input value on a dynamic input node",
       "supports_progress": false,
       "writes_logs": true
@@ -45944,7 +45944,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3166,
+      "source_line": 3167,
       "summary": "Assign a UNiagaraEffectType for scalability and cull distance",
       "supports_progress": false,
       "writes_logs": true
@@ -45973,7 +45973,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3461,
+      "source_line": 3462,
       "summary": "Set a property on a UNiagaraEffectType via reflection",
       "supports_progress": false,
       "writes_logs": true
@@ -46089,7 +46089,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3364,
+      "source_line": 3365,
       "summary": "Modify an event handler property (ExecutionMode, SpawnNumber, MaxEventsPerFrame, SourceEventName, etc.)",
       "supports_progress": false,
       "writes_logs": true
@@ -46118,7 +46118,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3157,
+      "source_line": 3158,
       "summary": "Set explicit bounds on system or emitter for GPU performance",
       "supports_progress": false,
       "writes_logs": true
@@ -46176,7 +46176,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2840,
+      "source_line": 2841,
       "summary": "Enable or disable a module",
       "supports_progress": false,
       "writes_logs": true
@@ -46205,7 +46205,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2857,
+      "source_line": 2858,
       "summary": "Bind a module input to a parameter",
       "supports_progress": false,
       "writes_logs": true
@@ -46234,7 +46234,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2866,
+      "source_line": 2867,
       "summary": "Set a data interface on a module input",
       "supports_progress": false,
       "writes_logs": true
@@ -46263,7 +46263,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2848,
+      "source_line": 2849,
       "summary": "Set a module input value",
       "supports_progress": false,
       "writes_logs": true
@@ -46292,7 +46292,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3439,
+      "source_line": 3440,
       "summary": "Set the default value for a parameter in a Niagara Parameter Collection",
       "supports_progress": false,
       "writes_logs": true
@@ -46321,7 +46321,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2941,
+      "source_line": 2942,
       "summary": "Set a parameter default value",
       "supports_progress": false,
       "writes_logs": true
@@ -46379,7 +46379,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2997,
+      "source_line": 2998,
       "summary": "Set a renderer attribute binding",
       "supports_progress": false,
       "writes_logs": true
@@ -46408,7 +46408,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2973,
+      "source_line": 2974,
       "summary": "Set renderer material",
       "supports_progress": false,
       "writes_logs": true
@@ -46437,7 +46437,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3312,
+      "source_line": 3313,
       "summary": "Assign a StaticMesh to a MeshRenderer slot with optional scale/rotation/pivot",
       "supports_progress": false,
       "writes_logs": true
@@ -46466,7 +46466,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2981,
+      "source_line": 2982,
       "summary": "Set a renderer property",
       "supports_progress": false,
       "writes_logs": true
@@ -46524,7 +46524,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3562,
+      "source_line": 3563,
       "summary": "Set scalability settings on a NiagaraEffectType asset",
       "supports_progress": false,
       "writes_logs": true
@@ -46611,7 +46611,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3388,
+      "source_line": 3389,
       "summary": "Modify a simulation stage property (IterationSource, NumIterations, SimulationStageName, etc.)",
       "supports_progress": false,
       "writes_logs": true
@@ -46640,7 +46640,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3241,
+      "source_line": 3242,
       "summary": "Add a spawn shape (Cylinder, Sphere, Box, Cone, Torus) to an emitter with automatic switch setup",
       "supports_progress": false,
       "writes_logs": true
@@ -46669,7 +46669,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3090,
+      "source_line": 3091,
       "summary": "Set a static switch value on a module",
       "supports_progress": false,
       "writes_logs": true
@@ -46698,7 +46698,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3081,
+      "source_line": 3082,
       "summary": "Set a system-level property (WarmupTime, bDeterminism, etc.)",
       "supports_progress": false,
       "writes_logs": true
@@ -46756,7 +46756,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 2921,
+      "source_line": 2922,
       "summary": "Trace where a parameter is used",
       "supports_progress": false,
       "writes_logs": true
@@ -46785,7 +46785,7 @@
       "skill": "niagara",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
-      "source_line": 3225,
+      "source_line": 3226,
       "summary": "Pre-compile validation: check common misconfigurations plus inter-emitter event-chain, spawn-location, and persistent-id issues",
       "supports_progress": false,
       "writes_logs": true
@@ -60254,7 +60254,7 @@
       "writes_logs": true
     }
   ],
-  "generated_at": "2026-07-24T15:45:22Z",
+  "generated_at": "2026-07-27T11:56:20Z",
   "generator": "Tools/MonolithQuery/generate_monolith_catalog_snapshot.py",
   "partial": false,
   "proof_anchors": {
@@ -60421,7 +60421,7 @@
   },
   "schema_version": 1,
   "source": "cpp_registry_scan",
-  "source_hash": "bc42a64e62d51f86625d7c42eec4343af706096a2ab7c992fcddae2ebd6928cd",
+  "source_hash": "b8d22084dd2061cc81911aacbdc4ba263f7db1169e0445844f1899a5ea7dd973",
   "source_hash_kind": "action_semantics_v1",
   "source_root": "Source"
 }

@@ -67,6 +67,110 @@ struct FNodeAlias
 	TMap<FString, FString> DefaultParams; // auto-filled params (e.g., macro_name for ForEachLoop)
 };
 
+namespace MonolithBlueprintResolveNodeDetail
+{
+	struct FStringParams
+	{
+		FString FunctionName;
+		FString TargetClass;
+		FString EnumType;
+		FString VariableName;
+		FString Replication;
+		FString AssetPath;
+		FString ComponentName;
+		FString DelegatePropertyName;
+		FString EventName;
+		FString MacroName;
+		FString MacroBlueprint;
+	};
+
+	static const TCHAR* JsonTypeName(EJson Type)
+	{
+		switch (Type)
+		{
+		case EJson::None:    return TEXT("none");
+		case EJson::Null:    return TEXT("null");
+		case EJson::String:  return TEXT("string");
+		case EJson::Number:  return TEXT("number");
+		case EJson::Boolean: return TEXT("boolean");
+		case EJson::Array:   return TEXT("array");
+		case EJson::Object:  return TEXT("object");
+		default:             return TEXT("unknown");
+		}
+	}
+
+	static bool ReadString(
+		const TSharedPtr<FJsonObject>& Params,
+		const TCHAR* Name,
+		bool bRequired,
+		FString& OutValue,
+		FMonolithActionResult& OutError)
+	{
+		OutValue.Reset();
+		if (!Params.IsValid())
+		{
+			OutError = FMonolithActionResult::Error(
+				TEXT("Invalid parameters: expected a JSON object"),
+				FMonolithJsonUtils::ErrInvalidParams);
+			return false;
+		}
+
+		const TSharedPtr<FJsonValue> Value = Params->TryGetField(Name);
+		if (!Value.IsValid())
+		{
+			if (!bRequired)
+			{
+				return true;
+			}
+
+			OutError = FMonolithActionResult::Error(
+				FString::Printf(TEXT("Missing required parameter: %s"), Name),
+				FMonolithJsonUtils::ErrInvalidParams);
+			return false;
+		}
+
+		if (Value->Type != EJson::String)
+		{
+			OutError = FMonolithActionResult::Error(
+				FString::Printf(
+					TEXT("Invalid parameter '%s': expected string, got %s"),
+					Name,
+					JsonTypeName(Value->Type)),
+				FMonolithJsonUtils::ErrInvalidParams);
+			return false;
+		}
+
+		OutValue = Value->AsString();
+		if (bRequired && OutValue.IsEmpty())
+		{
+			OutError = FMonolithActionResult::Error(
+				FString::Printf(TEXT("Parameter '%s' must not be empty"), Name),
+				FMonolithJsonUtils::ErrInvalidParams);
+			return false;
+		}
+
+		return true;
+	}
+
+	static bool ReadOptionalStrings(
+		const TSharedPtr<FJsonObject>& Params,
+		FStringParams& OutParams,
+		FMonolithActionResult& OutError)
+	{
+		return ReadString(Params, TEXT("function_name"), false, OutParams.FunctionName, OutError)
+			&& ReadString(Params, TEXT("target_class"), false, OutParams.TargetClass, OutError)
+			&& ReadString(Params, TEXT("enum_type"), false, OutParams.EnumType, OutError)
+			&& ReadString(Params, TEXT("variable_name"), false, OutParams.VariableName, OutError)
+			&& ReadString(Params, TEXT("replication"), false, OutParams.Replication, OutError)
+			&& ReadString(Params, TEXT("asset_path"), false, OutParams.AssetPath, OutError)
+			&& ReadString(Params, TEXT("component_name"), false, OutParams.ComponentName, OutError)
+			&& ReadString(Params, TEXT("delegate_property_name"), false, OutParams.DelegatePropertyName, OutError)
+			&& ReadString(Params, TEXT("event_name"), false, OutParams.EventName, OutError)
+			&& ReadString(Params, TEXT("macro_name"), false, OutParams.MacroName, OutError)
+			&& ReadString(Params, TEXT("macro_blueprint"), false, OutParams.MacroBlueprint, OutError);
+	}
+}
+
 static const TMap<FString, FNodeAlias>& GetNodeAliases()
 {
 	static TMap<FString, FNodeAlias> Aliases;
@@ -3603,11 +3707,13 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleBatchExecute(const TS
 
 FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSharedPtr<FJsonObject>& Params)
 {
+	using namespace MonolithBlueprintResolveNodeDetail;
+
 	FString NodeType;
-	Params->TryGetStringField(TEXT("node_type"), NodeType);
-	if (NodeType.IsEmpty())
+	FMonolithActionResult ParamError;
+	if (!ReadString(Params, TEXT("node_type"), true, NodeType, ParamError))
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: node_type"));
+		return ParamError;
 	}
 
 	// Apply same alias normalization as add_node (shared map from 1G)
@@ -3629,6 +3735,12 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 		}
 	}
 
+	FStringParams StringParams;
+	if (!ReadOptionalStrings(Params, StringParams, ParamError))
+	{
+		return ParamError;
+	}
+
 	TArray<FString> Warnings;
 	bool bGenericFallback = false;
 
@@ -3646,24 +3758,22 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 
 	if (NodeType == TEXT("CallFunction"))
 	{
-		FString FuncName;
-		Params->TryGetStringField(TEXT("function_name"), FuncName);
+		const FString& FuncName = StringParams.FunctionName;
 		if (FuncName.IsEmpty())
 		{
 			return FMonolithActionResult::Error(TEXT("CallFunction requires 'function_name'"));
 		}
 
-		FString TargetClassName;
-		Params->TryGetStringField(TEXT("target_class"), TargetClassName);
+		const FString& TargetClassName = StringParams.TargetClass;
 
 		// Load the context Blueprint (from asset_path) so a self / self-defined
 		// function resolves against the REAL class exactly as add_node would. Point
 		// the transient BP at the context's classes so self-scope pin resolution
 		// (SetSelfMember) finds a BP-authored function during the dry-run.
 		UBlueprint* ContextBP = nullptr;
-		FString ResolveAssetPath;
-		if (Params->TryGetStringField(TEXT("asset_path"), ResolveAssetPath) && !ResolveAssetPath.IsEmpty())
+		if (!StringParams.AssetPath.IsEmpty())
 		{
+			FString ResolveAssetPath;
 			ContextBP = MonolithBlueprintInternal::LoadBlueprintFromParams(Params, ResolveAssetPath);
 		}
 		if (ContextBP)
@@ -3698,8 +3808,7 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 	}
 	else if (NodeType == TEXT("SwitchOnEnum"))
 	{
-		FString EnumType;
-		Params->TryGetStringField(TEXT("enum_type"), EnumType);
+		const FString& EnumType = StringParams.EnumType;
 		if (EnumType.IsEmpty())
 		{
 			return FMonolithActionResult::Error(TEXT("SwitchOnEnum requires 'enum_type' (e.g. enum_type=ECollisionChannel, or a /Script or /Game asset path for a UserDefinedEnum)"));
@@ -3725,8 +3834,7 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 		// If variable_name is provided it's recorded in the response but the pin
 		// layout is identical regardless — VariableGet always has one output data pin.
 		UK2Node_VariableGet* VarNode = NewObject<UK2Node_VariableGet>(TempGraph);
-		FString VarName;
-		Params->TryGetStringField(TEXT("variable_name"), VarName);
+		FString VarName = StringParams.VariableName;
 		if (VarName.IsEmpty()) VarName = TEXT("Variable");
 		VarNode->VariableReference.SetSelfMember(FName(*VarName));
 		VarNode->AllocateDefaultPins();
@@ -3736,8 +3844,7 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 	else if (NodeType == TEXT("VariableSet"))
 	{
 		UK2Node_VariableSet* VarNode = NewObject<UK2Node_VariableSet>(TempGraph);
-		FString VarName;
-		Params->TryGetStringField(TEXT("variable_name"), VarName);
+		FString VarName = StringParams.VariableName;
 		if (VarName.IsEmpty()) VarName = TEXT("Variable");
 		VarNode->VariableReference.SetSelfMember(FName(*VarName));
 		VarNode->AllocateDefaultPins();
@@ -3753,21 +3860,19 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 	else if (NodeType == TEXT("CustomEvent"))
 	{
 		UK2Node_CustomEvent* EventNode = NewObject<UK2Node_CustomEvent>(TempGraph);
-		FString EventName;
-		Params->TryGetStringField(TEXT("event_name"), EventName);
+		FString EventName = StringParams.EventName;
 		if (EventName.IsEmpty()) EventName = TEXT("MyEvent");
 		EventNode->CustomFunctionName = FName(*EventName);
 		EventNode->AllocateDefaultPins();
 
 		// Apply replication flags for resolve preview (Phase 5A)
-		FString Replication;
-		if (Params->TryGetStringField(TEXT("replication"), Replication) && !Replication.IsEmpty() && Replication != TEXT("none"))
+		if (!StringParams.Replication.IsEmpty() && StringParams.Replication != TEXT("none"))
 		{
 			const uint32 FlagsToClear = FUNC_Net | FUNC_NetMulticast | FUNC_NetServer | FUNC_NetClient;
 			EventNode->FunctionFlags &= ~FlagsToClear;
 
 			uint32 NetFlag = 0;
-			FString RepLower = Replication.ToLower();
+			FString RepLower = StringParams.Replication.ToLower();
 			if (RepLower == TEXT("multicast"))      NetFlag = FUNC_NetMulticast;
 			else if (RepLower == TEXT("server"))    NetFlag = FUNC_NetServer;
 			else if (RepLower == TEXT("client"))    NetFlag = FUNC_NetClient;
@@ -3803,10 +3908,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 	}
 	else if (NodeType == TEXT("MacroInstance"))
 	{
-		FString MacroName;
-		Params->TryGetStringField(TEXT("macro_name"), MacroName);
-		FString MacroBP;
-		Params->TryGetStringField(TEXT("macro_blueprint"), MacroBP);
+		const FString& MacroName = StringParams.MacroName;
+		FString MacroBP = StringParams.MacroBlueprint;
 		if (MacroBP.IsEmpty()) MacroBP = TEXT("/Engine/EditorBlueprintResources/StandardMacros");
 
 		UBlueprint* MacroBlueprint = FMonolithAssetUtils::LoadAssetByPath<UBlueprint>(MacroBP);
@@ -3851,10 +3954,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 				TEXT("resolve_node for ComponentBoundEvent requires asset_path to resolve the component variable"));
 		}
 
-		FString CompNameStr;
-		Params->TryGetStringField(TEXT("component_name"), CompNameStr);
-		FString DelegateNameStr;
-		Params->TryGetStringField(TEXT("delegate_property_name"), DelegateNameStr);
+		const FString& CompNameStr = StringParams.ComponentName;
+		const FString& DelegateNameStr = StringParams.DelegatePropertyName;
 		if (CompNameStr.IsEmpty() || DelegateNameStr.IsEmpty())
 		{
 			return FMonolithActionResult::Error(
@@ -3892,8 +3993,7 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 		// If both target_class and asset_path are missing, the helper reports a
 		// clear error including the node-type label.
 		UClass* SelfContextClass = nullptr;
-		FString TargetClassName;
-		Params->TryGetStringField(TEXT("target_class"), TargetClassName);
+		const FString& TargetClassName = StringParams.TargetClass;
 		if (TargetClassName.IsEmpty())
 		{
 			FString AssetPath;

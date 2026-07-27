@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import socket
 import sys
 import threading
@@ -32,7 +33,7 @@ from io import TextIOWrapper
 from pathlib import Path
 
 MONOLITH_URL = os.environ.get("MONOLITH_URL", "http://localhost:9316/mcp")
-MONOLITH_HEALTH = MONOLITH_URL.replace("/mcp", "/health")
+MONOLITH_HEALTH = re.sub(r"/mcp$", "/health", MONOLITH_URL)
 PROXY_NAME = "monolith-proxy"
 PROXY_VERSION = "1.1.1"
 TIMEOUT = 30.0

@@ -192,4 +192,54 @@ bool FRiskQueryRegistrationTest::RunTest(const FString& /*Parameters*/)
 	return true;
 }
 
+
+// ---------------------------------------------------------------------------
+// Test: param guard — malformed params reject gracefully.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FModuleDepRealityParamGuardTest,
+	"Monolith.ParamGuard.ReflectionIntel.ModuleDepReality",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FModuleDepRealityParamGuardTest::RunTest(const FString& /*Parameters*/)
+{
+	FMonolithToolRegistry& Reg = FMonolithToolRegistry::Get();
+
+	// Test source.audit_module_dep_reality
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("scan_root"), 123.0); // malformed, should be string
+		const FMonolithActionResult Result = Reg.ExecuteAction(TEXT("source"), TEXT("audit_module_dep_reality"), Params);
+		TestFalse(TEXT("audit_module_dep_reality rejects malformed scan_root"), Result.bSuccess);
+		TestTrue(TEXT("audit_module_dep_reality names scan_root in error"), Result.ErrorMessage.Contains(TEXT("scan_root")));
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("limit"), TEXT("10")); // malformed, should be number
+		const FMonolithActionResult Result = Reg.ExecuteAction(TEXT("source"), TEXT("audit_module_dep_reality"), Params);
+		TestFalse(TEXT("audit_module_dep_reality rejects malformed limit"), Result.bSuccess);
+		TestTrue(TEXT("audit_module_dep_reality names limit in error"), Result.ErrorMessage.Contains(TEXT("limit")));
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("cursor"), 123.0); // malformed, should be string
+		const FMonolithActionResult Result = Reg.ExecuteAction(TEXT("source"), TEXT("audit_module_dep_reality"), Params);
+		TestFalse(TEXT("audit_module_dep_reality rejects malformed cursor"), Result.bSuccess);
+		TestTrue(TEXT("audit_module_dep_reality names cursor in error"), Result.ErrorMessage.Contains(TEXT("cursor")));
+	}
+
+	// Test source.suggest_build_cs_deps
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("file_path"), 123.0); // malformed, should be string
+		const FMonolithActionResult Result = Reg.ExecuteAction(TEXT("source"), TEXT("suggest_build_cs_deps"), Params);
+		TestFalse(TEXT("suggest_build_cs_deps rejects malformed file_path"), Result.bSuccess);
+		TestTrue(TEXT("suggest_build_cs_deps names file_path in error"), Result.ErrorMessage.Contains(TEXT("file_path")));
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
