@@ -7,10 +7,37 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardInterchangeImportMalformedPa
 
 bool FMonolithParamGuardInterchangeImportMalformedParamsTest::RunTest(const FString& Parameters)
 {
-	FMonolithInterchangeActions::RegisterActions(FMonolithToolRegistry::Get());
-	TestTrue(TEXT("interchange.import_asset action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("interchange"), TEXT("import_asset")));
-	TestTrue(TEXT("interchange.import_assets action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("interchange"), TEXT("import_assets")));
-	TestTrue(TEXT("interchange.export_asset action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("interchange"), TEXT("export_asset")));
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("interchange"), TEXT("get_supported_formats")))
+	{
+		FMonolithInterchangeActions::RegisterActions(Registry);
+	}
+
+	static const TCHAR* ExpectedActions[] = {
+		TEXT("get_supported_formats"),
+		TEXT("can_import"),
+		TEXT("can_reimport"),
+		TEXT("get_import_data"),
+		TEXT("import_asset"),
+		TEXT("import_assets"),
+		TEXT("import_scene"),
+		TEXT("import_mesh"),
+		TEXT("import_skeletal_mesh"),
+		TEXT("import_texture"),
+		TEXT("import_audio"),
+		TEXT("import_with_options"),
+		TEXT("update_reimport_path"),
+		TEXT("reimport_asset"),
+		TEXT("reimport_assets"),
+		TEXT("export_asset")
+	};
+
+	for (const TCHAR* ActionName : ExpectedActions)
+	{
+		TestTrue(
+			FString::Printf(TEXT("interchange.%s action is registered"), ActionName),
+			Registry.HasAction(TEXT("interchange"), ActionName));
+	}
 
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
@@ -18,7 +45,7 @@ bool FMonolithParamGuardInterchangeImportMalformedParamsTest::RunTest(const FStr
 		Params->SetStringField(TEXT("conflict_policy"), TEXT("fail"));
 		Params->SetBoolField(TEXT("dry_run"), true);
 
-		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("interchange"), TEXT("import_asset"), Params);
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("interchange"), TEXT("import_asset"), Params);
 		TestFalse(TEXT("import_asset rejects missing source_file"), Result.bSuccess);
 		TestTrue(TEXT("import_asset reports missing source_file"), Result.ErrorMessage.Contains(TEXT("source_file")));
 	}
@@ -29,7 +56,7 @@ bool FMonolithParamGuardInterchangeImportMalformedParamsTest::RunTest(const FStr
 		Params->SetStringField(TEXT("destination_path"), TEXT("/Game/Imported"));
 		Params->SetStringField(TEXT("conflict_policy"), TEXT("fail"));
 
-		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("interchange"), TEXT("import_asset"), Params);
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("interchange"), TEXT("import_asset"), Params);
 		TestTrue(TEXT("import_asset returns structured row for guarded mutation failure"), Result.bSuccess);
 		TestTrue(TEXT("import_asset response object is valid"), Result.Result.IsValid());
 	}

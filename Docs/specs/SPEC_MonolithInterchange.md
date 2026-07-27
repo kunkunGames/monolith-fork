@@ -69,7 +69,7 @@
 |------|----------|
 | Registration | `FMonolithInterchangeModule::StartupModule` registers 16 `interchange` actions. |
 | Namespace isolation | `MonolithMesh` remains unchanged; `MonolithInterchange` alone owns registration and shutdown for the `interchange` namespace. |
-| Parameter guard | `FMonolithParamGuardInterchangeImportMalformedParamsTest` rejects malformed import params through the new module. |
+| Registration and parameter guard | `FMonolithParamGuardInterchangeImportMalformedParamsTest` verifies all 16 registrations and rejects malformed import params through the new module. |
 | UE 5.7 build | Full plugin UBT build must succeed with the engine root resolved from the host `.uproject`. |
 | UE 5.8 build | Full plugin UBT build must succeed with the engine root resolved from the host `.uproject`. |
 | Live action contract | Discovery must expose all 16 actions, and a guarded `import_asset` dry run must reject an absent source without creating content. |
