@@ -496,16 +496,35 @@ bool FMonolithParamGuardLogicDriverConfigureSMComponentRejectsMalformedParamsTes
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverNodeRejectsMalformedFieldsTest, "Monolith.ParamGuard.LogicDriver.NodeRejectsMalformedFields", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithParamGuardLogicDriverNodeRejectsMalformedFieldsTest::RunTest(const FString& Parameters)
 {
-	// Test 1: configure_state with malformed always_update
+	// Test 1: configure_state rejects each malformed optional boolean before
+	// attempting to load the asset.
 	{
-		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
-		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Test/TestSM"));
-		Params->SetStringField(TEXT("node_guid"), TEXT("some-guid"));
-		Params->SetStringField(TEXT("always_update"), TEXT("not_a_boolean"));
+		const TArray<FString> BooleanFields = {
+			TEXT("always_update"),
+			TEXT("disable_tick_transition"),
+			TEXT("exclude_from_any_state"),
+		};
+		for (const FString& Field : BooleanFields)
+		{
+			TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+			Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Test/TestSM"));
+			Params->SetStringField(TEXT("node_guid"), TEXT("some-guid"));
+			Params->SetStringField(Field, TEXT("not_a_boolean"));
 
-		FMonolithActionResult Result = ExecuteNodeAction(TEXT("configure_state"), Params);
-		TestTrue(TEXT("Malformed always_update should return error"), !Result.bSuccess);
-		TestTrue(TEXT("Error message should mention always_update boolean"), Result.ErrorMessage.Contains(TEXT("always_update")) && Result.ErrorMessage.Contains(TEXT("boolean")));
+			const FMonolithActionResult Result =
+				ExecuteNodeAction(TEXT("configure_state"), Params);
+			TestFalse(
+				FString::Printf(TEXT("configure_state rejects malformed %s"), *Field),
+				Result.bSuccess);
+			TestEqual(
+				FString::Printf(TEXT("%s uses invalid-params error code"), *Field),
+				Result.ErrorCode,
+				FMonolithJsonUtils::ErrInvalidParams);
+			TestTrue(
+				FString::Printf(TEXT("%s error names the boolean field"), *Field),
+				Result.ErrorMessage.Contains(Field)
+					&& Result.ErrorMessage.Contains(TEXT("boolean")));
+		}
 	}
 
 	// Test 2: configure_transition with malformed priority
