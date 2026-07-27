@@ -77,4 +77,59 @@ bool FMonolithNetworkQueryLimitContractTest::RunTest(const FString& /*Parameters
 	return true;
 }
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithNetworkQueryStringContractTest,
+	"Monolith.ParamGuard.ReflectionIntel.NetworkStringContract",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithNetworkQueryStringContractTest::RunTest(const FString& /*Parameters*/)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("network"), TEXT("list_replicated_classes")))
+	{
+		FNetworkQueryAdapter::RegisterActions(Registry);
+	}
+
+	const TArray<TPair<FString, FString>> StringContracts = {
+		{ TEXT("list_replicated_classes"), TEXT("cursor") },
+		{ TEXT("list_rpc_functions"), TEXT("class_name") },
+		{ TEXT("list_rpc_functions"), TEXT("rpc_kind") },
+		{ TEXT("list_rpc_functions"), TEXT("cursor") },
+		{ TEXT("list_onrep_handlers"), TEXT("class_name") },
+		{ TEXT("list_onrep_handlers"), TEXT("cursor") },
+		{ TEXT("audit_unbalanced_onreps"), TEXT("cursor") },
+	};
+
+	for (const TPair<FString, FString>& Contract : StringContracts)
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetField(Contract.Value, MakeShared<FJsonValueNumber>(123.0));
+		const FMonolithActionResult Result =
+			Registry.ExecuteAction(TEXT("network"), Contract.Key, Params);
+
+		TestFalse(
+			FString::Printf(
+				TEXT("%s rejects non-string %s"),
+				*Contract.Key,
+				*Contract.Value),
+			Result.bSuccess);
+		TestEqual(
+			FString::Printf(
+				TEXT("%s %s uses invalid-params code"),
+				*Contract.Key,
+				*Contract.Value),
+			Result.ErrorCode,
+			-32602);
+		TestTrue(
+			FString::Printf(
+				TEXT("%s %s error names the field"),
+				*Contract.Key,
+				*Contract.Value),
+			Result.ErrorMessage.Contains(Contract.Value));
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

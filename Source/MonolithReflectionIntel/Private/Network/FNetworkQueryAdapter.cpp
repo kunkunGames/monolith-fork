@@ -260,8 +260,11 @@ FMonolithActionResult FNetworkQueryAdapter::HandleListReplicatedClasses(const TS
 			     "or build the project at least once so UHT artefacts exist."));
 	}
 
-	const FString CursorIn = Params.IsValid() && Params->HasField(TEXT("cursor"))
-		? Params->GetStringField(TEXT("cursor")) : FString();
+	FString CursorIn;
+	if (Params.IsValid() && Params->HasField(TEXT("cursor")) && !Params->TryGetStringField(TEXT("cursor"), CursorIn))
+	{
+		return FMonolithActionResult::Error(TEXT("cursor must be a string."), InvalidParamsError);
+	}
 
 	const uint32 FilterHash = RIComputeFilterHash({});
 
@@ -361,12 +364,21 @@ FMonolithActionResult FNetworkQueryAdapter::HandleListRPCFunctions(const TShared
 			TEXT("EngineSource.db not available. Run source.trigger_reindex to bootstrap."));
 	}
 
-	const FString ClassName = Params.IsValid() && Params->HasField(TEXT("class_name"))
-		? Params->GetStringField(TEXT("class_name")) : FString();
-	const FString RpcKindFilter = Params.IsValid() && Params->HasField(TEXT("rpc_kind"))
-		? Params->GetStringField(TEXT("rpc_kind")) : FString();
-	const FString CursorIn = Params.IsValid() && Params->HasField(TEXT("cursor"))
-		? Params->GetStringField(TEXT("cursor")) : FString();
+	FString ClassName;
+	if (Params.IsValid() && Params->HasField(TEXT("class_name")) && !Params->TryGetStringField(TEXT("class_name"), ClassName))
+	{
+		return FMonolithActionResult::Error(TEXT("class_name must be a string."), InvalidParamsError);
+	}
+	FString RpcKindFilter;
+	if (Params.IsValid() && Params->HasField(TEXT("rpc_kind")) && !Params->TryGetStringField(TEXT("rpc_kind"), RpcKindFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("rpc_kind must be a string."), InvalidParamsError);
+	}
+	FString CursorIn;
+	if (Params.IsValid() && Params->HasField(TEXT("cursor")) && !Params->TryGetStringField(TEXT("cursor"), CursorIn))
+	{
+		return FMonolithActionResult::Error(TEXT("cursor must be a string."), InvalidParamsError);
+	}
 
 	const uint32 FilterHash = RIComputeFilterHash({ ClassName, RpcKindFilter });
 
@@ -474,10 +486,16 @@ FMonolithActionResult FNetworkQueryAdapter::HandleListOnRepHandlers(const TShare
 			TEXT("EngineSource.db not available. Run source.trigger_reindex to bootstrap."));
 	}
 
-	const FString ClassName = Params.IsValid() && Params->HasField(TEXT("class_name"))
-		? Params->GetStringField(TEXT("class_name")) : FString();
-	const FString CursorIn = Params.IsValid() && Params->HasField(TEXT("cursor"))
-		? Params->GetStringField(TEXT("cursor")) : FString();
+	FString ClassName;
+	if (Params.IsValid() && Params->HasField(TEXT("class_name")) && !Params->TryGetStringField(TEXT("class_name"), ClassName))
+	{
+		return FMonolithActionResult::Error(TEXT("class_name must be a string."), InvalidParamsError);
+	}
+	FString CursorIn;
+	if (Params.IsValid() && Params->HasField(TEXT("cursor")) && !Params->TryGetStringField(TEXT("cursor"), CursorIn))
+	{
+		return FMonolithActionResult::Error(TEXT("cursor must be a string."), InvalidParamsError);
+	}
 
 	const uint32 FilterHash = RIComputeFilterHash({ ClassName });
 
@@ -562,8 +580,11 @@ FMonolithActionResult FNetworkQueryAdapter::HandleAuditUnbalancedOnReps(const TS
 			TEXT("EngineSource.db not available. Run source.trigger_reindex to bootstrap."));
 	}
 
-	const FString CursorIn = Params.IsValid() && Params->HasField(TEXT("cursor"))
-		? Params->GetStringField(TEXT("cursor")) : FString();
+	FString CursorIn;
+	if (Params.IsValid() && Params->HasField(TEXT("cursor")) && !Params->TryGetStringField(TEXT("cursor"), CursorIn))
+	{
+		return FMonolithActionResult::Error(TEXT("cursor must be a string."), InvalidParamsError);
+	}
 
 	const uint32 FilterHash = RIComputeFilterHash({});
 
