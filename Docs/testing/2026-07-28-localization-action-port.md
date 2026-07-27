@@ -5,7 +5,7 @@
 | Date | 2026-07-28 |
 | Branch | `agent/localization-string-tables` |
 | Base | `kunkunGames/monolith-fork@ee1dae25f9a90a45ae768abbfcb0d9356810b0c4` |
-| Verified source commit | `1eb26db4f7c8e0df598f88339ecb7facbb07a31f` |
+| Verified source commit | `b74025a93635afd7220ff17c858c893a5783be0b` |
 | Scope | Ten guarded `localization` actions for culture discovery and StringTable read/validate/create/edit/CSV workflows |
 | Excluded | Security, benchmark, invocation-log/metadata features, reinforcement learning |
 
@@ -39,8 +39,8 @@ $env:MONOLITH_RELEASE_BUILD = "1"
 
 | Engine | Host project | Result | Linked DLL | SHA256 |
 |--------|--------------|--------|------------|--------|
-| UE 5.7 | `D:\P4\MonolithLocalizationUE57Host\MonolithLocalizationUE57Host.uproject` | PASS (`Result: Succeeded`) | 448000 bytes | `C40AF2069740DF610DE6D71E02738A4F79E0A72B58DF051216E0BDA82F808343` |
-| UE 5.8 | `D:\P4\MonolithLocalizationUE58Host\MonolithLocalizationUE58Host.uproject` | PASS (`Result: Succeeded`) | 428544 bytes | `872BB74F2D30E1AC0A29E8F1B6F397407A39A007F52749046764D89FA0EA2820` |
+| UE 5.7 | `D:\P4\MonolithLocalizationUE57Host\MonolithLocalizationUE57Host.uproject` | PASS (`Result: Succeeded`) | 448000 bytes | `749692F8CC2BE47AA72CA6CE2D436E78FD4FA8D2FF75329DF8C57E35CB9E3FF9` |
+| UE 5.8 | `D:\P4\MonolithLocalizationUE58Host\MonolithLocalizationUE58Host.uproject` | PASS (`Result: Succeeded`) | 428544 bytes | `A0AFD8B977EDA3A9360899E3B0E73DDFA29676D92C3E4C0EA7AA98CC182D828A` |
 
 ---
 
@@ -55,8 +55,8 @@ $env:MONOLITH_RELEASE_BUILD = "1"
 
 | Engine | Report | Succeeded | With warnings | Failed | Not run | Test warnings | Test errors |
 |--------|--------|-----------|---------------|--------|---------|---------------|-------------|
-| UE 5.7 | `D:\P4\MonolithLocalizationUE57Host\Saved\Automation\LocalizationActionPort-UE57-CrossVersionFinal\index.json` | 6 | 0 | 0 | 0 | 0 | 0 |
-| UE 5.8 | `D:\P4\MonolithLocalizationUE58Host\Saved\Automation\LocalizationActionPort-UE58-Final\index.json` | 6 | 0 | 0 | 0 | 0 | 0 |
+| UE 5.7 | `D:\P4\MonolithLocalizationUE57Host\Saved\Automation\LocalizationActionPort-UE57-CSVContractFinal\index.json` | 6 | 0 | 0 | 0 | 0 | 0 |
+| UE 5.8 | `D:\P4\MonolithLocalizationUE58Host\Saved\Automation\LocalizationActionPort-UE58-CSVContractFinal\index.json` | 6 | 0 | 0 | 0 | 0 | 0 |
 
 | Test | Verified contract |
 |------|-------------------|
