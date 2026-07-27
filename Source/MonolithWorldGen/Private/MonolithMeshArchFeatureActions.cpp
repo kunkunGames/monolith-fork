@@ -835,6 +835,7 @@ FMonolithActionResult FMonolithMeshArchFeatureActions::CreateFireEscape(const TS
 	const float FloorHeight  = static_cast<float>(Params->GetNumberField(TEXT("floor_height")));
 
 	if (FloorCount < 1) return FMonolithActionResult::Error(TEXT("floor_count must be >= 1"));
+	if (FloorCount > 100) return FMonolithActionResult::Error(FString::Printf(TEXT("floor_count %d exceeds the maximum allowed (100)"), FloorCount));
 	if (FloorHeight <= 0.0f) return FMonolithActionResult::Error(TEXT("floor_height must be positive"));
 
 	const float LandingW    = GetFloat(Params, TEXT("landing_width"), 150.0f);
