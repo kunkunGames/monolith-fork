@@ -40,7 +40,7 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `[w] set_string_entry` | `asset_path*` `key*` `source_string*` `metadata?` `dry_run?=false` `confirm?=false` `save?=false` | Add or replace one StringTable entry and optional metadata. Requires dry_run=true or confirm=true. |
 | `[w] remove_string_entry` | `asset_path*` `key*` `dry_run?=false` `confirm?=false` `save?=false` | Remove one StringTable entry by key. Requires dry_run=true or confirm=true. |
 | `[w] set_string_metadata` | `asset_path*` `key*` `metadata_key*` `metadata_value?` `remove?=false` `dry_run?=false` `confirm?=false` `save?=false` | Add, replace, or remove metadata on one StringTable entry. Requires dry_run=true or confirm=true. |
-| `[w] import_string_table_csv` | `asset_path*` `file_path*` `replace_existing?=false` `dry_run?=false` `confirm?=false` `save?=false` | Import key,source_string,metadata CSV rows into a StringTable. Requires dry_run=true or confirm=true. |
+| `[w] import_string_table_csv` | `asset_path*` `file_path*` `replace_existing?=false` `dry_run?=false` `confirm?=false` `save?=false` | Import required `key`/`source_string` columns plus per-metadata-key columns into a StringTable. Requires dry_run=true or confirm=true. |
 | `[w] export_string_table_csv` | `asset_path*` `file_path*` `include_metadata?=true` `dry_run?=false` `confirm?=false` | Export a StringTable to CSV under the project directory. Requires dry_run=true or confirm=true. |
 
 ## Common Workflows
@@ -73,6 +73,6 @@ localization_query({ action: "list_cultures", params: {} })
 
 - Mutating actions (`create_string_table`, `set_string_entry`, `set_string_metadata`, `remove_string_entry`, `import_string_table_csv`, `export_string_table_csv`) require `dry_run=true` or `confirm=true`. Run `dry_run` first to preview, then re-issue with `confirm=true`.
 - `get_string_table` caps returned entries; for a full audit pair it with `validate_string_table` rather than relying on the capped list.
-- CSV rows are `key,source_string,metadata`; keep keys stable across export/import so translations re-link to the right entry.
+- CSV headers must contain `key` and `source_string`; every additional header is treated as a per-entry metadata key. Keep StringTable keys and metadata-column names stable across export/import so rows round-trip to the intended entries.
 - This reference is generated from the live `RegisterAction` surface. If an action is missing or renamed, re-run `monolith_discover({ namespace: "localization" })` — the catalog is the source of truth.
 - Pass `mode: "schema"` to `monolith_discover` for required/optional params and types before calling an action.

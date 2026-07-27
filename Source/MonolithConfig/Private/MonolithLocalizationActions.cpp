@@ -742,7 +742,7 @@ void FMonolithLocalizationActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	Registry.RegisterAction(TEXT("localization"), TEXT("import_string_table_csv"),
-		TEXT("Import key,source_string,metadata CSV rows into a StringTable. Requires dry_run=true or confirm=true."),
+		TEXT("Import key, source_string, and per-metadata-key CSV columns into a StringTable. Requires dry_run=true or confirm=true."),
 		FMonolithActionHandler::CreateStatic(&FMonolithLocalizationActions::ImportStringTableCsv),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StringTable asset path"))
