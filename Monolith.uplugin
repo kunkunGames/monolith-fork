@@ -222,6 +222,11 @@
 			"LoadingPhase": "Default"
 		},
 		{
+			"Name": "MonolithInterchange",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
 			"Name": "MonolithReflectionIntel",
 			"Type": "Editor",
 			"LoadingPhase": "Default"

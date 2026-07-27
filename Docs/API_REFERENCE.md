@@ -35,6 +35,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
 | [audio](#audio) | 98 | Sound Cue + MetaSound graph CRUD + document introspection, attenuation/class/mix/submix/concurrency, batch ops, Sound Cue templates, perception bindings |
 | [level_sequence](#level_sequence) | 8 | Level Sequence inspection: binding inventory (legacy + UE 5.7 custom bindings), Director Blueprint functions/variables, event-track bindings, cross-sequence reverse lookup |
+| [interchange](#interchange) | 16 | Guarded import, batch import, reimport-source management, reimport, export, and source/format inspection |
 | [bulk_fill](#bulk_fill) | 2 | Reflection-walker bulk property fill across 12 per-namespace adapters (`apply`, `list_namespaces`) |
 | [describe](#describe) | 3 | Read-only schema introspection for the same 12 adapters (`schema`, `list_targets`, `action_schema`) |
 | [decision](#decision) | 5 | **New v0.17.0.** Reflection Intelligence — architectural decision records mined from markdown corpora |
@@ -1121,6 +1122,31 @@ Level Sequence inspection — binding inventory (legacy possessables/spawnables 
 | `find_director_function_callers` | `function_name`, `asset_path_filter?` (glob) | Cross-sequence reverse lookup: every event-track section across the project that fires a given Director function |
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithLevelSequence.md`.
+
+---
+
+## interchange
+
+Guarded asset import/export pipeline. Read-only actions validate sources and inspect import metadata; every filesystem or asset mutation requires `confirm=true` unless `dry_run=true`.
+
+| Action | Key params | Notes |
+|--------|------------|-------|
+| `get_supported_formats` | none | Lists known source formats, runtime module availability, allowed roots, and mutation policy. |
+| `can_import` | `source_file`; optional `destination_path`, `allow_external` | Validates source existence, extension support, root policy, and destination package syntax without mutation. |
+| `can_reimport` | `asset_path` | Reports whether an existing asset carries usable source-import metadata. |
+| `get_import_data` | `asset_path` | Returns the reflected source-file rows for an existing asset. |
+| `import_asset` | `source_file`, `destination_path`, `conflict_policy`; optional `allow_external`, `confirm`, `dry_run`, `options` | Imports one source with an explicit `fail`, `overwrite`, `rename`, or `reimport_only` conflict policy. |
+| `import_assets` | `source_files`, `destination_path`, `conflict_policy`; optional `allow_external`, `confirm`, `dry_run`, `options` | Imports sources sequentially and returns one structured row per source. |
+| `import_scene` | same as `import_asset` | Typed scene import entry point over the guarded implementation. |
+| `import_mesh` | same as `import_asset` | Typed static-mesh import entry point over the guarded implementation. |
+| `import_skeletal_mesh` | same as `import_asset` | Typed skeletal-mesh import entry point over the guarded implementation. |
+| `import_texture` | same as `import_asset` | Typed texture import entry point over the guarded implementation. |
+| `import_audio` | same as `import_asset` | Typed audio import entry point over the guarded implementation. |
+| `import_with_options` | same as `import_asset` | Generic guarded import with a forward-compatible `options` object. |
+| `update_reimport_path` | `asset_path`, `source_file`; optional `source_file_index`, `allow_external`, `confirm`, `dry_run` | Repoints an existing asset's source metadata after root validation. |
+| `reimport_asset` | `asset_path`; optional `source_file`, `source_file_index`, `allow_external`, `confirm`, `dry_run` | Optionally repoints, then reimports one existing asset through Unreal's reimport manager. |
+| `reimport_assets` | `asset_paths`; optional `confirm`, `dry_run` | Reimports assets sequentially and returns one row per asset. |
+| `export_asset` | `asset_path`, `file_path`; optional `replace_existing`, `allow_external`, `confirm`, `dry_run` | Exports one asset after validating the output path and replacement policy. |
 
 ---
 

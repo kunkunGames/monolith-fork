@@ -166,6 +166,7 @@ Each module has its own spec file under `specs/`. The table below is the index.
 | 3.16 | MonolithAI | [specs/SPEC_MonolithAI.md](specs/SPEC_MonolithAI.md) | Behavior Trees, Blackboards, State Trees, EQS, Smart Objects, Perception, Nav (~220+ actions) |
 | 3.17 | MonolithAudio | [specs/SPEC_MonolithAudio.md](specs/SPEC_MonolithAudio.md) | Sound Cues, MetaSounds (Builder API + document introspection), batch audio ops, AI Perception bind (~90+ actions, MetaSound features WITH_METASOUND) |
 | 3.18 | MonolithReflectionIntel | [specs/SPEC_MonolithReflectionIntel.md](specs/SPEC_MonolithReflectionIntel.md) | Deterministic, $0-LLM reflection intelligence — Decision + Risk + CppReflect + Network + Pipeline + Reflect (maintenance) + Module-Dep Reality Audit + 4 cross-namespace audit actions. v0.17.0 shipped 26 actions across `decision_query` (5), `risk_query` (5), `cppreflect_query` (5), `network_query` (4), `pipeline_query` (2), `source_query("audit_module_dep_reality")` (1), plus 4 audit actions on existing namespaces — `material_query("audit_orphan_materials")` / `niagara_query("audit_cross_asset_refs")` / `blueprint_query("audit_cdo_drift")` / `project_query("audit_orphan_assets")`; the `cppreflect_query("list_class_specifiers")` follow-up brings `cppreflect_query` to 6, and the `reflect_query("rebuild_reflection_index")` network-completeness follow-up adds the new `reflect` namespace (1 WRITE/maintenance action — module total ~28 actions). Phase 3b native-tag tracking (tree-sitter) and Phase 4b tag-graph / thread-safety audits are WISHLIST — both blocked on tree-sitter substrate. |
+| 3.19 | MonolithInterchange | [specs/SPEC_MonolithInterchange.md](specs/SPEC_MonolithInterchange.md) | Guarded import, batch import, reimport-source management, reimport, export, and source/format inspection (16 actions) |
 
 ---
 
@@ -430,6 +431,7 @@ YourProject/Plugins/Monolith/
     MonolithComboGraph/            (conditional on WITH_COMBOGRAPH — combo graph CRUD, nodes, edges, effects, cues, ability scaffolding)
     MonolithAI/                    (conditional on WITH_STATETREE + WITH_SMARTOBJECTS — BT, BB, ST, EQS, SO, Controllers, Perception, Navigation, Runtime, Scaffolds)
     MonolithLogicDriver/           (conditional on WITH_LOGICDRIVER — SM CRUD, graph read/write, node config, runtime/PIE, JSON spec, scaffolding, discovery, components, text graph)
+    MonolithInterchange/           (16 guarded import, reimport, export, and source-inspection actions)
   Tools/
     MonolithProxy/                   (MCP stdio-to-HTTP proxy source + build.bat)
     MonolithQuery/                   (Offline query tool source + build.bat)

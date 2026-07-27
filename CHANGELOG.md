@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **New `interchange` namespace with 16 guarded import-pipeline actions.** Inspect supported formats and import metadata; validate sources; import one or many assets through generic or typed entry points; update reimport paths; reimport assets; and export assets. Mutations require `confirm=true` or an explicit dry run, validate disk/package roots before writes, and return per-item rows for batch operations.
+
 ## [0.21.3] - 2026-07-26
 
 This release closes out the open pull-request queue. Every fix below was reported or prototyped by a contributor — thanks to **@Thomasbehan**, **@whalemenace**, and **@kunkunGames** for the write-ups, which were detailed enough to reproduce from directly.
