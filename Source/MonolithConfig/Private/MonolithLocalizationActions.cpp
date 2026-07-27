@@ -46,7 +46,7 @@ namespace
 		FString DevNotes;
 		if (const FStringTableEntryConstPtr ExistingEntry = Table->FindEntry(Key))
 		{
-			DevNotes = ExistingEntry->DevNotes;
+			DevNotes = ExistingEntry->GetDevNotes();
 		}
 		Table->SetSourceString(Key, SourceString, DevNotes);
 #else

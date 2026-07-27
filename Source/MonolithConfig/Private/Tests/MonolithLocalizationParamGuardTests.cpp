@@ -310,7 +310,7 @@ bool FMonolithParamGuardLocalizationStringTableLifecycleTest::RunTest(const FStr
 	{
 		TestEqual(
 			TEXT("set_string_entry preserves UE 5.8 developer notes"),
-			UpdatedEntry->DevNotes,
+			UpdatedEntry->GetDevNotes(),
 			FString(TEXT("Preserve this translator context")));
 	}
 #endif
