@@ -67,7 +67,7 @@ Every non-durable role logs `Monolith — MCP host role=<role>; registered actio
 |--------|----------|-------------|
 | `find` | `monolith_find` | Fuzzy-rank profile-allowed actions by task text. Match rows default to `planning_detail=compact` (counts instead of `precondition_details`/`planning_signals` arrays; 2026-07-04 measurement: full arrays drove ~37KB average responses). Additive list-projection contract: `offset`/`cursor` paging with `total`/`returned`/`next_cursor`/`projection`, and `fields` row projection with an available-fields warning for names absent from every row. The internal `fields` param type remains `array|string`, while MCP `tools/list` and `include_schema=true` match rows expose JSON Schema `inputSchema` with `type:["array","string"]`. |
 | `execute_plan` | `monolith_execute_plan` | Multi-step plan executor (`FMonolithPlanExecutor`, v1 2026-07-04 / v2 2026-07-05): sequential steps `{id?, namespace, action, params?}` (max 25) dispatched through the normal `ExecuteAction` pipeline (profile, aliases, schema validation, guards, logging; children inherit the plan trace with the plan span as parent). Whole-string `"$steps.<id>.result.<field.path>"` references resolve prior step results (v2: all-digit segments index arrays); plan-time validation covers action existence, profile, aliases, required presence (references count as provided), and typed checks. `dry_run` returns the classified plan without executing; mutating steps require `confirm=true`, destructive steps additionally `allow_destructive=true`; `stop_on_error` (default true) skips the remainder after a failure; per-step results above `max_result_bytes_per_step` (default 16KB) are summarized. **v2 transaction (`transaction=auto` default):** a mutating plan runs in one outermost editor transaction cancelled on a `stop_on_error` halt — undoable object edits roll back (`rolled_back:"editor_transaction"`), while saves/disk/source-control/external effects do not (`transaction.caveat`); `transaction.{mode,state}` is reported. `transaction=off` or `stop_on_error=false` keeps partial-state markers (`partial_state_note`, `rollback_available:false`). Nested `execute_plan` steps are rejected. Tests: `Monolith.Core.PlanExecutor.*` (7). |
-| `discover` | `monolith_discover` | List available tool namespaces and actions. Optional params: `namespace`, `action`, `category`, `mode`. Use `mode="schema"` with `namespace` + `action` for one exact action schema. Detailed rows keep the internal Monolith `params` schema for compatibility and also expose a standard JSON Schema `inputSchema` for MCP/JSON Schema consumers. |
+| `discover` | `monolith_discover` | List available tool namespaces and actions. Optional params: `namespace`, `action`, `category`, `mode`, `filter`, `offset`, and `limit`. A `filter` without `namespace` returns the pre-pagination `matched_namespaces` ownership view plus bounded action candidates. Use `mode="schema"` with `namespace` + `action` for one exact action schema. Detailed rows keep the internal Monolith `params` schema for compatibility and also expose a standard JSON Schema `inputSchema` for MCP/JSON Schema consumers. |
 | `status` | `monolith_status` | Server health: version, uptime, port, action count, engine_version, project_name |
 | `update` | `monolith_update` | Check/install updates from GitHub Releases. `action`: "check" or "install" |
 | `reindex` | `monolith_reindex` | Trigger project re-index. Defaults to incremental (hash-based delta); pass `force=true` for full wipe-and-rebuild (via reflection to MonolithIndex, no hard dependency). With default `bEnableAsyncJobs=true`, returns `status:"started"`, `job_id`, `poll_action="monolith.get_job"`, and `cancel_action="monolith.cancel_job"`; the job-aware MonolithIndex entry point then drives the row to `completed`, `failed`, or `cancelled` instead of leaving it indefinitely `running` (see SPEC_MonolithAsyncJobActions). |
@@ -75,9 +75,25 @@ Every non-durable role logs `Monolith — MCP host role=<role>; registered actio
 | `get_job` | `monolith_get_job` | Return one async job's status/progress/result by `job_id` (read-only, idempotent). Gated by `UMonolithSettings::bEnableAsyncJobs`: with the flag off it returns `{status:"disabled", requested_job_id, reason}` instead of touching the registry; with the flag on it returns the `FMonolithAsyncJobRegistry` row including `cancellable`, `supports_progress`, `poll_action`, `cancel_action`, and `cancel_requested`, or `{status:"not_found"}` for an expired/evicted/never-minted id. Required param: `job_id` (string). |
 | `cancel_job` | `monolith_cancel_job` | Request cooperative cancellation of an async job by `job_id` and return its current row (mutation, idempotent, non-destructive). Gated by `bEnableAsyncJobs`: with the flag off it returns `{status:"disabled", requested_job_id, cancel_requested:false, reason}`; with the flag on it sets the cooperative cancel flag for cancellable jobs and returns the post-request row. The row remains non-terminal with `cancel_requested:true` until the producer observes the request and acknowledges `cancelled`. Required param: `job_id` (string). |
 
-#### Terse per-namespace discover
+#### Discover action projection
 
 `monolith_discover(namespace)` is **terse by default**: for each action it returns `action` (name) + a one-line `description` only. The full per-action internal `params` schema and MCP-facing JSON Schema `inputSchema` are NOT emitted by default — fetch a single action's schema with `describe_query action_schema` (the lazy-fetch target, ~54 tokens) or inline every action's schema with `detail=true`. Terse mode cuts per-namespace discover payload by ≥70% vs the pre-change shape (the win is dropping eager schema objects, not truncating the action list).
+
+`monolith_discover(filter="<substring>", limit=N)` omits `namespace` and applies the same action-name/full-description predicate across every registered namespace. It answers "which namespace owns this capability" for a caller that cannot name the namespace yet.
+
+The response carries two views of one filtered set:
+
+- `matched_namespaces` — every namespace containing at least one match, each with a `match_count`, in registry order. Computed **before** pagination, so a small `limit` never narrows it. This is the namespace-selection view: pick a namespace, then call `monolith_discover(namespace="<ns>")` for its full action list.
+- `actions` — the paginated flat candidate list, each row carrying `namespace`, `action`, bounded `description`, optional `category`, and optional detailed `params`.
+
+`match_count` is a count of the filtered set, not a relevance score: namespaces are never ordered by it, and no hand-tuned ranking, scoring tier, or alias database is introduced. Registry order is retained throughout, and any semantic ranking remains the MCP client's concern. No-argument discovery remains the namespace inventory and does not carry `matched_namespaces`.
+
+The editor-offline `monolith_discover` seed schemas in `Scripts/monolith_proxy.py`
+and `Tools/MonolithProxy/monolith_proxy.cpp` are unchanged by this path and
+already lag the live registration (they predate `filter`/`offset`/`limit`).
+A cold-start client that has never seen a live `tools/list` therefore cannot
+construct the cross-namespace call until the Editor is reachable. Refreshing the
+proxy seeds is tracked separately from this discovery contract.
 
 **One-line description trim (terse only).** Each `description` is trimmed to its first sentence (sentence terminator at index ≥25 followed by a space or end-of-string), else hard-capped at 150 chars on a word boundary, with an ASCII `"..."` suffix appended when trimmed; already-short descriptions are returned verbatim (no suffix). The FULL untrimmed description is preserved in detail mode and via `describe_query action_schema`.
 
@@ -93,7 +109,7 @@ Every non-durable role logs `Monolith — MCP host role=<role>; registered actio
 
 **Top-level response fields:** `total` (always; post-filter count); `truncated`; `limits` (`default_limit`, `max_limit`, `limit`, `requested_limit`, `offset`, `total`, `returned`); `next_offset` / `next_cursor` when more rows remain; `schema_hint` (terse only). The `schema_hint` string is: `Param schemas omitted. Call describe_query(action_schema, target_namespace="<ns>", target_action="<name>") for one action's full schema, or pass detail=true to inline all.`
 
-**Unchanged:** the full `discover()` (no namespace) response is untouched. `describe_query action_schema` is the unchanged lazy-fetch target for a single action's full schema.
+**Unchanged:** `discover()` with no namespace, filter, or positive limit still returns the namespace inventory. `describe_query action_schema` remains the lazy-fetch target for a single action's full schema.
 
 ### Actions (2 — namespace: "bulk_fill")
 

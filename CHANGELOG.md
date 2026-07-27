@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`monolith_discover` can find which namespace owns a capability without introducing another ranking tool.** Pass `filter` without `namespace` to receive `matched_namespaces` for the complete filtered set plus a bounded `actions` page. Namespace counts remain deterministic registry facts rather than relevance scores; semantic ranking stays with the MCP client.
+
 ### Fixed
 
 - **Auto-updater source and unrelated ZIP archives are rejected.** Update discovery now accepts only explicit `Monolith-*.zip` release assets and fails closed when a release exposes only GitHub's `zipball_url` or another ZIP, because repository source archives and unrelated artifacts do not carry the precompiled plugin binaries required by Blueprint-only installations.

@@ -2435,11 +2435,43 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 		Unchanged->SetArrayField(TEXT("namespaces"), UnchangedNamespaces);
 		return FMonolithActionResult::Success(Unchanged);
 	}
+	Filter.TrimStartAndEndInline();
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("catalog_version"), CatalogVersion);
 
 	TArray<FString> Namespaces = Registry.GetNamespaces();
+	const auto MatchesFilter = [&Filter](const FMonolithActionInfo& Info)
+	{
+		return Filter.IsEmpty()
+			|| Info.Action.Contains(Filter, ESearchCase::IgnoreCase)
+			|| Info.Description.Contains(Filter, ESearchCase::IgnoreCase);
+	};
+	const auto MakeActionValue = [bDetail](
+		const FMonolithActionInfo& ActionInfo,
+		const bool bIncludeNamespace)
+	{
+		TSharedPtr<FJsonObject> ActionObj = MakeShared<FJsonObject>();
+		if (bIncludeNamespace)
+		{
+			ActionObj->SetStringField(TEXT("namespace"), ActionInfo.Namespace);
+		}
+		ActionObj->SetStringField(TEXT("action"), ActionInfo.Action);
+		ActionObj->SetStringField(
+			TEXT("description"),
+			bDetail
+				? ActionInfo.Description
+				: MonolithToolText::TerseOneLineDescription(ActionInfo.Description));
+		if (!ActionInfo.Category.IsEmpty())
+		{
+			ActionObj->SetStringField(TEXT("category"), ActionInfo.Category);
+		}
+		if (bDetail && ActionInfo.ParamSchema.IsValid())
+		{
+			ActionObj->SetObjectField(TEXT("params"), ActionInfo.ParamSchema);
+		}
+		return MakeShared<FJsonValueObject>(ActionObj);
+	};
 
 	if (!FilterNamespace.IsEmpty() && Mode != TEXT("summary"))
 	{
@@ -2580,11 +2612,7 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 		}
 		if (!Filter.IsEmpty())
 		{
-			Actions = Actions.FilterByPredicate([&Filter](const FMonolithActionInfo& Info)
-			{
-				return Info.Action.Contains(Filter, ESearchCase::IgnoreCase)
-					|| Info.Description.Contains(Filter, ESearchCase::IgnoreCase);
-			});
+			Actions = Actions.FilterByPredicate(MatchesFilter);
 		}
 
 		// P0.5: namespace action listings stay bounded. Older callers sometimes
@@ -2731,6 +2759,74 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 					FString::Printf(TEXT("Param schemas omitted. Call describe_query(action_schema, target_namespace=\"%s\", target_action=\"<name>\") for one action's full schema, or pass detail=true to inline all."),
 						*FilterNamespace));
 			}
+		}
+	}
+	else if (!Filter.IsEmpty())
+	{
+		// A filter without a namespace is the lightweight cross-namespace search
+		// path, for callers that do not know which namespace owns a capability.
+		// Keep registry order, reuse the same predicate and pagination contract as
+		// per-namespace discovery, and let the MCP client perform any semantic
+		// ranking over the bounded candidate list.
+		TArray<FMonolithActionInfo> Actions;
+		for (const FString& Namespace : Namespaces)
+		{
+			Actions.Append(Registry.GetActions(Namespace));
+		}
+		Actions = Actions.FilterByPredicate(MatchesFilter);
+
+		// Which namespaces the filter hit, and how many actions in each. This is
+		// the "I do not know the namespace yet" answer: a caller can pick where to
+		// look without paging through every matching action, which is what makes a
+		// small limit usable. Counts are facts about the filtered set, not scores —
+		// nothing here orders namespaces by relevance. Computed before pagination,
+		// like `total`, so a page never narrows the picture.
+		TArray<FString> MatchedNamespaceOrder;
+		TMap<FString, int32> MatchesByNamespace;
+		for (const FMonolithActionInfo& Info : Actions)
+		{
+			int32& MatchCount = MatchesByNamespace.FindOrAdd(Info.Namespace);
+			if (MatchCount == 0)
+			{
+				MatchedNamespaceOrder.Add(Info.Namespace);
+			}
+			++MatchCount;
+		}
+
+		TArray<TSharedPtr<FJsonValue>> MatchedNamespaceArray;
+		for (const FString& Namespace : MatchedNamespaceOrder)
+		{
+			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("namespace"), Namespace);
+			Entry->SetNumberField(TEXT("match_count"), MatchesByNamespace[Namespace]);
+			MatchedNamespaceArray.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		Result->SetArrayField(TEXT("matched_namespaces"), MatchedNamespaceArray);
+
+		const int32 TotalCount = Actions.Num();
+		const int32 SliceStart = Limit > 0
+			? FMath::Clamp(Offset, 0, TotalCount)
+			: 0;
+		const int32 SliceEnd = Limit > 0
+			? SliceStart + FMath::Min(Limit, TotalCount - SliceStart)
+			: TotalCount;
+
+		TArray<TSharedPtr<FJsonValue>> ActionArray;
+		for (int32 Index = SliceStart; Index < SliceEnd; ++Index)
+		{
+			ActionArray.Add(MakeActionValue(Actions[Index], true));
+		}
+		Result->SetArrayField(TEXT("actions"), ActionArray);
+		Result->SetNumberField(TEXT("total"), TotalCount);
+		if (Limit > 0 && SliceEnd < TotalCount)
+		{
+			Result->SetNumberField(TEXT("next_offset"), SliceStart + Limit);
+		}
+		if (!bDetail)
+		{
+			Result->SetStringField(
+				TEXT("schema_hint"),
+				TEXT("Param schemas omitted. Call monolith_discover(namespace=\"<namespace>\", filter=\"<action>\", detail=true) or describe_query(action_schema, ...) for one action's full schema."));
 		}
 	}
 	else

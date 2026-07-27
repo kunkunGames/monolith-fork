@@ -134,7 +134,7 @@ Core server management and introspection.
 
 ### `monolith.discover`
 
-List available tool namespaces and their actions. Pass `namespace` to filter; pass `category` to narrow further (e.g. `"CommonUI"` inside `ui`). Pass both `namespace` and `action` with `mode="schema"` to fetch one exact action schema without dumping the whole namespace.
+List available tool namespaces and their actions. Pass `namespace` to filter; pass `category` to narrow further (e.g. `"CommonUI"` inside `ui`). Pass `filter` without `namespace` to find which namespaces own a capability while keeping the existing deterministic registry order. Pass both `namespace` and `action` with `mode="schema"` to fetch one exact action schema without dumping the whole namespace.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -142,13 +142,16 @@ List available tool namespaces and their actions. Pass `namespace` to filter; pa
 | `action` | string | optional | Filter to a specific action inside `namespace`; most useful with `mode="schema"` |
 | `category` | string | optional | Filter actions within the namespace by category |
 | `mode` | enum | optional | `summary`, `actions`, or `schema`. Default is summary-style namespace discovery unless a legacy caller requests the namespace payload. |
+| `detail` | boolean | optional | Inline full internal param schemas in action listings. Default: `false` |
+| `verbose` | boolean | optional | Backward-compatible alias for `detail=true` |
 | `planning_detail` | enum | optional | `compact` or `full`. Namespace action listings default to `compact`, which keeps planning status/count fields but omits heavy `precondition_details` and `planning_signals` arrays; pass `full` when auditing those arrays. |
 | `schema_detail` | enum | optional | `compact` or `full`. Namespace action listings default to `compact`, which uses terse action descriptions and omits `search_metadata` plus per-param descriptions from inline `params`; focused `mode="schema"` defaults to `full`. |
+| `filter` | string | optional | Case-insensitive substring over action name or full description. Without `namespace`, searches the full live registry. |
 | `if_version` | string | optional | Catalog version from a prior `monolith.status`/`monolith.discover` response. When it matches the live catalog, the response is a small `{status:"unchanged", catalog_version, total_actions, namespaces}` payload (<1KB) instead of the full listing. |
 | `offset` | integer | optional | Pagination offset applied after category/filter. |
 | `limit` | integer | optional | Pagination limit. Defaults to `50`; `0` is accepted for older callers but normalized to the default bounded page. Namespace listings with `detail=true` are capped to the default page size even when a larger limit is requested; continue with `next_cursor`/`offset`. |
 
-**Returns:** Namespace summaries, action rows, or exact param schemas depending on `mode`; every non-short-circuit response also carries top-level `catalog_version`. Namespace action listings expose `planning_detail` / `schema_detail` plus hints when compact projections are active. AI clients also receive MCP tool schemas in `tools/list` at session start, so callers should request focused schema mode when they need exact params for one action. Recommended session routine: call `monolith.status` once, remember `catalog_version`, and pass it as `if_version` on repeat discovers.
+**Returns:** Namespace summaries, action rows, or exact param schemas depending on `mode`; every non-short-circuit response also carries top-level `catalog_version`. A `filter` without `namespace` returns `matched_namespaces` (`namespace`, pre-pagination `match_count`) plus the paginated `actions` rows (`namespace`, `action`, bounded `description`, optional category/schema), `total`, and `next_offset` when more rows remain. Namespace counts are not relevance scores. Namespace action listings expose `planning_detail` / `schema_detail` plus hints when compact projections are active. AI clients also receive MCP tool schemas in `tools/list` at session start, so callers should request focused schema mode when they need exact params for one action. Recommended session routine: call `monolith.status` once, remember `catalog_version`, and pass it as `if_version` on repeat discovers.
 
 ---
 

@@ -237,16 +237,39 @@ bool FMonolithDiscoverDetailOptInTest::RunTest(const FString& /*Parameters*/)
 		// `params`. At least one monolith action (discover/update) has a schema, so
 		// assert at least one action obj carries params.
 		bool bAnyHasParams = false;
+		bool bDiscoverAdvertisesCrossNamespaceFilter = false;
 		for (const TSharedPtr<FJsonValue>& Val : *Arr)
 		{
 			const TSharedPtr<FJsonObject>* Obj = nullptr;
 			if (Val.IsValid() && Val->TryGetObject(Obj) && Obj && (*Obj)->HasField(TEXT("params")))
 			{
 				bAnyHasParams = true;
-				break;
+
+				FString ActionName;
+				if ((*Obj)->TryGetStringField(TEXT("action"), ActionName)
+					&& ActionName == TEXT("discover"))
+				{
+					const TSharedPtr<FJsonObject>* DiscoverParams = nullptr;
+					if ((*Obj)->TryGetObjectField(TEXT("params"), DiscoverParams)
+						&& DiscoverParams
+						&& DiscoverParams->IsValid())
+					{
+						// The cross-namespace path reuses the existing filter /
+						// offset / limit parameters. Assert the schema still
+						// carries exactly those, so the advertised contract
+						// cannot drift from the handler.
+						bDiscoverAdvertisesCrossNamespaceFilter =
+							(*DiscoverParams)->HasField(TEXT("filter"))
+							&& (*DiscoverParams)->HasField(TEXT("offset"))
+							&& (*DiscoverParams)->HasField(TEXT("limit"));
+					}
+				}
 			}
 		}
 		TestTrue(TEXT("detail mode inlines params on at least one action"), bAnyHasParams);
+		TestTrue(
+			TEXT("discover schema advertises the reused filter/offset/limit contract"),
+			bDiscoverAdvertisesCrossNamespaceFilter);
 	}
 
 	if (R.bSuccess && R.Result.IsValid())
@@ -784,7 +807,8 @@ bool FMonolithDiscoverPaginationTest::RunTest(const FString& /*Parameters*/)
 // and (b) the terse description with any trailing "..." removed is a prefix of
 // the full (detail) description. AND at least one action whose full description
 // exceeds HardCap must have a terse description ending in "..." (proves trimming
-// actually fires). HardCap mirrors MonolithTerseOneLineDescription (150).
+// actually fires). HardCap mirrors MonolithToolText::TerseOneLineDescription
+// (150).
 // ---------------------------------------------------------------------------
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FMonolithDiscoverTerseTrimInvariantTest,
