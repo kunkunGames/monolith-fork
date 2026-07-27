@@ -120,8 +120,22 @@ known to be stale.
 
 The primary `Plugins\Monolith` checkout and every dirty user-owned worktree were
 treated as read-only during integration. Temporary clean integration/build
-worktrees are removed only after the pushed `master` commit is verified from
-the remote. External `contrib/*` and `tumourlove/*` branches are not deleted.
+worktrees were removed only after the pushed `master` commit was verified from
+the remote.
+
+| Cleanup | Result |
+|---|---|
+| GitHub PRs | Closed superseded PRs `#1864`, `#1934`, `#1935`, `#1938`, `#1939`, and `#1940` after posting the consolidation disposition |
+| `origin` branches | Removed 69 branches belonging to closed PRs or this integration; retained only `master` and the recovery branch `p4-snapshot/monolith-ue58-divergent-20260620` |
+| Local branches | Removed 16 integrated, externally reproducible, or abandoned temporary branches and fast-forwarded local `master` to the verified remote |
+| Git worktrees | Removed 9 clean/temporary/corrupt worktrees, including the isolated build host, both integration baselines, and the final consolidation worktree after publication |
+| Preserved work | Kept 13 user-owned or active external-review worktrees, including every dirty checkout and a concurrently created Interchange worktree |
+| External remotes | Did not delete any `contrib/*` or `tumourlove/*` branch |
+
+The primary checkout accumulated additional concurrent user edits while this
+integration was running. Its final dirty inventory was therefore intentionally
+not reset to the earlier snapshot; no integration command wrote, staged,
+stashed, or cleaned those files.
 
 ## 7. Screenshot and Discord Upload
 
