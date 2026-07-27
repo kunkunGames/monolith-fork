@@ -29,6 +29,7 @@ namespace
 		FString LegacyPath;
 		bool bServerDefault = true;
 		bool bIndexingDefault = true;
+		bool bRetryUnreadableInputs = false;
 
 		bool MatchesRequest(
 			const FString& CurrentUserPath,
@@ -50,6 +51,10 @@ namespace
 	};
 
 	FActivationCache ActivationCache;
+
+#if WITH_DEV_AUTOMATION_TESTS
+	TSet<FString> ForcedUnreadableActivationFiles;
+#endif
 
 	enum class EActivationFeature : uint8
 	{
@@ -122,6 +127,14 @@ namespace
 		{
 			return EActivationFileState::Absent;
 		}
+
+#if WITH_DEV_AUTOMATION_TESTS
+		if (ForcedUnreadableActivationFiles.Contains(
+				FPaths::ConvertRelativePathToFull(FilePath)))
+		{
+			return EActivationFileState::Unreadable;
+		}
+#endif
 
 		// FConfigFile::Read returns void on both supported engines, so probe
 		// readability explicitly rather than inferring it from an empty parse.
@@ -277,7 +290,13 @@ namespace
 		return true;
 	}
 
-	FMonolithActivation ResolveActivationUnlocked(
+	struct FActivationResolution
+	{
+		FMonolithActivation Value;
+		bool bAnyInputUnreadable = false;
+	};
+
+	FActivationResolution ResolveActivationUnlocked(
 		const FString& UserPath,
 		const FString& LegacyPath,
 		bool bServerDefault,
@@ -296,11 +315,12 @@ namespace
 				TEXT("Monolith could not read the activation config at %s; failing closed with server and indexing disabled until it is readable"),
 				*UserPath);
 
-			FMonolithActivation FailedClosed;
-			FailedClosed.bServerEnabled = false;
-			FailedClosed.bIndexingEnabled = false;
-			FailedClosed.bServerUserSet = true;
-			FailedClosed.bIndexingUserSet = true;
+			FActivationResolution FailedClosed;
+			FailedClosed.Value.bServerEnabled = false;
+			FailedClosed.Value.bIndexingEnabled = false;
+			FailedClosed.Value.bServerUserSet = true;
+			FailedClosed.Value.bIndexingUserSet = true;
+			FailedClosed.bAnyInputUnreadable = true;
 			return FailedClosed;
 		}
 
@@ -312,6 +332,9 @@ namespace
 		FConfigFile LegacyConfig;
 		const EActivationFileState LegacyFileState = ReadConfigFile(LegacyPath, LegacyConfig);
 		const bool bLegacyFileExists = LegacyFileState != EActivationFileState::Absent;
+		FActivationResolution Resolution;
+		Resolution.bAnyInputUnreadable =
+			LegacyFileState == EActivationFileState::Unreadable;
 		if (LegacyFileState == EActivationFileState::Unreadable)
 		{
 			UE_LOG(LogMonolith, Warning,
@@ -323,7 +346,7 @@ namespace
 		const FParsedActivationValue LegacyIndexing =
 			ReadActivationValue(LegacyConfig, LegacyActivationSection, IndexingEnabledKey, LegacyPath);
 
-		FMonolithActivation Activation;
+		FMonolithActivation& Activation = Resolution.Value;
 		Activation.bServerEnabled = bServerDefault;
 		Activation.bIndexingEnabled = bIndexingDefault;
 
@@ -389,7 +412,7 @@ namespace
 		}
 
 		SyncCachedActivationFile(UserPath, UserConfig);
-		return Activation;
+		return Resolution;
 	}
 
 	FMonolithActivation GetCachedActivationUnlocked(
@@ -415,17 +438,20 @@ namespace
 		const FDateTime UserStamp = IFileManager::Get().GetTimeStamp(*UserPath);
 		const FDateTime LegacyStamp = IFileManager::Get().GetTimeStamp(*LegacyPath);
 		if (bRequestMatches
+			&& !Cache.bRetryUnreadableInputs
 			&& UserStamp == Cache.UserStamp
 			&& LegacyStamp == Cache.LegacyStamp)
 		{
 			return Cache.Value;
 		}
 
-		Cache.Value = ResolveActivationUnlocked(
+		const FActivationResolution Resolution = ResolveActivationUnlocked(
 			UserPath,
 			LegacyPath,
 			bServerDefault,
 			bIndexingDefault);
+		Cache.Value = Resolution.Value;
+		Cache.bRetryUnreadableInputs = Resolution.bAnyInputUnreadable;
 		Cache.UserStamp = IFileManager::Get().GetTimeStamp(*UserPath);
 		Cache.LegacyStamp = IFileManager::Get().GetTimeStamp(*LegacyPath);
 		Cache.UserPath = UserPath;
@@ -596,7 +622,7 @@ FMonolithActivation UMonolithSettings::LoadActivationForTests(
 		FPaths::ConvertRelativePathToFull(UserPath),
 		FPaths::ConvertRelativePathToFull(LegacyPath),
 		bServerDefault,
-		bIndexingDefault);
+		bIndexingDefault).Value;
 }
 
 FMonolithActivation UMonolithSettings::GetCachedActivationForTests(
@@ -640,5 +666,21 @@ bool UMonolithSettings::SetIndexingActivatedForTests(
 		EActivationFeature::Indexing,
 		bActivated,
 		OutError);
+}
+
+void UMonolithSettings::SetActivationFileUnreadableForTests(
+	const FString& FilePath,
+	bool bUnreadable)
+{
+	FScopeLock Lock(&ActivationConfigLock);
+	const FString FullPath = FPaths::ConvertRelativePathToFull(FilePath);
+	if (bUnreadable)
+	{
+		ForcedUnreadableActivationFiles.Add(FullPath);
+	}
+	else
+	{
+		ForcedUnreadableActivationFiles.Remove(FullPath);
+	}
 }
 #endif

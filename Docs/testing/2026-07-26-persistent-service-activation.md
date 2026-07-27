@@ -19,12 +19,12 @@
 | Independence | Changing server activation does not overwrite indexing activation, and vice versa. |
 | Invalid data | An explicit malformed boolean fails closed instead of silently using a permissive fallback. |
 | Migration | `Saved/Monolith/Activation.ini` is migrated once to the generated user config. |
-| Cache | Project-default changes participate in the cache key, in-process writes invalidate immediately, and external edits are revalidated within one second. Accepted activation keys replace stale dirty values before a later flush without replacing the fully merged `GConfig` hierarchy or losing unrelated settings. |
+| Cache | Project-default changes participate in the cache key, in-process writes invalidate immediately, and external edits are revalidated within one second. An unreadable input fails closed inside that interval but is retried afterward even if its timestamp is unchanged. Accepted activation keys replace stale dirty values before a later flush without replacing the fully merged `GConfig` hierarchy or losing unrelated settings. |
 | Server lifecycle | Start and stop commands persist the next-launch choice and apply it to the current process; a one-second cache plus a one-second ticker reconcile external activation edits within two seconds worst-case. |
 | Port ownership | A listener present before bind is rejected; this process must not report success or write a sentinel for another Editor's port. |
 | Shared listener cleanup | If the bounded post-bind probe reports failure after the UE listener bound, cleanup must unbind only Monolith routes, keep unrelated UE listeners running, and allow same-port retry through the retained router. |
 | Live port change | Restart must reject a different configured port before unbinding working routes or removing the owned sentinel. |
-| Sentinel cleanup | A transient deletion failure retains sentinel ownership so a later Stop or shutdown can retry; ownership clears only after deletion or confirmed absence. |
+| Sentinel cleanup | A transient deletion failure retains sentinel ownership so a later Stop or shutdown can retry; ownership clears only after deletion or confirmed absence. Startup removes a sentinel only when its numeric PID is the current or a no-longer-running process, and preserves a live foreign owner, malformed owner, or file replaced during validation. |
 | Index lifecycle | Start and stop commands gate automatic source and asset writers while preserving read access to existing databases. |
 | External writer deactivation | Revalidated `IndexingEnabled=False` state must block new source and asset writes even when process-local hooks were already enabled. |
 | Source writer start failure | Thread-creation and writer-open failures must broadcast completion so the subsystem clears indexing state and reopens the readable DB. |
@@ -108,7 +108,7 @@ Command:
 | PASS | `Found 5 automation tests based on 'Monolith.Activation'`. |
 | PASS | `Monolith.Activation.FailedServerProbePreservesSharedListeners` confirmed forced Monolith cleanup left an unrelated UE HTTP listener running, reused the retained same-port router, and rejected a live move to another port without unbinding the working old-port routes. |
 | PASS | `Monolith.Activation.OccupiedServerPort` completed with `Result={Success}`. |
-| PASS | `Monolith.Activation.PersistentState` confirmed accepted activation keys replace stale dirty values and survive a later flush while non-activation values from the merged cache remain intact; it also confirmed a failed sentinel deletion retains ownership for a successful retry and releases ownership only after deletion or confirmed absence. |
+| PASS | `Monolith.Activation.PersistentState` confirmed accepted activation keys replace stale dirty values and survive a later flush while non-activation values from the merged cache remain intact. It also confirmed failed owned-sentinel deletion remains retryable, startup reclamation distinguishes dead/current/live/malformed/replaced owners, and an unreadable activation input is retried after the one-second cache interval despite an unchanged timestamp. |
 | PASS | `Monolith.Activation.ProcessLocalReindexRejection` confirmed project and source re-index entry points return rejection instead of a false successful start and that both Settings eligibility predicates are false in the same process-local stopped state. |
 | PASS | `Monolith.Activation.SourceWriterOpenFailureRecovers` observed exactly one completion signal, a non-zero error count, and cleared running state. |
 | PASS | `**** TEST COMPLETE. EXIT CODE: 0 ****`; `ACTIVATION_AUTOMATION_EXIT=0`. |
@@ -271,12 +271,27 @@ Both rounds re-verified at their heads: UE 5.7 and UE 5.8 editor builds succeed 
 `Monolith.Activation` + `Monolith.Source` + `Monolith.Index` report 16/16 with 0
 failed and exit 0 on each.
 
-A related residue case is known and deliberately not changed here: because
-sentinel removal is ownership-gated, a sentinel left by a crashed process is not
-cleaned up by a later editor that starts with activation off, since that editor
-never takes ownership. Ownership gating is still correct — it is what stops one
-editor from deleting another live editor's sentinel — and a stale-sentinel reaper
-belongs with the startup path rather than this activation change.
+### Round 5
+
+The final review addressed two bounded-recovery defects without weakening the
+fail-closed contracts:
+
+| Defect | Fix |
+|---|---|
+| An unreadable activation file cached the failed-closed value with its unchanged timestamp, so the timestamp fast path could preserve both services as disabled for the rest of the editor process after the file became readable | Cache resolutions now carry an unreadable-input retry bit. The normal one-second interval still bounds disk probes, but the next revalidation bypasses the timestamp fast path until a read succeeds |
+| A crashed editor could leave `.monolith_running`, and a later editor starting with activation off never took ownership and therefore never removed it | Non-commandlet startup validates the recorded numeric PID before activation is evaluated. It removes only a current-process reload or dead-process sentinel, reads the file again before deletion, and preserves live foreign, malformed, or concurrently replaced files |
+
+`Monolith.Activation.PersistentState` uses deterministic fixtures for both
+contracts: a readable config is temporarily forced through the unreadable path
+without changing its timestamp, and sentinel liveness predicates cover dead,
+live, same-process reload, malformed-owner, and replacement-race cases.
+
+| Gate | Result | Evidence |
+|---|---|---|
+| UE 5.7 protected editor build | PASS | `D:\P4\MonolithPR114ReviewUE57Host`; recompiled `MonolithSettings.cpp`, `MonolithCoreModule.cpp`, and `MonolithSettingsActivationTests.cpp`, relinked `UnrealEditor-MonolithCore.dll`, `Result: Succeeded`, wrapper exit 0 |
+| UE 5.7 focused automation | PASS, 6/6 | `D:\P4\MonolithPR114ReviewUE57Host\Saved\Automation\PR114ReviewRound5FinalUE57\index.json`; log `Saved\Logs\PR114ReviewRound5FinalUE57.log`; 0 failed, 0 warnings, 0 errors, process exit 0 |
+| UE 5.8 protected editor build | PASS | Separate exact source-code snapshot/output host `D:\P4\MonolithPR114ReviewUE58Host`; full 436-action compile/link reported `Result: Succeeded`, followed by protected-wrapper exit 0 |
+| UE 5.8 focused automation | PASS, 6/6 | `D:\P4\MonolithPR114ReviewUE58Host\Saved\Automation\PR114ReviewRound5FinalUE58\index.json`; log `Saved\Logs\PR114ReviewRound5FinalUE58.log`; 0 failed, 0 warnings, 0 errors, process exit 0 |
 
 ---
 

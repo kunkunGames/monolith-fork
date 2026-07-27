@@ -386,6 +386,114 @@ bool FMonolithSettingsActivationPersistenceTest::RunTest(const FString& Paramete
 		TEXT("successful sentinel deletion releases ownership"),
 		bOwnsSentinel);
 
+	const FString StaleSentinelFile =
+		FPaths::Combine(TestDirectory, TEXT("stale-sentinel"));
+	TestTrue(
+		TEXT("stale sentinel fixture writes"),
+		FFileHelper::SaveStringToFile(
+			TEXT("{\"pid\":424242,\"port\":9316}"),
+			*StaleSentinelFile));
+	TestEqual(
+		TEXT("a sentinel whose recorded process exited is reclaimed"),
+		MonolithSentinelFile::ReclaimStale(
+			StaleSentinelFile,
+			1234,
+			[](uint32 ProcessId)
+			{
+				return ProcessId != 424242;
+			}),
+		MonolithSentinelFile::EReclaimResult::Removed);
+	TestFalse(
+		TEXT("reclaimed stale sentinel is absent"),
+		FPaths::FileExists(StaleSentinelFile));
+
+	const FString LiveSentinelFile =
+		FPaths::Combine(TestDirectory, TEXT("live-sentinel"));
+	TestTrue(
+		TEXT("live sentinel fixture writes"),
+		FFileHelper::SaveStringToFile(
+			TEXT("{\"pid\":424243,\"port\":9316}"),
+			*LiveSentinelFile));
+	TestEqual(
+		TEXT("a sentinel owned by another live process is preserved"),
+		MonolithSentinelFile::ReclaimStale(
+			LiveSentinelFile,
+			1234,
+			[](uint32 ProcessId)
+			{
+				return ProcessId == 424243;
+			}),
+		MonolithSentinelFile::EReclaimResult::LiveOwner);
+	TestTrue(
+		TEXT("live-owner sentinel still exists"),
+		FPaths::FileExists(LiveSentinelFile));
+
+	const FString ReplacedSentinelFile =
+		FPaths::Combine(TestDirectory, TEXT("replaced-sentinel"));
+	TestTrue(
+		TEXT("replace-race sentinel fixture writes"),
+		FFileHelper::SaveStringToFile(
+			TEXT("{\"pid\":424244,\"port\":9316}"),
+			*ReplacedSentinelFile));
+	TestEqual(
+		TEXT("a sentinel replaced during liveness validation is preserved"),
+		MonolithSentinelFile::ReclaimStale(
+			ReplacedSentinelFile,
+			1234,
+			[&ReplacedSentinelFile](uint32 ProcessId)
+			{
+				if (ProcessId == 424244)
+				{
+					FFileHelper::SaveStringToFile(
+						TEXT("{\"pid\":424245,\"port\":9317}"),
+						*ReplacedSentinelFile);
+				}
+				return false;
+			}),
+		MonolithSentinelFile::EReclaimResult::OwnerChanged);
+	TestTrue(
+		TEXT("replace-race sentinel still exists"),
+		FPaths::FileExists(ReplacedSentinelFile));
+
+	const FString ReloadSentinelFile =
+		FPaths::Combine(TestDirectory, TEXT("reload-sentinel"));
+	TestTrue(
+		TEXT("same-process reload sentinel fixture writes"),
+		FFileHelper::SaveStringToFile(
+			TEXT("{\"pid\":1234,\"port\":9316}"),
+			*ReloadSentinelFile));
+	TestEqual(
+		TEXT("an unowned sentinel from this process is reclaimed after module reload"),
+		MonolithSentinelFile::ReclaimStale(
+			ReloadSentinelFile,
+			1234,
+			[](uint32)
+			{
+				return true;
+			}),
+		MonolithSentinelFile::EReclaimResult::Removed);
+
+	const FString InvalidSentinelFile =
+		FPaths::Combine(TestDirectory, TEXT("invalid-sentinel"));
+	TestTrue(
+		TEXT("invalid sentinel fixture writes"),
+		FFileHelper::SaveStringToFile(
+			TEXT("{\"pid\":\"unknown\",\"port\":9316}"),
+			*InvalidSentinelFile));
+	TestEqual(
+		TEXT("a sentinel without a verifiable numeric owner is preserved"),
+		MonolithSentinelFile::ReclaimStale(
+			InvalidSentinelFile,
+			1234,
+			[](uint32)
+			{
+				return false;
+			}),
+		MonolithSentinelFile::EReclaimResult::InvalidFile);
+	TestTrue(
+		TEXT("invalid-owner sentinel is not deleted speculatively"),
+		FPaths::FileExists(InvalidSentinelFile));
+
 	bool bOwnsConcurrentlyRemovedSentinel = true;
 	TestEqual(
 		TEXT("confirmed absence after a failed delete releases ownership"),
@@ -541,6 +649,83 @@ bool FMonolithSettingsActivationPersistenceTest::RunTest(const FString& Paramete
 				&& !bFlushedIndexingEnabled);
 	}
 
+	const FString TransientUnreadableUserFile = FPaths::Combine(
+		TestDirectory,
+		TEXT("TransientUnreadable"),
+		TEXT("Monolith.ini"));
+	const FString TransientUnreadableLegacyFile = FPaths::Combine(
+		TestDirectory,
+		TEXT("TransientUnreadable"),
+		TEXT("LegacyActivation.ini"));
+	TestTrue(
+		TEXT("transient-unreadable activation fixture directory exists"),
+		IFileManager::Get().MakeDirectory(
+			*FPaths::GetPath(TransientUnreadableUserFile),
+			true));
+	TestTrue(
+		TEXT("transient-unreadable activation fixture writes"),
+		FFileHelper::SaveStringToFile(
+			ExternalContents,
+			*TransientUnreadableUserFile));
+	UMonolithSettings::SetActivationFileUnreadableForTests(
+		TransientUnreadableUserFile,
+		true);
+	ON_SCOPE_EXIT
+	{
+		UMonolithSettings::SetActivationFileUnreadableForTests(
+			TransientUnreadableUserFile,
+			false);
+	};
+
+	AddExpectedError(
+		TEXT("Monolith could not read the activation config"),
+		EAutomationExpectedErrorFlags::Contains,
+		1);
+	const FMonolithActivation CachedUnreadableInput =
+		UMonolithSettings::GetCachedActivationForTests(
+			TransientUnreadableUserFile,
+			TransientUnreadableLegacyFile,
+			true,
+			true,
+			30.0);
+	TestFalse(
+		TEXT("an unreadable user activation file fails the server closed"),
+		CachedUnreadableInput.bServerEnabled);
+	TestFalse(
+		TEXT("an unreadable user activation file fails indexing closed"),
+		CachedUnreadableInput.bIndexingEnabled);
+
+	UMonolithSettings::SetActivationFileUnreadableForTests(
+		TransientUnreadableUserFile,
+		false);
+	const FMonolithActivation CachedBeforeUnreadableRetryWindow =
+		UMonolithSettings::GetCachedActivationForTests(
+			TransientUnreadableUserFile,
+			TransientUnreadableLegacyFile,
+			true,
+			true,
+			30.5);
+	TestFalse(
+		TEXT("unreadable-input retries remain bounded by the cache interval"),
+		CachedBeforeUnreadableRetryWindow.bServerEnabled);
+	TestFalse(
+		TEXT("bounded unreadable-input retries keep indexing failed closed"),
+		CachedBeforeUnreadableRetryWindow.bIndexingEnabled);
+
+	const FMonolithActivation CachedAfterUnreadableRetryWindow =
+		UMonolithSettings::GetCachedActivationForTests(
+			TransientUnreadableUserFile,
+			TransientUnreadableLegacyFile,
+			true,
+			true,
+			31.1);
+	TestTrue(
+		TEXT("a readable activation file is retried despite an unchanged timestamp"),
+		CachedAfterUnreadableRetryWindow.bServerEnabled);
+	TestFalse(
+		TEXT("the successful retry reads the persisted indexing value"),
+		CachedAfterUnreadableRetryWindow.bIndexingEnabled);
+
 	return true;
 }
 
@@ -593,10 +778,15 @@ bool FMonolithOccupiedServerPortTest::RunTest(const FString& Parameters)
 	}
 
 	// Telling Monolith's own retained listener apart from a foreign owner costs
-	// one rejected bind through FHttpServerModule, which logs at Error level.
-	// It only happens on the path that was going to fail anyway.
+	// one rejected bind through FHttpServerModule. UE records both the listener
+	// bind error and the module-level start warning. They happen only on the
+	// path that was going to fail, and this test asserts that exact failure.
 	AddExpectedError(
 		TEXT("HttpListener unable to bind"),
+		EAutomationExpectedErrorFlags::Contains,
+		1);
+	AddExpectedError(
+		TEXT("failed to start listening on port"),
 		EAutomationExpectedErrorFlags::Contains,
 		1);
 	AddExpectedError(

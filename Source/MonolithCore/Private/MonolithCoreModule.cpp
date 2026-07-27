@@ -47,6 +47,11 @@ void FMonolithCoreModule::StartupModule()
 		return;
 	}
 
+	// A crashed or reloaded editor can leave the fixed-path readiness marker
+	// behind. Reclaim it only when its recorded process is this process or is
+	// no longer alive; a sentinel owned by another live editor is preserved.
+	RemoveSentinelFile();
+
 	// Register core discovery/status tools
 	RegisterCoreTools();
 
@@ -236,7 +241,9 @@ void FMonolithCoreModule::WriteSentinelFile(int32 Port)
 void FMonolithCoreModule::RemoveSentinelFile()
 {
 	const FString Path = GetSentinelFilePath();
-	switch (MonolithSentinelFile::RemoveOwned(Path, bOwnsSentinelFile))
+	const MonolithSentinelFile::ERemoveResult OwnedRemoval =
+		MonolithSentinelFile::RemoveOwned(Path, bOwnsSentinelFile);
+	switch (OwnedRemoval)
 	{
 	case MonolithSentinelFile::ERemoveResult::Removed:
 		UE_LOG(LogMonolith, Log, TEXT("Sentinel file removed: %s"), *Path);
@@ -244,8 +251,39 @@ void FMonolithCoreModule::RemoveSentinelFile()
 	case MonolithSentinelFile::ERemoveResult::Failed:
 		UE_LOG(LogMonolith, Warning, TEXT("Failed to remove sentinel file: %s"), *Path);
 		return;
-	case MonolithSentinelFile::ERemoveResult::NotOwned:
 	case MonolithSentinelFile::ERemoveResult::AlreadyAbsent:
+		return;
+	case MonolithSentinelFile::ERemoveResult::NotOwned:
+	default:
+		break;
+	}
+
+	switch (MonolithSentinelFile::ReclaimStale(
+		Path,
+		FPlatformProcess::GetCurrentProcessId(),
+		[](uint32 ProcessId)
+		{
+			return FPlatformProcess::IsApplicationRunning(ProcessId);
+		}))
+	{
+	case MonolithSentinelFile::EReclaimResult::Removed:
+		UE_LOG(LogMonolith, Log, TEXT("Stale sentinel file removed: %s"), *Path);
+		return;
+	case MonolithSentinelFile::EReclaimResult::InvalidFile:
+		UE_LOG(LogMonolith, Warning,
+			TEXT("Sentinel file has no verifiable process owner and was preserved: %s"),
+			*Path);
+		return;
+	case MonolithSentinelFile::EReclaimResult::OwnerChanged:
+		UE_LOG(LogMonolith, Verbose,
+			TEXT("Sentinel owner changed during stale-file validation; preserving: %s"),
+			*Path);
+		return;
+	case MonolithSentinelFile::EReclaimResult::Failed:
+		UE_LOG(LogMonolith, Warning, TEXT("Failed to remove stale sentinel file: %s"), *Path);
+		return;
+	case MonolithSentinelFile::EReclaimResult::AlreadyAbsent:
+	case MonolithSentinelFile::EReclaimResult::LiveOwner:
 	default:
 		return;
 	}

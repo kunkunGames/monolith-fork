@@ -378,5 +378,8 @@ public:
 		const FString& UserPath,
 		bool bActivated,
 		FString* OutError = nullptr);
+	static void SetActivationFileUnreadableForTests(
+		const FString& FilePath,
+		bool bUnreadable);
 #endif
 };
