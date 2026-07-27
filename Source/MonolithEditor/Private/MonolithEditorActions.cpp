@@ -7509,61 +7509,10 @@ FMonolithActionResult FMonolithEditorActions::HandleLoadLevel(const TSharedPtr<F
 		return ErrorWithMapLoadDisposition(LoadResult, LoadResult.Error);
 	}
 
-	FString DirtyPolicy;
-	Params->TryGetStringField(TEXT("dirty_policy"), DirtyPolicy);
-	if (!DirtyPolicy.IsEmpty() && DirtyPolicy != TEXT("refuse") && DirtyPolicy != TEXT("discard"))
-	{
-		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("Invalid dirty_policy '%s' — expected 'refuse' (default) or 'discard'."), *DirtyPolicy));
-	}
-
-	// Dirty-current-map guard (fail-closed): LoadLevel discards the current world
-	// WITHOUT a save prompt (it runs unattended), so unsaved changes to the current
-	// map or its external actor packages would be lost silently. Refuse unless the
-	// caller explicitly passes dirty_policy:"discard". Checked before the PIE guard
-	// so a refusal has no side effects (no PIE teardown).
-	TArray<FString> DirtyWorldPackages;
-	CollectDirtyCurrentWorldPackages(DirtyWorldPackages);
-	if (DirtyWorldPackages.Num() > 0 && DirtyPolicy != TEXT("discard"))
-	{
-		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("Refusing load_level: the current level has unsaved changes that would be discarded ")
-			TEXT("silently (LoadLevel runs unattended — no save prompt). Dirty packages: [%s]. ")
-			TEXT("Save them (save_packages) or pass dirty_policy:\"discard\" to lose them explicitly."),
-			*FString::Join(DirtyWorldPackages, TEXT(", "))));
-	}
-
-	// #6 world-leak guard: never LoadLevel while a PIE world is still resident — the
-	// deferred EndPlayMap teardown would assert "World Memory Leaks" in EditorDestroyWorld.
-	FString PieGuardError;
-	if (!EnsureNoResidentPieWorldBeforeMapLoad(PieGuardError))
-	{
-		return FMonolithActionResult::Error(PieGuardError);
-	}
-
-	// Second world-leak class: a stale rooted in-memory copy of the TARGET world (from a
-	// scripting load) survives the purge and fatals the editor. Refuse instead.
-	FString StaleWorldError;
-	if (!EnsureNoStaleResidentTargetWorld(Path, StaleWorldError))
-	{
-		return FMonolithActionResult::Error(StaleWorldError);
-	}
-
-	const bool bLoaded = LevelEd->LoadLevel(Path);
-
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("ok"), LoadResult.bLoaded);
 	Result->SetBoolField(TEXT("loaded"), LoadResult.bLoaded);
 	Result->SetStringField(TEXT("path"), Path);
-	if (DirtyWorldPackages.Num() > 0)
-	{
-		TArray<TSharedPtr<FJsonValue>> Discarded;
-		for (const FString& PackageName : DirtyWorldPackages)
-		{
-			Discarded.Add(MakeShared<FJsonValueString>(PackageName));
-		}
-		Result->SetArrayField(TEXT("discarded_dirty_packages"), Discarded);
-	}
 	Result->SetStringField(TEXT("message"),
 		LoadResult.bLoaded
 			? FString::Printf(TEXT("Loaded level '%s'."), *Path)

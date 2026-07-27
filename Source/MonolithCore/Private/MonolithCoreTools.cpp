@@ -13,6 +13,7 @@
 #include "MonolithProjectionUtils.h"
 #include "MonolithResourceRegistry.h"
 #include "MonolithSettings.h"
+#include "MonolithToolText.h"
 #include "MonolithToolProfileManager.h"
 #include "MonolithUpdateSubsystem.h"
 #include "Dom/JsonValue.h"
@@ -88,65 +89,6 @@ static const TArray<FKnownOptionalModule>& GetKnownOptionalModules()
 		}
 	};
 	return Modules;
-}
-
-static FString MonolithTerseOneLineDescription(const FString& Full)
-{
-	const int32 HardCap = 150;
-	const int32 MinSentence = 25;
-	const int32 Len = Full.Len();
-
-	int32 SentenceEnd = MAX_int32;
-	for (int32 Index = MinSentence; Index < Len; ++Index)
-	{
-		const TCHAR Ch = Full[Index];
-		if (Ch == TEXT('.') || Ch == TEXT('!') || Ch == TEXT('?'))
-		{
-			const bool bFollowedBySpaceOrEnd = (Index + 1 >= Len) || FChar::IsWhitespace(Full[Index + 1]);
-			if (bFollowedBySpaceOrEnd)
-			{
-				SentenceEnd = Index + 1;
-				break;
-			}
-		}
-	}
-
-	int32 Cut = FMath::Min(SentenceEnd, HardCap);
-	if (Cut >= Len)
-	{
-		return Full;
-	}
-
-	if (Cut == HardCap && !FChar::IsWhitespace(Full[Cut]))
-	{
-		int32 WordBoundary = Cut;
-		while (WordBoundary > 0 && !FChar::IsWhitespace(Full[WordBoundary - 1]))
-		{
-			--WordBoundary;
-		}
-		if (WordBoundary > 0)
-		{
-			Cut = WordBoundary;
-		}
-	}
-
-	FString Trimmed = Full.Left(Cut);
-	int32 Tail = Trimmed.Len();
-	while (Tail > 0)
-	{
-		const TCHAR Ch = Trimmed[Tail - 1];
-		if (FChar::IsWhitespace(Ch) || Ch == TEXT('.') || Ch == TEXT('!') || Ch == TEXT('?'))
-		{
-			--Tail;
-		}
-		else
-		{
-			break;
-		}
-	}
-	Trimmed.LeftInline(Tail);
-	Trimmed += TEXT("...");
-	return Trimmed;
 }
 
 static bool IsKnownOfflineAction(const FMonolithActionInfo& ActionInfo)
@@ -725,7 +667,7 @@ static TSharedPtr<FJsonObject> MakeDiscoverActionRow(
 	ActionObj->SetStringField(TEXT("action"), ActionInfo.Action);
 	ActionObj->SetStringField(TEXT("description"), SchemaDetail == EMonolithSchemaDetail::Full
 		? ActionInfo.Description
-		: MonolithTerseOneLineDescription(ActionInfo.Description));
+		: MonolithToolText::TerseOneLineDescription(ActionInfo.Description));
 	ActionObj->SetObjectField(TEXT("execution_policy"), ActionInfo.ExecutionPolicy.ToJson());
 	AddActionPolicyFields(ActionObj, ActionInfo);
 	if (!ActionInfo.Category.IsEmpty())
@@ -2360,7 +2302,16 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 	FString FilterCategory;
 	FString Mode;
 	FString IfVersion;
+	FString Filter;
 	FString ErrMsg;
+	bool bDetail = false;
+	constexpr int32 DefaultLimit = 50;
+	constexpr int32 MaxLimit = 1000;
+	int32 Offset = 0;
+	int32 RequestedLimit = DefaultLimit;
+	int32 Limit = DefaultLimit;
+	bool bNormalizedLimit = false;
+	bool bProjectionCappedLimit = false;
 	if (Params.IsValid())
 	{
 		if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("namespace"), FilterNamespace, ErrMsg, TEXT(""), true))
@@ -2387,11 +2338,79 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 		{
 			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
 		}
+
+		if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("filter"), Filter, ErrMsg))
+		{
+			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+		}
+
+		if (!MonolithParamUtils::GetOptionalBoolParam(Params, TEXT("detail"), bDetail, ErrMsg))
+		{
+			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (!bDetail &&
+			!MonolithParamUtils::GetOptionalBoolParam(Params, TEXT("verbose"), bDetail, ErrMsg))
+		{
+			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+		}
+
+		const TSharedPtr<FJsonValue> OffsetField = Params->TryGetField(TEXT("offset"));
+		if (OffsetField.IsValid())
+		{
+			double RawOffset = 0;
+			if (!OffsetField->TryGetNumber(RawOffset) || FMath::RoundToDouble(RawOffset) != RawOffset)
+			{
+				return FMonolithActionResult::Error(
+					TEXT("Parameter 'offset' must be an integer"),
+					FMonolithJsonUtils::ErrInvalidParams);
+			}
+			Offset = static_cast<int32>(RawOffset);
+			if (Offset < 0 || Offset > 1000000)
+			{
+				return FMonolithActionResult::Error(
+					TEXT("Parameter 'offset' must be between 0 and 1000000"),
+					FMonolithJsonUtils::ErrInvalidParams);
+			}
+		}
+
+		const TSharedPtr<FJsonValue> LimitField = Params->TryGetField(TEXT("limit"));
+		if (LimitField.IsValid())
+		{
+			double RawLimit = 0;
+			if (!LimitField->TryGetNumber(RawLimit) || FMath::RoundToDouble(RawLimit) != RawLimit)
+			{
+				return FMonolithActionResult::Error(
+					TEXT("Parameter 'limit' must be an integer"),
+					FMonolithJsonUtils::ErrInvalidParams);
+			}
+			RequestedLimit = static_cast<int32>(RawLimit);
+			if (RequestedLimit <= 0)
+			{
+				Limit = DefaultLimit;
+				bNormalizedLimit = true;
+			}
+			else if (RequestedLimit > MaxLimit)
+			{
+				return FMonolithActionResult::Error(
+					FString::Printf(TEXT("Parameter 'limit' cannot exceed %d"), MaxLimit),
+					FMonolithJsonUtils::ErrInvalidParams);
+			}
+			else
+			{
+				Limit = RequestedLimit;
+			}
+		}
+		if (bDetail && Limit > DefaultLimit)
+		{
+			Limit = DefaultLimit;
+			bProjectionCappedLimit = true;
+		}
 	}
 
 	FilterNamespace.TrimStartAndEndInline();
 	FilterAction.TrimStartAndEndInline();
 	FilterCategory.TrimStartAndEndInline();
+	Filter.TrimStartAndEndInline();
 	Mode.TrimStartAndEndInline();
 	Mode.ToLowerInline();
 
@@ -2433,8 +2452,6 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 		Unchanged->SetArrayField(TEXT("namespaces"), UnchangedNamespaces);
 		return FMonolithActionResult::Success(Unchanged);
 	}
-	Filter.TrimStartAndEndInline();
-
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("catalog_version"), CatalogVersion);
 
@@ -2551,22 +2568,6 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 			}
 		}
 
-		// Terse-by-default: param schemas are omitted unless detail (canonical) or
-		// verbose (alias) is set. Schemas are fetched lazily via describe_query
-		// action_schema, or inlined for the whole namespace with detail=true.
-		bool bDetail = false;
-		if (!MonolithParamUtils::GetOptionalBoolParam(Params, TEXT("detail"), bDetail, ErrMsg))
-		{
-			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
-		}
-		if (!bDetail)
-		{
-			if (!MonolithParamUtils::GetOptionalBoolParam(Params, TEXT("verbose"), bDetail, ErrMsg))
-			{
-				return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
-			}
-		}
-
 		FString PlanningDetailText = FilterAction.IsEmpty() ? TEXT("compact") : TEXT("full");
 		if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("planning_detail"), PlanningDetailText, ErrMsg, PlanningDetailText, true))
 		{
@@ -2603,11 +2604,6 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 
 		// Optional substring filter on action name OR description (case-insensitive).
 		// Applied AFTER the category filter, BEFORE pagination.
-		FString Filter;
-		if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("filter"), Filter, ErrMsg))
-		{
-			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
-		}
 		if (!Filter.IsEmpty())
 		{
 			Actions = Actions.FilterByPredicate(MatchesFilter);
@@ -2617,59 +2613,6 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 		// send limit=0 as a full-list sentinel; accept it but normalize to the
 		// default page to prevent large registry dumps.
 		const int32 TotalCount = Actions.Num();
-		constexpr int32 DefaultLimit = 50;
-		constexpr int32 MaxLimit = 1000;
-		int32 Offset = 0;
-		int32 RequestedLimit = DefaultLimit;
-		int32 EffectiveLimit = DefaultLimit;
-		bool bNormalizedLimit = false;
-		bool bProjectionCappedLimit = false;
-
-		const TSharedPtr<FJsonValue> OffsetField = Params->TryGetField(TEXT("offset"));
-		if (OffsetField.IsValid())
-		{
-			double RawOffset = 0;
-			if (!OffsetField->TryGetNumber(RawOffset) || FMath::RoundToDouble(RawOffset) != RawOffset)
-			{
-				return FMonolithActionResult::Error(TEXT("Parameter 'offset' must be an integer"), FMonolithJsonUtils::ErrInvalidParams);
-			}
-			Offset = static_cast<int32>(RawOffset);
-			if (Offset < 0 || Offset > 1000000)
-			{
-				return FMonolithActionResult::Error(TEXT("Parameter 'offset' must be between 0 and 1000000"), FMonolithJsonUtils::ErrInvalidParams);
-			}
-		}
-
-		const TSharedPtr<FJsonValue> LimitField = Params->TryGetField(TEXT("limit"));
-		if (LimitField.IsValid())
-		{
-			double RawLimit = 0;
-			if (!LimitField->TryGetNumber(RawLimit) || FMath::RoundToDouble(RawLimit) != RawLimit)
-			{
-				return FMonolithActionResult::Error(TEXT("Parameter 'limit' must be an integer"), FMonolithJsonUtils::ErrInvalidParams);
-			}
-			RequestedLimit = static_cast<int32>(RawLimit);
-			if (RequestedLimit <= 0)
-			{
-				EffectiveLimit = DefaultLimit;
-				bNormalizedLimit = true;
-			}
-			else if (RequestedLimit > MaxLimit)
-			{
-				return FMonolithActionResult::Error(FString::Printf(TEXT("Parameter 'limit' cannot exceed %d"), MaxLimit), FMonolithJsonUtils::ErrInvalidParams);
-			}
-			else
-			{
-				EffectiveLimit = RequestedLimit;
-			}
-		}
-		if (bDetail && EffectiveLimit > DefaultLimit)
-		{
-			EffectiveLimit = DefaultLimit;
-			bProjectionCappedLimit = true;
-		}
-
-		const int32 Limit = EffectiveLimit;
 		const int32 SliceStart = FMath::Clamp(Offset, 0, TotalCount);
 		const int32 SliceEnd = FMath::Clamp(SliceStart + Limit, SliceStart, TotalCount);
 
@@ -2711,7 +2654,9 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 
 				TSharedPtr<FJsonObject> ActionObj = MakeShared<FJsonObject>();
 				ActionObj->SetStringField(TEXT("action"), ActionInfo.Action);
-				ActionObj->SetStringField(TEXT("description"), MonolithTerseOneLineDescription(ActionInfo.Description));
+				ActionObj->SetStringField(
+					TEXT("description"),
+					MonolithToolText::TerseOneLineDescription(ActionInfo.Description));
 				ActionObj->SetObjectField(TEXT("execution_policy"), ActionInfo.ExecutionPolicy.ToJson());
 				AddActionPolicyFields(ActionObj, ActionInfo);
 				AddPlanningFields(ActionObj, ActionInfo, PlanningDetail);

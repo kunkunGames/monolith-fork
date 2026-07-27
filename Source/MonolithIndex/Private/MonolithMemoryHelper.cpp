@@ -76,7 +76,9 @@ void FMonolithMemoryHelper::ForceGarbageCollection(bool bFullPurge)
 	}
 }
 
-bool FMonolithMemoryHelper::TryUnloadPackage(UObject* Asset, bool bWasAlreadyLoaded)
+bool FMonolithMemoryHelper::TryUnloadPackage(
+	UObject* Asset,
+	const FMonolithPackageResidency& Residency)
 {
 	if (!Asset)
 	{
@@ -88,17 +90,6 @@ bool FMonolithMemoryHelper::TryUnloadPackage(UObject* Asset, bool bWasAlreadyLoa
 		// externally-referenced object usually cannot collect it, but permanently
 		// strands the live object without its save-safety flag (SavePackage guard
 		// 0x10000002). Only release objects loaded by this indexing operation.
-		return false;
-	}
-
-	// Residency guard (issue #81): if the asset/package was already resident BEFORE
-	// this indexing pass loaded it, it is referenced elsewhere (e.g. an open editor
-	// tab, or a package pinned by the startup map). Clearing RF_Standalone on such an
-	// object does not unload it — it survives GC because of the external reference —
-	// but leaves it permanently stripped, so File->Save later trips the engine's
-	// data-loss guard (0x10000002). Only strip objects THIS pass brought in.
-	if (bWasAlreadyLoaded)
-	{
 		return false;
 	}
 

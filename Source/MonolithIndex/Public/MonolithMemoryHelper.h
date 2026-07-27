@@ -68,12 +68,12 @@ struct MONOLITHINDEX_API FMonolithMemoryHelper
 	 * Attempt to unload the package containing the given asset.
 	 * Marks the package for GC - actual unload happens on next GC cycle.
 	 * @param Asset The asset whose package should be unloaded
-	 * @param bWasAlreadyLoaded true if the asset/package was resident BEFORE this
-	 *        indexing pass loaded it. When true this is a no-op: the object is
-	 *        referenced elsewhere and stripping RF_Standalone would strand it (issue #81).
+	 * @param Residency package residency captured before the indexing load.
+	 *        Pre-resident packages are owned by another editor workflow and must
+	 *        retain RF_Standalone.
 	 * @return true if the package was successfully marked for unload
 	 */
-	static bool TryUnloadPackage(UObject* Asset, bool bWasAlreadyLoaded);
+	static bool TryUnloadPackage(UObject* Asset, const FMonolithPackageResidency& Residency);
 
 	/**
 	 * Yield to the editor to allow UI updates and prevent freezing.

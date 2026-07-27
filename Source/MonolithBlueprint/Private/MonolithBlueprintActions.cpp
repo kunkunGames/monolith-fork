@@ -415,48 +415,6 @@ FMonolithActionResult FMonolithBlueprintActions::HandleListGraphs(const TSharedP
 		GraphsArr.Add(MakeShared<FJsonValueObject>(GraphObject));
 	}
 
-	// Nested graphs (collapsed-graph composites, macro-instance internals) live
-	// in SubGraphs, not the top-level arrays. Without them, "graph not listed"
-	// reads as "does not exist" and reference audits go blind to everything
-	// inside a collapsed graph. Append the ones not already listed.
-	{
-		TSet<const UEdGraph*> Listed;
-		auto Collect = [&Listed](const TArray<TObjectPtr<UEdGraph>>& Arr)
-		{
-			for (const auto& G : Arr) { if (G) { Listed.Add(G); } }
-		};
-		Collect(BP->UbergraphPages);
-		Collect(BP->FunctionGraphs);
-		Collect(BP->MacroGraphs);
-		Collect(BP->DelegateSignatureGraphs);
-		for (const FBPInterfaceDescription& Iface : BP->ImplementedInterfaces)
-		{
-			Collect(Iface.Graphs);
-		}
-
-		TArray<UEdGraph*> AllGraphs;
-		BP->GetAllGraphs(AllGraphs);
-		for (UEdGraph* G : AllGraphs)
-		{
-			if (!G || Listed.Contains(G)) continue;
-			Listed.Add(G); // GetAllGraphs can surface a graph more than once
-			TSharedPtr<FJsonObject> GObj = MakeShared<FJsonObject>();
-			GObj->SetStringField(TEXT("name"), G->GetName());
-			GObj->SetStringField(TEXT("type"), TEXT("subgraph"));
-			GObj->SetNumberField(TEXT("node_count"), G->Nodes.Num());
-			// Walk the full outer chain: a composite's BoundGraph is outered to
-			// the K2Node_Composite NODE, not the parent graph directly.
-			for (const UObject* Outer = G->GetOuter(); Outer; Outer = Outer->GetOuter())
-			{
-				if (const UEdGraph* ParentGraph = Cast<UEdGraph>(Outer))
-				{
-					GObj->SetStringField(TEXT("parent_graph"), ParentGraph->GetName());
-					break;
-				}
-			}
-			GraphsArr.Add(MakeShared<FJsonValueObject>(GObj));
-		}
-	}
 	Root->SetArrayField(TEXT("graphs"), GraphsArr);
 
 	return FMonolithActionResult::Success(Root);
