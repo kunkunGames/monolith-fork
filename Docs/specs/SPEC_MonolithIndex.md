@@ -99,6 +99,8 @@ Events are batched into a pending queue and drained on a 2-second timer tick. Th
 
 `monolith_reindex()` defaults to incremental mode (Layer 1 logic). Passing `force=true` triggers a full wipe-and-rebuild: drops all table data, re-enumerates, and re-indexes every asset. Both forms require active indexing and `bEnableIndex=true`; while durably stopped they return `indexing_inactive`. The underlying full/incremental entry points return acceptance, so a process-local stop after a persistence failure or another start failure returns `reindex_not_started` rather than reporting a false start. `MonolithCore` reads that acceptance through reflection and has no compile-time dependency on `MonolithIndex`, so it verifies the reflected function exposes an `FBoolProperty` return before trusting the value; a signature that stops returning `bool` is reported as an explicit module-sync error instead of being read from a zeroed buffer as `reindex_not_started`.
 
+Live Asset Registry callbacks are unregistered for the duration of a full index and re-armed on **every** completion outcome, not only success, so a cancelled or failed run cannot leave the subsystem reporting itself active while silently dropping later asset changes. `RegisterLiveCallbacks()` remains self-guarding on effective activation, active-run state, and database readiness, so a run that completes after indexing was deactivated still leaves the callbacks off. Startup deferral honours the persisted choice: an explicit `Monolith.StartIndexing` is passed through as an explicit request, so `bDeferFirstTimeIndex` cannot re-defer the first-time index on every later launch.
+
 **Schema v2 Migration**
 
 Schema v2 adds:

@@ -166,7 +166,8 @@ void UMonolithIndexSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		return;
 	}
 
-	if (!UMonolithSettings::IsIndexingActivated())
+	const FMonolithActivation Activation = UMonolithSettings::GetActivation();
+	if (!Activation.bIndexingEnabled)
 	{
 		UE_LOG(LogMonolithIndex, Log,
 			TEXT("MonolithIndex: durable indexing activation is off; existing ProjectIndex.db remains available for reads"));
@@ -174,7 +175,12 @@ void UMonolithIndexSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	}
 
 	SetAutomaticIndexingEnabled(true);
-	StartPreferredIndex(false);
+	// An explicit Monolith.StartIndexing is a standing request, not a one-shot.
+	// Passing it through lets the first-time run proceed under
+	// bDeferFirstTimeIndex; hard-coding false would re-defer on every launch
+	// even though the user's persisted choice is still enabled. This mirrors
+	// what the source subsystem passes for its bootstrap decision.
+	StartPreferredIndex(Activation.bIndexingUserSet);
 }
 
 void UMonolithIndexSubsystem::OnAssetRegistryFilesLoaded()
@@ -633,9 +639,17 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 	FMonolithIndexDatabase* DB = Owner->Database.Get();
 	if (!DB || !DB->IsOpen())
 	{
-		AsyncTask(ENamedThreads::GameThread, [this]()
+		// Deinitialize joins this thread, which makes every Owner-> access above
+		// safe, but a game-thread task queued here outlives that join. Hold the
+		// subsystem weakly so a completion landing after teardown is dropped
+		// instead of dereferencing a destroyed subsystem.
+		TWeakObjectPtr<UMonolithIndexSubsystem> WeakOwner(Owner);
+		AsyncTask(ENamedThreads::GameThread, [WeakOwner]()
 		{
-			Owner->OnIndexingFinished(false);
+			if (UMonolithIndexSubsystem* Subsystem = WeakOwner.Get())
+			{
+				Subsystem->OnIndexingFinished(false);
+			}
 		});
 		return 1;
 	}
@@ -1320,9 +1334,16 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 		FMonolithMemoryHelper::LogMemoryStats(TEXT("Full index complete"));
 	}
 
-	AsyncTask(ENamedThreads::GameThread, [this]()
+	// See the database-open failure path: the join in Deinitialize does not cover
+	// a game-thread task queued from here, so resolve the subsystem weakly.
+	TWeakObjectPtr<UMonolithIndexSubsystem> WeakOwner(Owner);
+	const bool bFinishedSuccessfully = !bShouldStop;
+	AsyncTask(ENamedThreads::GameThread, [WeakOwner, bFinishedSuccessfully]()
 	{
-		Owner->OnIndexingFinished(!bShouldStop);
+		if (UMonolithIndexSubsystem* Subsystem = WeakOwner.Get())
+		{
+			Subsystem->OnIndexingFinished(bFinishedSuccessfully);
+		}
 	});
 
 	return 0;
@@ -1355,10 +1376,15 @@ void UMonolithIndexSubsystem::OnIndexingFinished(bool bSuccess)
 		TaskNotification.Reset();
 	}
 
-	if (bSuccess)
-	{
-		RegisterLiveCallbacks();
-	}
+	// StartFullIndex unregisters the live Asset Registry callbacks for the
+	// duration of the run, so re-arm on EVERY outcome, not just success. A
+	// cancelled or failed run previously left them unregistered while
+	// bAutomaticIndexingEnabled stayed true, so the subsystem reported itself
+	// active while silently dropping every later asset change until a successful
+	// reindex or an editor restart. RegisterLiveCallbacks is self-guarding
+	// (effective activation, active run, database readiness) and idempotent, so
+	// the disabled case still correctly leaves them off.
+	RegisterLiveCallbacks();
 
 	OnComplete.Broadcast(bSuccess);
 	OnProgress.Clear();

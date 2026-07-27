@@ -252,6 +252,25 @@ listener bound for the process lifetime. A port-based liveness check is therefor
 not a valid Monolith readiness signal after a Stop — the sentinel file is. This
 is now stated in `Docs/specs/SPEC_MonolithCore.md` instead of being implied.
 
+### Round 3
+
+| Defect | Fix |
+|---|---|
+| The source completion handler captured raw `this`; `Deinitialize()` closes the database and deletes the indexer, so a queued game-thread task could call `ReopenDatabase()` on a torn-down subsystem. Reachable because this branch starts a catch-up run from `Initialize()` | `TWeakObjectPtr` + a `bIsShuttingDown` flag checked in the handler, and `OnComplete.Clear()` before `delete Indexer` |
+| `StartPreferredIndex` treated "database missing" and "database present but unopenable" identically and fell through to a CLEAN `TriggerReindex()`, so a transient lock became a destructive rebuild | Full bootstrap reserved for `!FileExists`; an existing-but-unopenable database reports an explicit error and leaves the index intact |
+
+### Round 4
+
+| Defect | Fix |
+|---|---|
+| `bDeferFirstTimeIndex` hard-coded `bExplicitRequest=false` at startup, so an explicit `Monolith.StartIndexing` was treated as an inherited default and the first-time index was re-deferred on every launch | Pass `Activation.bIndexingUserSet`, matching what the source subsystem already does |
+| Live Asset Registry callbacks were re-armed only on `bSuccess`, so a cancelled or failed full index left them unregistered while `bAutomaticIndexingEnabled` stayed true — the subsystem looked active but silently dropped every later asset change | Re-arm on every outcome; `RegisterLiveCallbacks()` is already self-guarding and idempotent, so a genuinely deactivated run still leaves them off |
+| The index worker queued `OnIndexingFinished` to the game thread capturing raw `this`/`Owner`. `Deinitialize()` joins the thread, which covers every worker-thread `Owner->` access, but not a task queued just before the join — the same hazard class fixed in the source subsystem | `TWeakObjectPtr<UMonolithIndexSubsystem>` at both queue sites, dropped when the subsystem is gone |
+
+Both rounds re-verified at their heads: UE 5.7 and UE 5.8 editor builds succeed and
+`Monolith.Activation` + `Monolith.Source` + `Monolith.Index` report 16/16 with 0
+failed and exit 0 on each.
+
 A related residue case is known and deliberately not changed here: because
 sentinel removal is ownership-gated, a sentinel left by a crashed process is not
 cleaned up by a later editor that starts with activation off, since that editor
