@@ -423,7 +423,11 @@ FMonolithActionResult FMonolithUIAccessibilityActions::HandleAuditAccessibility(
     for (const auto& I : Issues)
     {
         FString Sev;
-        I->AsObject()->TryGetStringField(TEXT("severity"), Sev);
+        const TSharedPtr<FJsonObject>* ObjPtr = nullptr;
+        if (I->TryGetObject(ObjPtr) && ObjPtr && (*ObjPtr).IsValid())
+        {
+            (*ObjPtr)->TryGetStringField(TEXT("severity"), Sev);
+        }
         if (Sev == TEXT("error")) Errors++;
         else Warnings++;
     }
