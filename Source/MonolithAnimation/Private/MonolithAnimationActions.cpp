@@ -11564,7 +11564,11 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateMontageFromSections
 			TSharedPtr<FJsonObject> SecObj = (*SectionsArr)[i]->AsObject();
 			if (!SecObj.IsValid()) continue;
 
-			FString SectionName = SecObj->GetStringField(TEXT("name"));
+			FString SectionName;
+			if (!SecObj->TryGetStringField(TEXT("name"), SectionName))
+			{
+				return EndMontageTransactionAndError(TEXT("Parameter 'name' in section must be a string"));
+			}
 				float StartTime = 0.0f;
 				if (SecObj->HasField(TEXT("start_time")))
 				{
@@ -11615,7 +11619,11 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateMontageFromSections
 			FString NextSection;
 			if (SecObj->TryGetStringField(TEXT("next_section"), NextSection) && !NextSection.IsEmpty())
 			{
-				FString SectionName = SecObj->GetStringField(TEXT("name"));
+				FString SectionName;
+				if (!SecObj->TryGetStringField(TEXT("name"), SectionName))
+				{
+					return EndMontageTransactionAndError(TEXT("Parameter 'name' in section must be a string"));
+				}
 				int32 SecIdx = Montage->GetSectionIndex(FName(*SectionName));
 				if (SecIdx != INDEX_NONE)
 				{
