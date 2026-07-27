@@ -941,6 +941,28 @@ def _load_sibling_module(script: Path, alias: str) -> Any | None:
                 pass
 
 
+def _load_offline_exe_freshness_module(
+    ctx: CheckContext,
+    finding_check: str,
+) -> tuple[Path, Any] | None:
+    """Load the single authority for selecting the current Query executable."""
+    config = ctx.config.get("offline_exe_freshness", {})
+    script = ctx.path(str(config.get("script", "Scripts/check_offline_exe_fresh.py")))
+    if not script.is_file():
+        ctx.block(finding_check, "Offline-exe freshness script is missing", script)
+        return None
+
+    try:
+        fresh = _load_sibling_module(script, "monolith_check_offline_exe_fresh")
+    except Exception as exc:  # noqa: BLE001 - report load failure as a finding.
+        ctx.block(finding_check, f"Could not load offline-exe freshness script: {exc}", script)
+        return None
+    if fresh is None:
+        ctx.block(finding_check, "Could not load offline-exe freshness script", script)
+        return None
+    return script, fresh
+
+
 def _plugin_relative_path(value: str | Path) -> Path:
     text = str(value).replace("\\", "/")
     parts = [part for part in Path(text).as_posix().split("/") if part not in ("", ".")]
@@ -1243,19 +1265,10 @@ def check_offline_exe_freshness(ctx: CheckContext) -> None:
     if not config.get("enabled", False):
         return
 
-    script = ctx.path(str(config.get("script", "Scripts/check_offline_exe_fresh.py")))
-    if not script.is_file():
-        ctx.block("offline-exe-fresh", "Offline-exe freshness script is missing", script)
+    loaded = _load_offline_exe_freshness_module(ctx, "offline-exe-fresh")
+    if loaded is None:
         return
-
-    try:
-        fresh = _load_sibling_module(script, "monolith_check_offline_exe_fresh")
-    except Exception as exc:  # noqa: BLE001 - report load failure as a finding.
-        ctx.block("offline-exe-fresh", f"Could not load offline-exe freshness script: {exc}", script)
-        return
-    if fresh is None:
-        ctx.block("offline-exe-fresh", "Could not load offline-exe freshness script", script)
-        return
+    script, fresh = loaded
 
     missing_sources = [path for path in fresh.SRC_PATHS if not path.exists()]
     if missing_sources:
@@ -1299,9 +1312,13 @@ def check_offline_parity_smoke(ctx: CheckContext) -> None:
     - offline_parity_score >= min_score (default 0.80)
     - error_rate <= max_error_rate (default 0.10)
 
-    Gracefully skips (advisory) when monolith_query.exe is absent or cannot
-    execute on this host (e.g. Windows PE on Linux runner). Only a present,
-    runnable exe with a sub-threshold score blocks.
+    The executable is selected by the same freshness module used by
+    check_offline_exe_freshness: monolith_query.current.json chooses the
+    authoritative immutable image and the fixed monolith_query.exe name is only
+    a legacy fallback when no manifest exists. Gracefully skips (advisory) when
+    that selected executable is absent or cannot execute on this host (e.g. a
+    Windows PE binary on Linux). Only a present, runnable executable with a
+    sub-threshold score blocks.
     """
     config = ctx.config.get("offline_parity_smoke", {})
     if not config.get("enabled", False):
@@ -1312,7 +1329,11 @@ def check_offline_parity_smoke(ctx: CheckContext) -> None:
         ctx.block("offline-parity-smoke", "Offline parity benchmark script is missing", script)
         return
 
-    exe_path = ctx.root / "Binaries" / "monolith_query.exe"
+    loaded = _load_offline_exe_freshness_module(ctx, "offline-parity-smoke")
+    if loaded is None:
+        return
+    _, fresh = loaded
+    exe_path = Path(fresh.EXE_PATH).resolve()
     if not exe_path.exists():
         ctx.advisory(
             "offline-parity-smoke",
@@ -1332,6 +1353,7 @@ def check_offline_parity_smoke(ctx: CheckContext) -> None:
                     sys.executable, str(script), "run",
                     "--label", "ci-smoke",
                     "--output-dir", tmp_dir,
+                    "--exe-path", str(exe_path),
                 ],
                 cwd=ctx.root,
                 capture_output=True,

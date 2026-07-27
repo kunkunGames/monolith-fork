@@ -81,7 +81,6 @@ static const std::map<std::string, CliOptionKind>& cli_option_kinds() {
         {"changed_ranges", CliOptionKind::Value},
         {"class_name", CliOptionKind::Value},
         {"context_lines", CliOptionKind::Value},
-        {"cooldown_seconds", CliOptionKind::Value},
         {"cursor", CliOptionKind::Value},
         {"db", CliOptionKind::Value},
         {"decision_id", CliOptionKind::Value},
@@ -103,8 +102,6 @@ static const std::map<std::string, CliOptionKind>& cli_option_kinds() {
         {"file_path", CliOptionKind::Value},
         {"filter", CliOptionKind::Value},
         {"fields", CliOptionKind::Value},
-        {"force", CliOptionKind::Bool},
-        {"graph_db", CliOptionKind::Value},
         {"include_content", CliOptionKind::Bool},
         {"include_counts", CliOptionKind::Bool},
         {"include_deep_checks", CliOptionKind::Bool},
@@ -200,9 +197,8 @@ static const std::map<std::string, std::vector<std::string>>& offline_dispatch_a
             "find_callees", "get_class_hierarchy", "get_module_info",
             "get_symbol_context", "read_file", "impact_radius", "find_overrides",
             "health", "trigger_reindex", "trigger_project_reindex",
-            "repair_fts", "repair_crg_cache", "build_crg_graph",
-            "rebuild_crg_graph", "repair_crg_graph", "search_crg_graph",
-            "crg_graph_health", "risk_score", "review_hotspots", "review_context",
+            "repair_fts", "repair_crg_cache", "search_crg_graph",
+            "risk_score", "review_hotspots", "review_context",
             "detect_changes", "find_unused", "pre_merge_check", "snapshot",
             "diff_snapshots", "get_include_path", "get_signature",
             "check_deprecations", "verify_symbols", "find_example_usage",
@@ -250,7 +246,7 @@ static const std::vector<CliNamespaceHelp>& cli_help_catalog() {
         {"source",
          "C++ source, CRG, risk, and code-review queries.",
          "Read and maintain Saved/EngineSource.db plus source CRG graph data. Help is DB-free.",
-         "Default DB: Saved/EngineSource.db. CRG graph actions use Saved/graph.db unless --graph-db is supplied.",
+         "Default DB: Saved/EngineSource.db, including CRG graph-node search.",
          {
              "monolith_query.exe source health --include-counts=false",
              "monolith_query.exe source search_source UObject --limit=5",
@@ -314,31 +310,16 @@ static const std::vector<CliNamespaceHelp>& cli_help_catalog() {
               "source trigger_project_reindex", {}, {}, "Offline guidance only; requires live MCP/editor to execute.", "read-only guidance",
               {"status", "offline_supported", "next_actions"}, {"monolith_query.exe source trigger_project_reindex"}, {"source.health"}},
              {"repair_fts", "Maintenance", "Inspect or repair source FTS tables.",
-              "source repair_fts [--target=all|symbols|source] [--execute]", {}, {"--target NAME", "--execute bool"},
+              "source repair_fts [--target=all|symbols|graph_nodes|console_objects|source] [--execute]", {}, {"--target NAME", "--execute bool"},
               "target=all; dry-run unless --execute=true.", "execute-gated write",
               {"status", "success", "target", "execute", "actions"}, {"monolith_query.exe source repair_fts --target=all", "monolith_query.exe source repair_fts --target=all --execute"}, {"source.health"}},
              {"repair_crg_cache", "Maintenance", "Inspect or repair source CRG projection/cache parity.",
               "source repair_crg_cache [--scope=all|override_edges] [--execute]", {}, {"--scope NAME", "--execute bool"},
               "scope=all; dry-run unless --execute=true.", "execute-gated write",
               {"status", "success", "scope", "execute", "actions"}, {"monolith_query.exe source repair_crg_cache --scope=all"}, {"source.health"}},
-             {"build_crg_graph", "Maintenance", "Build Saved/graph.db for CRG graph search.",
-              "source build_crg_graph [--execute] [--force] [--cooldown_seconds=N] [--graph-db=PATH]", {}, {"--execute bool", "--force bool", "--cooldown_seconds N", "--graph-db PATH"},
-              "dry-run unless --execute=true; cooldown_seconds=1800 (0 disables the rebuild cooldown; --force bypasses); graph-db defaults to Saved/graph.db.", "execute-gated write",
-              {"status", "success", "graph_db", "job_id"}, {"monolith_query.exe source build_crg_graph --execute"}, {"source.crg_graph_health", "source.search_crg_graph"}},
-             {"rebuild_crg_graph", "Maintenance", "Alias-compatible CRG graph rebuild action.",
-              "source rebuild_crg_graph [--execute] [--force] [--cooldown_seconds=N] [--graph-db=PATH]", {}, {"--execute bool", "--force bool", "--cooldown_seconds N", "--graph-db PATH"},
-              "dry-run unless --execute=true; cooldown_seconds=1800 (0 disables; --force bypasses).", "execute-gated write",
-              {"status", "success", "graph_db"}, {"monolith_query.exe source rebuild_crg_graph --execute --force"}, {"source.crg_graph_health"}},
-             {"repair_crg_graph", "Maintenance", "Compatibility alias for rebuild_crg_graph.",
-              "source repair_crg_graph [--execute] [--force] [--cooldown_seconds=N] [--graph-db=PATH]", {}, {"--execute bool", "--force bool", "--cooldown_seconds N", "--graph-db PATH"},
-              "alias: dispatches to rebuild_crg_graph; cooldown_seconds=1800 (0 disables; --force bypasses).", "execute-gated write",
-              {"status", "success", "graph_db"}, {"monolith_query.exe source repair_crg_graph --execute"}, {"source.rebuild_crg_graph"}},
-             {"search_crg_graph", "CRG", "Search graph nodes in Saved/graph.db.",
-              "source search_crg_graph <query>|--query=TEXT [--kind=K] [--limit=N] [--graph-db=PATH]", {"query"}, {"--query/--q TEXT", "--kind K", "--limit N", "--graph-db PATH"},
-              "limit=20.", "read-only", {"status", "success", "nodes", "count"}, {"monolith_query.exe source search_crg_graph UObject --limit=10"}, {"source.build_crg_graph"}},
-             {"crg_graph_health", "CRG", "Report graph.db freshness and row counts.",
-              "source crg_graph_health [--graph-db=PATH]", {}, {"--graph-db PATH"}, "graph-db defaults to Saved/graph.db.", "read-only",
-              {"status", "success", "graph_db", "counts"}, {"monolith_query.exe source crg_graph_health"}, {"source.build_crg_graph"}},
+             {"search_crg_graph", "CRG", "Search the EngineSource graph-node projection and FTS index.",
+              "source search_crg_graph <query>|--query=TEXT [--kind=K] [--limit=N]", {"query"}, {"--query/--q TEXT", "--kind K", "--limit N"},
+              "limit=20; backend=engine_source_fts.", "read-only", {"status", "backend", "results", "count", "used_fts", "truncated"}, {"monolith_query.exe source search_crg_graph UObject --limit=10"}, {"source.health", "source.review_context"}},
              {"risk_score", "Review", "Score source symbols by fan-in, fan-out, size, and risk cues.",
               "source risk_score <symbol> [--limit=N] [--min-tier=low|medium|high]", {"symbol"}, {"--limit N", "--min-tier low|medium|high"},
               "limit=10; min-tier=low.", "read-only", {"success", "symbol", "items", "count"}, {"monolith_query.exe source risk_score UObject --limit=5"}, {"source.review_context"}},
@@ -817,8 +798,8 @@ static void print_top_level_help(std::ostream& out) {
         << "  source, console, and RI namespaces read Saved/EngineSource.db.\n"
         << "  project reads Saved/ProjectIndex.db.\n"
         << "  bridge reads both ProjectIndex.db and EngineSource.db.\n"
-        << "  source CRG graph actions use Saved/graph.db.\n"
-        << "  Overrides: --db PATH, --source-db PATH, --project-db PATH, --graph-db PATH.\n\n";
+        << "  source CRG graph-node search uses Saved/EngineSource.db.\n"
+        << "  Overrides: --db PATH, --source-db PATH, --project-db PATH.\n\n";
 
     out << "Query logging and trace environment:\n"
         << "  --no-log disables query logging for this invocation.\n"
@@ -836,7 +817,7 @@ static void print_top_level_help(std::ostream& out) {
         << "  monolith_query.exe source review_context UObject --detail-level=minimal\n"
         << "  monolith_query.exe project search Health --limit=10 --include-content=true\n"
         << "  monolith_query.exe bridge search_asset_symbols --symbol=UObject --limit=5\n"
-        << "  monolith_query.exe source crg_graph_health\n\n";
+        << "  monolith_query.exe source search_crg_graph UObject --limit=5\n\n";
 
     out << "Help forms:\n"
         << "  monolith_query.exe help source\n"
@@ -869,7 +850,7 @@ static void print_namespace_help(std::ostream& out, const CliNamespaceHelp& ns) 
     }
 
     out << "\nMaintenance warning:\n"
-        << "  repair_fts, repair_crg_cache, build_crg_graph, snapshot, and aliases are dry-run or read-only unless --execute=true is supplied.\n";
+        << "  repair_fts, repair_crg_cache, snapshot, and aliases are dry-run or read-only unless --execute=true is supplied.\n";
 }
 
 static void print_action_help(std::ostream& out, const CliNamespaceHelp& ns, const CliActionHelp& action) {

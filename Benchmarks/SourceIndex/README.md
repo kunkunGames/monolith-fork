@@ -18,13 +18,13 @@ graphs, and plan C++ changes.
 | `RESULTS.md` | Latest checked-in benchmark result summary. |
 | `Plugins/Monolith/Scripts/source_index_benchmark.py` | Generator, runner, and comparison tool. |
 
-Checked-in corpus size: **376 tasks**.
+Checked-in corpus size: **374 tasks**.
 
 ## Task Categories
 
 | Category | Request type | Scored evidence |
 | --- | --- | --- |
-| `symbol_lookup` | `source_query` with `action=search_source`, `find_callers`, `find_callees`, or `risk_score` against a golden symbol | At least 1 result returned; each result checked for `name`, `kind`, `file_path`/`location` fields. Tasks marked `require_results` (symbols KNOWN to have a definition / callers / callees) **miss** on an empty or "No direct C++ callers found…" sentinel response — closing the `min_results:0` loophole. |
+| `symbol_lookup` | `source_query` with `action=search_source`, `search_crg_graph`, `find_callers`, `find_callees`, or `risk_score` against a golden symbol | At least 1 result returned; each result checked for `name`, `kind`, `file_path`/`location` fields. Tasks marked `require_results` (symbols KNOWN to have a definition / callers / callees) **miss** on an empty or "No direct C++ callers found…" sentinel response — closing the `min_results:0` loophole. |
 | `review_context_lookup` | `source_query` with `action=review_context` against engine and gameplay symbols | Review context returns a valid risk seed/top-risk symbol row or a truthful empty response. |
 | `impact_radius_lookup` | `source_query` with `action=impact_radius` against gameplay, UI, VFX, and asset symbols | Impact radius returns valid seed/impacted symbol rows or a truthful empty response. |
 | `ergonomics_text` | Plain-text source helpers such as `get_include_path`, `get_signature`, `verify_symbols`, and `find_example_usage` | Non-empty, non-error text that an agent can use directly. |
@@ -40,10 +40,8 @@ so they never mutate the index.
 
 Canonical `source_query` tasks read `Saved/EngineSource.db` through the source
 subsystem, including its internal CRG cache used by risk, review-context, and
-impact-radius actions. The remaining graph-specific source actions are exercised
-only as `monolith_discover` schema probes; the corpus does not execute their
-`Saved/graph.db` handlers. SourceIndex input evidence therefore fingerprints only
-`Saved/EngineSource.db`, and unrelated derived `graph.db` churn cannot stale a run.
+impact-radius actions and its graph-node VIEW/FTS used by `search_crg_graph`.
+SourceIndex input evidence therefore fingerprints only `Saved/EngineSource.db`.
 
 ## Generate
 
@@ -64,11 +62,11 @@ by the curated corpus receives one exact `monolith_discover(mode=schema)` task i
 sorted action-name order. If the resulting corpus is still below `--min-tasks`,
 generation fails and requires schema-verified curated tasks.
 
-The current catalog generates 376 tasks: 217 `symbol_lookup` (of which 28 carry
+The current catalog generates 374 tasks: 218 `symbol_lookup` (of which 29 carry
 `require_results`), 32 `review_context_lookup`, 32 `impact_radius_lookup`, 40
-`ergonomics_text`, 13 `negative_recovery`, 7 `health_check`, and 35
-`schema_field_presence` tasks. The 23 appended schema tasks close live source action
-identity coverage from 14/37 to 37/37. All 353 curated tasks remain in order; the old
+`ergonomics_text`, 13 `negative_recovery`, 7 `health_check`, and 32
+`schema_field_presence` tasks. The 19 appended schema tasks close live source action
+identity coverage from 15/34 to 34/34. All 355 curated tasks remain in order; the old
 10 generator top-ups that guessed a generic `query` parameter are replaced by exact
 schema discovery and no longer distort execution scoring.
 

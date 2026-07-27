@@ -19,8 +19,13 @@ delegates the launch/wait/reconnect sequence to Scripts/recover_mcp.ps1.
 When the endpoint is healthy, the same long-running process can perform one
 daily Monolith index maintenance pass. By default this runs at 05:00 Korea
 Standard Time, starts incremental asset/source indexing through the bridge
-namespace, waits for those indexes to go idle, then refreshes the derived
-Saved/graph.db export through monolith_query.exe with its cooldown gate intact.
+namespace, and waits for those indexes to go idle.
+
+DefaultMonolith.ini supplies project defaults and
+Saved/Config/WindowsEditor/Monolith.ini supplies per-user intent. When server
+activation is off, the watchdog reports MCP_DISABLED and performs no
+probe/build/recovery mutation. When indexing activation is off, daily and
+restart indexing maintenance is skipped while DB reads remain unaffected.
 
 This script does not replace recover_mcp.ps1. It is a supervisor for the common
 Codex/direct-client pain point where the endpoint dies between agent calls.
@@ -85,7 +90,7 @@ RESULT=RECOVER_TIMEOUT. Default 300.
 Run one probe/recover cycle and exit.
 
 .PARAMETER DisableDailyReindex
-Disable the daily asset/source/graph maintenance pass.
+Disable the daily asset/source maintenance pass.
 
 .PARAMETER DailyReindexTime
 Daily maintenance start time in HH:mm, interpreted in DailyReindexTimeZone
@@ -98,11 +103,10 @@ Windows time-zone id for DailyReindexTime (default Korea Standard Time).
 Indexing mode: incremental (default) or full.
 
 .PARAMETER DailyReindexTargets
-Maintenance targets: assets, source, graph. Default is all three.
+Maintenance targets: assets and source. Default is both.
 
 .PARAMETER DailyReindexWaitTimeoutSec
-Maximum seconds to wait for asset/source indexing to become idle before graph
-maintenance (default 1800).
+Maximum seconds to wait for asset/source indexing to become idle (default 1800).
 
 .PARAMETER DailyReindexWaitPollSec
 Seconds between bridge.get_index_status polls while waiting (default 10).
@@ -110,17 +114,13 @@ Seconds between bridge.get_index_status polls while waiting (default 10).
 .PARAMETER DailyReindexActionTimeoutSec
 HTTP timeout for a single MCP action call (default 120).
 
-.PARAMETER DailyGraphCooldownSeconds
-Cooldown passed to source build_crg_graph for graph.db maintenance (default
-1800). Use 0 only for intentional diagnostics.
-
 .PARAMETER RunDailyReindexNow
 Run one maintenance pass as soon as the MCP endpoint is healthy, ignoring the
 daily schedule. Combine with -Once for a smoke test.
 
 .PARAMETER SkipRestartReindex
-Skip the restart recovery indexing pass. Normal restart recovery runs source and
-graph maintenance before launch and asset maintenance after MCP health returns.
+Skip the restart recovery indexing pass. Normal restart recovery runs source
+maintenance before launch and asset maintenance after MCP health returns.
 Pre-launch maintenance failure does not prevent endpoint recovery; requested
 targets are retried after health returns.
 
@@ -128,7 +128,7 @@ targets are retried after health returns.
 Indexing mode for restart-triggered maintenance: incremental (default) or full.
 
 .PARAMETER RestartReindexTargets
-Restart-triggered maintenance targets. Default is assets, source, graph.
+Restart-triggered maintenance targets. Default is assets and source.
 
 .PARAMETER ProjectRoot
 Explicit host checkout root containing the .uproject (skips upward search).
@@ -144,6 +144,7 @@ The same structured events are appended to
 Notable events:
   WatchdogStart         watchdog instance started (instance boundary marker)
   McpUp                 endpoint is reachable
+  McpDisabled           durable server activation is off; no mutation occurs
   TrustedEditorBusy     exact project/listener identity is intact but /health
                         transport timed out; no mutation is attempted
   TrustedEditorBusyReset
@@ -171,7 +172,8 @@ Notable events:
                         occupied endpoint fails trusted project/process identity
 
 Exit codes:
-  0  endpoint is up, or recover cycle succeeded in -Once mode, or
+  0  endpoint is up, server activation is intentionally disabled, or recover
+     cycle succeeded in -Once mode, or
      -ProbeBuildLocksOnly found all link outputs free
   2  endpoint down, trusted-busy, or planned-exit automation active and
      -ProbeOnly/-Once was requested, or
@@ -210,18 +212,17 @@ param(
     [string]$DailyReindexTimeZone = 'Korea Standard Time',
     [ValidateSet('incremental', 'full')]
     [string]$DailyReindexMode = 'incremental',
-    [ValidateSet('assets', 'source', 'graph')]
-    [string[]]$DailyReindexTargets = @('assets', 'source', 'graph'),
+    [ValidateSet('assets', 'source')]
+    [string[]]$DailyReindexTargets = @('assets', 'source'),
     [int]$DailyReindexWaitTimeoutSec = 1800,
     [int]$DailyReindexWaitPollSec = 10,
     [int]$DailyReindexActionTimeoutSec = 120,
-    [int]$DailyGraphCooldownSeconds = 1800,
     [switch]$RunDailyReindexNow,
     [switch]$SkipRestartReindex,
     [ValidateSet('incremental', 'full')]
     [string]$RestartReindexMode = 'incremental',
-    [ValidateSet('assets', 'source', 'graph')]
-    [string[]]$RestartReindexTargets = @('assets', 'source', 'graph'),
+    [ValidateSet('assets', 'source')]
+    [string[]]$RestartReindexTargets = @('assets', 'source'),
     [string]$ProjectRoot
 )
 
@@ -234,6 +235,14 @@ if (-not (Test-Path -LiteralPath $hostRoleHelperPath -PathType Leaf)) {
     exit 3
 }
 . $hostRoleHelperPath
+
+$activationHelperPath = Join-Path $PSScriptRoot 'monolith_activation_state.ps1'
+if (-not (Test-Path -LiteralPath $activationHelperPath -PathType Leaf)) {
+    Write-Output ("RESULT=BLOCKED reason=activation_state_helper_missing path={0}" -f $activationHelperPath)
+    exit 3
+}
+. $activationHelperPath
+
 $script:lastKnownMcpPid = $null
 $script:watchdogInlinePayloadLimit = 240
 $script:watchdogLogRoot = Join-Path (Split-Path -Parent $PSScriptRoot) 'Logs'
@@ -758,59 +767,12 @@ function Wait-BridgeIndexIdle {
     }
 }
 
-function Invoke-GraphIndex {
-    param(
-        [string]$Root,
-        [bool]$Full,
-        [int]$CooldownSeconds = $DailyGraphCooldownSeconds,
-        [string]$Prefix = 'daily_reindex'
-    )
-
-    $pluginRoot = Split-Path -Parent $PSScriptRoot
-    $queryExe = Join-Path $pluginRoot 'Binaries\monolith_query.exe'
-    if (-not (Test-Path -LiteralPath $queryExe -PathType Leaf)) {
-        Write-Watchdog ("{0}_graph_failed reason=query_exe_missing path={1}" -f $Prefix, $queryExe)
-        return $false
-    }
-
-    $args = @(
-        'source',
-        'build_crg_graph',
-        '--execute',
-        ("--cooldown_seconds={0}" -f $CooldownSeconds)
-    )
-    if ($Full) {
-        $args += '--force'
-    }
-
-    Write-Watchdog ("{0}_graph_start mode={1} root={2} query={3}" -f `
-            $Prefix, $(if ($Full) { 'full' } else { 'incremental' }), $Root, $queryExe)
-    Push-Location -LiteralPath $pluginRoot
-    try {
-        $output = & $queryExe @args 2>&1
-        $exitCode = $LASTEXITCODE
-    }
-    finally {
-        Pop-Location
-    }
-
-    $detail = Format-WatchdogValue (($output | Out-String).Trim())
-    if ($exitCode -ne 0) {
-        Write-Watchdog ("{0}_graph_failed exit_code={1} detail={2}" -f $Prefix, $exitCode, $detail)
-        return $false
-    }
-
-    Write-Watchdog ("{0}_graph_done exit_code={1} detail={2}" -f $Prefix, $exitCode, $detail)
-    return $true
-}
-
 function Invoke-DailyReindex {
     param(
         [string]$Root,
         [string]$Reason,
         [string]$Mode = $DailyReindexMode,
         [string[]]$Targets = $DailyReindexTargets,
-        [int]$GraphCooldownSeconds = $DailyGraphCooldownSeconds,
         [string]$Prefix = 'daily_reindex',
         [string]$ResultToken = 'DAILY_REINDEX'
     )
@@ -820,7 +782,6 @@ function Invoke-DailyReindex {
             $Prefix, $Reason, $DailyReindexTime, $DailyReindexTimeZone, $Mode, $targetsText)
 
     $ok = $true
-    $bridgeOk = $true
     $scope = Get-BridgeIndexScope -Targets $Targets
     if ($scope) {
         $start = Invoke-MonolithAction -Namespace 'bridge' -Action 'start_indexing' -Params @{
@@ -829,20 +790,8 @@ function Invoke-DailyReindex {
         }
         if (-not $start.Succeeded) {
             $ok = $false
-            $bridgeOk = $false
         }
         elseif (-not (Wait-BridgeIndexIdle -Scope $scope)) {
-            $ok = $false
-            $bridgeOk = $false
-        }
-    }
-
-    if (Test-IndexTarget -Targets $Targets -Target 'graph') {
-        if ($scope -and -not $bridgeOk) {
-            Write-Watchdog ("{0}_graph_skipped reason=asset_or_source_index_not_verified_idle" -f $Prefix)
-            $ok = $false
-        }
-        elseif (-not (Invoke-GraphIndex -Root $Root -Full ($Mode -eq 'full') -CooldownSeconds $GraphCooldownSeconds -Prefix $Prefix)) {
             $ok = $false
         }
     }
@@ -860,6 +809,18 @@ function Invoke-DailyReindexIfDue {
     if ($DisableDailyReindex -or $ProbeOnly) {
         return [PSCustomObject]@{ Ran = $false; Succeeded = $true; ExitCode = 0 }
     }
+
+    $activation = Get-MonolithActivationState -Root $script:hostRoot
+    if (-not $activation.IndexingEnabled) {
+        if (-not $script:indexingDisabledReported) {
+            Write-Watchdog (
+                "daily_reindex_skipped reason=indexing_activation_disabled state_path={0} mutation=none" -f
+                    (Format-WatchdogValue $activation.StatePath))
+            $script:indexingDisabledReported = $true
+        }
+        return [PSCustomObject]@{ Ran = $false; Succeeded = $true; ExitCode = 0 }
+    }
+    $script:indexingDisabledReported = $false
 
     $reason = $null
     if ($RunDailyReindexNow -and -not $script:runDailyReindexNowConsumed) {
@@ -1427,6 +1388,14 @@ function Invoke-SourceCommandletReindex {
         [string]$Mode
     )
 
+    $activation = Get-MonolithActivationState -Root $Root
+    if (-not $activation.IndexingEnabled) {
+        Write-Watchdog (
+            "pre_restart_reindex_source_skipped reason=indexing_activation_disabled state_path={0} mutation=none" -f
+                (Format-WatchdogValue $activation.StatePath))
+        return $true
+    }
+
     $uproject = Get-ProjectFile -Root $Root
     if (-not $uproject) {
         Write-Watchdog ("RESULT=BLOCKED reason=uproject_not_found root={0}" -f $Root)
@@ -1478,6 +1447,14 @@ function Invoke-SourceCommandletReindex {
 function Invoke-PreRestartReindex {
     param([string]$Root)
 
+    $activation = Get-MonolithActivationState -Root $Root
+    if (-not $activation.IndexingEnabled) {
+        Write-Watchdog (
+            "pre_restart_reindex_skipped reason=indexing_activation_disabled state_path={0} mutation=none" -f
+                (Format-WatchdogValue $activation.StatePath))
+        return $true
+    }
+
     if ($SkipRestartReindex) {
         Write-Watchdog 'pre_restart_reindex_skipped reason=SkipRestartReindex'
         return $true
@@ -1493,12 +1470,6 @@ function Invoke-PreRestartReindex {
 
     if (Test-IndexTarget -Targets $RestartReindexTargets -Target 'source') {
         if (-not (Invoke-SourceCommandletReindex -Root $Root -Mode $RestartReindexMode)) {
-            $ok = $false
-        }
-    }
-
-    if (Test-IndexTarget -Targets $RestartReindexTargets -Target 'graph') {
-        if (-not (Invoke-GraphIndex -Root $Root -Full ($RestartReindexMode -eq 'full') -CooldownSeconds $DailyGraphCooldownSeconds -Prefix 'pre_restart_reindex')) {
             $ok = $false
         }
     }
@@ -1521,6 +1492,14 @@ function Invoke-PostRecoverReindex {
         [switch]$RetryPreRestartTargets
     )
 
+    $activation = Get-MonolithActivationState -Root $Root
+    if (-not $activation.IndexingEnabled) {
+        Write-Watchdog (
+            "post_recover_reindex_skipped reason=indexing_activation_disabled state_path={0} mutation=none" -f
+                (Format-WatchdogValue $activation.StatePath))
+        return $true
+    }
+
     if ($SkipRestartReindex) {
         return $true
     }
@@ -1537,7 +1516,7 @@ function Invoke-PostRecoverReindex {
     if ($targets.Count -eq 0) { return $true }
 
     $ok = Invoke-DailyReindex -Root $Root -Reason $phase `
-        -Mode $RestartReindexMode -Targets $targets -GraphCooldownSeconds $DailyGraphCooldownSeconds -Prefix 'restart_reindex' -ResultToken 'RESTART_REINDEX'
+        -Mode $RestartReindexMode -Targets $targets -Prefix 'restart_reindex' -ResultToken 'RESTART_REINDEX'
     $targetsText = $targets -join ','
     if ($ok) {
         Write-Watchdog ("RESULT=RESTART_REINDEX_OK phase={0} mode={1} targets={2}" -f $phase, $RestartReindexMode, $targetsText)
@@ -1689,6 +1668,14 @@ function Invoke-RestartSequence {
         [string]$Reason
     )
 
+    $activation = Get-MonolithActivationState -Root $Root
+    if (-not $activation.ServerEnabled) {
+        Write-Watchdog (
+            "RESULT=MCP_DISABLED desired_enabled=false mutation=none state_path={0} next_action=run_Monolith.StartServer_in_editor_console" -f
+                (Format-WatchdogValue $activation.StatePath))
+        return [PSCustomObject]@{ ExitCode = 0; Result = 'RESULT=MCP_DISABLED' }
+    }
+
     # This is the common mutation boundary for build, offline maintenance, and
     # relaunch. Any listener without a fully accepted health response owns the
     # port until an operator resolves it; never race that owner with UBT or a
@@ -1766,7 +1753,7 @@ function Invoke-RestartSequence {
     }
 
     $recoverResult = Invoke-Recover -Root $Root -ForceLaunch
-    if ($recoverResult.ExitCode -eq 0) {
+    if ($recoverResult.ExitCode -eq 0 -and $recoverResult.Result -notmatch 'RESULT=MCP_DISABLED') {
         $postRecoverReindexOk = Invoke-PostRecoverReindex -Root $Root -RetryPreRestartTargets:(-not $preRestartReindexOk)
         if (-not $postRecoverReindexOk) {
             # Keep the successful availability result. The explicit maintenance
@@ -1783,14 +1770,15 @@ $script:dailyReindexSchedule = $null
 $script:dailyReindexTimeZoneInfo = $null
 $script:lastDailyReindexAttemptDate = $null
 $script:runDailyReindexNowConsumed = $false
+$script:indexingDisabledReported = $false
 
 if (-not $DisableDailyReindex -and -not $ProbeOnly -and -not $ProbeBuildLocksOnly) {
     if ($DailyReindexWaitTimeoutSec -lt 0 -or $DailyReindexWaitPollSec -le 0 -or
-        $DailyReindexActionTimeoutSec -le 0 -or $DailyGraphCooldownSeconds -lt 0 -or
+        $DailyReindexActionTimeoutSec -le 0 -or
         @($DailyReindexTargets).Count -eq 0 -or
         (-not $SkipRestartReindex -and @($RestartReindexTargets).Count -eq 0)) {
-        Write-Watchdog ("RESULT=BLOCKED reason=invalid_reindex_arguments wait_timeout={0} wait_poll={1} action_timeout={2} graph_cooldown={3} daily_target_count={4} restart_target_count={5}" -f `
-                $DailyReindexWaitTimeoutSec, $DailyReindexWaitPollSec, $DailyReindexActionTimeoutSec, $DailyGraphCooldownSeconds, @($DailyReindexTargets).Count, @($RestartReindexTargets).Count)
+        Write-Watchdog ("RESULT=BLOCKED reason=invalid_reindex_arguments wait_timeout={0} wait_poll={1} action_timeout={2} daily_target_count={3} restart_target_count={4}" -f `
+                $DailyReindexWaitTimeoutSec, $DailyReindexWaitPollSec, $DailyReindexActionTimeoutSec, @($DailyReindexTargets).Count, @($RestartReindexTargets).Count)
         exit 3
     }
 
@@ -1808,6 +1796,7 @@ if (-not $DisableDailyReindex -and -not $ProbeOnly -and -not $ProbeBuildLocksOnl
 $restartAttempts = 0
 $script:consecutiveBuildFailures = 0
 $script:consecutiveTrustedBusy = 0
+$script:serverDisabledReported = $false
 
 # Terminal logging guarantee: every abnormal end must leave a last line in
 # watchdog.jsonl (2026-07-03/04 incidents ended with no terminal record).
@@ -1851,6 +1840,23 @@ if ($ProbeBuildLocksOnly) {
 }
 
 while ($true) {
+    $activation = Get-MonolithActivationState -Root $script:hostRoot
+    if (-not $activation.ServerEnabled) {
+        if (-not $script:serverDisabledReported) {
+            Write-Watchdog (
+                "RESULT=MCP_DISABLED desired_enabled=false mutation=none state_path={0} next_action=run_Monolith.StartServer_in_editor_console" -f
+                    (Format-WatchdogValue $activation.StatePath))
+            $script:serverDisabledReported = $true
+        }
+        if ($ProbeOnly -or $Once) { exit 0 }
+        Start-Sleep -Seconds $PollIntervalSec
+        continue
+    }
+    if ($script:serverDisabledReported) {
+        Write-Watchdog 'server_activation_enabled action=resume_health_supervision'
+        $script:serverDisabledReported = $false
+    }
+
     $health = Get-MonolithHealth
     if ($health) {
         Write-Watchdog ("RESULT=MCP_UP version={0} tools_registered={1} pid={2} uptime_seconds={3}" -f `

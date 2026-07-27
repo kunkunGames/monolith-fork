@@ -342,7 +342,7 @@ Rules:
 | Surface project/source index freshness | `monolith.status`, `get_readiness_status`, `index.get_index_status` | Implemented 2026-05-19. `index_freshness` / per-index `freshness` include DB path, exists flag, size, mtime, and age. `index.get_index_status(include_stats=true)` also carries stats/health summaries from live subsystems. |
 | Surface CRG cache freshness/parity | Source/project health, readiness | Implemented 2026-05-19. Readiness executes `source.health` / `project.health` when registered and adds compact status, warning count, CRG check counts, and next actions. |
 | Add action catalog freshness | Discovery response | Implemented 2026-05-19. Discovery already includes `snapshot_mode=live_registry`, active profile, and profile filtering; `monolith.status` / readiness also expose `action_catalog`. |
-| Keep post-build source index path documented | `SPEC_MonolithSource.md`, testing docs | `PostBuildSourceIndex.bat` + commandlet path remains the offline writer. |
+| Keep explicit editor-down source index path documented | `SPEC_MonolithSource.md`, testing docs | `PostBuildSourceIndex.bat` + commandlet remains an explicit offline writer, but is not wired to `SpeedEditor.Target.cs`; persisted in-editor catch-up owns automatic maintenance, avoiding competing DB writers after a build. The helper exits before marker/detached-worker creation while durable indexing activation is off. `MONOLITH_FORCE_POSTBUILD_INDEX=1` is an explicit one-shot override and does not persist activation. |
 
 ---
 

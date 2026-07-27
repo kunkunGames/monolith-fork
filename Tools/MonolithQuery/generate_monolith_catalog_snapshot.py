@@ -115,8 +115,6 @@ LONG_RUNNING_TOKENS = (
 PROGRESS_ACTIONS = {
     ("ai", "rebuild_zone_graph"),
     ("monolith", "reindex"),
-    ("source", "build_crg_graph"),
-    ("source", "rebuild_crg_graph"),
 }
 
 OFFLINE_AVAILABLE_ACTIONS = {
@@ -135,11 +133,7 @@ OFFLINE_AVAILABLE_ACTIONS = {
         "health",
         "repair_fts",
         "repair_crg_cache",
-        "build_crg_graph",
-        "rebuild_crg_graph",
-        "repair_crg_graph",
         "search_crg_graph",
-        "crg_graph_health",
         "risk_score",
         "review_hotspots",
         "review_context",

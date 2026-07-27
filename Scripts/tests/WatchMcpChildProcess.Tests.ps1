@@ -573,6 +573,14 @@ Describe 'watch_mcp fail-closed mutation gates' {
         $NoBuildBeforeRestart = $false
 
         function Write-Watchdog { param([string]$Message) }
+        function Get-MonolithActivationState {
+            param([string]$Root)
+            return [PSCustomObject]@{
+                ServerEnabled = $true
+                IndexingEnabled = $true
+                StatePath = 'D:\P4\speed\Saved\Config\WindowsEditor\Monolith.ini'
+            }
+        }
         function Get-McpHealthPort { return 9316 }
         function Get-MonolithRecoveryPortGate {
             param([int]$Port)
@@ -613,6 +621,14 @@ Describe 'watch_mcp fail-closed mutation gates' {
         $NoBuildBeforeRestart = $false
 
         function Write-Watchdog { param([string]$Message) }
+        function Get-MonolithActivationState {
+            param([string]$Root)
+            return [PSCustomObject]@{
+                ServerEnabled = $true
+                IndexingEnabled = $true
+                StatePath = 'D:\P4\speed\Saved\Config\WindowsEditor\Monolith.ini'
+            }
+        }
         function Get-McpHealthPort { return 9316 }
         function Get-MonolithRecoveryPortGate {
             param([int]$Port)
@@ -652,6 +668,14 @@ Describe 'watch_mcp recovery availability ordering' {
         $NoBuildBeforeRestart = $true
 
         function Write-Watchdog { param([string]$Message) }
+        function Get-MonolithActivationState {
+            param([string]$Root)
+            return [PSCustomObject]@{
+                ServerEnabled = $true
+                IndexingEnabled = $true
+                StatePath = 'D:\P4\speed\Saved\Config\WindowsEditor\Monolith.ini'
+            }
+        }
         function Get-McpHealthPort { return 9316 }
         function Get-MonolithRecoveryPortGate {
             param([int]$Port)
@@ -674,5 +698,71 @@ Describe 'watch_mcp recovery availability ordering' {
         $result.MaintenanceSucceeded | Should Be $false
         $script:recoverCalled | Should Be $true
         $script:postRecoverRetryAll | Should Be $true
+    }
+}
+
+Describe 'watch_mcp graph export retirement contract' {
+    It 'keeps daily and restart maintenance targets bounded to assets and source' {
+        foreach ($parameterName in @('DailyReindexTargets', 'RestartReindexTargets')) {
+            $parameter = $Ast.ParamBlock.Parameters | Where-Object {
+                $_.Name.VariablePath.UserPath -eq $parameterName
+            }
+            $parameter | Should Not BeNullOrEmpty
+
+            $validateSet = $parameter.Attributes | Where-Object {
+                $_.TypeName.Name -eq 'ValidateSet'
+            }
+            $validateSet | Should Not BeNullOrEmpty
+            $allowed = @($validateSet.PositionalArguments | ForEach-Object {
+                    [string]$_.SafeGetValue()
+                })
+            ($allowed -join ',') | Should Be 'assets,source'
+
+            $defaultText = $parameter.DefaultValue.Extent.Text
+            $defaultText | Should Match "'assets'"
+            $defaultText | Should Match "'source'"
+            $defaultText | Should Not Match "'graph'"
+        }
+    }
+
+    It 'contains no retired graph builder, target, or cooldown path' {
+        $retiredParameters = @($Ast.ParamBlock.Parameters | Where-Object {
+                $_.Name.VariablePath.UserPath -eq 'DailyGraphCooldownSeconds'
+            })
+        $retiredParameters.Count | Should Be 0
+
+        $retiredFunctions = @($Ast.FindAll({
+                    param($node)
+                    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                    $node.Name -eq 'Invoke-GraphIndex'
+                }, $true))
+        $retiredFunctions.Count | Should Be 0
+
+        $scriptText = [System.IO.File]::ReadAllText($WatchdogPath)
+        foreach ($retiredToken in @(
+                'build_crg_graph',
+                "Test-IndexTarget -Targets `$Targets -Target 'graph'",
+                "Test-IndexTarget -Targets `$RestartReindexTargets -Target 'graph'"
+            )) {
+            $scriptText.Contains($retiredToken) | Should Be $false
+        }
+    }
+
+    It 'keeps explicit editor-down source maintenance on the indexer-owned scoped CRG path' {
+        $pluginRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+        $projectRoot = Split-Path -Parent (Split-Path -Parent $pluginRoot)
+        $postBuildPath = Join-Path $projectRoot 'Build\BatchFiles\PostBuildSourceIndex.bat'
+        Test-Path -LiteralPath $postBuildPath | Should Be $true
+
+        $postBuildText = [System.IO.File]::ReadAllText($postBuildPath)
+        $postBuildText.Contains('MonolithReindex') | Should Be $true
+        $postBuildText.Contains('repair_crg_cache') | Should Be $false
+        $postBuildText.Contains('build_crg_graph') | Should Be $false
+        $postBuildText.Contains('MONOLITH_SKIP_CRG') | Should Be $false
+
+        $targetPath = Join-Path $projectRoot 'Source\SpeedEditor.Target.cs'
+        Test-Path -LiteralPath $targetPath | Should Be $true
+        $targetText = [System.IO.File]::ReadAllText($targetPath)
+        $targetText.Contains('PostBuildSourceIndex.bat') | Should Be $false
     }
 }

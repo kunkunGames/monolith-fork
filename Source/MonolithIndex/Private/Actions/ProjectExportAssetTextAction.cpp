@@ -118,7 +118,8 @@ FMonolithActionResult FProjectExportAssetTextAction::Execute(const TSharedPtr<FJ
 	FString AssetPath;
 	if (Params->HasField(TEXT("asset_path")))
 	{
-		if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+		if (!Params->HasTypedField<EJson::String>(TEXT("asset_path")) ||
+			!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
 		{
 			return FMonolithActionResult::Error(TEXT("'asset_path' parameter must be a string"), -32602);
 		}

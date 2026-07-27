@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 from contextlib import closing
 import ctypes
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -94,46 +93,6 @@ def run_repair(db_path: Path) -> tuple[subprocess.CompletedProcess[str], dict[st
 
 @unittest.skipUnless(os.name == "nt", "Win32 file-sharing contract")
 class CrgRepairWritePreflightTests(unittest.TestCase):
-    def test_graph_build_treats_source_database_as_immutable_input(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            db_path = Path(temp_dir) / "EngineSource.db"
-            graph_path = Path(temp_dir) / "graph.db"
-            create_minimal_source_db(db_path)
-            before_bytes = db_path.read_bytes()
-            before_stat = db_path.stat()
-
-            completed = subprocess.run(
-                [
-                    str(QUERY_EXE),
-                    "source",
-                    "build_crg_graph",
-                    f"--source_db={db_path}",
-                    f"--graph_db={graph_path}",
-                    "--execute=true",
-                    "--force=true",
-                    "--no-log",
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                timeout=30,
-            )
-            payload = json.loads(completed.stdout)
-            after_bytes = db_path.read_bytes()
-            after_stat = db_path.stat()
-
-            self.assertEqual(completed.returncode, 0, completed.stderr)
-            self.assertEqual(payload["status"], "ok", payload)
-            self.assertTrue(payload["replaced"])
-            self.assertTrue(payload["validation"]["passed"])
-            self.assertEqual(hashlib.sha256(before_bytes).digest(), hashlib.sha256(after_bytes).digest())
-            self.assertEqual(before_stat.st_size, after_stat.st_size)
-            self.assertEqual(before_stat.st_mtime_ns, after_stat.st_mtime_ns)
-            self.assertFalse(Path(f"{db_path}-journal").exists())
-            self.assertFalse(Path(f"{db_path}-wal").exists())
-            self.assertFalse(Path(f"{db_path}-shm").exists())
-
     def test_share_denial_is_actionable_atomic_and_retryable(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / "EngineSource.db"

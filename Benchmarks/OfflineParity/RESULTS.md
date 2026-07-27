@@ -1,5 +1,62 @@
 # Offline Parity Benchmark Results
 
+## 2026-07-26 activation-settings-compact-api-final-20260726-03
+
+| Item | Value |
+| --- | ---: |
+| `offline_parity_score` | **1.0** |
+| Actions | 317 total; 311 comparable; 6 decision-chain skips |
+| MATCH / DIFF / real ERROR | 311 / 0 / 0 |
+| Expected-error cases | 5 (0 problems) |
+| `version_parity_score` | 1.0 (`2026-05-29.1` on both implementations) |
+| Input fingerprint | `1846a1a51c66e1346c3b7c7ebf6f285c937c82803f9afff49ffd2f482c09dfe5` |
+| Accepted evidence | `Benchmarks\OfflineParity\accepted\activation-settings-compact-api-final-20260726-03` |
+
+This full run refreshes the accepted input fingerprint after consolidating
+activation state into the compact `UMonolithSettings` API, making the cache
+project-default-aware, and adding a shared C++/PowerShell parity fixture.
+Native Query and Python matched every comparable action against the same
+verified 3.83 GB single-writer `EngineSource.db` after the final native cache
+regression run; the activation changes introduced no offline behavior drift.
+
+## 2026-07-25 activation-controls-20260725-01
+
+| Item | Value |
+| --- | ---: |
+| `offline_parity_score` | **1.0** |
+| Actions | 317 total; 311 comparable; 6 decision-chain skips |
+| MATCH / DIFF / real ERROR | 311 / 0 / 0 |
+| Expected-error cases | 5 (0 problems) |
+| `version_parity_score` | 1.0 (`2026-05-29.1` on both implementations) |
+| Input fingerprint | `ac8f994ab58e35673a98af48bae1cbf34129f50e2df69a940b23e08c86d6df98` |
+| Accepted evidence | `Benchmarks\OfflineParity\accepted\activation-controls-20260725-01` |
+
+This full run fixes the accepted baseline to the activation-aware Query bundle
+and the rebuilt, integrity-checked `EngineSource.db`. Native Query and Python
+matched every comparable action after server and indexing activation became
+durable opt-in state. The accepted bundle fingerprints the final 3.80 GB
+single-writer source database after scoped CRG edge parity reached 91,057 /
+91,057, while retaining portable verification when that generated database is
+not present in a clean checkout.
+
+## 2026-07-21 graph-retirement-20260721-08
+
+| Item | Value |
+| --- | ---: |
+| `offline_parity_score` | **1.0** |
+| Actions | 317 total; 311 comparable; 6 decision-chain skips |
+| MATCH / DIFF / real ERROR | 311 / 0 / 0 |
+| Expected-error cases | 5 (0 problems) |
+| `version_parity_score` | 1.0 (`2026-05-29.1` on both implementations) |
+| Input fingerprint | `f2acf3584953af0c3cf89414467ec57c81f31fc1c2768bf93dcf65558e5fb9d6` |
+| Accepted evidence | `Benchmarks\OfflineParity\accepted\graph-retirement-20260721-08` |
+
+This full run followed the EngineSource Schema v4 migration and health-directed
+CRG cache repair and the final portable Query rebuild. Native Query and Python
+matched every comparable action after the separate `graph.db` input was
+removed; the accepted bundle fingerprints the 4.66 GB `EngineSource.db` plus
+the final `monolith_query.exe` and contains no graph-export dependency.
+
 ## 2026-07-11 run-20260711-final — post-CRG-repair final
 
 | Item | Value |

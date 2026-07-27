@@ -142,7 +142,15 @@ Beyond the core tools, the `monolith` namespace carries server-management action
 
 For project work that needs editor-backed Monolith actions, use the configured MCP client connection to `http://localhost:9316/mcp` and confirm it with `monolith_status()` or the active MCP client's health check before calling editor actions.
 
-If the endpoint is unreachable or the MCP transport fails, treat it as an editor/server availability issue and start the project wrapper from the checkout root:
+The HTTP server inherits project `bServerEnabledByDefault` until a generated per-user override exists. Probe the effective activation before treating an unreachable endpoint as a failure:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File Plugins\Monolith\Scripts\recover_mcp.ps1 -ProbeOnly
+```
+
+`RESULT=MCP_DISABLED` is a healthy no-mutation outcome for a disabled service, not a crash. Do not force recovery or create a launch loop in that state; an operator must run `Monolith.StartServer` in an editor console. Project defaults live in `Config\DefaultMonolith.ini`; Start/Stop choices persist per user in generated `Saved\Config\WindowsEditor\Monolith.ini`.
+
+If the state is enabled and the endpoint is unreachable or the MCP transport fails, treat it as an editor/server availability issue and start the project wrapper from the checkout root:
 
 ```powershell
 .\Build\BatchFiles\RunHeadlessEditor.bat
@@ -152,7 +160,7 @@ Keep the MCP client configuration on the existing Monolith proxy command; do not
 
 After launching the wrapper, wait for `localhost:9316` to listen, reconnect the existing Monolith proxy/client to `http://localhost:9316/mcp`, then re-run `monolith_status()` before using `monolith_find`, `monolith_discover`, or namespace actions. If the endpoint still cannot connect, inspect `Saved\HeadlessMcp\Logs\HeadlessEditor-*.log` plus the Monolith proxy/editor invocation logs, report the concrete blocker, and limit fallback work to read-only `Plugins\Monolith\Binaries\monolith_query.exe` source/project/bridge queries while editor-only actions remain blocked.
 
-`Scripts\recover_mcp.ps1` runs this whole sequence deterministically — probe `/health`, launch the wrapper only when no editor-server candidate process exists (`-game`/`-server` instances are ignored), wait, and end with a `RESULT=` token plus documented exit code (contract: `Docs\specs\SPEC_MonolithAgentOpsScripts.md`):
+`Scripts\recover_mcp.ps1` runs this whole sequence deterministically — read activation, report `MCP_DISABLED` without mutation when off, otherwise probe `/health`, launch the wrapper only when no editor-server candidate process exists (`-game`/`-server` instances are ignored), wait, and end with a `RESULT=` token plus documented exit code (contract: `Docs\specs\SPEC_MonolithAgentOpsScripts.md`):
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File Plugins\Monolith\Scripts\recover_mcp.ps1             # probe + launch + wait
@@ -165,7 +173,7 @@ For a long agent session that will call editor-backed actions repeatedly, keep t
 powershell -NoProfile -ExecutionPolicy Bypass -File Plugins\Monolith\Scripts\watch_mcp.ps1
 ```
 
-The watchdog probes `/health` continuously. If the endpoint is down and the editor-server process is gone, it runs the host project's primary editor UBT build, then restart-triggered source/graph maintenance before relaunch (`MonolithReindex -mode=project`, then cooldown-gated `build_crg_graph`). Asset ProjectIndex maintenance requires the non-commandlet editor subsystem, so the watchdog waits for `/health`, runs `bridge.start_indexing(scope=assets, full=false)`, and only then resumes normal supervision. If a headless `-NullRHI` / `Saved\HeadlessMcp` editor process is alive but `/health` stays unhealthy until `-RecoverTimeoutSec`, it stops only that headless process and reruns the same build/reindex/relaunch sequence; non-headless editor/server processes are left alone. Recover launches with `AssetEditorOpenLocation=NewWindow`, `CleanShutdown=True`, and `RestoreOpenAssetTabsOnRestart=NeverRestore` to avoid stale asset-editor modal loops. Use Live Coding through the editor namespace for `.cpp` body-only compile checks and reserve full UBT for dead editor or structural changes. While healthy, the watchdog also runs scheduled index maintenance once per selected time-zone date, defaulting to `05:00` KST: live `bridge.start_indexing(scope=all, full=false)`, wait via `bridge.get_index_status`, then cooldown-gated `Saved\graph.db` refresh. Tune with `-RestartReindexMode`, `-RestartReindexTargets`, `-RecoverTimeoutSec`, `-DailyReindexTime`, `-DailyReindexMode incremental|full`, `-DailyReindexTargets`, or disable with `-SkipRestartReindex` / `-DisableDailyReindex`.
+The watchdog re-reads activation on every loop. While server activation is off it reports `MCP_DISABLED` and performs no probe/build/recovery/process-stop mutation; it automatically resumes supervision after `Monolith.StartServer`. Restart and scheduled source/asset maintenance likewise run only while indexing activation is on. With both services enabled, the existing bounded recovery flow remains: build when the durable editor is gone, refresh source state, relaunch, then perform asset maintenance through the non-commandlet editor. Recover launches keep the headless-safe editor settings, and only an unhealthy headless process is eligible for a bounded stop. Use Live Coding through the editor namespace for `.cpp` body-only compile checks and reserve full UBT for a dead editor or structural changes.
 
 For automatic startup after a workstation restart, prefer a per-user Task Scheduler job that opens a visible watchdog PowerShell window at logon. Use `Run only when user is logged on` / `LogonType Interactive`; do not run the watchdog as a Windows Service or `LocalSystem` job because it uses the user's checkout, Unreal environment, and editor-backed MCP process. Agents can install the Speed watchdog task with:
 
@@ -205,7 +213,7 @@ When the checkout includes Monolith invocation logs, treat them as local diagnos
 
 ## Offline CLI (no editor / no MCP)
 
-When the editor and MCP server are down, `source` / `project` / `bridge` actions still work against the on-disk DBs via the bundled CLI (reads `Saved\EngineSource.db`, `Saved\ProjectIndex.db`, `Saved\graph.db`):
+When the editor and MCP server are down, `source` / `project` / `bridge` actions still work against the on-disk DBs via the bundled CLI (reads `Saved\EngineSource.db` and `Saved\ProjectIndex.db`):
 
 ```
 Plugins\Monolith\Binaries\monolith_query.exe source search_source UObject --limit=5
@@ -220,9 +228,9 @@ The CLI is the MCP-free equivalent of `source_query` / `project_query` / `bridge
 
 ## Source/project index freshness
 
-When a source query fails to show a C++ change that is present on disk, treat the source index as stale before making source-backed conclusions.
+When a source query fails to show a C++ change that is present on disk, first inspect `bridge.get_index_status.indexing_activation_enabled`. Indexing inherits project `bIndexingEnabledByDefault` until a per-user choice exists. Existing DB reads remain available after `Monolith.StopIndexing` persists an explicit opt-out, but no source or asset writer is then started. Run `Monolith.StartIndexing` in the editor console before requesting a refresh; the enabled state persists until `Monolith.StopIndexing`.
 
-1. Discover the current `source` reindex action schema through the live catalog, then call the source reindex action when available.
+1. With indexing activation enabled, discover the current `source` reindex action schema through the live catalog, then call the source reindex action when available.
 2. After the reindex reports completion, verify freshness by searching for the touched symbol, filename, or unique changed text through `source_query("search_source", ...)` or `source_query("read_source", ...)`.
 3. If MCP/editor source reindex is unavailable or fails in the Go checkout, run the project's primary UBT build command from the checkout root, then verify the same symbol or unique changed text through `source_query` or `Plugins\Monolith\Binaries\monolith_query.exe source search_source ...`. Do not treat the build itself as source-index verification.
 4. If the index still cannot see the change, report the concrete blocker and avoid source-index-backed review or API claims until indexing is fixed.
@@ -240,4 +248,4 @@ For project assets, `project.search` is content-inclusive by default and returns
 - After indexing completes, the matching CRG projection/cache rebuilds automatically; run `project repair_crg_cache --execute` or `source repair_crg_cache --execute` only when health reports stale parity.
 - `source repair_crg_cache --execute` rebuilds EngineSource `crg_*` metrics plus the signature-aware `source_override_edges` cache used by `find_overrides`, `impact_radius`, `risk_score`, `review_context`, and `review_hotspots --kind=override`. Use `source repair_crg_cache --scope=override_edges --execute` when only the override edge cache/version is stale.
 - When project search looks stale, run `project health` first; `project repair_fts --target=all --execute` rebuilds all seven project FTS tables.
-- `Saved\graph.db` is the CRG-compatible source graph export/search artifact, not the source of truth for source risk/review actions. Its `flows`, `communities`, and `risk_index` auxiliary tables are reserved placeholders; zero rows there are not a health failure.
+- `source.search_crg_graph` searches the CRG-compatible file/symbol node VIEW and FTS index inside `Saved\EngineSource.db`; `source.health` owns readiness and `source.repair_fts --target=graph_nodes --execute` owns explicit repair.

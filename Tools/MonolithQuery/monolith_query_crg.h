@@ -1,6 +1,6 @@
 #pragma once
 
-// CRG graph/cache, snapshot, and source review maintenance helpers.
+// EngineSource CRG projection/cache, snapshot, and source review helpers.
 
 static int64_t count_rows(Database& db, const std::string& sql) {
     auto rows = query(db, sql);
@@ -22,217 +22,6 @@ static void add_next(json& root, std::initializer_list<const char*> actions) {
     root["next_actions"] = json::array();
     for (const char* action : actions) root["next_actions"].push_back(action);
 }
-
-static bool remove_file_best_effort(const std::string& path, std::string* error = nullptr) {
-    std::error_code ec;
-    fs::remove(path, ec);
-    if (ec && error) *error = ec.message();
-    return !ec;
-}
-
-static void remove_sqlite_sidecars_best_effort(const std::string& db_path) {
-    remove_file_best_effort(db_path + "-journal");
-    remove_file_best_effort(db_path + "-wal");
-    remove_file_best_effort(db_path + "-shm");
-}
-
-static bool atomic_replace_file(const std::string& source_path,
-                                const std::string& target_path,
-                                std::string& error) {
-#ifdef _WIN32
-    fs::path source_fs(source_path);
-    fs::path target_fs(target_path);
-    if (!MoveFileExW(source_fs.wstring().c_str(),
-                     target_fs.wstring().c_str(),
-                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        DWORD code = GetLastError();
-        std::ostringstream out;
-        out << "MoveFileExW failed with Win32 error " << code;
-        error = out.str();
-        return false;
-    }
-    return true;
-#else
-    std::error_code ec;
-    fs::rename(source_path, target_path, ec);
-    if (ec) {
-        error = ec.message();
-        return false;
-    }
-    return true;
-#endif
-}
-
-static bool try_open_readonly_database(Database& db,
-                                       const std::string& path,
-                                       std::string& error) {
-    try {
-        db.open(path, true);
-        return true;
-    } catch (const QueryFatal& e) {
-        error = e.what();
-    } catch (const std::exception& e) {
-        error = e.what();
-    }
-    return false;
-}
-
-static bool looks_like_graph_busy_error(const std::string& error) {
-    const std::string lower = lower_copy(error);
-    return lower.find("database is locked") != std::string::npos
-        || lower.find("rollback journal") != std::string::npos
-        || lower.find("sharing violation") != std::string::npos
-        || lower.find("locked") != std::string::npos;
-}
-
-static json graph_busy_json(const std::string& action,
-                            const std::string& graph_db_path,
-                            const std::string& reason) {
-    json root = {
-        {"status", "busy"},
-        {"summary", "CRG graph database is busy; use EngineSource-backed source actions while the graph rebuild finishes"},
-        {"action", action},
-        {"graph_db", graph_db_path},
-        {"journal_path", graph_db_path + "-journal"},
-        {"busy_reason", reason},
-        {"warnings", json::array({reason})},
-        {"next_actions", json::array({"source.search_source", "source.risk_score", "source.review_context", "source.crg_graph_health"})},
-        {"truncated", false},
-    };
-    return root;
-}
-
-class GraphRebuildLock {
-public:
-    explicit GraphRebuildLock(std::string path)
-        : lock_path(std::move(path)) {}
-
-    GraphRebuildLock(const GraphRebuildLock&) = delete;
-    GraphRebuildLock& operator=(const GraphRebuildLock&) = delete;
-
-    ~GraphRebuildLock() {
-        release();
-    }
-
-    bool acquire(json& busy) {
-        for (int attempt = 0; attempt < 2; ++attempt) {
-            if (try_create_lock()) {
-                write_payload();
-                return true;
-            }
-
-            json existing = read_payload();
-            const int64_t owner_pid = existing.value("owner_pid", static_cast<int64_t>(0));
-            const bool stale = owner_pid > 0 && !process_is_running(owner_pid);
-            if (stale) {
-                remove_file_best_effort(lock_path);
-                continue;
-            }
-
-            busy = {
-                {"status", "busy"},
-                {"summary", "CRG graph rebuild is already running"},
-                {"lock_path", lock_path},
-                {"owner_pid", owner_pid},
-                {"lock", existing},
-                {"next_actions", json::array({"source.crg_graph_health", "source.search_source", "source.review_context"})},
-                {"warnings", json::array({"another build_crg_graph --execute process owns the graph rebuild lock"})},
-                {"truncated", false},
-            };
-            return false;
-        }
-
-        busy = {
-            {"status", "busy"},
-            {"summary", "CRG graph rebuild lock could not be acquired"},
-            {"lock_path", lock_path},
-            {"next_actions", json::array({"source.crg_graph_health", "source.search_source", "source.review_context"})},
-            {"warnings", json::array({"graph rebuild lock exists and could not be reclaimed"})},
-            {"truncated", false},
-        };
-        return false;
-    }
-
-    const std::string& path() const {
-        return lock_path;
-    }
-
-private:
-    std::string lock_path;
-#ifdef _WIN32
-    HANDLE handle = INVALID_HANDLE_VALUE;
-#else
-    int fd = -1;
-#endif
-
-    bool try_create_lock() {
-        fs::path parent = fs::path(lock_path).parent_path();
-        if (!parent.empty()) fs::create_directories(parent);
-#ifdef _WIN32
-        handle = CreateFileW(fs::path(lock_path).wstring().c_str(),
-                             GENERIC_WRITE | DELETE,
-                             FILE_SHARE_READ,
-                             nullptr,
-                             CREATE_NEW,
-                             FILE_ATTRIBUTE_TEMPORARY,
-                             nullptr);
-        return handle != INVALID_HANDLE_VALUE;
-#else
-        fd = ::open(lock_path.c_str(), O_CREAT | O_EXCL | O_WRONLY, 0600);
-        return fd >= 0;
-#endif
-    }
-
-    void write_payload() {
-        json payload = {
-            {"owner_pid", current_process_id()},
-            {"created_at", iso_local_now()},
-            {"tool", "monolith_query"},
-            {"purpose", "source build_crg_graph atomic rebuild"},
-        };
-        const std::string text = payload.dump(2);
-#ifdef _WIN32
-        if (handle != INVALID_HANDLE_VALUE) {
-            DWORD written = 0;
-            WriteFile(handle, text.data(), static_cast<DWORD>(text.size()), &written, nullptr);
-            FlushFileBuffers(handle);
-        }
-#else
-        if (fd >= 0) {
-            (void)::write(fd, text.data(), text.size());
-            (void)::fsync(fd);
-        }
-#endif
-    }
-
-    json read_payload() const {
-        try {
-            std::ifstream in(lock_path, std::ios::binary);
-            std::stringstream buffer;
-            buffer << in.rdbuf();
-            json parsed = json::parse(buffer.str(), nullptr, false);
-            if (parsed.is_object()) return parsed;
-        } catch (...) {
-        }
-        return json::object();
-    }
-
-    void release() {
-#ifdef _WIN32
-        if (handle != INVALID_HANDLE_VALUE) {
-            CloseHandle(handle);
-            handle = INVALID_HANDLE_VALUE;
-            remove_file_best_effort(lock_path);
-        }
-#else
-        if (fd >= 0) {
-            close(fd);
-            fd = -1;
-            remove_file_best_effort(lock_path);
-        }
-#endif
-    }
-};
 
 static std::string json_string_field(const json& object, const std::string& field,
                                      const std::string& fallback) {
@@ -515,445 +304,6 @@ static bool has_crg_projection_tables(Database& db) {
         && object_exists(db, "table", "crg_edges")
         && object_exists(db, "table", "crg_node_metrics")
         && object_exists(db, "table", "crg_meta");
-}
-
-static const char* kCrgGraphDdl[] = {
-    "CREATE TABLE IF NOT EXISTS nodes ("
-    "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-    "kind TEXT NOT NULL,"
-    "name TEXT NOT NULL,"
-    "qualified_name TEXT NOT NULL UNIQUE,"
-    "file_path TEXT NOT NULL,"
-    "line_start INTEGER,"
-    "line_end INTEGER,"
-    "language TEXT,"
-    "parent_name TEXT,"
-    "params TEXT,"
-    "return_type TEXT,"
-    "modifiers TEXT,"
-    "is_test INTEGER DEFAULT 0,"
-    "file_hash TEXT,"
-    "extra TEXT DEFAULT '{}',"
-    "signature TEXT,"
-    "community_id INTEGER,"
-    "updated_at REAL NOT NULL"
-    ");",
-    "CREATE TABLE IF NOT EXISTS edges ("
-    "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-    "kind TEXT NOT NULL,"
-    "source_qualified TEXT NOT NULL,"
-    "target_qualified TEXT NOT NULL,"
-    "file_path TEXT NOT NULL,"
-    "line INTEGER DEFAULT 0,"
-    "extra TEXT DEFAULT '{}',"
-    "confidence REAL DEFAULT 1.0,"
-    "confidence_tier TEXT DEFAULT 'EXTRACTED',"
-    "updated_at REAL NOT NULL"
-    ");",
-    "CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY,value TEXT NOT NULL);",
-    "CREATE TABLE IF NOT EXISTS flows ("
-    "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-    "name TEXT NOT NULL,"
-    "entry_point_id INTEGER NOT NULL,"
-    "depth INTEGER NOT NULL,"
-    "node_count INTEGER NOT NULL,"
-    "file_count INTEGER NOT NULL,"
-    "criticality REAL NOT NULL DEFAULT 0.0,"
-    "path_json TEXT NOT NULL,"
-    "created_at TEXT NOT NULL DEFAULT (datetime('now')),"
-    "updated_at TEXT NOT NULL DEFAULT (datetime('now'))"
-    ");",
-    "CREATE TABLE IF NOT EXISTS flow_memberships ("
-    "flow_id INTEGER NOT NULL,"
-    "node_id INTEGER NOT NULL,"
-    "position INTEGER NOT NULL,"
-    "PRIMARY KEY (flow_id, node_id)"
-    ");",
-    "CREATE TABLE IF NOT EXISTS communities ("
-    "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-    "name TEXT NOT NULL,"
-    "level INTEGER NOT NULL DEFAULT 0,"
-    "parent_id INTEGER,"
-    "cohesion REAL NOT NULL DEFAULT 0.0,"
-    "size INTEGER NOT NULL DEFAULT 0,"
-    "dominant_language TEXT,"
-    "description TEXT,"
-    "created_at TEXT NOT NULL DEFAULT (datetime('now'))"
-    ");",
-    "CREATE TABLE IF NOT EXISTS community_summaries ("
-    "community_id INTEGER PRIMARY KEY,"
-    "name TEXT NOT NULL,"
-    "purpose TEXT DEFAULT '',"
-    "key_symbols TEXT DEFAULT '[]',"
-    "risk TEXT DEFAULT 'unknown',"
-    "size INTEGER DEFAULT 0,"
-    "dominant_language TEXT DEFAULT ''"
-    ");",
-    "CREATE TABLE IF NOT EXISTS flow_snapshots ("
-    "flow_id INTEGER PRIMARY KEY,"
-    "name TEXT NOT NULL,"
-    "entry_point TEXT NOT NULL,"
-    "critical_path TEXT DEFAULT '[]',"
-    "criticality REAL DEFAULT 0.0,"
-    "node_count INTEGER DEFAULT 0,"
-    "file_count INTEGER DEFAULT 0"
-    ");",
-    "CREATE TABLE IF NOT EXISTS risk_index ("
-    "node_id INTEGER PRIMARY KEY,"
-    "qualified_name TEXT NOT NULL,"
-    "risk_score REAL DEFAULT 0.0,"
-    "caller_count INTEGER DEFAULT 0,"
-    "test_coverage TEXT DEFAULT 'unknown',"
-    "security_relevant INTEGER DEFAULT 0,"
-    "last_computed TEXT DEFAULT ''"
-    ");",
-    "CREATE INDEX IF NOT EXISTS idx_nodes_file ON nodes(file_path);",
-    "CREATE INDEX IF NOT EXISTS idx_nodes_kind ON nodes(kind);",
-    "CREATE INDEX IF NOT EXISTS idx_nodes_qualified ON nodes(qualified_name);",
-    "CREATE INDEX IF NOT EXISTS idx_nodes_community ON nodes(community_id);",
-    "CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_qualified);",
-    "CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_qualified);",
-    "CREATE INDEX IF NOT EXISTS idx_edges_kind ON edges(kind);",
-    "CREATE INDEX IF NOT EXISTS idx_edges_target_kind ON edges(target_qualified, kind);",
-    "CREATE INDEX IF NOT EXISTS idx_edges_source_kind ON edges(source_qualified, kind);",
-    "CREATE INDEX IF NOT EXISTS idx_edges_file ON edges(file_path);",
-    "CREATE INDEX IF NOT EXISTS idx_edges_composite ON edges(kind, source_qualified, target_qualified, file_path, line);",
-    "CREATE INDEX IF NOT EXISTS idx_flows_criticality ON flows(criticality DESC);",
-    "CREATE INDEX IF NOT EXISTS idx_flows_entry ON flows(entry_point_id);",
-    "CREATE INDEX IF NOT EXISTS idx_flow_memberships_node ON flow_memberships(node_id);",
-    "CREATE INDEX IF NOT EXISTS idx_communities_parent ON communities(parent_id);",
-    "CREATE INDEX IF NOT EXISTS idx_communities_cohesion ON communities(cohesion DESC);",
-    "CREATE INDEX IF NOT EXISTS idx_risk_index_score ON risk_index(risk_score DESC);",
-    "CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5("
-    "name, qualified_name, file_path, signature,"
-    "content='nodes', content_rowid='id', tokenize='porter unicode61'"
-    ");",
-};
-
-static bool ensure_crg_graph_tables(Database& db, std::string& error) {
-    for (const char* sql : kCrgGraphDdl) {
-        if (!exec_sql_ok(db, sql, error)) return false;
-    }
-    return true;
-}
-
-static bool crg_graph_ddl_is_index(const char* sql) {
-    return lower_copy(trim_copy(sql)).rfind("create index", 0) == 0;
-}
-
-static bool ensure_crg_graph_base_tables(Database& db, std::string& error) {
-    for (const char* sql : kCrgGraphDdl) {
-        if (crg_graph_ddl_is_index(sql)) continue;
-        if (!exec_sql_ok(db, sql, error)) return false;
-    }
-    return true;
-}
-
-static bool ensure_crg_graph_indexes(Database& db, std::string& error) {
-    for (const char* sql : kCrgGraphDdl) {
-        if (!crg_graph_ddl_is_index(sql)) continue;
-        if (!exec_sql_ok(db, sql, error)) return false;
-    }
-    return true;
-}
-
-static bool has_crg_graph_tables(Database& db) {
-    return object_exists(db, "table", "nodes")
-        && object_exists(db, "table", "edges")
-        && object_exists(db, "table", "metadata")
-        && object_exists(db, "table", "nodes_fts");
-}
-
-static json crg_graph_counts(Database& db) {
-    json counts = json::object();
-    counts["nodes"] = object_exists(db, "table", "nodes") ? count_rows(db, "SELECT COUNT(*) FROM nodes;") : -1;
-    counts["edges"] = object_exists(db, "table", "edges") ? count_rows(db, "SELECT COUNT(*) FROM edges;") : -1;
-    counts["files"] = object_exists(db, "table", "nodes") ? count_rows(db, "SELECT COUNT(*) FROM nodes WHERE kind = 'File';") : -1;
-    counts["symbols"] = object_exists(db, "table", "nodes") ? count_rows(db, "SELECT COUNT(*) FROM nodes WHERE kind != 'File';") : -1;
-    counts["fts_rows"] = object_exists(db, "table", "nodes_fts") ? count_rows(db, "SELECT COUNT(*) FROM nodes_fts;") : -1;
-    return counts;
-}
-
-static json crg_graph_auxiliary_counts(Database& db) {
-    json counts = json::object();
-    for (const char* table : {
-        "flows",
-        "flow_memberships",
-        "flow_snapshots",
-        "communities",
-        "community_summaries",
-        "risk_index",
-    }) {
-        counts[table] = object_exists(db, "table", table)
-            ? count_rows(db, std::string("SELECT COUNT(*) FROM ") + table + ";")
-            : -1;
-    }
-    return counts;
-}
-
-static json crg_graph_health_json(const std::string& graph_db_path) {
-    json checks = json::array();
-    json warnings = json::array();
-    json root = {
-        {"input", {{"graph_db", graph_db_path}}},
-        {"graph_db", graph_db_path},
-        {"checks", checks},
-        {"warnings", warnings},
-    };
-
-    if (!fs::exists(graph_db_path)) {
-        root["status"] = "warning";
-        root["summary"] = "CRG graph database is missing";
-        root["counts"] = json::object();
-        root["next_actions"] = json::array({"source.build_crg_graph --execute"});
-        root["checks"].push_back({{"check", "graph_db_exists"}, {"result", "warning"}, {"detail", "missing: " + graph_db_path}});
-        root["warnings"].push_back("Saved/graph.db is missing; run source.build_crg_graph --execute");
-        return root;
-    }
-
-    Database graph;
-    std::string open_error;
-    if (!try_open_readonly_database(graph, graph_db_path, open_error)) {
-        json busy = graph_busy_json("source.crg_graph_health", graph_db_path, open_error);
-        busy["input"] = root["input"];
-        busy["checks"] = json::array({
-            {{"check", "graph_db_readable"}, {"result", looks_like_graph_busy_error(open_error) ? "busy" : "warning"}, {"detail", open_error}}
-        });
-        if (!looks_like_graph_busy_error(open_error)) busy["status"] = "warning";
-        return busy;
-    }
-    auto add_check = [&](const std::string& name, bool ok, const std::string& detail) {
-        root["checks"].push_back({{"check", name}, {"result", ok ? "ok" : "warning"}, {"detail", detail}});
-        if (!ok) root["warnings"].push_back(detail);
-    };
-
-    add_check("table:nodes", object_exists(graph, "table", "nodes"), "table nodes present");
-    add_check("table:edges", object_exists(graph, "table", "edges"), "table edges present");
-    add_check("table:metadata", object_exists(graph, "table", "metadata"), "table metadata present");
-    add_check("fts:nodes_fts", object_exists(graph, "table", "nodes_fts"), "FTS table nodes_fts present");
-    json counts = crg_graph_counts(graph);
-    if (counts["nodes"].get<int64_t>() >= 0 && counts["fts_rows"].get<int64_t>() >= 0) {
-        add_check("fts:row_parity", counts["nodes"] == counts["fts_rows"],
-                  "nodes=" + std::to_string(counts["nodes"].get<int64_t>()) +
-                  " nodes_fts=" + std::to_string(counts["fts_rows"].get<int64_t>()));
-    }
-
-    std::string schema_version = scalar_str(graph, "SELECT value FROM metadata WHERE key = 'schema_version';");
-    add_check("metadata:schema_version", schema_version == "9",
-              schema_version.empty() ? "metadata.schema_version missing" : "schema_version=" + schema_version + " (expected 9)");
-    root["counts"] = counts;
-    root["auxiliary_tables"] = {
-        {"population_status", "reserved_unimplemented"},
-        {"detail", "flow, community, and graph risk-index tables are schema-reserved and are not populated by the current builder"},
-        {"counts", crg_graph_auxiliary_counts(graph)},
-    };
-    root["status"] = root["warnings"].empty() ? "ok" : "warning";
-    root["summary"] = root["warnings"].empty()
-        ? "CRG graph database schema, FTS, and metadata OK"
-        : std::to_string(root["warnings"].size()) + " CRG graph warning(s)";
-    root["next_actions"] = root["warnings"].empty()
-        ? json::array({"source.search_crg_graph", "source.review_context"})
-        : json::array({"source.build_crg_graph --execute", "source.crg_graph_health"});
-    return root;
-}
-
-static json source_graph_build_counts(Database& source_db) {
-    json counts = json::object();
-    counts["files"] = count_rows(source_db, "SELECT COUNT(*) FROM files;");
-    counts["symbols"] = count_rows(source_db, "SELECT COUNT(*) FROM symbols;");
-    counts["valid_references"] = count_rows(source_db,
-        "SELECT COUNT(*) FROM \"references\" r "
-        "JOIN symbols fs ON fs.id = r.from_symbol_id "
-        "JOIN symbols ts ON ts.id = r.to_symbol_id;");
-    counts["inheritance"] = count_rows(source_db,
-        "SELECT COUNT(*) FROM inheritance i "
-        "JOIN symbols cs ON cs.id = i.child_id "
-        "JOIN symbols ps ON ps.id = i.parent_id;");
-    return counts;
-}
-
-static int64_t json_count_value(const json& counts, const std::string& key) {
-    if (!counts.is_object() || !counts.contains(key) || !counts[key].is_number_integer()) return -1;
-    return counts[key].get<int64_t>();
-}
-
-static std::string source_graph_signature(const json& source_counts) {
-    std::ostringstream out;
-    out << "v1"
-        << ":files=" << json_count_value(source_counts, "files")
-        << ":symbols=" << json_count_value(source_counts, "symbols")
-        << ":valid_references=" << json_count_value(source_counts, "valid_references")
-        << ":inheritance=" << json_count_value(source_counts, "inheritance");
-    return out.str();
-}
-
-static bool graph_metadata_matches_source(Database& graph,
-                                          const json& source_counts,
-                                          json& metadata) {
-    metadata = json::object();
-    if (!has_crg_graph_tables(graph)) return false;
-
-    Rows rows = query(graph,
-        "SELECT key,value FROM metadata WHERE key IN ("
-        "'schema_version','source_signature_version','source_files','source_symbols',"
-        "'source_valid_references','source_inheritance','source_signature'"
-        ");");
-    for (const auto& row : rows) {
-        metadata[row.get("key")] = row.get("value");
-    }
-
-    auto equals_count = [&](const char* metadata_key, const char* count_key) {
-        return metadata.value(metadata_key, std::string()) == std::to_string(json_count_value(source_counts, count_key));
-    };
-
-    return metadata.value("schema_version", std::string()) == "9"
-        && metadata.value("source_signature_version", std::string()) == "1"
-        && equals_count("source_files", "files")
-        && equals_count("source_symbols", "symbols")
-        && equals_count("source_valid_references", "valid_references")
-        && equals_count("source_inheritance", "inheritance")
-        && metadata.value("source_signature", std::string()) == source_graph_signature(source_counts);
-}
-
-static std::vector<std::pair<std::string, std::string>> crg_graph_build_sql(const std::string& source_db_path,
-                                                                            const json& source_counts) {
-    return {
-        {"clear risk index", "DELETE FROM risk_index;"},
-        {"clear flow memberships", "DELETE FROM flow_memberships;"},
-        {"clear flows", "DELETE FROM flows;"},
-        {"clear community summaries", "DELETE FROM community_summaries;"},
-        {"clear communities", "DELETE FROM communities;"},
-        {"clear flow snapshots", "DELETE FROM flow_snapshots;"},
-        {"clear edges", "DELETE FROM edges;"},
-        {"clear nodes", "DELETE FROM nodes;"},
-        {"clear metadata", "DELETE FROM metadata;"},
-        {"recreate fts", "CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5("
-            "name, qualified_name, file_path, signature,"
-            "content='nodes', content_rowid='id', tokenize='porter unicode61'"
-            ");"},
-        {"file nodes", R"SQL(
-INSERT INTO nodes(id,kind,name,qualified_name,file_path,line_start,line_end,language,parent_name,params,return_type,modifiers,is_test,file_hash,extra,signature,community_id,updated_at)
-SELECT -f.id,
-       'File',
-       COALESCE(NULLIF(f.path,''), 'file#' || f.id),
-       COALESCE(NULLIF(f.path,''), 'file#' || f.id),
-       COALESCE(f.path,''),
-       1,
-       COALESCE(f.line_count,0),
-       CASE
-         WHEN lower(COALESCE(f.file_type,'')) IN ('header','hpp','h') THEN 'cpp'
-         WHEN lower(COALESCE(f.file_type,'')) IN ('cpp','cc','cxx') THEN 'cpp'
-         WHEN lower(COALESCE(f.file_type,'')) LIKE '%shader%' THEN 'shader'
-         ELSE COALESCE(NULLIF(f.file_type,''),'cpp')
-       END,
-       NULL,NULL,NULL,NULL,0,'',
-       printf('{"source":"monolith","file_id":%lld,"module":"%s"}', f.id, replace(COALESCE(m.name,''), '"', '')),
-       NULL,NULL,CAST(strftime('%s','now') AS REAL)
-FROM src.files f
-LEFT JOIN src.modules m ON m.id = f.module_id;
-)SQL"},
-        {"symbol nodes", R"SQL(
-INSERT INTO nodes(id,kind,name,qualified_name,file_path,line_start,line_end,language,parent_name,params,return_type,modifiers,is_test,file_hash,extra,signature,community_id,updated_at)
-SELECT s.id,
-       CASE
-         WHEN lower(COALESCE(s.kind,'')) IN ('class','struct','interface') THEN 'Class'
-         WHEN lower(COALESCE(s.kind,'')) IN ('function','method','constructor','destructor') THEN
-           CASE WHEN lower(COALESCE(s.name,'') || ' ' || COALESCE(f.path,'')) LIKE '%test%' THEN 'Test' ELSE 'Function' END
-         WHEN lower(COALESCE(s.kind,'')) IN ('enum','typedef','type','delegate') THEN 'Type'
-         ELSE COALESCE(NULLIF(s.kind,''),'Symbol')
-       END,
-       COALESCE(NULLIF(s.name,''), 'symbol#' || s.id),
-       COALESCE(NULLIF(s.qualified_name,''), COALESCE(f.path,'') || '::' || COALESCE(s.name,'symbol')) || '#' || s.id,
-       COALESCE(f.path,''),
-       COALESCE(s.line_start,0),
-       COALESCE(s.line_end,0),
-       CASE
-         WHEN lower(COALESCE(f.file_type,'')) LIKE '%shader%' THEN 'shader'
-         ELSE 'cpp'
-       END,
-       p.name,
-       NULL,
-       NULL,
-       s.access,
-       CASE WHEN lower(COALESCE(s.name,'') || ' ' || COALESCE(f.path,'')) LIKE '%test%' THEN 1 ELSE 0 END,
-       '',
-       printf('{"source":"monolith","symbol_id":%lld,"kind":"%s","module":"%s","is_ue_macro":%d}',
-              s.id, replace(COALESCE(s.kind,''), '"', ''), replace(COALESCE(m.name,''), '"', ''), COALESCE(s.is_ue_macro,0)),
-       s.signature,
-       NULL,
-       CAST(strftime('%s','now') AS REAL)
-FROM src.symbols s
-LEFT JOIN src.files f ON f.id = s.file_id
-LEFT JOIN src.modules m ON m.id = f.module_id
-LEFT JOIN src.symbols p ON p.id = s.parent_symbol_id;
-)SQL"},
-        {"contains edges", R"SQL(
-INSERT INTO edges(kind,source_qualified,target_qualified,file_path,line,extra,confidence,confidence_tier,updated_at)
-SELECT 'CONTAINS',
-       COALESCE(f.path,''),
-       COALESCE(NULLIF(s.qualified_name,''), COALESCE(f.path,'') || '::' || COALESCE(s.name,'symbol')) || '#' || s.id,
-       COALESCE(f.path,''),
-       COALESCE(s.line_start,0),
-       printf('{"source":"monolith","file_id":%lld,"symbol_id":%lld}', f.id, s.id),
-       1.0,
-       'EXTRACTED',
-       CAST(strftime('%s','now') AS REAL)
-FROM src.symbols s
-JOIN src.files f ON f.id = s.file_id;
-)SQL"},
-        {"reference edges", R"SQL(
-INSERT INTO edges(kind,source_qualified,target_qualified,file_path,line,extra,confidence,confidence_tier,updated_at)
-SELECT CASE
-         WHEN lower(COALESCE(r.ref_kind,'')) IN ('call','calls','function_call') THEN 'CALLS'
-         WHEN lower(COALESCE(r.ref_kind,'')) IN ('type','type_ref','reference') THEN 'REFERENCES'
-         ELSE upper(COALESCE(NULLIF(r.ref_kind,''),'REFERENCES'))
-       END,
-       COALESCE(NULLIF(fs.qualified_name,''), COALESCE(ff.path,'') || '::' || COALESCE(fs.name,'symbol')) || '#' || fs.id,
-       COALESCE(NULLIF(ts.qualified_name,''), COALESCE(tf.path,'') || '::' || COALESCE(ts.name,'symbol')) || '#' || ts.id,
-       COALESCE(rf.path, ff.path, ''),
-       COALESCE(r.line,0),
-       printf('{"source":"monolith","reference_id":%lld,"ref_kind":"%s"}', r.id, replace(COALESCE(r.ref_kind,''), '"', '')),
-       1.0,
-       'EXTRACTED',
-       CAST(strftime('%s','now') AS REAL)
-FROM src."references" r
-JOIN src.symbols fs ON fs.id = r.from_symbol_id
-JOIN src.symbols ts ON ts.id = r.to_symbol_id
-LEFT JOIN src.files ff ON ff.id = fs.file_id
-LEFT JOIN src.files tf ON tf.id = ts.file_id
-LEFT JOIN src.files rf ON rf.id = r.file_id;
-)SQL"},
-        {"inheritance edges", R"SQL(
-INSERT INTO edges(kind,source_qualified,target_qualified,file_path,line,extra,confidence,confidence_tier,updated_at)
-SELECT 'INHERITS',
-       COALESCE(NULLIF(cs.qualified_name,''), COALESCE(cf.path,'') || '::' || COALESCE(cs.name,'symbol')) || '#' || cs.id,
-       COALESCE(NULLIF(ps.qualified_name,''), COALESCE(pf.path,'') || '::' || COALESCE(ps.name,'symbol')) || '#' || ps.id,
-       COALESCE(cf.path,''),
-       COALESCE(cs.line_start,0),
-       printf('{"source":"monolith","inheritance_id":%lld}', i.id),
-       1.0,
-       'EXTRACTED',
-       CAST(strftime('%s','now') AS REAL)
-FROM src.inheritance i
-JOIN src.symbols cs ON cs.id = i.child_id
-JOIN src.symbols ps ON ps.id = i.parent_id
-LEFT JOIN src.files cf ON cf.id = cs.file_id
-LEFT JOIN src.files pf ON pf.id = ps.file_id;
-)SQL"},
-        {"metadata schema", "INSERT OR REPLACE INTO metadata(key,value) VALUES('schema_version','9');"},
-        {"metadata source", "INSERT OR REPLACE INTO metadata(key,value) VALUES('source','monolith');"},
-        {"metadata source db", "INSERT OR REPLACE INTO metadata(key,value) VALUES('monolith_source_db'," + sql_quote(source_db_path) + ");"},
-        {"metadata built_at", "INSERT OR REPLACE INTO metadata(key,value) VALUES('built_at',datetime('now'));"},
-        {"metadata builder", "INSERT OR REPLACE INTO metadata(key,value) VALUES('builder','monolith_query source build_crg_graph');"},
-        {"metadata source signature version", "INSERT OR REPLACE INTO metadata(key,value) VALUES('source_signature_version','1');"},
-        {"metadata source files", "INSERT OR REPLACE INTO metadata(key,value) VALUES('source_files','" + std::to_string(json_count_value(source_counts, "files")) + "');"},
-        {"metadata source symbols", "INSERT OR REPLACE INTO metadata(key,value) VALUES('source_symbols','" + std::to_string(json_count_value(source_counts, "symbols")) + "');"},
-        {"metadata source valid references", "INSERT OR REPLACE INTO metadata(key,value) VALUES('source_valid_references','" + std::to_string(json_count_value(source_counts, "valid_references")) + "');"},
-        {"metadata source inheritance", "INSERT OR REPLACE INTO metadata(key,value) VALUES('source_inheritance','" + std::to_string(json_count_value(source_counts, "inheritance")) + "');"},
-        {"metadata source signature", "INSERT OR REPLACE INTO metadata(key,value) VALUES('source_signature'," + sql_quote(source_graph_signature(source_counts)) + ");"},
-        {"metadata auxiliary tables", "INSERT OR REPLACE INTO metadata(key,value) VALUES('auxiliary_tables','reserved_unimplemented:flows,flow_memberships,flow_snapshots,communities,community_summaries,risk_index');"},
-        {"rebuild fts", "INSERT INTO nodes_fts(nodes_fts) VALUES('rebuild');"},
-    };
 }
 
 static json crg_repair_counts(Database& db, const std::string& domain) {
@@ -1437,9 +787,19 @@ static json crg_repair_cache_json(Database& db, const std::string& domain,
             : "Dry-run: " + domain + " CRG projection/cache is already fresh; --execute would skip the rebuild.";
         root["after"] = json::object();
         if (repair_needed) {
-            root["next_actions"] = domain == "source"
-                ? json::array({"source.repair_crg_cache --execute", "source.repair_crg_cache --scope=override_edges --execute", "source.health --include-deep-checks=true", "source.risk_score"})
-                : json::array({domain + ".repair_crg_cache --execute", domain + ".health", domain + ".risk_score"});
+            if (domain == "source" && normalized_scope == "override_edges") {
+                root["next_actions"] = json::array({
+                    "source.repair_crg_cache --scope=override_edges --execute",
+                    "source.health --include-deep-checks=true",
+                    "source.find_overrides",
+                });
+            } else {
+                root["next_actions"] = json::array({
+                    domain + ".repair_crg_cache --scope=all --execute",
+                    domain + ".health",
+                    domain + ".risk_score",
+                });
+            }
         } else {
             root["next_actions"] = domain == "source"
                 ? json::array({"source.health", "source.risk_score", "source.review_context"})
@@ -1950,35 +1310,56 @@ static json try_cached_risk(Database& db, const std::string& domain,
     return item;
 }
 
-// Appends crg:* checks mirroring the editor ComputeHealth. Cache ABSENT is
-// informational only (keeps offline `health` "ok" for pre-cache DBs, per
-// projection-cache REQ-006); cache PRESENT-but-inconsistent warns like the
-// editor. `valid_edges` lets the caller pass the dangling-ref-corrected
-// native edge count so parity matches the editor's current behavior.
-static void append_crg_health_checks(Database& db, const std::string& domain,
-                                     int64_t native_node_cnt, int64_t valid_edges,
-                                     json& root) {
+struct CrgHealthRepairNeeds {
+    bool core = false;
+    bool override_edges = false;
+};
+
+// Appends crg:* checks mirroring the editor ComputeHealth and reports which
+// independently repairable cache range is stale. Project CRG remains an
+// optional projection when absent; an absent source CRG is an actionable core
+// defect because source.health exposes its repair plan.
+static CrgHealthRepairNeeds append_crg_health_checks(
+        Database& db,
+        const std::string& domain,
+        int64_t native_node_cnt,
+        int64_t valid_edges,
+        json& root) {
+    CrgHealthRepairNeeds repair_needs;
     auto info = [&](const std::string& name, const std::string& detail) {
         root["checks"].push_back({{"check", name}, {"result", "info"}, {"detail", detail}});
     };
-    auto check = [&](const std::string& name, bool pass, const std::string& detail) {
+    auto check = [&](const std::string& name, bool pass, const std::string& detail, bool& repair_flag) {
         root["checks"].push_back({{"check", name}, {"result", pass ? "ok" : "warning"}, {"detail", detail}});
-        if (!pass) root["warnings"].push_back(detail);
+        if (!pass) {
+            repair_flag = true;
+            root["warnings"].push_back(detail);
+        }
     };
     if (!crg_cache_present(db)) {
-        info("crg:cache_absent",
-             "CRG projection cache not built (run repair_crg_cache for cached risk + parity checks)");
-        return;
+        if (domain == "source") {
+            check(
+                "crg:cache_absent",
+                false,
+                "Source CRG projection cache is missing (run source.repair_crg_cache --scope=all)",
+                repair_needs.core);
+        } else {
+            info("crg:cache_absent",
+                 "CRG projection cache not built (run repair_crg_cache for cached risk + parity checks)");
+        }
+        return repair_needs;
     }
     for (const char* t : {"crg_nodes", "crg_edges", "crg_node_metrics", "crg_meta"})
         check(std::string("crg:table:") + t, object_exists(db, "table", t),
               object_exists(db, "table", t) ? std::string("CRG table ") + t + " present"
-                                            : std::string("missing CRG table ") + t);
+                                            : std::string("missing CRG table ") + t,
+              repair_needs.core);
     if (domain == "source") {
         check("crg:table:source_override_edges", object_exists(db, "table", "source_override_edges"),
               object_exists(db, "table", "source_override_edges")
                   ? "CRG table source_override_edges present"
-                  : "missing CRG table source_override_edges (run source.repair_crg_cache)");
+                  : "missing CRG table source_override_edges (run source.repair_crg_cache --scope=override_edges)",
+              repair_needs.override_edges);
     }
     int64_t cnodes = count_rows(db, "SELECT COUNT(*) FROM crg_nodes WHERE domain = '" + domain + "';");
     int64_t cedges = count_rows(db, "SELECT COUNT(*) FROM crg_edges WHERE domain = '" + domain + "';");
@@ -1987,32 +1368,40 @@ static void append_crg_health_checks(Database& db, const std::string& domain,
         "WHERE n.domain = '" + domain + "';");
     check("crg:nodes_row_parity", cnodes == native_node_cnt,
           domain + " native=" + std::to_string(native_node_cnt) + " crg_nodes=" + std::to_string(cnodes) +
-          (cnodes == native_node_cnt ? "" : " (mismatch -> repair_crg_cache)"));
+          (cnodes == native_node_cnt ? "" : " (mismatch -> repair_crg_cache)"),
+          repair_needs.core);
     check("crg:edges_row_parity", cedges == valid_edges,
           "valid native edges=" + std::to_string(valid_edges) + " crg_edges=" + std::to_string(cedges) +
-          (cedges == valid_edges ? "" : " (mismatch -> repair_crg_cache)"));
+          (cedges == valid_edges ? "" : " (mismatch -> repair_crg_cache)"),
+          repair_needs.core);
     check("crg:metrics_row_parity", cmetrics == cnodes,
           "crg_nodes=" + std::to_string(cnodes) + " crg_node_metrics=" + std::to_string(cmetrics) +
-          (cmetrics == cnodes ? "" : " (mismatch -> repair_crg_cache)"));
+          (cmetrics == cnodes ? "" : " (mismatch -> repair_crg_cache)"),
+          repair_needs.core);
     int64_t orphan = count_rows(db,
         "SELECT COUNT(*) FROM crg_edges e WHERE e.domain = '" + domain + "' AND ("
         "e.source_node_id NOT IN (SELECT id FROM crg_nodes) OR "
         "e.target_node_id NOT IN (SELECT id FROM crg_nodes));");
     check("crg:orphan_edges", orphan == 0,
           orphan == 0 ? "no orphan CRG projection edge rows"
-                      : std::to_string(orphan) + " orphan CRG projection edge row(s)");
+                      : std::to_string(orphan) + " orphan CRG projection edge row(s)",
+          repair_needs.core);
     std::string cache_ver = scalar_str(db, "SELECT value FROM crg_meta WHERE key = 'cache_version';");
     check("crg:cache_version", !cache_ver.empty(),
           cache_ver.empty() ? "crg_meta.cache_version missing (run repair_crg_cache)"
-                            : "crg cache_version=" + cache_ver);
+                            : "crg cache_version=" + cache_ver,
+          repair_needs.core);
     std::string scoring_ver = scalar_str(db, "SELECT value FROM crg_meta WHERE key = 'scoring_version';");
     check("crg:scoring_version", scoring_ver == "3",
           scoring_ver.empty() ? "crg_meta.scoring_version missing (run repair_crg_cache)"
-                              : "crg scoring_version=" + scoring_ver + " (expected 3)");
+                              : "crg scoring_version=" + scoring_ver + " (expected 3)",
+          repair_needs.core);
     if (domain == "source") {
         std::string override_ver = scalar_str(db, "SELECT value FROM crg_meta WHERE key = 'source_override_edges_version';");
         check("crg:source_override_edges_version", override_ver == "2",
-              override_ver.empty() ? "crg_meta.source_override_edges_version missing (run source.repair_crg_cache)"
-                                   : "source override edge cache version=" + override_ver + " (expected 2)");
+              override_ver.empty() ? "crg_meta.source_override_edges_version missing (run source.repair_crg_cache --scope=override_edges)"
+                                   : "source override edge cache version=" + override_ver + " (expected 2)",
+              repair_needs.override_edges);
     }
+    return repair_needs;
 }

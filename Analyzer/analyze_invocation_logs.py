@@ -69,6 +69,12 @@ RECENCY_WEIGHTS = {
     "stable_quiet": 0.4,
     "newly_quiet": 0.15,
 }
+RETIRED_SOURCE_ACTIONS = frozenset({
+    "build_crg_graph",
+    "rebuild_crg_graph",
+    "crg_graph_health",
+    "repair_crg_graph",
+})
 SYNTHETIC_ARGUMENT_MARKERS = (
     "__test_",
     "__missing_console_test.db",
@@ -516,14 +522,17 @@ class Analyzer:
         self.noise_counts: Counter[str] = Counter()
         self.noise_by_action: Counter[Tuple[str, str]] = Counter()
         self.index_health_counts: Counter[str] = Counter()
+        self.problem_index_health_counts: Counter[str] = Counter()
         self.headless_counts: Counter[str] = Counter()
         self.profile_counts: Counter[str] = Counter()
         self.environment_issue_evidence: Dict[str, EvidenceBucket] = defaultdict(EvidenceBucket)
         self.retry_counts: Counter[Tuple[str, str]] = Counter()
         self.retry_evidence: Dict[Tuple[str, str], EvidenceBucket] = defaultdict(EvidenceBucket)
         self.duration_by_action: Dict[str, DurationStats] = defaultdict(DurationStats)
+        self.problem_duration_by_action: Dict[str, DurationStats] = defaultdict(DurationStats)
         self.payload_by_action: Counter[str] = Counter()
-        self.max_payload_by_action: Dict[str, Tuple[int, Evidence]] = {}
+        self.problem_payload_by_action: Counter[str] = Counter()
+        self.problem_max_payload_by_action: Dict[str, Tuple[int, Evidence]] = {}
         self.slow_calls = TopN(TOP_SAMPLE_LIMIT)
         self.large_results = TopN(TOP_SAMPLE_LIMIT)
         self.long_gaps = TopN(TOP_SAMPLE_LIMIT)
@@ -620,15 +629,16 @@ class Analyzer:
         self.status_by_action[(event.action_key, event.status)] += 1
         self.noise_counts[event.noise_class] += 1
         self.noise_by_action[(event.noise_class, event.action_key)] += 1
+        excluded_from_problems = self._exclude_from_problem_findings(event)
         date_key = event.date_key
-        # all_date_keys defines the recent window over every real log day (noise
-        # included), so the window is stable; the per-action recency tallies below
-        # are gated to the same population as the findings they annotate.
-        if date_key != "direct":
+        # Preserve the existing calendar semantics for heartbeat/synthetic log
+        # days, but a day containing only retired traffic must not advance the
+        # recency window for current problems.
+        if date_key != "direct" and event.noise_class != "retired_action":
             self.all_date_keys.add(date_key)
-        self._record_environment(event)
         self.duration_by_action[event.action_key].add(event.duration_ms)
         self.payload_by_action[event.action_key] += event.payload_bytes
+        self._record_environment(event, include_problem_findings=not excluded_from_problems)
         self.mixed_schema_days[event.date_key][event.format_version] += 1
         if event.trace_id:
             self.trace_versions[event.trace_id][event.format_version] += 1
@@ -638,24 +648,31 @@ class Analyzer:
             self.error_by_action[event.action_key] += 1
             self.error_evidence[event.action_key].add(event)
 
-        if not self._exclude_from_problem_findings(event):
-            self.finding_count_by_action[event.action_key] += 1
-            # Recency per-date tallies share the finding population so the
-            # recent/historical split and recency_score weight are computed over
-            # the same rows the finding's base score is (heartbeat/synthetic
-            # excluded unless --include-* is passed); otherwise an action whose
-            # only recent traffic is synthetic CI would flip no_recent_data -> closed.
-            self.count_by_action_date[(event.action_key, date_key)] += 1
-            if event.status != "success":
-                self.finding_error_by_action[event.action_key] += 1
-                self.finding_error_evidence[event.action_key].add(event)
-                self.error_by_action_date[(event.action_key, date_key)] += 1
-
         if event.outcome:
             self.outcome_by_action[(event.action_key, event.outcome)] += 1
 
         for tag in event.tags:
             self.tag_by_action[(event.action_key, tag)] += 1
+
+        # Raw telemetry above remains visible in noise_summary/action_stats. All
+        # current-problem metrics below share this one ingestion gate so retired,
+        # heartbeat, and synthetic rows cannot leak into a different builder or
+        # its per-action recency tallies.
+        if excluded_from_problems:
+            return
+
+        self._record_problem_event(event)
+
+    def _record_problem_event(self, event: CanonicalEvent) -> None:
+        date_key = event.date_key
+        self.problem_duration_by_action[event.action_key].add(event.duration_ms)
+        self.problem_payload_by_action[event.action_key] += event.payload_bytes
+        self.finding_count_by_action[event.action_key] += 1
+        self.count_by_action_date[(event.action_key, date_key)] += 1
+        if event.status != "success":
+            self.finding_error_by_action[event.action_key] += 1
+            self.finding_error_evidence[event.action_key].add(event)
+            self.error_by_action_date[(event.action_key, date_key)] += 1
 
         # A retry finding represents repeated failures, not merely repeated calls.
         # v3 loggers stamp a stable retry signature on successful calls as well, so
@@ -676,9 +693,9 @@ class Analyzer:
         if event.payload_bytes >= LARGE_RESULT_BYTES:
             self.large_results.add(event.payload_bytes, event.evidence())
 
-        max_payload = self.max_payload_by_action.get(event.action_key)
+        max_payload = self.problem_max_payload_by_action.get(event.action_key)
         if event.payload_bytes and (max_payload is None or event.payload_bytes > max_payload[0]):
-            self.max_payload_by_action[event.action_key] = (event.payload_bytes, event.evidence())
+            self.problem_max_payload_by_action[event.action_key] = (event.payload_bytes, event.evidence())
 
         child_ms = child_process_duration(event.child_process)
         if child_ms is not None:
@@ -687,16 +704,15 @@ class Analyzer:
             self.child_process_duration[event.action_key] += child_ms
             self.child_process_evidence[event.action_key].add(event)
 
-        if is_schema_confusion(event) and not self._exclude_from_problem_findings(event):
+        if is_schema_confusion(event):
             key = schema_group_key(event)
             self.schema_groups[key] += 1
             self.schema_evidence[key].add(event)
 
         if is_unknown_action(event):
-            if self.args.include_synthetic_tests or event.noise_class != "synthetic_test":
-                key = unknown_group_key(event)
-                self.unknown_groups[key] += 1
-                self.unknown_evidence[key].add(event)
+            key = unknown_group_key(event)
+            self.unknown_groups[key] += 1
+            self.unknown_evidence[key].add(event)
 
         if event.noise_class == "escape_hatch":
             self.escape_hatch_count[event.action_key] += 1
@@ -726,16 +742,20 @@ class Analyzer:
             return True
         if event.noise_class == "synthetic_test" and not self.args.include_synthetic_tests:
             return True
+        if event.noise_class == "retired_action":
+            return True
         return False
 
-    def _record_environment(self, event: CanonicalEvent) -> None:
+    def _record_environment(self, event: CanonicalEvent, include_problem_findings: bool) -> None:
         env = event.environment
         if not env:
             return
         index_health = str(env.get("index_health") or "").strip().lower()
         if index_health:
             self.index_health_counts[index_health] += 1
-            if index_health not in {"ok", "unknown"}:
+            if include_problem_findings:
+                self.problem_index_health_counts[index_health] += 1
+            if include_problem_findings and index_health not in {"ok", "unknown"}:
                 self.environment_issue_evidence["index_health:{0}".format(index_health)].add(event)
         if "headless" in env:
             self.headless_counts[str(env.get("headless"))] += 1
@@ -916,6 +936,31 @@ class Analyzer:
                     sample={"synthetic_test_records": synthetic_count},
                 )
             )
+        retired_count = self.noise_counts.get("retired_action", 0)
+        if retired_count:
+            retired_actions = {
+                action_key: count
+                for (noise_class, action_key), count in self.noise_by_action.items()
+                if noise_class == "retired_action"
+            }
+            findings.append(
+                Finding(
+                    finding_id="noise_summary:retired_action",
+                    category="noise_summary",
+                    severity="info",
+                    confidence=1.0,
+                    score=retired_count,
+                    title="Retired action records are retained as historical evidence",
+                    recommendation=(
+                        "Keep these rows available for before/after cost analysis, but do not "
+                        "rank them as current problem findings or recency signals."
+                    ),
+                    sample={
+                        "retired_action_records": retired_count,
+                        "actions": dict(sorted(retired_actions.items())),
+                    },
+                )
+            )
         return findings
 
     def _build_maintenance_findings(self) -> List[Finding]:
@@ -1007,7 +1052,7 @@ class Analyzer:
         for action_key, count in self.escape_hatch_count.most_common():
             if count < MIN_ESCAPE_HATCH_COUNT:
                 continue
-            error_count = self.error_by_action.get(action_key, 0)
+            error_count = self.finding_error_by_action.get(action_key, 0)
             severity = "high" if count >= 100 else "medium"
             findings.append(
                 Finding(
@@ -1067,7 +1112,7 @@ class Analyzer:
             total_ms = self.child_process_duration.get(action_key, 0.0)
             if count == 0:
                 continue
-            parent_stats = self.duration_by_action[action_key].as_row()
+            parent_stats = self.problem_duration_by_action[action_key].as_row()
             parent_total_ms = parent_stats.get("total_ms", 0.0)
             dominance = total_ms / parent_total_ms if parent_total_ms else 0.0
             severity = "medium" if total_ms >= SLOW_CALL_MS or dominance >= 0.7 else "low"
@@ -1099,7 +1144,7 @@ class Analyzer:
     def _build_large_result_findings(self) -> List[Finding]:
         findings: List[Finding] = []
         for action_key, (payload, evidence) in sorted(
-            self.max_payload_by_action.items(), key=lambda item: item[1][0], reverse=True
+            self.problem_max_payload_by_action.items(), key=lambda item: item[1][0], reverse=True
         ):
             if payload < LARGE_RESULT_BYTES:
                 continue
@@ -1115,7 +1160,10 @@ class Analyzer:
                         "Inspect projection, pagination, duplicate row suppression, and default limit "
                         "behavior for this action."
                     ),
-                    sample={"max_payload_bytes": payload, "total_payload_bytes": self.payload_by_action[action_key]},
+                    sample={
+                        "max_payload_bytes": payload,
+                        "total_payload_bytes": self.problem_payload_by_action[action_key],
+                    },
                     action_key=action_key,
                     evidence=[evidence],
                 )
@@ -1185,7 +1233,7 @@ class Analyzer:
 
     def _build_slow_findings(self) -> List[Finding]:
         findings: List[Finding] = []
-        for action_key, stats in self.duration_by_action.items():
+        for action_key, stats in self.problem_duration_by_action.items():
             row = stats.as_row()
             p95 = row["p95_ms"]
             if stats.count < 5 or p95 < SLOW_CALL_MS:
@@ -1234,7 +1282,7 @@ class Analyzer:
         findings: List[Finding] = []
         for key, bucket in sorted(self.environment_issue_evidence.items()):
             _prefix, value = key.split(":", 1)
-            count = self.index_health_counts.get(value, 0)
+            count = self.problem_index_health_counts.get(value, 0)
             severity = "medium" if value in {"missing", "stale", "error", "unhealthy"} else "low"
             findings.append(
                 Finding(
@@ -1593,11 +1641,11 @@ def classify_noise(
         return "synthetic_test"
     if is_synthetic_param_guard_fixture(namespace, action, call or {}, message):
         return "synthetic_test"
+    if namespace == "source" and action in RETIRED_SOURCE_ACTIONS:
+        return "retired_action"
     if namespace == "source" and action in {
         "repair_crg_cache",
-        "build_crg_graph",
         "health",
-        "crg_graph_health",
         "repair_fts",
         "trigger_project_reindex",
     }:

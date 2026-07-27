@@ -3459,7 +3459,10 @@ namespace MonolithImageGen::SvgSource
 		if (Params->HasField(TEXT("return_sanitized_svg")))
 		{
 			bool bReturnSanitizedSvg = false;
-			if (!Params->TryGetBoolField(TEXT("return_sanitized_svg"), bReturnSanitizedSvg))
+			// TryGetBoolField coerces string/number values (e.g. "not_a_bool" -> false with success),
+			// so require an actual JSON boolean before accepting the param.
+			if (!Params->HasTypedField<EJson::Boolean>(TEXT("return_sanitized_svg"))
+				|| !Params->TryGetBoolField(TEXT("return_sanitized_svg"), bReturnSanitizedSvg))
 			{
 				return FMonolithActionResult::Error(TEXT("Invalid parameter type: return_sanitized_svg must be a boolean"), -32602);
 			}
@@ -3505,7 +3508,9 @@ namespace MonolithImageGen::SvgSource
 		Params->TryGetBoolField(TEXT("save"), MsdfOptions.bSave);
 		if (Params->HasField(TEXT("save_source_png")))
 		{
-			if (!Params->TryGetBoolField(TEXT("save_source_png"), MsdfOptions.bSaveSourcePng))
+			// TryGetBoolField coerces non-boolean JSON values, so require an actual boolean type.
+			if (!Params->HasTypedField<EJson::Boolean>(TEXT("save_source_png"))
+				|| !Params->TryGetBoolField(TEXT("save_source_png"), MsdfOptions.bSaveSourcePng))
 			{
 				return FMonolithActionResult::Error(TEXT("Invalid parameter type: save_source_png must be a boolean"), -32602);
 			}

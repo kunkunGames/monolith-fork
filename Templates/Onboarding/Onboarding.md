@@ -228,3 +228,9 @@ powershell -ExecutionPolicy Bypass -File Scripts\validate_monolith_skills.ps1 -I
 ```
 
 The installed roots must contain directory links or junctions for Monolith-owned skills, and each linked `SKILL.md` hash must match the repository source.
+
+The current `unreal-cpp` and `monolith-mcp` skills route `source.search_crg_graph`
+to the graph-node VIEW/FTS in `Saved\EngineSource.db`. They must not instruct an
+agent to build, poll, or maintain a separate graph export. Because installs are
+links, updating the checkout updates this routing contract without a copy or
+reinstall; run `validate_monolith_skills.ps1` to detect a stale copied install.

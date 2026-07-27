@@ -47,13 +47,13 @@ The investigation used read-only repo inspection, offline CLI health checks, rec
 | `gh pr list --state open --limit 100 ...` | Only open PR #1415 touches `Source/MonolithIndex/Private/Actions/ProjectExportAssetTextAction.cpp`; this spec file does not overlap. |
 | Sub-agent engine/tools audit | `Scripts/recover_mcp.ps1 -ProbeOnly` observed MCP down: `RESULT=MCP_DOWN probe_only=true url=http://localhost:9316/health`. |
 
-### 2.2 Latest still-open log findings
+### 2.2 Historical log snapshot and current disposition
 
-Recent invocation logs, ranked by recency, show these still-open issues:
+The table preserves the ranked invocation-log snapshot used by the original audit. It is evidence, not a current open queue: the graph export was retired on 2026-07-21 and old builder calls are now classified as `retired_action`.
 
 | Rank | Finding | Recent evidence |
 |---:|---|---|
-| 1 | `source.build_crg_graph` maintenance loop | 37 recent calls, score 2525.05, latest 20260626. |
+| 1 | `source.build_crg_graph` maintenance loop — **retired/resolved 2026-07-21** | 37 historical calls, score 2525.05, latest 20260626; the separate graph export no longer exists. |
 | 2 | `source.repair_crg_cache` maintenance loop | 37 recent calls, score 2493.68, latest 20260626. |
 | 3 | `monolith.discover` routing/availability errors | 3,711 recent calls, 31 recent errors, max payload 535,812 bytes. |
 | 4 | Blueprint mutating action failures | `remove_event_dispatcher` 73/73 recent errors, `add_event_node` 58/58, `rename_function` 20/20, `override_parent_function` 16/16, `duplicate_graph` 12/12. |
@@ -61,7 +61,7 @@ Recent invocation logs, ranked by recency, show these still-open issues:
 | 6 | Large payloads | `console.search_objects` max 697,478 bytes; `project.search` max 202,559 bytes. |
 | 7 | Duplicate retries | `cppreflect`, `risk`, `decision`, and Blueprint read actions repeat identical retry signatures. |
 
-This means the spec must not focus only on future domain wishlist. The current agent-facing foundation still has high-value reliability work.
+This historical evidence means the spec must not focus only on future domain wishlist. Current prioritization excludes the retired graph builder while retaining the remaining agent-facing reliability findings.
 
 ## 3. Practitioner Blockers
 
@@ -190,7 +190,7 @@ Rules:
 | P0.1.1 deterministic probe | `Scripts/recover_mcp.ps1 -ProbeOnly` returns stable `RESULT=` tokens and never launches the editor. |
 | P0.1.2 recovery plan | A new or extended readiness action reports endpoint URL, listener status, editor candidate status, headless log path, and bounded next steps. |
 | P0.1.3 offline catalog snapshot | `Binaries\monolith_query.exe monolith discover`, `find`, `status`, and `get_action_metadata_coverage` work while MCP is down, using a stamped snapshot and `requires_live_editor` markers. |
-| P0.1.4 watchdog supervisor | `Scripts/watch_mcp.ps1` keeps `/health` supervised during long agent sessions; when the editor process is gone, it runs the host editor UBT build, restart-triggered source/graph maintenance, relaunches through `recover_mcp.ps1`, then runs post-health asset maintenance; when a headless editor process exists but stays unhealthy through the recover timeout, it stops only that headless process and reruns the same sequence; recover uses modal-safe headless asset-editor settings. |
+| P0.1.4 watchdog supervisor | `Scripts/watch_mcp.ps1` keeps `/health` supervised during long agent sessions; when the editor process is gone, it runs the host editor UBT build, restart-triggered source maintenance, relaunches through `recover_mcp.ps1`, then runs post-health asset maintenance; when a headless editor process exists but stays unhealthy through the recover timeout, it stops only that headless process and reruns the same sequence; recover uses modal-safe headless asset-editor settings. |
 | P0.1.5 Codex-direct path | Availability fixes cover direct streamable-HTTP clients, not only `monolith_proxy.py` / `.js`. |
 
 Acceptance:

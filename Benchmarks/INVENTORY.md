@@ -1,6 +1,6 @@
 # Monolith Benchmark Completion Inventory
 
-Snapshot: `post-rebase-20260721-02`
+Snapshot: `activation-settings-compact-api-final-20260726-03`
 Catalog contract: `sha256:72abda9f0901c33d` / 61 namespaces / 1863 checked-in actions
 Source of truth: manifests and JSONL corpora under `Benchmarks`, plus `Benchmarks/inventory_status.json` for accepted-run evidence.
 Validation modes are explicit: `--portable-check` rederives tracked accepted bundles in a clean checkout and uses recorded DB attestation only when the DB is absent; `--check` additionally requires every live DB and pending Saved diagnostic and rejects mtime/content drift.
@@ -17,16 +17,16 @@ A diagnostic subset or an interrupted prefix is evidence, but never reduces the 
 
 | Items | Pass | Expected skip | Fail | Unverified | Unwritten | Rows classified | Suites accepted | Benchmark rows done | Gates passed | Overall Done |
 | ---: | ---: | ---: | ---: | ---: | ---: | :---: | ---: | :---: | ---: | :---: |
-| 4560 | 311 | 6 | 0 | 4243 | 0 | NO | 1/8 | NO | 4/5 | NO |
+| 4557 | 311 | 6 | 0 | 4240 | 0 | NO | 1/8 | NO | 4/5 | NO |
 
 ## Suite Summary
 
 | Suite | Namespace rows | Items | Pass | Expected skip | Fail | Unverified | Unwritten | State | Gap | Evidence / diagnostic |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- |
-| OfflineParity | 5 | 317 | 311 | 6 | 0 | 0 | 0 | accepted |  | Benchmarks/OfflineParity/accepted/post-rebase-20260721-02/summary.json; Post-rebase and post-repair generation: 311 MATCH, 0 DIFF, 0 ERROR, 6 explicit decision_id-dependent SKIP. Accepted freshness checks every input file SHA plus the 4.46 GB EngineSource.db content SHA-256. |
+| OfflineParity | 5 | 317 | 311 | 6 | 0 | 0 | 0 | accepted |  | Benchmarks/OfflineParity/accepted/activation-settings-compact-api-final-20260726-03/summary.json; Compact UMonolithSettings activation API, project-default-aware cache, and shared parity fixture against the final single-writer EngineSource baseline: 311 MATCH, 0 DIFF, 0 ERROR, 6 explicit decision_id-dependent SKIP. The accepted bundle fingerprints the verified 3.83 GB EngineSource.db content SHA-256. |
 | ActionGuidance | 61 | 569 | 0 | 0 | 0 | 569 | 0 | pending | GAP-ACTION-001 | Saved/Monolith/Benchmarks/ActionGuidance/diagnostic-legacy-migrations/run-02/summary.json; 16/16 retired-action migration subset passed; explicit subset is non-canonical and does not reduce the 454-row full-run gap. |
-| SourceIndex | 1 | 376 | 0 | 0 | 0 | 376 | 0 | pending | GAP-SOURCE-001 | Saved/Monolith/Benchmarks/SourceIndex/audit-20260717-full01/partial_summary.json; 284 valid prefix rows followed by 3 transport failures; interrupted results are non-comparable, so all 376 rows remain unverified. |
-| SchemaCompleteness probe contract | 51 | 330 | 0 | 0 | 0 | 330 | 0 | pending | GAP-SCHEMA-PROBE-001 | The previously reported 330-probe pre-link artifact is not retained locally, so no positive result is claimed. All probe rows remain unverified until the final-linked exact catalog identity is captured and the canonical probe run is retained. |
+| SourceIndex | 1 | 374 | 0 | 0 | 0 | 374 | 0 | pending | GAP-SOURCE-001 | Saved/Monolith/Benchmarks/SourceIndex/audit-20260717-full01/partial_summary.json; 284 valid prefix rows followed by 3 transport failures; interrupted results are non-comparable, so all 374 rows remain unverified. |
+| SchemaCompleteness probe contract | 51 | 329 | 0 | 0 | 0 | 329 | 0 | pending | GAP-SCHEMA-PROBE-001 | The previously reported 329-probe pre-link artifact is not retained locally, so no positive result is claimed. All probe rows remain unverified until the final-linked exact catalog identity is captured and the canonical probe run is retained. |
 | SchemaCompleteness live full catalog | 61 | 1863 | 0 | 0 | 0 | 1863 | 0 | pending | GAP-SCHEMA-FULL-001 | Saved/Monolith/Benchmarks/SchemaCompleteness/diagnostic-live-prebuild-20260718-01/summary.json; 20/20 bounded diagnostic rows passed, but max-actions output is non-comparable; all 1,857 checked-in pre-link catalog-contract rows remain unverified. |
 | ProjectIndex | 1 | 314 | 0 | 0 | 0 | 314 | 0 | pending | GAP-PROJECT-001 | Saved/Monolith/Benchmarks/ProjectIndex/baseline-20260711e/summary.json; The retained legacy run contains 314 rows but predates the current fail-closed identity and fixture-provenance contracts; it receives no completion credit and fixtures must be regenerated before a current full run. |
 | AICapability | 1 | 212 | 0 | 0 | 0 | 212 | 0 | pending | GAP-AI-001 | Saved/Monolith/Benchmarks/AICapability/baseline-20260711d/summary.json; The older run covered 74 rows; the current canonical corpus has 212, so no row is credited to current full-run completion. |
@@ -114,7 +114,7 @@ A diagnostic subset or an interrupted prefix is evidence, but never reduces the 
 
 | Namespace | Items | Pass | Expected skip | Fail | Unverified | Unwritten |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| source | 376 | 0 | 0 | 0 | 376 | 0 |
+| source | 374 | 0 | 0 | 0 | 374 | 0 |
 
 ### SchemaCompleteness probe contract
 
@@ -164,7 +164,7 @@ A diagnostic subset or an interrupted prefix is evidence, but never reduces the 
 | risk | 2 | 0 | 0 | 0 | 2 | 0 |
 | scene | 17 | 0 | 0 | 0 | 17 | 0 |
 | slate | 1 | 0 | 0 | 0 | 1 | 0 |
-| source | 27 | 0 | 0 | 0 | 27 | 0 |
+| source | 26 | 0 | 0 | 0 | 26 | 0 |
 | source_control | 3 | 0 | 0 | 0 | 3 | 0 |
 | sprite | 1 | 0 | 0 | 0 | 1 | 0 |
 | ui | 14 | 0 | 0 | 0 | 14 | 0 |
@@ -265,8 +265,8 @@ Only these declared gaps and execution gates may expand the remaining work. New 
 | ID | Scope | Remaining | Done when | Blocker / sequencing |
 | --- | --- | ---: | --- | --- |
 | GAP-SCHEMA-FULL-001 | SchemaCompletenessFullCatalog | 1863 | A final-linked current-identity exact-catalog scan publishes comparable=true, zero fetch failures, and zero quality failures for every catalog action. | Run against the final linked live catalog; resumable diagnostics may proceed beforehand. |
-| GAP-SCHEMA-PROBE-001 | SchemaCompletenessProbe | 330 | All 330 declared probes finish under the same current catalog identity with no required stale row. | Run after the full live catalog identity is fixed. |
-| GAP-SOURCE-001 | SourceIndex | 376 | All 376 canonical rows complete in one valid run with zero transport/protocol failures. | Live HTTP MCP must remain stable for the full sequence. |
+| GAP-SCHEMA-PROBE-001 | SchemaCompletenessProbe | 329 | All 329 declared probes finish under the same current catalog identity with no required stale row. | Run after the full live catalog identity is fixed. |
+| GAP-SOURCE-001 | SourceIndex | 374 | All 374 canonical rows complete in one valid run with zero transport/protocol failures. | Live HTTP MCP must remain stable for the full sequence. |
 | GAP-ACTION-001 | ActionGuidance | 569 | All 454 canonical rows complete with current task and catalog fingerprints. | Regenerate once against the final catalog, then run the canonical corpus. |
 | GAP-PROJECT-001 | ProjectIndex | 314 | Live fixtures are regenerated and all 314 rows pass the fail-closed provenance gate. | Fixture refresh must precede the full run. |
 | GAP-AI-001 | AICapability | 212 | All 212 canonical AI rows complete with current fixture and catalog identity. | Run after read-only index suites. |
@@ -277,10 +277,10 @@ Only these declared gaps and execution gates may expand the remaining work. New 
 | ID | Status | Contract | Evidence |
 | --- | --- | --- | --- |
 | GATE-NOLINK | passed | Before the coordinated editor-down window, use only protected -NoLink partial compilation and do not replace the protected build scripts with direct UBT/UAT. | 2026-07-18: the latest CL 1100 protected strict non-unity -NoLink compile of MonolithCore+MonolithAnimation passed 111/111 compile actions. Core/Animation DLL and PDB SHA-256 values were identical before and after; no link, binary deletion, process termination, or binary reconcile ran. |
-| GATE-FINAL-LINK | passed | After CL 1198 PCG live revalidation, use one user-coordinated editor-down window for the CL 1100 protected link build. | 2026-07-21: BuildGameEditorAndRun.bat completed the full SpeedEditor link with exit 0; BuildGameEditorStrictNonUnity.bat then compiled and linked all 46 Monolith modules under Strict, WarningsAsErrors, and DisableUnity with exit 0. |
-| GATE-CRG | passed | Source health must prove CRG parity, then OfflineParity must be rerun against that exact EngineSource.db and promoted as a schema-v2 tracked accepted bundle. | 2026-07-21: source.repair_crg_cache rebuilt 91,020 edges, 1,328,685 node metrics, and 133,274 override edges; follow-up source.health was clean. post-rebase-20260721-02 then completed 317/317 rows as 311 MATCH, 0 DIFF, 0 ERROR, and 6 exact prerequisite-dependent SKIP rows. |
+| GATE-FINAL-LINK | passed | After CL 1198 PCG live revalidation, use one user-coordinated editor-down window for the CL 1100 protected link build. | 2026-07-21: BuildGameEditorAndRun.bat completed the normal SpeedEditor build with exit 0; BuildGameEditorStrictNonUnity.bat then compiled and linked 1,472 actions under Strict, WarningsAsErrors, DisableUnity, and NoUBTMakefiles with exit 0. |
+| GATE-CRG | passed | Source health must prove CRG parity, then OfflineParity must be rerun against that exact EngineSource.db and promoted as a schema-v2 tracked accepted bundle. | 2026-07-21: source.repair_crg_cache rebuilt 91,028 edges, 1,328,817 node metrics, and 133,279 override edges; follow-up deep source.health was clean. graph-retirement-20260721-08 then completed 317/317 rows as 311 MATCH, 0 DIFF, 0 ERROR, and 6 exact prerequisite-dependent SKIP rows against that EngineSource.db and the final Query binary. |
 | GATE-ANIMATION | pending_after_final_link | After MCP recovery, every discovered Monolith.ParamGuard.Animation test must pass on the newly linked binary (currently 11/11). |  |
-| GATE-PRECOMMIT | passed | Run static CI, portable and full inventory checks, final P4/CL/default-CL audit, and review/reflection evidence after the final accepted bundles are fixed. | 2026-07-21: hosted static CI completed with 0 blocking findings; benchmark inventory unit tests passed 46/46; portable and full inventory checks verified 229 rows; git diff --check passed; final P4 audit confirmed Monolith build outputs remain isolated in CL 1271 while unrelated SpeedSwitching and SpeedCore work remains in CLs 1275/1276; final diff and accepted-bundle manifest were reviewed. |
+| GATE-PRECOMMIT | passed | Run static CI, portable and full inventory checks, final P4/CL/default-CL audit, and review/reflection evidence after the final accepted bundles are fixed. | 2026-07-21: final graph-retirement OfflineParity scored 1.0; hosted static CI completed with 0 blocking findings; benchmark inventory unit tests passed; portable and full inventory checks verified 229 rows; Strict Non-Unity compiled and linked 1,472 actions; git diff --check passed; final scope and accepted-bundle reviews found no blocking regression. |
 
 ## Changelist Boundary
 

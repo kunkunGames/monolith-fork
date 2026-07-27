@@ -110,5 +110,96 @@ class ClassifyNoiseBenchmarkClientTests(unittest.TestCase):
         self.assertNotEqual(agent_class, "synthetic_test")
 
 
+class RetiredSourceActionClassificationTests(unittest.TestCase):
+    def test_removed_graph_actions_remain_historical_not_missing_demand(self):
+        for action in sorted(analyzer.RETIRED_SOURCE_ACTIONS):
+            with self.subTest(action=action):
+                self.assertEqual(
+                    analyzer.classify_noise(
+                        "query", "source", action, "source_query", (),
+                        {"namespace": "source", "action": action}, "", {}, None,
+                    ),
+                    "retired_action",
+                )
+
+    def test_current_source_maintenance_stays_maintenance(self):
+        self.assertEqual(
+            analyzer.classify_noise(
+                "query", "source", "repair_crg_cache", "source_query", (),
+                {"namespace": "source", "action": "repair_crg_cache"}, "", {}, None,
+            ),
+            "maintenance",
+        )
+
+    def test_retired_graph_traffic_is_only_historical_evidence(self):
+        args = analyzer.parse_args([])
+        report = analyzer.Analyzer(PLUGIN_ROOT, args)
+        source_path = PLUGIN_ROOT / "Logs" / "20260720" / "query.jsonl"
+
+        # One fixture simultaneously qualifies for every action-scoped problem
+        # family that previously leaked retired actions into the ROI backlog.
+        # Repeating it crosses the retry/high-error/slow thresholds as well.
+        for line_number in range(1, 13):
+            raw = {
+                "format_version": 3,
+                "surface": "query",
+                "status": "error",
+                "duration_ms": 10_000 + line_number,
+                "call": {
+                    "namespace": "source",
+                    "action": "build_crg_graph",
+                    "tool_name": "source_query",
+                },
+                "return_summary": {"payload_bytes": 600_000 + line_number},
+                "agent_signal": {
+                    "outcome": "unknown_action",
+                    "error_class": "unknown_action",
+                    "retry_signature": "retired-graph-retry",
+                    "improvement_tags": ["schema_confusing"],
+                },
+                "child_process": {"exec_process_ms": 9_000 + line_number},
+            }
+            event = analyzer.normalize_event(raw, source_path, line_number, PLUGIN_ROOT, False)
+            self.assertEqual(event.noise_class, "retired_action")
+            report._record_event(event)
+
+        action_key = "query:source.build_crg_graph"
+        findings = report.build_findings()
+
+        # Historical rows remain directly inspectable in both promised surfaces.
+        retired_summary = next(f for f in findings if f.finding_id == "noise_summary:retired_action")
+        self.assertEqual(retired_summary.sample["actions"], {action_key: 12})
+        action_stats = next(row for row in report.action_stats_rows() if row["action_key"] == action_key)
+        self.assertEqual(action_stats["noise_class"], "retired_action")
+        self.assertEqual(action_stats["count"], 12)
+        self.assertEqual(action_stats["errors"], 12)
+        self.assertGreater(action_stats["payload_bytes_total"], 7_200_000)
+        self.assertGreater(action_stats["p95_ms"], analyzer.SLOW_CALL_MS)
+
+        # No action-scoped problem builder or recency view may receive the row.
+        self.assertFalse(any(f.action_key == action_key for f in findings))
+        self.assertTrue(
+            {
+                "maintenance_loop",
+                "schema_fix",
+                "needed_action",
+                "child_query_bottleneck",
+                "large_result",
+                "high_error_rate",
+                "duplicate_retry",
+                "slow_action",
+            }.isdisjoint({f.category for f in findings})
+        )
+        self.assertNotIn(action_key, report.finding_count_by_action)
+        self.assertNotIn(action_key, report.problem_duration_by_action)
+        self.assertNotIn(action_key, report.problem_max_payload_by_action)
+        self.assertNotIn(action_key, report.child_process_count)
+        self.assertNotIn(action_key, report.maintenance_count)
+        self.assertNotIn("20260720", report.all_date_keys)
+        recency_rows = report.recency_views(findings)
+        for view in ("still_open", "regressions", "newly_quiet", "no_recent_data"):
+            self.assertFalse(any(row["action_key"] == action_key for row in recency_rows[view]))
+
+
 if __name__ == "__main__":
     unittest.main()

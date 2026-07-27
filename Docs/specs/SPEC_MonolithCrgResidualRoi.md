@@ -2,11 +2,11 @@
 
 **Parent:** [../SPEC_CORE.md](../SPEC_CORE.md), [SPEC_MonolithSource.md](SPEC_MonolithSource.md), [SPEC_MonolithIndex.md](SPEC_MonolithIndex.md), [SPEC_MonolithToolCallReliabilityBacklog.md](SPEC_MonolithToolCallReliabilityBacklog.md)
 **Engine:** Unreal Engine 5.7+
-**Status:** Trust slice implemented 2026-06-15; project asset and project-source scoped projection refresh verified 2026-06-16; P4/P5 evidence gates remain
+**Status:** Trust slice implemented 2026-06-15; scoped projection refresh verified 2026-06-16; graph export retirement and EngineSource-backed node search implemented 2026-07-21
 **Created:** 2026-06-15
 **Owner modules:** `MonolithSource`, `MonolithIndex`, `Tools/MonolithQuery`, `Scripts/`, `Analyzer/`
-**Scope:** Residual high-ROI work after the 2026-06-15 adversarial CRG audit. Covers the source/project CRG-inspired review surfaces, derived `crg_*` projection caches, the `Saved\graph.db` export/search artifact, scoring correctness, freshness repair, maintenance-loop SLOs, and regression fixtures.
-**Non-goals:** Removing the `source` or `project` CRG-inspired query surfaces, replacing Monolith's native indexes with the external CRG runtime, adding community/betweenness/flow algorithms, changing public action names, or keeping stale/duplicate data hidden behind silent fallbacks.
+**Scope:** Residual high-ROI work after the 2026-06-15 adversarial CRG audit. Covers the source/project CRG-inspired review surfaces, derived `crg_*` projection caches, EngineSource-backed graph-node search, scoring correctness, freshness repair, maintenance SLOs, and regression fixtures.
+**Non-goals:** Removing the retained `source` or `project` CRG-inspired review surfaces, replacing Monolith's native indexes with the external CRG runtime, adding community/betweenness/flow algorithms, renaming `source.search_crg_graph`, or keeping stale/duplicate data hidden behind silent fallbacks.
 
 ---
 
@@ -21,9 +21,9 @@ Keep the high-value query surfaces:
 | `source.impact_radius`, `source.risk_score`, `source.review_hotspots`, `source.review_context`, `source.find_overrides` | Yes | They package source review context over existing `symbols`, `"references"`, `inheritance`, and override edges. |
 | `project.impact_radius`, `project.risk_score`, `project.review_hotspots`, `project.review_context` | Yes | They package asset dependency and risk context over existing `assets` and `dependencies`. |
 | Derived `crg_*` projection tables | Yes | They are disposable caches that accelerate risk/review surfaces and can be rebuilt from authoritative DB tables. |
-| `Saved\graph.db` export/search artifact | Conditional | Useful only when `source.search_crg_graph` or external graph-style export is explicitly needed. It must not be a default maintenance cost center. |
+| Separate graph export artifact | No | Caller/log census did not justify a duplicated DB and builder lifecycle. `source.search_crg_graph` is retained over the canonical EngineSource File/Symbol VIEW and FTS index. |
 
-The residual work is not about proving that "CRG" exists. It is about making the retained surfaces trustworthy enough that agents can act on them without second-guessing duplicate rows, stale caches, or false-positive risk labels. The practical value is a compact review package over Monolith's existing source/project indexes; custom CRG ownership is justified only where it improves `risk_score`, `impact_radius`, `review_context`, `review_hotspots`, `pre_merge_check`, or explicit `Saved\graph.db` export.
+The residual work is not about proving that "CRG" exists. It is about making the retained surfaces trustworthy enough that agents can act on them without second-guessing duplicate rows, stale caches, or false-positive risk labels. The practical value is a compact review package over Monolith's existing source/project indexes; custom CRG ownership is justified only where it improves `risk_score`, `impact_radius`, `review_context`, `review_hotspots`, `pre_merge_check`, or the retained EngineSource graph-node search.
 
 CRG must remain a derived risk/impact cache, not a second source of truth and not a custom graph that humans maintain by hand. If source symbols, source references, asset rows, or asset dependencies disagree with CRG rows, the native source/project tables win and the CRG projection is repaired or rebuilt. If a CRG component cannot be kept disposable, scoped, health-gated, and measurably useful to review decisions, it should be removed or reduced rather than carried as custom maintenance debt.
 
@@ -48,8 +48,8 @@ The 2026-06-15 read-only audit established the baseline below. These values are 
 | 2 | Project sensitivity tokenization and provenance | Removes high-visibility false risk labels with a small scoring change | `MonolithIndexReview.cpp`, `monolith_query_crg.h`, `MonolithIndexQueryTests.cpp` |
 | 3 | Project CRG cache freshness and transactional repair enforcement | Prevents stale cached risk/review data and makes health actionable | `MonolithIndexReview.*`, `monolith_query_crg.h`, `check_index_freshness.ps1` |
 | 4 | Regression fixtures for observed failures | Locks in the audit findings and prevents silent drift | `MonolithSourceQueryTests.cpp`, `MonolithIndexQueryTests.cpp`, CLI fixture tests |
-| 5 | Maintenance/export SLO and `graph.db` default gating | Keeps `Saved\graph.db` from costing more than it returns | `monolith_query.cpp`, `Analyzer/analyze_invocation_logs.py`, `SPEC_MonolithSource.md` |
-| 6 | Removal criteria for low-value graph export pieces | Gives a defensible future delete path without losing useful CRG review actions | Docs, analyzer reports, source/project specs |
+| 5 | EngineSource node-search SLO and retired-action visibility | Removes duplicated storage/maintenance while preserving search semantics and historical cost evidence | `monolith_query.cpp`, `Analyzer/analyze_invocation_logs.py`, `SPEC_MonolithSource.md` |
+| 6 | Regression gates for removed graph-export pieces | Prevents runtime/help/watchdog reintroduction without losing useful CRG review actions | Tests, analyzer reports, source/project specs |
 
 ## 3.1 Implementation Update - 2026-06-15 to 2026-06-16
 
@@ -63,8 +63,8 @@ The retained high-ROI slice is implemented and verified as a trust/correctness p
 | P3 project freshness | Implemented for copied-DB fixture | `project.health --include-counts=true` detects stale CRG count parity and `project.repair_crg_cache --execute` repairs the fixture back to healthy parity. |
 | P3.1 scoped project refresh | Implemented and verified | Asset startup/live indexing completion now refreshes only changed project paths plus one-hop dependency/referencer neighbors in `crg_*` when projection tables exist, including deleted-path neighbor recovery from old CRG edges, and falls back to full repair only for missing tables. `Monolith.IndexGuard.Project.RefreshCrgCacheForAssetsScoped` passed in `Saved\Automation\MonolithCrgScopedRefresh_20260616_R11\index.json`. |
 | P3.2 duplicate-free project source reindex + scoped source CRG refresh | Implemented and verified | Project-only source indexing prunes existing project `Source`/project-plugin `Source` rows, orphan symbols, and dependent source/CRG projection rows before reinserting current project symbols. `InsertModule`/`InsertFile` re-select canonical ids after `INSERT OR IGNORE`, preventing stale `last_insert_rowid()` from attaching new symbols to nonexistent files. `FMonolithSourceDatabase::RefreshCrgCacheForFiles` refreshes changed-file symbols plus one-hop/pending-prune neighbors without a full CRG rebuild when projection tables exist. `Monolith.IndexGuard.Source.PruneIndexedFilesUnderRootsRemovesProjectSlice` passed in `Saved\Automation\MonolithCrgScopedRefresh_20260616_R11\index.json`; project-only reindex `Saved\Logs\MonolithReindexScopedRefresh_20260616_R10.log` completed in 31.9 s commandlet time / 39.3 s wall time, with scoped source CRG refresh for 1934 file(s), 12494 affected symbol(s), reference edges 0.910 s, inheritance edges 0.151 s, metrics 4.034 s. Final `source health --include-counts=true --include-deep-checks=true` was `status=ok`, including `integrity:orphan_symbols`, `integrity:orphan_references`, CRG node/edge/metric parity, and `source_override_edges_version=2`. |
-| P4 maintenance/export SLO | Evidence gate remains | No new automatic `Saved\graph.db` maintenance was added. Routine review actions must continue using source/project query surfaces, with graph export invoked only for explicit export/search needs. |
-| P5 graph export keep/deprecate | Decision gate remains | Keep/deprecate is intentionally separate from retained CRG review surfaces. Deprecating `build_crg_graph`/`search_crg_graph` must not remove `risk_score`, `review_context`, `impact_radius`, `review_hotspots`, or `find_overrides`. |
+| P4 maintenance/export SLO | Implemented and measured 2026-07-21 | `search_crg_graph` reads EngineSource directly; routine/restart/daily paths have no graph-export build step. A broad `UObject --limit=5` query on the 4.66 GB real DB dropped from more than three minutes with the unbounded VIEW join to 372 ms with a 4,096-row proven candidate boundary and no full fallback. Historical graph actions are analyzer-only `retired_action` evidence. |
+| P5 graph export keep/deprecate | Implemented 2026-07-21 | The export builder/health/actions were removed while `search_crg_graph`, `risk_score`, `review_context`, `impact_radius`, `review_hotspots`, `find_overrides`, and `repair_crg_cache` remain. |
 
 Verification record:
 
@@ -73,6 +73,10 @@ Saved\Automation\MonolithCrgResidualRoi_20260615_R2\index.json
 Saved\Automation\MonolithCrgScopedRefresh_20260616_R11\index.json
 Saved\Logs\MonolithReindexScopedRefresh_20260616_R10.log
 Plugins\Monolith\Binaries\monolith_query.exe --version  # source_hash=ecfaa97ca26b8192
+Saved\Automation\MonolithGraphRetirementFixed\index.json  # 5/5 Source graph-retirement automation tests passed
+Saved\Monolith\LogAnalysis\graph-retirement-20260721-gated\summary.md  # 741120 records; 574 retired graph calls; 7726657.635 ms historical export cost
+Plugins\Monolith\Binaries\monolith_query.exe source search_crg_graph UObject --limit=5  # 372 ms, candidate_limit=4096, full fallback=false
+Plugins\Monolith\Binaries\monolith_query.exe source health --include-counts=true  # 6.82 s, 1418683 graph-node docs and all CRG/FTS parity clean
 ```
 
 ## 4. Requirements
@@ -87,7 +91,7 @@ Add regression fixtures before broad behavior changes.
 | P0.2 review-context pollution fixture | A `source.review_context` fixture must fail before the fix when the top impact list is dominated by repeated `<unknown>` or blank-path rows. |
 | P0.3 sensitivity fixture | Project scoring tests must cover `Design`, `Assignment`, `Signal`, `Signature`, `Crypto`, and `Hash`. |
 | P0.4 stale project cache fixture | A copied ProjectIndex DB with `assets != crg_nodes` must make `project.health --include-counts=true` report stale parity and must be repairable. |
-| P0.5 maintenance SLO baseline | Deferred to P4. Analyzer output must separately report query-surface latency and maintenance/export latency, so `graph.db` churn cannot be hidden inside generic CRG cost. |
+| P0.5 maintenance SLO baseline | Analyzer output must preserve retired graph-action counts/durations separately from current query/maintenance latency, so the removal benefit remains measurable without ranking old calls as current demand. |
 
 ### P1 - Source De-duplication and Path Provenance
 
@@ -99,7 +103,7 @@ The source index and CRG search path must preserve real distinct symbols while s
 | P1.2 no silent data loss | If two rows have the same display name but represent real distinct declarations, both remain visible with enough provenance to distinguish them. |
 | P1.3 blank-path handling | Blank or unresolved file paths must not dominate ranked search/review results. They must either be suppressed behind a warning bucket or returned with an explicit `path_status=missing`/equivalent provenance field. |
 | P1.4 review-context ranking | `source.review_context` must rank known-path symbols above blank-path duplicates unless the blank-path row has stronger, explicit evidence. |
-| P1.5 graph export parity | `source.search_crg_graph` must not reintroduce blank-path duplicate storms from `Saved\graph.db`; search results expose `path_status` and apply known-path-first de-duplication even when the export already exists. |
+| P1.5 graph-node search parity | `source.search_crg_graph` must not reintroduce blank-path duplicate storms from its EngineSource VIEW/FTS; results expose `path_status` and apply known-path-first de-duplication. |
 
 Acceptance:
 
@@ -153,48 +157,49 @@ Plugins\Monolith\Binaries\monolith_query.exe project health --include-counts=tru
 
 The copied DB must move from stale parity to healthy parity. A simulated in-progress indexing state or DB write contention must return an explicit refusal/busy result, not a partial silent repair.
 
-### P4 - Maintenance and Graph Export SLO
+### P4 - EngineSource Node-Search and Maintenance SLO
 
-`Saved\graph.db` is an export/search artifact. It must not be rebuilt by default just because source/project CRG review actions exist.
+Graph-node search is an EngineSource-owned read surface. It must not require a second database, export builder, lock, cooldown, or scheduled maintenance step.
 
 | Requirement | Contract |
 |---|---|
-| P4.1 no rebuild on read-only query | `risk_score`, `review_context`, `impact_radius`, `review_hotspots`, and `find_overrides` must never trigger `build_crg_graph` implicitly. |
-| P4.2 skip on no-change | A second `build_crg_graph --execute` with no source signature change and no `force` must return a skip result in under 1 second. |
-| P4.3 cooldown honored | When the source signature churns due to preceding maintenance but the last graph build is within the cooldown, the builder must return `skip_reason=cooldown` unless `force=true`. |
-| P4.4 explicit export intent | Scripts and docs must route routine review work to source/project query surfaces. `build_crg_graph` is reserved for explicit graph export/search needs. |
-| P4.5 analyzer SLO | The invocation analyzer must show separate counts/durations for `repair_crg_cache`, `build_crg_graph`, and query actions, with a post-fix target of no routine daily rebuild storm. |
+| P4.1 no export lifecycle | Runtime/catalog/help/proxy/watchdog paths must not open, create, build, poll, or accept an override for a separate graph database. |
+| P4.2 direct search | `source.search_crg_graph` must query `source_graph_nodes_fts` and `source_graph_nodes` in EngineSource with the frozen FTS/LIKE/result contract. |
+| P4.3 bounded maintenance | Incremental files/symbols triggers keep the graph-node FTS current; only migration and explicit `source.repair_fts --target=graph_nodes --execute` may perform a full rebuild. |
+| P4.4 source health owner | `source.health` reports schema, trigger, version, bounded MATCH readiness, and optional deep row parity. |
+| P4.5 analyzer continuity | Historical graph build/rebuild/health rows remain visible as `retired_action`, excluded from current maintenance loops and missing-action demand. |
+| P4.6 broad-query latency without semantic drift | On the 4.66 GB reference EngineSource DB, `UObject --limit=5` must complete within 2 seconds without the full-rank fallback. The implementation uses a bounded FTS5 rank pool, strict omitted-rank boundary proof, and geometric expansion; equal-rank and sparse-kind fixtures must still match the frozen legacy ordering exactly. |
 
 Acceptance:
 
 ```powershell
-Plugins\Monolith\Binaries\monolith_query.exe source build_crg_graph --execute --graph-db=<copied_graph.db>
-Plugins\Monolith\Binaries\monolith_query.exe source build_crg_graph --execute --graph-db=<copied_graph.db>
+Plugins\Monolith\Binaries\monolith_query.exe source search_crg_graph UObject --limit=5
+Plugins\Monolith\Binaries\monolith_query.exe source health --include-counts=true
 python Plugins\Monolith\Analyzer\analyze_invocation_logs.py --log-root Plugins\Monolith\Logs --since 20260615 --rank-by-recency
 ```
 
-The second build must skip, and the next log window must show maintenance/export wall time below query-surface wall time unless an operator explicitly forced an export rebuild.
+Search and health must succeed without creating another DB. The reference broad query must meet P4.6 and expose its candidate/expansion/fallback diagnostics. A fresh invocation window must contain no graph build/open/create calls, while old rows remain visible only as retired evidence.
 
-### P5 - Graph Export Removal Criteria
+### P5 - Graph Export Removal Criteria (Satisfied)
 
-Do not delete `Saved\graph.db` support speculatively. Gate it first, then remove only if the evidence says it has no practical consumer.
+The caller/log census justified removal of the export lifecycle while retaining the useful public node-search action and all CRG review surfaces.
 
 | Requirement | Contract |
 |---|---|
-| P5.1 caller census | Audit in-repo scripts, tests, docs, and logs for `search_crg_graph`, `build_crg_graph`, and direct `Saved\graph.db` use. |
-| P5.2 explicit owner | If graph export remains, document its owner and intended consumers in `SPEC_MonolithSource.md`. |
-| P5.3 deprecation threshold | If two fresh log windows show no meaningful `search_crg_graph` or graph-export consumer after default gating, propose deprecating `search_crg_graph`/`build_crg_graph` separately from the retained CRG review actions. |
-| P5.4 no query-surface regression | Any graph export deprecation must leave `risk_score`, `review_context`, `impact_radius`, `review_hotspots`, `find_overrides`, and projection repair intact. |
+| P5.1 caller census | Completed: runtime callers were confined to the removable builder/health/watchdog/docs/tests; low search demand did not justify duplicated storage. |
+| P5.2 retained owner | `MonolithSource` owns the canonical VIEW/FTS and health/repair; `MonolithQuery` owns the single live/offline search implementation. |
+| P5.3 removal boundary | Build/rebuild/health actions, offline alias, graph-only DDL/locks/path/env/cooldown, proxy forwarding, and watchdog maintenance are removed together. |
+| P5.4 no query-surface regression | `risk_score`, `review_context`, `impact_radius`, `review_hotspots`, `find_overrides`, `repair_crg_cache`, and `search_crg_graph` remain and are regression-tested. |
 
 ## 5. Test Matrix
 
 | Area | Test location | Required coverage |
 |---|---|---|
 | Source de-dup | `Source/MonolithSource/Private/Tests/MonolithSourceQueryTests.cpp` | `Monolith.IndexGuard.Source.KnownPathSymbolPreferred`: duplicate name with missing-path candidate, known path priority, and `review_context` seed provenance. |
-| Graph search parity | Offline `Tools/MonolithQuery/monolith_query.cpp` path plus binary build | `search_crg_graph` emits `path_status` and applies known-path-first duplicate suppression when reading existing graph export rows. |
+| Graph search parity | `Tools/MonolithQuery/test_engine_source_crg_search.py` plus Source schema automation | `search_crg_graph` preserves FTS/LIKE semantics, stable ordering, result fields, `path_status`, and known-path-first duplicate suppression over EngineSource. |
 | Project sensitivity | `Source/MonolithIndex/Private/Tests/MonolithIndexQueryTests.cpp` | `Monolith.IndexGuard.Project.RiskScoreSensitivityTokenBoundary`: negative substring cases and positive sensitivity token cases. |
 | Project freshness | `MonolithIndexQueryTests.cpp` copied-DB fixture | `Monolith.IndexGuard.Project.HealthWarnsOnStaleCrgCache`: stale count detection and repair-to-healthy parity. |
-| Maintenance SLO | `Analyzer` fixtures and real-log verification record | Distinct maintenance vs query buckets, cooldown/skip visibility, post-fix window comparison. |
+| Retired maintenance evidence | `Analyzer` fixtures and real-log verification record | Historical build/rebuild/graph-health rows remain visible as `retired_action` evidence, are excluded from current problem findings, and no fresh-window graph export maintenance is required. |
 
 ## 6. Documentation Updates
 
@@ -210,11 +215,11 @@ Every implementation change must update docs in the same changelist:
 
 ## 7. Exit Criteria
 
-The retained trust slice is done when all of these are true; P4/P5 remain separate evidence gates:
+The retained trust slice and P4/P5 decision are done when all of these are true:
 
 1. `source.search_source`, `source.search_crg_graph`, and `source.review_context` no longer produce duplicate blank-path storms for the observed `AProjectMonster`/`AProjectCharacter` class of failures.
 2. `project.risk_score` does not classify `Design` as signing/crypto/hash sensitivity, while positive-control sensitive names still score.
 3. `project.health --include-counts=true` detects stale CRG parity, and `project.repair_crg_cache --execute` repairs a copied stale DB transactionally.
-4. Routine source/project review queries do not rebuild `Saved\graph.db`.
-5. The invocation analyzer can prove the maintenance/export path is no longer the dominant CRG wall-time source in a fresh post-fix window.
-6. A separate graph-export keep/deprecate decision is made from caller census and post-gating usage, without threatening the retained source/project CRG review surfaces.
+4. Routine source/project review and `search_crg_graph` queries do not create or maintain a separate graph database.
+5. The invocation analyzer preserves old graph-action cost as retired evidence and a fresh post-fix window has zero graph build/open/create activity.
+6. The graph-export removal leaves the retained source/project CRG review surfaces and EngineSource graph-node search healthy.

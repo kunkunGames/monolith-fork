@@ -8,6 +8,7 @@
 #include "Actions/ProjectSearchAction.h"
 #include "Actions/ProjectSearchGameplayTagsAction.h"
 #include "Actions/ProjectReviewHotspotsAction.h"
+#include "Actions/ProjectRiskScoreAction.h"
 #include "Dom/JsonObject.h"
 #include "MonolithParamSchema.h"
 
@@ -155,6 +156,48 @@ bool FProjectIndexParamGuardTest::RunTest(const FString& Parameters)
 		FMonolithActionResult Result = FProjectReviewHotspotsAction::Execute(Params);
 		TestFalse(TEXT("ReviewHotspots: Reject wrong type for min_lines"), Result.bSuccess);
 		TestEqual(TEXT("ReviewHotspots: Error code for min_lines"), Result.ErrorCode, -32602);
+	}
+
+	{
+		auto Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("limit"), 0);
+		FMonolithActionResult Result = FProjectRiskScoreAction::Execute(Params);
+		TestTrue(TEXT("RiskScore: limit 0 preserves the default sentinel"), Result.bSuccess);
+		if (Result.bSuccess && Result.Result.IsValid())
+		{
+			const TSharedPtr<FJsonObject>* Limits = nullptr;
+			TestTrue(TEXT("RiskScore: limits object present"),
+				Result.Result->TryGetObjectField(TEXT("limits"), Limits) && Limits);
+			if (Limits)
+			{
+				int32 EffectiveLimit = -1;
+				(*Limits)->TryGetNumberField(TEXT("limit"), EffectiveLimit);
+				TestEqual(TEXT("RiskScore: limit 0 uses the documented default"), EffectiveLimit, 20);
+			}
+		}
+	}
+
+	{
+		auto Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("limit"), 0);
+		Params->SetNumberField(TEXT("min_lines"), 0);
+		FMonolithActionResult Result = FProjectReviewHotspotsAction::Execute(Params);
+		TestTrue(TEXT("ReviewHotspots: non-positive values preserve default sentinels"), Result.bSuccess);
+		if (Result.bSuccess && Result.Result.IsValid())
+		{
+			const TSharedPtr<FJsonObject>* Limits = nullptr;
+			TestTrue(TEXT("ReviewHotspots: limits object present"),
+				Result.Result->TryGetObjectField(TEXT("limits"), Limits) && Limits);
+			if (Limits)
+			{
+				int32 EffectiveLimit = -1;
+				int32 EffectiveMinLines = -1;
+				(*Limits)->TryGetNumberField(TEXT("limit"), EffectiveLimit);
+				(*Limits)->TryGetNumberField(TEXT("min_lines"), EffectiveMinLines);
+				TestEqual(TEXT("ReviewHotspots: limit 0 uses the documented default"), EffectiveLimit, 50);
+				TestEqual(TEXT("ReviewHotspots: min_lines 0 uses the documented default"), EffectiveMinLines, 100);
+			}
+		}
 	}
 
 	return true;

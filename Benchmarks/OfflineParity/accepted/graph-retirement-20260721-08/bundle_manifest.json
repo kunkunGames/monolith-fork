@@ -1,0 +1,27 @@
+{
+  "schema_version": 2,
+  "benchmark": "OfflineParity",
+  "suite": "OfflineParity",
+  "snapshot_id": "graph-retirement-20260721-08",
+  "summary_file": "summary.json",
+  "summary_sha256": "80dfc734e5ff1fe405869100ca2cda55e6add41e56783c814cf4c20e11529ebb",
+  "artifact_files": {
+    "per_action.jsonl": {
+      "sha256": "e44d6171b05ef78563152f205c6de202e2bf9faa4c11be2da6ddcfc0293abf8b",
+      "non_empty_line_count": 317
+    }
+  },
+  "input_fingerprint": "f2acf3584953af0c3cf89414467ec57c81f31fc1c2768bf93dcf65558e5fb9d6",
+  "database_inputs": [
+    {
+      "kind": "database",
+      "path": "Saved/EngineSource.db",
+      "exists": true,
+      "size_bytes": 4659212288,
+      "mtime_ns": 1784658054099378500,
+      "signature": "4659212288:1784658054099378500",
+      "sha256": "437e19f26bf0d2b028fa196f4718368c274ea382e67f29ded0e16e68d7de9692"
+    }
+  ],
+  "portable_database_policy": "attest_when_absent_verify_when_present"
+}

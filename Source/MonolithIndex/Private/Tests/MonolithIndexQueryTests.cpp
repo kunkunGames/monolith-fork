@@ -218,7 +218,6 @@ bool FProjectIndexAsyncJobCompletesTest::RunTest(const FString& Parameters)
 	{
 		return false;
 	}
-
 	const FString JobId = Registry.SubmitJob(TEXT("project"), TEXT("reindex"));
 	Subsystem->SetActiveAsyncJobForTests(JobId, TEXT("full"));
 	Subsystem->CompleteActiveAsyncJobForTests(true);
@@ -231,6 +230,58 @@ bool FProjectIndexAsyncJobCompletesTest::RunTest(const FString& Parameters)
 	{
 		TestEqual(TEXT("Result records full mode"), Job->GetObjectField(TEXT("result"))->GetStringField(TEXT("index_mode")), TEXT("full"));
 	}
+
+	Registry.ResetForTests();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FProjectIndexAsyncJobFailsWhenActivationDisabledTest,
+	"Monolith.Activation.ProjectIndexStartFailsWhenDisabled",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FProjectIndexAsyncJobFailsWhenActivationDisabledTest::RunTest(const FString& Parameters)
+{
+	FMonolithAsyncJobRegistry& Registry = FMonolithAsyncJobRegistry::Get();
+	Registry.ResetForTests();
+
+	UMonolithIndexSubsystem* Subsystem = NewObject<UMonolithIndexSubsystem>();
+	TestNotNull(TEXT("Index subsystem test object created"), Subsystem);
+	if (!Subsystem)
+	{
+		return false;
+	}
+
+	UFunction* FullFunc =
+		UMonolithIndexSubsystem::StaticClass()->FindFunctionByName(TEXT("StartFullIndexWithAsyncJob"));
+	TestNotNull(TEXT("Full async start function exists"), FullFunc);
+	if (!FullFunc)
+	{
+		Registry.ResetForTests();
+		return false;
+	}
+
+	struct FStartIndexWithAsyncJobParams
+	{
+		FString JobId;
+		bool ReturnValue = true;
+	};
+
+	const FString JobId = Registry.SubmitJob(TEXT("project"), TEXT("reindex"));
+	FStartIndexWithAsyncJobParams StartParams;
+	StartParams.JobId = JobId;
+	AddExpectedError(
+		TEXT("Full project indexing is disabled"),
+		EAutomationExpectedErrorFlags::Contains,
+		1);
+	Subsystem->ProcessEvent(FullFunc, &StartParams);
+
+	TestFalse(TEXT("Disabled project index does not start"), StartParams.ReturnValue);
+	TSharedPtr<FJsonObject> Job = Registry.GetJobJson(JobId);
+	TestEqual(TEXT("Disabled start fails the async job row"), Job->GetStringField(TEXT("status")), TEXT("failed"));
+	TestTrue(
+		TEXT("Disabled start explains the activation command"),
+		Job->GetStringField(TEXT("error")).Contains(TEXT("Monolith.StartIndexing")));
 
 	Registry.ResetForTests();
 	return true;
@@ -275,6 +326,7 @@ bool FProjectIndexAsyncJobReflectedStartFailsWithoutDatabaseTest::RunTest(const 
 	{
 		return false;
 	}
+	Subsystem->SetIndexingWorkEnabledForTests(true);
 
 	UFunction* FullFunc = UMonolithIndexSubsystem::StaticClass()->FindFunctionByName(TEXT("StartFullIndexWithAsyncJob"));
 	TestNotNull(TEXT("Full async start function exists"), FullFunc);

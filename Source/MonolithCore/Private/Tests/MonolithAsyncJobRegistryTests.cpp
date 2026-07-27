@@ -75,19 +75,19 @@ bool FMonolithAsyncJobRegistryNonCancellableTest::RunTest(const FString& Paramet
 	Registry.ResetForTests();
 
 	const FString JobId = Registry.SubmitJob(
-		TEXT("source"),
-		TEXT("build_crg_graph"),
+		TEXT("monolith"),
+		TEXT("reindex"),
 		/*bCancellable=*/false,
 		/*bSupportsProgress=*/false,
-		TEXT("source.crg_graph_health"),
+		TEXT("monolith.status"),
 		FString());
-	Registry.UpdateProgress(JobId, 0.0, TEXT("external_process"), TEXT("Started external graph build process."));
+	Registry.UpdateProgress(JobId, 0.0, TEXT("external_process"), TEXT("Started external reindex process."));
 
 	TSharedPtr<FJsonObject> Running = Registry.GetJobJson(JobId);
 	TestEqual(TEXT("Non-cancellable job is running before cancel request"), Running->GetStringField(TEXT("status")), TEXT("running"));
 	TestFalse(TEXT("Non-cancellable flag is surfaced"), Running->GetBoolField(TEXT("cancellable")));
 	TestFalse(TEXT("No progress support is surfaced"), Running->GetBoolField(TEXT("supports_progress")));
-	TestEqual(TEXT("External poll action is surfaced"), Running->GetStringField(TEXT("poll_action")), TEXT("source.crg_graph_health"));
+	TestEqual(TEXT("External poll action is surfaced"), Running->GetStringField(TEXT("poll_action")), TEXT("monolith.status"));
 	TestFalse(TEXT("No cancel action is emitted"), Running->HasField(TEXT("cancel_action")));
 
 	Registry.RequestCancel(JobId);
@@ -141,7 +141,7 @@ bool FMonolithAsyncJobRegistryCancellationTest::RunTest(const FString& Parameter
 	FMonolithAsyncJobRegistry& Registry = FMonolithAsyncJobRegistry::Get();
 	Registry.ResetForTests();
 
-	const FString JobId = Registry.SubmitJob(TEXT("source"), TEXT("build_crg_graph"));
+	const FString JobId = Registry.SubmitJob(TEXT("monolith"), TEXT("reindex"));
 	Registry.UpdateProgress(JobId, 25.0, TEXT("building"), TEXT("phase 1"));
 
 	TestFalse(TEXT("Cancel not requested initially"), Registry.IsCancelRequested(JobId));

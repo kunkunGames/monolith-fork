@@ -503,7 +503,6 @@ def status_identity_mismatches(
 _PLUGIN_PREFIX = ("plugins", "monolith")
 DEFAULT_DATABASE_PATHS = (
     "Saved/EngineSource.db",
-    "Saved/graph.db",
     "Saved/ProjectIndex.db",
     "Logs/_engine_analysis.db",
     "Logs/_engine_analysis_v2.db",
@@ -519,9 +518,8 @@ DEFAULT_DATABASE_PATHS = (
 # databases they never queried.
 BENCHMARK_DATABASE_PATHS: dict[str, tuple[str, ...]] = {
     "ActionGuidance": (),
-    # Canonical SourceIndex execution reads the source subsystem's EngineSource
-    # database. Saved/graph.db is a derived CRG export used only by graph-specific
-    # handlers, none of which is executed by this corpus.
+    # Canonical SourceIndex execution, including graph-node search, reads the
+    # source subsystem's authoritative EngineSource database.
     "SourceIndex": ("Saved/EngineSource.db",),
     "SchemaCompleteness": (),
     "OfflineParity": ("Saved/EngineSource.db",),

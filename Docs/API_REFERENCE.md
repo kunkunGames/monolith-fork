@@ -128,6 +128,34 @@ These releases added the `level_sequence` namespace, the `bulk_fill` / `describe
 
 ---
 
+## Editor console service activation
+
+`UMonolithSettings::bServerEnabledByDefault` and `bIndexingEnabledByDefault` define the project defaults in `Config/DefaultMonolith.ini` (both ship as true). These are editor console commands, not MCP actions, so `Monolith.StartServer` remains usable from the editor console after an explicit Stop has removed the HTTP endpoint:
+
+| Command | Persistent effect | Immediate effect |
+|---------|-------------------|------------------|
+| `Monolith.StartServer` | Writes `[Monolith.UserActivation] ServerEnabled=True` to generated `Saved/Config/WindowsEditor/Monolith.ini` | Starts Monolith's `/mcp` and `/health` routes on the configured port |
+| `Monolith.StopServer` | Writes `ServerEnabled=False` | Removes the Monolith routes and sentinel immediately; unrelated UE HTTP routes/listeners are not globally stopped |
+| `Monolith.StartIndexing` | Writes `IndexingEnabled=True` | Enables source hot-reload and asset-registry hooks, starts project-source incremental/full bootstrap as needed, and starts the cheapest correct asset catch-up mode |
+| `Monolith.StopIndexing` | Writes `IndexingEnabled=False` | Removes queued/automatic source and asset hooks immediately; an active run drains to its normal transaction/completion boundary |
+
+The native consumers share one compact `UMonolithSettings` API:
+
+| C++ API | Contract |
+|---------|----------|
+| `GetActivation()` | Returns `FMonolithActivation`, containing the resolved server/indexing values and whether each value came from user intent rather than project policy |
+| `IsServerActivated()` / `IsIndexingActivated()` | Cheap effective-state predicates used by the server, source, asset, recovery, and editor surfaces |
+| `SetServerActivated()` / `SetIndexingActivated()` | Persist one per-user choice without replacing the sibling choice or changing `DefaultMonolith.ini` |
+| `GetUserActivationPath()` / `GetLegacyActivationPath()` | Return the generated user config and one-time legacy migration paths |
+
+`GetActivation()` caches the resolved value because some consumers are per-frame Slate attributes. Its request key contains both config paths and both project-default values; Start/Stop setters invalidate immediately, project-policy changes refresh immediately, and external edits to either generated `Monolith.ini` or the one-time legacy migration file are detected by bounded one-second timestamp checks.
+
+A missing user key inherits its matching project default; malformed user values fail closed to `false`. An explicit Stop therefore survives editor restarts and is local to that checkout/user, while project teams can change the initial policy without manufacturing user state. Older `Saved/Monolith/Activation.ini` choices migrate once into the generated config. `UMonolithSettings::bMcpServerEnabled`, `bEnableSource`, and `bEnableIndex` remain hard project-policy gates and cannot be overridden by a Start command.
+
+Index deactivation never blocks existing `ProjectIndex.db` or `EngineSource.db` reads. An active source reindex still owns the source DB until it completes because that writer intentionally closes and atomically reopens the database. The compatibility command `Monolith.StartIndex` does not enable indexing; it can request a full asset index only after `Monolith.StartIndexing`.
+
+---
+
 ## monolith
 
 Core server management and introspection.
@@ -218,13 +246,13 @@ Check for or install Monolith updates from GitHub Releases. Auto-updater hits `h
 
 ### `monolith.reindex`
 
-Re-index the Monolith project database. Incremental by default (delta only). Pass `force=true` for a full wipe + rebuild.
+Re-index the Monolith project database. Incremental by default (delta only). Pass `force=true` for a full wipe + rebuild. The durable indexing state must already be enabled with `Monolith.StartIndexing`; this MCP action never changes operator activation.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `force` | bool | optional | Full wipe + rebuild instead of incremental delta. Default: `false` |
 
-**Returns:** with `UMonolithSettings::bEnableAsyncJobs=true` (default), `status:"started"`, `legacy_status:"reindex_started"`, `job_id`, `poll_action:"monolith.get_job"`, `cancel_action:"monolith.cancel_job"`, `supports_progress:true`, and `cancellable:true`. Polling that job reaches an honest terminal state from the index subsystem: `completed` on successful full/incremental/no-change indexing, `failed` when the indexer cannot start or reports failure, and `cancelled` when cooperative job cancellation is observed. If async jobs are disabled, the legacy response remains `status:"reindex_started"` plus a message. If the async start is rejected before indexing begins, the action response uses `status:"reindex_not_started"` and the returned `job_id` contains the failure details.
+**Returns:** `status:"indexing_disabled"` plus guidance when durable activation is off. With `UMonolithSettings::bEnableAsyncJobs=true` (default) and activation on, `status:"started"`, `legacy_status:"reindex_started"`, `job_id`, `poll_action:"monolith.get_job"`, `cancel_action:"monolith.cancel_job"`, `supports_progress:true`, and `cancellable:true`. Polling that job reaches an honest terminal state from the index subsystem: `completed` on successful full/incremental/no-change indexing, `failed` when the indexer cannot start or reports failure, and `cancelled` when cooperative job cancellation is observed. If async jobs are disabled, the legacy response remains `status:"reindex_started"` plus a message. If the async start is rejected before indexing begins, the action response uses `status:"reindex_not_started"` and the returned `job_id` contains the failure details.
 
 ---
 
@@ -782,7 +810,7 @@ Current editor viewport camera position, rotation, FOV, resolution. *No paramete
 
 ### `editor.capture_system_gif`
 
-Capture a Niagara system as ordered PNG frames and, by default, encode a GIF by trying ffmpeg first and python imageio second. The action records the actual fps, any adaptive degradation, all frame paths, and GIF/encoder status. The encoded GIF is an opaque RGB visual-review artifact: UE/Slate frames with zero or undefined alpha are normalized at the encoder boundary without modifying the original PNG evidence. The ffmpeg and python paths apply the same opacity contract. Because GIF stores time in 10 ms units, the python path rounds cumulative frame boundaries and emits a per-frame millisecond schedule instead of truncating `1000 / fps`; examples are `20 fps -> [50,...]`, `30 fps -> [30,40,30,...]`, and `60 fps -> [20,10,20,20,10,20,...]`. The response keeps `gif_duration_seconds` as the backward-compatible nominal `frame_count / fps` value and labels it with `gif_duration_kind`; Python output additionally reports `encoded_gif_duration_seconds`, `gif_duration_quantization_error_seconds`, `gif_delay_unit_ms=10`, and `gif_timing_mode="cumulative_centisecond_rounding"`.
+Capture a Niagara system as ordered PNG frames and, by default, encode a GIF by trying ffmpeg first and python imageio second. The action records the actual fps, any adaptive degradation, all frame paths, and GIF/encoder status. The encoded GIF is an opaque RGB visual-review artifact: UE/Slate frames with zero or undefined alpha are normalized at the encoder boundary without modifying the original PNG evidence. The ffmpeg and python paths apply the same opacity contract. Because GIF stores time in 10 ms units, the python path rounds cumulative frame boundaries and emits a per-frame millisecond schedule instead of truncating `1000 / fps`; examples are `20 fps -> [50,...]`, `30 fps -> [30,40,30,...]`, and `60 fps -> [20,10,20,20,10,20,...]`. The ffmpeg route repeats the terminal concat entry to preserve the final source-frame duration, applies `-frames:v <selected-frame-count>` so that bookkeeping packet cannot become an extra GIF frame, and fail-closes unless `ffprobe` decodes exactly the selected count. Its uniquely named concat manifest is scope-cleaned on all return paths and never remains in the evidence directory. The response keeps `gif_duration_seconds` as the backward-compatible nominal `frame_count / fps` value and labels it with `gif_duration_kind`; Python output additionally reports its scheduled duration metadata, while verified ffmpeg output reports the probed `encoded_frame_count`, `encoded_gif_duration_seconds`, `gif_frame_count_verified=true`, `gif_probe_tool="ffprobe"`, and `gif_timing_mode="ffmpeg_fps_filter_exact_frame_cap"`.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -795,7 +823,7 @@ Capture a Niagara system as ordered PNG frames and, by default, encode a GIF by 
 
 ### `editor.encode_frame_sequence_gif`
 
-Encode already-captured ordered PNG frames into a GIF without recapturing editor content. Use this for PIE screenshot/frame automation after the PNG frames already exist. The default target is 60 fps; the action preserves source duration while downsampling frames and degrades under resource pressure to 30 fps, 20 fps, or a lower reported rate only when the hard frame budget requires it. The output GIF is always an opaque RGB visual-review artifact: both ffmpeg and python normalize UE/Slate zero or undefined alpha during encoding, leave every source PNG unchanged, and use the selected fps as the timing contract. The python encoder converts that timing to a per-frame 10 ms schedule by rounding cumulative frame boundaries, which prevents the drift caused by independently truncating every `1000 / fps` delay. `gif_duration_seconds` and `nominal_gif_duration_seconds` report the nominal frame-count duration for compatibility; `gif_duration_kind` makes that semantic explicit, while Python output reports the exact scheduled `encoded_gif_duration_seconds` and its quantization error separately.
+Encode already-captured ordered PNG frames into a GIF without recapturing editor content. Use this for PIE screenshot/frame automation after the PNG frames already exist. The default target is 60 fps; the action preserves source duration while downsampling frames and degrades under resource pressure to 30 fps, 20 fps, or a lower reported rate only when the hard frame budget requires it. The output GIF is always an opaque RGB visual-review artifact: both ffmpeg and python normalize UE/Slate zero or undefined alpha during encoding, leave every source PNG unchanged, and use the selected fps as the timing contract. The python encoder converts that timing to a per-frame 10 ms schedule by rounding cumulative frame boundaries, which prevents the drift caused by independently truncating every `1000 / fps` delay. For ffmpeg, the handler preserves the terminal concat duration entry but caps encoded output to `selected_frame_count`; it then invokes `ffprobe`, deletes and rejects any output whose decoded frame count differs, and reports the decoded count and duration rather than merely echoing its input plan. The per-call concat manifest is uniquely named and deleted on every return path. `selected_frame_count` is the planned sample count. `encoded_frame_count`, `encoded_gif_duration_seconds`, `gif_frame_count_verified`, and `gif_probe_tool` describe verified ffmpeg output. `gif_duration_seconds` and `nominal_gif_duration_seconds` remain the nominal frame-count duration for compatibility, and `gif_duration_kind` makes that semantic explicit.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -1570,7 +1598,7 @@ Unreal Engine C++ source code navigation. 1M+ symbols indexed. **13 actions** (1
 
 ### `source.trigger_reindex` · `source.trigger_project_reindex`
 
-`trigger_reindex` does a full clean build (engine + shaders + project). `trigger_project_reindex` is incremental (project Source/ + Plugins/ only). Both take *no parameters*. Offline `monolith_query.exe source trigger_project_reindex` returns live-only guidance instead of an unknown-action error; actual indexing still requires the editor-backed MCP action.
+`trigger_reindex` does a full clean build (engine + shaders + project). `trigger_project_reindex` is incremental (project Source/ + Plugins/ only). Both take *no parameters*, require prior durable activation through the editor-console command `Monolith.StartIndexing`, and never enable it implicitly. Offline `monolith_query.exe source trigger_project_reindex` returns live-only guidance instead of an unknown-action error; actual indexing still requires the editor-backed MCP action.
 
 ### `source.impact_radius`
 
@@ -1623,14 +1651,13 @@ Dry-run by default. `execute=true` is freshness-gated: if CRG projection counts,
 
 ### `source.search_crg_graph`
 
-Searches the optional `Saved\graph.db` export. Results expose `path_status=known|missing`, prefer known source paths, and suppress duplicate missing-path rows for the same symbol identity. Use this action for explicit graph-export/search needs; routine review should prefer `source.search_source`, `source.risk_score`, and `source.review_context`.
+Read-only CRG-compatible File/Symbol graph-node search over the canonical `source_graph_nodes` VIEW and `source_graph_nodes_fts` index inside `Saved\EngineSource.db`. There is no separate graph export. FTS is queried first and LIKE over `source_graph_nodes` is used only after a successful FTS query returns zero rows; FTS prepare/step failures surface structured warning/error detail instead of falling back. Results expose `backend=engine_source_fts`, `path_status=known|missing` with known-path-first ranking and duplicate suppression, `used_fts`, and `truncated`. Graph-node availability and parity are owned by `source.health`; when it recommends repair, call `source.repair_fts` with `target=graph_nodes` and `execute=true`. Routine review should prefer `source.search_source`, `source.risk_score`, and `source.review_context`.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `query` | string | **required** | Symbol/query text |
 | `kind` | string | optional | Optional node kind filter |
-| `limit` | integer | optional | Default: `20` |
-| `graph_db` | string | optional | Non-default graph DB path |
+| `limit` | integer | optional | Max graph-node matches, clamped to `1..200`. Default: `20` |
 
 ### `source.risk_score`
 
@@ -3764,9 +3791,11 @@ Report local project/source index readiness for Monolith bridge searches.
 |-----------|------|----------|-------------|
 | `include_stats` | bool | optional | Include project index stats when available. Default: `false` |
 
+**Returns:** includes top-level `indexing_activation_enabled` in addition to project/source availability and in-flight status. Database availability is independent of that flag.
+
 ### `bridge.start_indexing`
 
-Start local project asset and/or source indexing for bridge search.
+Start local project asset and/or source indexing for bridge search. Requires prior `Monolith.StartIndexing` activation and never changes the persisted flag itself.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|

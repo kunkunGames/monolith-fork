@@ -1,8 +1,8 @@
 # Monolith SQLite Journal Mode / WAL Conversion Spec
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
-**Scope:** `EngineSource.db`, `ProjectIndex.db`, `graph.db`
-**Status:** `EngineSource.db` WAL gate failed for UE SQLiteCore; all live DBs remain `DELETE`
+**Scope:** `EngineSource.db`, `ProjectIndex.db`; retired `graph.db` evidence is preserved in sections 5.3 and 8.1
+**Status:** `EngineSource.db` WAL gate failed for UE SQLiteCore; both live index DBs remain `DELETE`; the separate graph DB is removed
 **Date:** 2026-05-22
 **Owner Modules:** MonolithCore, MonolithSource, MonolithIndex, MonolithQuery
 
@@ -12,7 +12,7 @@
 
 This spec records Monolith's database-specific SQLite journal-mode policy.
 
-The decision is intentionally DB-specific. `EngineSource.db`, `ProjectIndex.db`, and `graph.db` have different writer patterns, reader fan-out, and rebuild costs. A single global "turn WAL on everywhere" switch is not acceptable. The 2026-05-22 `EngineSource.db` WAL attempt passed with standalone `monolith_query.exe` SQLite but failed in the editor/MCP path because UE 5.7 `SQLiteCore` uses a custom `SQLITE_OS_OTHER` VFS without WAL shared-memory support. Leaving `EngineSource.db` in WAL would make editor/MCP source opens fail, so the live policy remains rollback-journal `DELETE`.
+The decision is intentionally DB-specific. `EngineSource.db` and `ProjectIndex.db` have different writer patterns, reader fan-out, and rebuild costs. A single global "turn WAL on everywhere" switch is not acceptable. The 2026-05-22 `EngineSource.db` WAL attempt passed with standalone `monolith_query.exe` SQLite but failed in the editor/MCP path because UE 5.7 `SQLiteCore` uses a custom `SQLITE_OS_OTHER` VFS without WAL shared-memory support. Leaving `EngineSource.db` in WAL would make editor/MCP source opens fail, so the live policy remains rollback-journal `DELETE`. The former `graph.db` export is no longer a live database: its only useful graph-node search meaning is served by the `source_graph_nodes` VIEW and `source_graph_nodes_fts` inside EngineSource.
 
 ---
 
@@ -22,9 +22,9 @@ The decision is intentionally DB-specific. `EngineSource.db`, `ProjectIndex.db`,
 |----------|--------------|---------------------|-----------------------|-----|------|----------|
 | `EngineSource.db` | `DELETE` + `synchronous=NORMAL` | Keep `DELETE` | `WAL` only after replacing/augmenting the UE SQLite VFS or moving editor source DB access to a WAL-capable SQLite layer | High | High | Do not enable WAL in the live DB. Standalone CLI can read WAL, but the editor/MCP `FSQLiteDatabase` path cannot safely open/write WAL DBs under UE 5.7 SQLiteCore. |
 | `ProjectIndex.db` | `DELETE` + `synchronous=NORMAL` | Keep `DELETE` | `WAL` + `synchronous=NORMAL`, only after a separate asset-index smoke | Medium | High | Defer. The project index has useful concurrent readers, but the editor indexer and content FTS path are wider blast radius than source search. |
-| `graph.db` | `DELETE` + `synchronous=NORMAL` | Keep `DELETE` | Usually none. Consider `TRUNCATE` rollback journal or temp-db atomic rebuild if churn matters. | Low | Medium | Do not use WAL by default. The graph DB is derived, rebuilt explicitly, and simpler to replace atomically after a complete rebuild. |
+| ~~`graph.db`~~ | Retired | None | None | Removal eliminates duplicate storage and maintenance | Low | Removed. `source.search_crg_graph` now reads EngineSource's canonical graph-node VIEW/FTS. |
 
-No live DB journal-mode behavior changes are authorized by this spec. `EngineSource.db`, `ProjectIndex.db`, and `graph.db` stay on rollback-journal `DELETE`.
+No live DB journal-mode behavior changes are authorized by this spec. `EngineSource.db` and `ProjectIndex.db` stay on rollback-journal `DELETE`; no journal policy applies to the removed graph export.
 
 ---
 
@@ -34,7 +34,7 @@ No live DB journal-mode behavior changes are authorized by this spec. `EngineSou
 |---------|----|--------|---------|--------------------------|
 | Source index | `Saved/EngineSource.db` | `UMonolithSourceSubsystem`, source reindex commandlet, repair/snapshot actions | MCP `source` actions, `monolith_query.exe source`, bridge actions | Source write-capable opens set `PRAGMA journal_mode=DELETE`, `synchronous=NORMAL`, `locking_mode=NORMAL`, and `busy_timeout=5000`. Read-only CLI opens use `query_only=ON` and never run `PRAGMA journal_mode=...`. |
 | Project index | `Saved/ProjectIndex.db` | `UMonolithIndexSubsystem` and deep asset indexers | MCP `project` actions, `monolith_query.exe project`, bridge actions | Project DB opens force `PRAGMA journal_mode=DELETE`; comments note `WAL + ReadOnly` previously returned zero rows on Windows. |
-| Source CRG graph | `Saved/graph.db` | `source build_crg_graph --execute` / `rebuild_crg_graph --execute` | `source search_crg_graph`, `crg_graph_health`, review helpers | Offline query DB wrapper currently inherits `DELETE` for create/write paths. |
+| Source graph-node search | `Saved/EngineSource.db` | Source index/schema migration; `source repair_fts --target=graph_nodes --execute` when health requests repair | `source search_crg_graph` | Uses the EngineSource connection policy above. `source_graph_nodes` is a VIEW; `source_graph_nodes_fts` is external-content FTS5 maintained by file/symbol triggers. |
 
 The repository contains two important historical signals:
 
@@ -47,7 +47,7 @@ The repository contains two important historical signals:
 
 ## 4. SQLite Mode Inventory
 
-SQLite `PRAGMA journal_mode` supports the modes below. Monolith should expose only the safe subset needed by the three DBs, not every SQLite mode.
+SQLite `PRAGMA journal_mode` supports the modes below. Monolith should expose only the safe subset needed by the two live index DBs, not every SQLite mode.
 
 | Mode | Behavior | Monolith policy |
 |------|----------|-----------------|
@@ -123,11 +123,11 @@ Recommended future policy:
 
 Expected ROI: medium. It helps when project search, impact/risk/review context, and bridge reads overlap with editor asset indexing. The blast radius is higher than source because project indexing touches asset registry state, deep indexers, FTS repair, and collection/project actions.
 
-### 5.3 `graph.db`
+### 5.3 Retired `graph.db` policy record
 
-`graph.db` should remain rollback-journal based.
+`graph.db` and its build/rebuild/health actions are removed. `source.search_crg_graph` now reads the canonical `source_graph_nodes` VIEW and `source_graph_nodes_fts` in `EngineSource.db`, so it inherits the EngineSource journal policy and no longer needs a second writer, sidecar lifecycle, lock, cooldown, or copied-DB override.
 
-Recommended policy:
+The table below is retained as the historical policy that applied before removal; it is not a current runtime recommendation:
 
 | Field | Value |
 |-------|-------|
@@ -136,7 +136,7 @@ Recommended policy:
 | Alternative if rebuild interruption becomes painful | Build into a temp DB in the same directory, validate schema/FTS parity, then atomically replace `graph.db` when no reader owns it |
 | WAL | Not recommended by default |
 
-Expected ROI: low. `graph.db` is derived from `EngineSource.db`, rebuilt by explicit `source build_crg_graph --execute`, and can be regenerated. WAL sidecars add lifecycle complexity without much benefit unless graph rebuild becomes a frequent background writer.
+Historical ROI was low: `graph.db` duplicated data derived from `EngineSource.db`, while its flow/community/risk tables were unused. Moving the only effective consumer—graph-node search—onto EngineSource removes that artifact instead of optimizing its journal mode.
 
 ---
 
@@ -147,10 +147,10 @@ The WAL attempt established these constraints:
 | Area | Requirement |
 |------|-------------|
 | Source writer policy | `FMonolithSourceDatabase` and `monolith_query.exe source` write-capable opens must keep `DELETE` until the editor SQLite layer supports WAL. |
-| Read-only policy | Readers must never run `PRAGMA journal_mode=...`. They may run `PRAGMA query_only=ON` after opening and then query `PRAGMA journal_mode;` for diagnostics. |
+| Read-only policy | Readers must never run `PRAGMA journal_mode=...`. They may run `PRAGMA query_only=ON` after opening and then query `PRAGMA journal_mode;` for diagnostics. Native Query invocations with global `--readonly` must refuse before opening any handle whenever a rollback journal exists: UE SQLiteCore's custom `unreal-fs` writer locks are not interoperable with the executable's Win32 VFS, so probing through the sidecar can make the active editor writer fail with `SQLITE_IOERR`. |
 | Writer policy | Writers set the configured journal mode, `synchronous=NORMAL`, `locking_mode=NORMAL`, and a bounded `busy_timeout`. |
 | Checkpoint policy | Query-only tools never delete or truncate sidecars manually. If a future WAL-capable writer exists, that writer must own checkpoints. |
-| Health output | `source health` reports `journal_mode`; when an accidental WAL DB is opened by a WAL-capable path, it also reports WAL/SHM sizes and checkpoint counters. `project health` continues to report `journal_mode=delete`; `crg_graph_health` remains schema/FTS focused while `graph.db` is fixed to `DELETE`. |
+| Health output | `source health` reports `journal_mode`; when an accidental WAL DB is opened by a WAL-capable path, it also reports WAL/SHM sizes and checkpoint counters. It also owns `source_graph_nodes` VIEW/FTS availability and parity diagnostics. `project health` continues to report `journal_mode=delete`. |
 | Tooling | `monolith_query.exe` diagnostics must treat `db`, `db-wal`, and `db-shm` as one logical DB state. It must not delete WAL sidecars manually. |
 | Backup/copy guidance | Copying or archiving a WAL DB must use SQLite backup API or happen after a controlled checkpoint/close window. Copying only `*.db` while `*.db-wal` has committed frames is invalid. |
 
@@ -164,7 +164,7 @@ The WAL attempt established these constraints:
 | 1 | Keep source health journal-mode reporting and focused source DB automation coverage. | Done. `source health` reports `journal_mode`; `Monolith.IndexGuard.Source.DatabaseUsesDeleteJournalMode` covers the supported live source DB mode. |
 | 2 | Enable `EngineSource.db` WAL. | Not authorized. The live DB was converted back to `DELETE` after the failed gate. |
 | 3 | Evaluate `ProjectIndex.db` with the same harness only after source pilot is stable. | Project search, FTS repair, asset dependency review, and bridge reads all pass under overlap with index writes. |
-| 4 | Keep `graph.db` on `DELETE`; only revisit if graph rebuild becomes a frequent background writer. | If revisited, prefer temp DB atomic replace before WAL. |
+| 4 | Remove the low-ROI `graph.db` export and move graph-node search into EngineSource. | Complete when `source.search_crg_graph` preserves search semantics through `source_graph_nodes`/`source_graph_nodes_fts` and graph build/rebuild/health surfaces are absent. |
 
 ---
 
@@ -172,7 +172,7 @@ The WAL attempt established these constraints:
 
 | Gate | Required checks |
 |------|-----------------|
-| Rollback baseline | `DELETE` mode still leaves no stale hot rollback journal after clean close, and query-only CLI does not require writable opens except bounded hot-journal recovery. |
+| Rollback baseline | `DELETE` mode still leaves no stale hot rollback journal after clean close. Global `--readonly` fails closed on any rollback journal without opening the DB or modifying the sidecar; a non-`--readonly` query may perform the existing bounded hot-journal recovery. |
 | WAL read-only | Read-only CLI and MCP query paths return expected rows with `*.db-wal` and `*.db-shm` present, absent, and after clean close where possible. |
 | Read while write | A long writer transaction does not block unrelated readers in WAL mode. Readers see a stable snapshot. |
 | Write while write | A second writer waits only up to the configured `busy_timeout`, then fails clearly with `database is locked` if the first writer still owns the write lock. |
@@ -182,6 +182,8 @@ The WAL attempt established these constraints:
 | Crash recovery | Simulated interrupted writers preserve DB integrity and do not require manual deletion of `*-wal`, `*-shm`, or `*-journal`. |
 
 ### 8.1 EngineSource WAL Gate Record
+
+This verification table is preserved as historical evidence. In particular, the `Graph DB remains DELETE` row records the retired artifact at the time of the 2026-05-22 gate; it is not a current file-existence requirement.
 
 | Check | Command | Result |
 |-------|---------|--------|

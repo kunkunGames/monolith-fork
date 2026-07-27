@@ -26,7 +26,7 @@ The registry must land before the polling actions and the job-emitting actions b
 
 ## 2. Problem
 
-Several Monolith actions are long-running (project/source reindex, CRG graph export, ZoneGraph rebuild). Today they return a single synchronous response with no pollable handle. Before adding `monolith.get_job` / `cancel_job` and job emission, Monolith needs one process-local owner of job state that is safe, bounded, and thread-safe.
+Several Monolith actions are long-running (project/source reindex and ZoneGraph rebuild). Today they return a single synchronous response with no pollable handle. Before adding `monolith.get_job` / `cancel_job` and job emission, Monolith needs one process-local owner of job state that is safe, bounded, and thread-safe. The former CRG graph export is retired; EngineSource-backed graph-node search has no independent build job.
 
 | Question | Current state | Needed first slice |
 |----------|---------------|--------------------|

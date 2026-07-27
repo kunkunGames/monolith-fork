@@ -142,5 +142,5 @@ python Plugins\Monolith\Scripts\action_guidance_benchmark.py compare `
 | Benchmark | Script | Primary Score | What it tests |
 | --- | --- | --- | --- |
 | [SourceIndex](../SourceIndex/README.md) | Scripts/source_index_benchmark.py | source_index_score | C++ symbol index data quality and recall |
-| [SchemaCompleteness](../SchemaCompleteness/README.md) | Scripts/schema_completeness_benchmark.py | schema_completeness_score | Full live-catalog schema quality plus a strict 330-probe contract |
+| [SchemaCompleteness](../SchemaCompleteness/README.md) | Scripts/schema_completeness_benchmark.py | schema_completeness_score | Full live-catalog schema quality plus a strict 329-probe contract |
 | [OfflineParity](../OfflineParity/README.md) | Scripts/offline_parity_benchmark.py | offline_parity_score | exe-vs-py offline parity trend tracking |

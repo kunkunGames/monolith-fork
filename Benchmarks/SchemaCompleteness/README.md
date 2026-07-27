@@ -6,7 +6,7 @@ catalog snapshot of 61 namespaces and 1840 actions. Unlike the ActionGuidance
 benchmark (which currently contains 454 tasks), SchemaCompleteness calls
 `monolith_discover` once per action and scores six quality dimensions for every
 action in the live catalog. The checked-in targeted probe contract contains
-**330 unique probes**: 315 required, 11 feature-gated, and 4 optional.
+**329 unique probes**: 314 required, 11 feature-gated, and 4 optional.
 
 ## Files
 
@@ -16,7 +16,7 @@ action in the live catalog. The checked-in targeted probe contract contains
 | `METRICS.md` | Metric definitions and score formula |
 | `RESULTS.md` | Baseline and historical scan results |
 | `manifest.json` | Probe count/availability contract, catalog snapshot metadata, and scoring formula |
-| `probe_set.jsonl` | 330 unique targeted schema probes for practical Unreal agent workflows |
+| `probe_set.jsonl` | 329 unique targeted schema probes for practical Unreal agent workflows |
 | `probe_migration_20260711.json` | Audited mapping for 122 removed legacy IDs, their current replacements, and 15 explicit availability gates |
 
 ## Quality Dimensions

@@ -216,8 +216,10 @@ Every proxy-spawned query includes the global `--readonly` option.
 
 This rule is mandatory even when the editor transport is down: an editor
 process can still be alive and retain SQLite writer or asset state after its
-HTTP endpoint stops responding. Execute-gated repair, snapshot, and graph-build
-operations therefore fail explicitly through the query CLI's read-only gate.
+HTTP endpoint stops responding. Execute-gated repair and snapshot operations
+therefore fail explicitly through the query CLI's read-only gate. The retained
+`source.search_crg_graph` action is read-only and searches EngineSource's
+`source_graph_nodes` VIEW/FTS with `backend=engine_source_fts`.
 
 Offline database mutation requires a future single-writer lease. It is not part
 of Phase A.
@@ -308,12 +310,12 @@ handle, and resumes only on a match. Release packaging keeps the current
 immutable proxy, its manifest, and Query together under
 `Plugins/Monolith/Binaries`.
 
-MCP callers cannot pass `db`, `source_db`, `project_db`, `graph_db`, or
-`snapshot` overrides. Database selection is proxy-controlled so a caller cannot
+MCP callers cannot pass `db`, `source_db`, `project_db`, or `snapshot`
+overrides. Database selection is proxy-controlled so a caller cannot
 manufacture an index that authorizes an arbitrary filesystem path. Direct Query
 CLI use keeps its copied-DB flags. Tests/nonstandard deployments may use the
-launch-time trusted `MONOLITH_OFFLINE_SOURCE_DB`,
-`MONOLITH_OFFLINE_PROJECT_DB`, and `MONOLITH_OFFLINE_GRAPH_DB` variables; each
+launch-time trusted `MONOLITH_OFFLINE_SOURCE_DB` and
+`MONOLITH_OFFLINE_PROJECT_DB` variables; each
 must resolve to an existing regular non-reparse file.
 
 ### 5.2 Limits
@@ -353,7 +355,6 @@ be copied into routing metadata or a tool result.
 | `MONOLITH_EXPECTED_PROJECT_ROOT` | inferred project root | Project identity that live `monolith_status` must report. |
 | `MONOLITH_OFFLINE_SOURCE_DB` | deployed source DB | Trusted launch-time copied/test DB override; never an MCP argument. |
 | `MONOLITH_OFFLINE_PROJECT_DB` | deployed project DB | Trusted launch-time copied/test DB override. |
-| `MONOLITH_OFFLINE_GRAPH_DB` | source DB sibling graph | Trusted launch-time copied/test graph override. |
 | `MONOLITH_TOOL_LOG_ENABLED` | `1` | Existing daily proxy/query log switch. |
 | `MONOLITH_TOOL_LOG_DIR` | plugin `Logs/` | Existing isolated log-root override. |
 
@@ -399,14 +400,13 @@ the snapshot cannot claim an authoritative current live JSON schema.
 
 ## 8. Capability Boundary
 
-The query executable currently describes 96 offline CLI actions across source,
-project, bridge, console, reflection intelligence, risk, and catalog domains.
-Within the Phase A proxy boundary:
-
-- 73 read/text actions can execute against on-disk databases or bundled data.
-- 14 console/source actions return useful live-only guidance rather than
-  touching editor state.
-- 9 execute-gated maintenance actions are deliberately blocked by `--readonly`.
+The query executable describes offline CLI actions across source, project,
+bridge, console, reflection intelligence, risk, and catalog domains. Within the
+Phase A proxy boundary, read/text actions can execute against on-disk databases
+or bundled data, console/source live-only actions return guidance rather than
+touching editor state, and execute-gated maintenance actions are deliberately
+blocked by `--readonly`. Removed graph export maintenance actions are absent;
+`source.search_crg_graph` remains a read-only EngineSource query.
 
 Exact action availability comes from `monolith_query.exe --help`; documentation
 must not hard-code this count as a public MCP action count.

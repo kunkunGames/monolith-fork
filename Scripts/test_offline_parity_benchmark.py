@@ -158,7 +158,6 @@ def test_input_fingerprint_tracks_only_declared_database_dependencies() -> None:
         root = pathlib.Path(temp_dir)
         (root / "Saved").mkdir()
         (root / "Saved" / "EngineSource.db").write_bytes(b"source")
-        (root / "Saved" / "graph.db").write_bytes(b"graph")
         (root / "Saved" / "ProjectIndex.db").write_bytes(b"project")
         exe = root / "query.exe"
         py = root / "offline.py"

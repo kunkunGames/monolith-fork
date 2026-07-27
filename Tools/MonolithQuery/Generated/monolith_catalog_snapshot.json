@@ -1,5 +1,5 @@
 {
-  "action_count": 2074,
+  "action_count": 2073,
   "actions": [
     {
       "action": "add_bb_key",
@@ -20818,7 +20818,7 @@
       "skill": "bridge",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceContextActions.cpp",
-      "source_line": 538,
+      "source_line": 539,
       "summary": "Materialize a bridge.search_items result into a bounded prompt attachment",
       "supports_progress": false,
       "writes_logs": true
@@ -20847,7 +20847,7 @@
       "skill": "bridge",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceContextActions.cpp",
-      "source_line": 513,
+      "source_line": 514,
       "summary": "Report local project/source index readiness for Monolith bridge searches",
       "supports_progress": false,
       "writes_logs": true
@@ -20876,7 +20876,7 @@
       "skill": "bridge",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceContextActions.cpp",
-      "source_line": 547,
+      "source_line": 548,
       "summary": "Read-only RX-6 bridge between ProjectIndex assets and EngineSource symbols",
       "supports_progress": false,
       "writes_logs": true
@@ -20905,7 +20905,7 @@
       "skill": "bridge",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceContextActions.cpp",
-      "source_line": 528,
+      "source_line": 529,
       "summary": "Search local indexed assets and source entries for mention-style prompt context",
       "supports_progress": false,
       "writes_logs": true
@@ -20934,7 +20934,7 @@
       "skill": "bridge",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceContextActions.cpp",
-      "source_line": 520,
+      "source_line": 521,
       "summary": "Start local project asset and/or source indexing for bridge search",
       "supports_progress": false,
       "writes_logs": true
@@ -25400,7 +25400,36 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithPieInputActions.cpp",
-      "source_line": 471,
+      "source_line": 679,
+      "summary": "",
+      "supports_progress": false,
+      "writes_logs": true
+    },
+    {
+      "action": "pie_inject_key",
+      "available_offline": false,
+      "full_name": "editor.pie_inject_key",
+      "implementation_status": "source_scanned_candidate",
+      "long_running": false,
+      "mutates_assets": false,
+      "namespace": "editor",
+      "next_actions_status": "availability_required",
+      "output_contract_status": "snapshot_only",
+      "outputs": [],
+      "planning_signals": [
+        "skill:editor",
+        "editor",
+        "source_scanned_candidate",
+        "read_only"
+      ],
+      "preconditions": [],
+      "preconditions_status": "snapshot_only",
+      "proof_anchor": "",
+      "requires_live_editor": true,
+      "skill": "editor",
+      "source": "cpp_registry_scan",
+      "source_file": "Source/MonolithEditor/Private/MonolithPieInputActions.cpp",
+      "source_line": 694,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -25429,7 +25458,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithPieInputActions.cpp",
-      "source_line": 486,
+      "source_line": 723,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -25458,7 +25487,36 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithPieInputActions.cpp",
-      "source_line": 456,
+      "source_line": 664,
+      "summary": "",
+      "supports_progress": false,
+      "writes_logs": true
+    },
+    {
+      "action": "pie_start_with_url_options",
+      "available_offline": false,
+      "full_name": "editor.pie_start_with_url_options",
+      "implementation_status": "source_scanned_candidate",
+      "long_running": false,
+      "mutates_assets": false,
+      "namespace": "editor",
+      "next_actions_status": "availability_required",
+      "output_contract_status": "snapshot_only",
+      "outputs": [],
+      "planning_signals": [
+        "skill:editor",
+        "editor",
+        "source_scanned_candidate",
+        "read_only"
+      ],
+      "preconditions": [],
+      "preconditions_status": "snapshot_only",
+      "proof_anchor": "",
+      "requires_live_editor": true,
+      "skill": "editor",
+      "source": "cpp_registry_scan",
+      "source_file": "Source/MonolithEditor/Private/MonolithPieInputActions.cpp",
+      "source_line": 709,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -48844,7 +48902,7 @@
       "skill": "scene",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithScene/Private/MonolithMeshSceneActions.cpp",
-      "source_line": 345,
+      "source_line": 346,
       "summary": "Align multiple actors along an axis. Modes: min/max (snap to extremes), center (average), distribute (spread evenly between min/max).",
       "supports_progress": false,
       "writes_logs": true
@@ -48989,7 +49047,7 @@
       "skill": "scene",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithScene/Private/MonolithMeshSceneActions.cpp",
-      "source_line": 338,
+      "source_line": 339,
       "summary": "Execute up to 200 scene actions in one undo transaction. Stops at the first failure, ends the transaction for Undo, and never claims automatic rollback. No nested batch_execute allowed.",
       "supports_progress": false,
       "writes_logs": true
@@ -49134,7 +49192,7 @@
       "skill": "scene",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithScene/Private/MonolithMeshSceneActions.cpp",
-      "source_line": 310,
+      "source_line": 311,
       "summary": "Delete exact live actors from the current map package. Preflights every target and verifies every requested actor identity is absent after one undoable commit. Does NOT delete asset files.",
       "supports_progress": false,
       "writes_logs": true
@@ -49163,7 +49221,7 @@
       "skill": "scene",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithScene/Private/MonolithMeshSceneActions.cpp",
-      "source_line": 301,
+      "source_line": 302,
       "summary": "Duplicate an actor in the editor world with an optional position offset",
       "supports_progress": false,
       "writes_logs": true
@@ -49279,7 +49337,7 @@
       "skill": "scene",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithScene/Private/MonolithMeshSceneActions.cpp",
-      "source_line": 271,
+      "source_line": 272,
       "summary": "Get comprehensive info for an actor in the editor world (class, transform, mesh, materials, tags, components, bounds)",
       "supports_progress": false,
       "writes_logs": true
@@ -49569,7 +49627,7 @@
       "skill": "scene",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithScene/Private/MonolithMeshSceneActions.cpp",
-      "source_line": 317,
+      "source_line": 318,
       "summary": "Move actors into an outliner folder (creates folder hierarchy automatically)",
       "supports_progress": false,
       "writes_logs": true
@@ -49743,7 +49801,7 @@
       "skill": "scene",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithScene/Private/MonolithMeshSceneActions.cpp",
-      "source_line": 362,
+      "source_line": 363,
       "summary": "Manage World Outliner folders: list, delete (move actors to root), rename, or move folders.",
       "supports_progress": false,
       "writes_logs": true
@@ -49830,8 +49888,8 @@
       "skill": "scene",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithScene/Private/MonolithMeshSceneActions.cpp",
-      "source_line": 290,
-      "summary": "Move/rotate/scale an actor. Set relative=true to offset from current transform.",
+      "source_line": 291,
+      "summary": "Persistently move/rotate/scale a non-transient editor actor. Set relative=true to offset from current transform.",
       "supports_progress": false,
       "writes_logs": true
     },
@@ -50700,7 +50758,7 @@
       "skill": "scene",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithScene/Private/MonolithMeshSceneActions.cpp",
-      "source_line": 325,
+      "source_line": 326,
       "summary": "Set properties on an actor (mobility, physics, collision, shadows, tags, mass)",
       "supports_progress": false,
       "writes_logs": true
@@ -50787,7 +50845,7 @@
       "skill": "scene",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithScene/Private/MonolithMeshSceneActions.cpp",
-      "source_line": 354,
+      "source_line": 355,
       "summary": "Snap actors to the floor by tracing downward. Places the bottom of each actor on the hit surface.",
       "supports_progress": false,
       "writes_logs": true
@@ -50845,7 +50903,7 @@
       "skill": "scene",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithScene/Private/MonolithMeshSceneActions.cpp",
-      "source_line": 278,
+      "source_line": 279,
       "summary": "Spawn an actor in the editor world. Path starting with '/' spawns StaticMeshActor with that mesh; otherwise spawns by class name.",
       "supports_progress": false,
       "writes_logs": true
@@ -51431,35 +51489,6 @@
       "writes_logs": true
     },
     {
-      "action": "build_crg_graph",
-      "available_offline": true,
-      "full_name": "source.build_crg_graph",
-      "implementation_status": "offline_query_implemented",
-      "long_running": true,
-      "mutates_assets": true,
-      "namespace": "source",
-      "next_actions_status": "availability_required",
-      "output_contract_status": "snapshot_only",
-      "outputs": [],
-      "planning_signals": [
-        "skill:source",
-        "source",
-        "source_scanned_candidate",
-        "mutating"
-      ],
-      "preconditions": [],
-      "preconditions_status": "snapshot_only",
-      "proof_anchor": "",
-      "requires_live_editor": false,
-      "skill": "source",
-      "source": "cpp_registry_scan",
-      "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 438,
-      "summary": "Build Saved/graph.db from EngineSource symbols, references and inheritance via atomic temp replacement. Dry-run unless execute=true",
-      "supports_progress": true,
-      "writes_logs": true
-    },
-    {
       "action": "check_deprecations",
       "available_offline": true,
       "full_name": "source.check_deprecations",
@@ -51483,37 +51512,8 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 281,
+      "source_line": 330,
       "summary": "Batch-check whether symbols are UE_DEPRECATED. Returns per-symbol {deprecated, version, message, kind}. If the deprecation index is empty (schema v2 landed but no reindex yet), returns index_state:\"empty\" with a hint to run source.trigger_reindex.",
-      "supports_progress": false,
-      "writes_logs": true
-    },
-    {
-      "action": "crg_graph_health",
-      "available_offline": true,
-      "full_name": "source.crg_graph_health",
-      "implementation_status": "offline_query_implemented",
-      "long_running": false,
-      "mutates_assets": false,
-      "namespace": "source",
-      "next_actions_status": "availability_required",
-      "output_contract_status": "snapshot_only",
-      "outputs": [],
-      "planning_signals": [
-        "skill:source",
-        "source",
-        "source_scanned_candidate",
-        "read_only"
-      ],
-      "preconditions": [],
-      "preconditions_status": "snapshot_only",
-      "proof_anchor": "",
-      "requires_live_editor": false,
-      "skill": "source",
-      "source": "cpp_registry_scan",
-      "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 466,
-      "summary": "Read-only health check for Saved/graph.db schema, FTS parity and metadata",
       "supports_progress": false,
       "writes_logs": true
     },
@@ -51541,7 +51541,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 482,
+      "source_line": 505,
       "summary": "Map changed source paths to indexed symbols, direct caller impact, test gaps, and risk-ranked review priorities",
       "supports_progress": false,
       "writes_logs": true
@@ -51570,7 +51570,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 523,
+      "source_line": 546,
       "summary": "Compare stored/current EngineSource CRG projection snapshots",
       "supports_progress": false,
       "writes_logs": true
@@ -51599,7 +51599,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 319,
+      "source_line": 368,
       "summary": "Find all functions called by the given function",
       "supports_progress": false,
       "writes_logs": true
@@ -51628,7 +51628,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 311,
+      "source_line": 360,
       "summary": "Find all functions that call the given function",
       "supports_progress": false,
       "writes_logs": true
@@ -51657,7 +51657,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 580,
+      "source_line": 603,
       "summary": "Find real call-site examples of a symbol via full-text search over indexed source lines (pattern `SymbolName(`). Returns ranked snippets with ~3 lines of context. `prefer`: \"engine\" (default \u2014 engine Runtime first, then other engine, then project) or \"project\" (flips project ahead). Supports cursor pagination \u2014 pass `cursor` from a prior response's `next_cursor`.",
       "supports_progress": false,
       "writes_logs": true
@@ -51686,7 +51686,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 400,
+      "source_line": 449,
       "summary": "Find function override relationships for a symbol using indexed class inheritance and matching method signatures",
       "supports_progress": false,
       "writes_logs": true
@@ -51715,7 +51715,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 301,
+      "source_line": 350,
       "summary": "Find all usage sites of a symbol (calls, includes, type references)",
       "supports_progress": false,
       "writes_logs": true
@@ -51744,7 +51744,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 494,
+      "source_line": 517,
       "summary": "Find advisory dead-symbol candidates with confidence and reasons; read-only",
       "supports_progress": false,
       "writes_logs": true
@@ -51773,7 +51773,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 602,
+      "source_line": 625,
       "summary": "Generate a UCLASS-derived .h/.cpp stub pair as TEXT (never writes to disk). Resolves the parent header + owning module via the source DB, emits <MODULE>_API, parent header include FIRST, \"<Class>.generated.h\" LAST, GENERATED_BODY(), and a plain default constructor (the FObjectInitializer& overload only when the parent requires it). UCLASS-derived parents only; other parents are rejected cleanly.",
       "supports_progress": false,
       "writes_logs": true
@@ -51802,7 +51802,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 343,
+      "source_line": 392,
       "summary": "Show the inheritance tree for a class",
       "supports_progress": false,
       "writes_logs": true
@@ -51831,7 +51831,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 266,
+      "source_line": 315,
       "summary": "Get the canonical #include path for a symbol (resolves via the owning class header). Public/Classes/Internal headers are includable cross-module; Private headers return includable:false with a same-module note.",
       "supports_progress": false,
       "writes_logs": true
@@ -51860,7 +51860,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 352,
+      "source_line": 401,
       "summary": "Get module statistics: file count, symbol counts by kind, and key classes",
       "supports_progress": false,
       "writes_logs": true
@@ -51889,7 +51889,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 273,
+      "source_line": 322,
       "summary": "Get the declaration signature(s) for a symbol or Class::Method. Reads the declaration line(s) from source (engine class-body methods are not indexed as symbols); strips inline bodies and macro line-continuations. Overloads returned as separate entries.",
       "supports_progress": false,
       "writes_logs": true
@@ -51918,7 +51918,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 359,
+      "source_line": 408,
       "summary": "Get a symbol definition with surrounding context lines",
       "supports_progress": false,
       "writes_logs": true
@@ -51947,8 +51947,8 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 414,
-      "summary": "Read-only EngineSource diagnostics: schema v1, symbols_ai/ad triggers, symbols_fts parity, orphans",
+      "source_line": 463,
+      "summary": "Read-only EngineSource diagnostics: schema v4, source graph-node FTS readiness, native FTS/CRG parity, and orphans",
       "supports_progress": false,
       "writes_logs": true
     },
@@ -51976,7 +51976,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 389,
+      "source_line": 438,
       "summary": "Bounded BFS over call/type references, inheritance and function overrides: who is impacted within N hops",
       "supports_progress": false,
       "writes_logs": true
@@ -52005,7 +52005,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 595,
+      "source_line": 618,
       "summary": "Regex-level UHT-gotcha lint of a single header file. Works on UNINDEXED files (a header you just wrote). Deterministic rule table: GENERATED_BODY presence/position, *.generated.h last-include, UCLASS/class-name match, missing <MODULE>_API, UPROPERTY/UFUNCTION in a non-reflected type, invalid specifier token. Returns structured findings {rule_id, line, message, severity}; a clean header returns zero findings.",
       "supports_progress": false,
       "writes_logs": true
@@ -52034,7 +52034,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 503,
+      "source_line": 526,
       "summary": "Read-only source pre-merge gate over health, detect_changes, and optional find_unused",
       "supports_progress": false,
       "writes_logs": true
@@ -52063,7 +52063,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 367,
+      "source_line": 416,
       "summary": "Read source lines from a file by path",
       "supports_progress": false,
       "writes_logs": true
@@ -52092,38 +52092,9 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 288,
+      "source_line": 337,
       "summary": "Get the implementation source code for a class, function, or struct. If a source file path is supplied via path, delegates to source.read_file.",
       "supports_progress": false,
-      "writes_logs": true
-    },
-    {
-      "action": "rebuild_crg_graph",
-      "available_offline": true,
-      "full_name": "source.rebuild_crg_graph",
-      "implementation_status": "offline_query_implemented",
-      "long_running": true,
-      "mutates_assets": true,
-      "namespace": "source",
-      "next_actions_status": "availability_required",
-      "output_contract_status": "snapshot_only",
-      "outputs": [],
-      "planning_signals": [
-        "skill:source",
-        "source",
-        "source_scanned_candidate",
-        "mutating"
-      ],
-      "preconditions": [],
-      "preconditions_status": "snapshot_only",
-      "proof_anchor": "",
-      "requires_live_editor": false,
-      "skill": "source",
-      "source": "cpp_registry_scan",
-      "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 447,
-      "summary": "Alias of build_crg_graph for explicit graph.db rebuilds",
-      "supports_progress": true,
       "writes_logs": true
     },
     {
@@ -52150,7 +52121,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 430,
+      "source_line": 479,
       "summary": "Rebuild derived EngineSource CRG projection/cache tables. Dry-run unless execute=true",
       "supports_progress": false,
       "writes_logs": true
@@ -52179,8 +52150,8 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 422,
-      "summary": "Rebuild symbols_fts (external-content). source_fts is plain fts5 -> reindex guidance. Dry-run unless execute=true",
+      "source_line": 471,
+      "summary": "Rebuild external-content symbols, console, or graph-node FTS. source_fts is plain fts5 -> reindex guidance. Dry-run unless execute=true",
       "supports_progress": false,
       "writes_logs": true
     },
@@ -52208,7 +52179,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 542,
+      "source_line": 565,
       "summary": "Token-efficient review package: seed + impact + risk reasons + next actions (minimal|standard)",
       "supports_progress": false,
       "writes_logs": true
@@ -52237,7 +52208,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 532,
+      "source_line": 555,
       "summary": "Rank global source review hotspots by fan-in, fan-out, risk, LOC size, override fanout, or all signals",
       "supports_progress": false,
       "writes_logs": true
@@ -52266,7 +52237,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 473,
+      "source_line": 496,
       "summary": "Score symbol change risk (caller fan-in, descendants, UE macro, sensitivity, boundary crossing) with reasons",
       "supports_progress": false,
       "writes_logs": true
@@ -52295,8 +52266,8 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 456,
-      "summary": "Search the CRG-compatible Saved/graph.db nodes FTS index",
+      "source_line": 487,
+      "summary": "Search the EngineSource-backed canonical File/Symbol graph-node FTS index",
       "supports_progress": false,
       "writes_logs": true
     },
@@ -52324,7 +52295,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 327,
+      "source_line": 376,
       "summary": "Full-text search across Unreal Engine source code and shaders. Supports cursor pagination \u2014 pass `cursor` from a prior response's `next_cursor` to fetch the next page.",
       "supports_progress": false,
       "writes_logs": true
@@ -52353,7 +52324,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 515,
+      "source_line": 538,
       "summary": "Capture current EngineSource CRG projection manifest. Dry-run unless execute=true",
       "supports_progress": false,
       "writes_logs": true
@@ -52411,7 +52382,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 383,
+      "source_line": 432,
       "summary": "Trigger incremental project-only C++ source indexing (loads existing engine symbols, indexes project Source/ and Plugins/)",
       "supports_progress": false,
       "writes_logs": true
@@ -52440,7 +52411,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 378,
+      "source_line": 427,
       "summary": "Trigger C++ indexer to rebuild the engine source DB (full clean build: engine + shaders + project)",
       "supports_progress": false,
       "writes_logs": true
@@ -52469,7 +52440,7 @@
       "skill": "source",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithSource/Private/MonolithSourceActions.cpp",
-      "source_line": 573,
+      "source_line": 596,
       "summary": "Batch pre-flight verdict for a list of symbols. Per symbol composes include path, declaration signature, deprecation status, and existence into one record. `exists` for a Class::Method is decided by the owning class row + a source-line declaration hit (engine class-body methods are not indexed as symbols), NOT by symbols-table presence; a missing symbol reports exists:false with no error.",
       "supports_progress": false,
       "writes_logs": true

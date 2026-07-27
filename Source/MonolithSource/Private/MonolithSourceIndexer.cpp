@@ -305,18 +305,45 @@ uint32 FMonolithSourceIndexer::Run()
 			TSharedPtr<FJsonObject> ScopedCrg = DB.RefreshCrgCacheForFiles(NewFileIds, TEXT("Project source indexing complete"));
 			FString Status;
 			FString Summary;
+			FString RefreshMode;
 			if (ScopedCrg.IsValid())
 			{
 				ScopedCrg->TryGetStringField(TEXT("status"), Status);
 				ScopedCrg->TryGetStringField(TEXT("summary"), Summary);
+				ScopedCrg->TryGetStringField(TEXT("refresh_mode"), RefreshMode);
 			}
-			if (Status == TEXT("ok"))
+			if (Status != TEXT("ok"))
 			{
-				UE_LOG(LogMonolithSource, Log, TEXT("Indexer: %s"), *Summary);
+				UE_LOG(LogMonolithSource, Error,
+					TEXT("Indexer: scoped source CRG refresh failed; project source indexing cannot complete: %s"),
+					*Summary);
+				return FailRun();
+			}
+
+			if (RefreshMode == TEXT("full_required"))
+			{
+				TSharedPtr<FJsonObject> FullCrg = DB.RepairCrgCache(true);
+				FString FullStatus;
+				FString FullSummary;
+				if (FullCrg.IsValid())
+				{
+					FullCrg->TryGetStringField(TEXT("status"), FullStatus);
+					FullCrg->TryGetStringField(TEXT("summary"), FullSummary);
+				}
+				if (FullStatus != TEXT("ok"))
+				{
+					UE_LOG(LogMonolithSource, Error,
+						TEXT("Indexer: source CRG projection bootstrap failed; project source indexing cannot complete: %s"),
+						*FullSummary);
+					return FailRun();
+				}
+				UE_LOG(LogMonolithSource, Log,
+					TEXT("Indexer: source CRG projection tables were absent; completed one required full bootstrap: %s"),
+					*FullSummary);
 			}
 			else
 			{
-				UE_LOG(LogMonolithSource, Warning, TEXT("Indexer: scoped source CRG refresh did not complete cleanly: %s"), *Summary);
+				UE_LOG(LogMonolithSource, Log, TEXT("Indexer: %s"), *Summary);
 			}
 		}
 	}

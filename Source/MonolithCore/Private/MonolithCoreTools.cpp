@@ -178,8 +178,8 @@ static bool IsKnownOfflineAction(const FMonolithActionInfo& ActionInfo)
 			TEXT("source.pre_merge_check"),
 			TEXT("source.search_crg_graph"),
 			TEXT("source.health"),
+			TEXT("source.repair_fts"),
 			TEXT("source.repair_crg_cache"),
-			TEXT("source.build_crg_graph"),
 			TEXT("source.get_include_path"),
 			TEXT("source.get_signature"),
 			TEXT("source.check_deprecations"),
@@ -249,8 +249,6 @@ static bool IsKnownLongRunningAction(const FMonolithActionInfo& ActionInfo)
 {
 	const FString ActionId = ActionInfo.Namespace + TEXT(".") + ActionInfo.Action;
 	return ActionId == TEXT("monolith.reindex")
-		|| ActionId == TEXT("source.build_crg_graph")
-		|| ActionId == TEXT("source.rebuild_crg_graph")
 		|| ActionId == TEXT("ai.rebuild_zone_graph");
 }
 
@@ -3047,6 +3045,15 @@ FMonolithActionResult FMonolithCoreTools::HandleReindex(const TSharedPtr<FJsonOb
 		{
 			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
 		}
+	}
+
+	if (!UMonolithSettings::IsIndexingActivated())
+	{
+		Result->SetStringField(TEXT("status"), TEXT("indexing_disabled"));
+		Result->SetStringField(
+			TEXT("message"),
+			TEXT("Monolith indexing is disabled. Run Monolith.StartIndexing in the editor console to enable source and asset indexing persistently."));
+		return FMonolithActionResult::Success(Result);
 	}
 
 	UClass* IndexSubsystemClass = FindObject<UClass>(nullptr, TEXT("/Script/MonolithIndex.MonolithIndexSubsystem"));
