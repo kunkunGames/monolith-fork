@@ -695,7 +695,7 @@ Full-text search across the existing indexed asset and graph-node FTS tables. In
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `query` | string | **required** | Non-empty FTS5 search query (supports `AND`, `OR`, `NOT`, quoted phrases, field qualifiers, and `prefix*`) |
+| `query` | string | **required** | Non-empty FTS5 search query (supports `AND`, `OR`, `NOT`, quoted phrases, field qualifiers, `prefix*`, and `NEAR(phrase..., N)` with an optional unsigned-decimal distance) |
 | `limit` | integer | optional | Default: `50`; clamped to `1..1000` |
 
 Every hit retains the compatibility fields (`asset_path`, `asset_name`, `asset_class`, `module_name`, `match_context`, `rank`) and adds provenance: `match_source`, `match_table`, `match_field`, `match_object_path`, and `match_value`. `match_context` is derived from the reported `match_field`: description/node-name matches use a bounded FTS snippet, while matches in another field use that field's highlighted value instead of unrelated description or node-name text. `match_context` and `match_value` are always bounded to 240 Unicode code points, with their original `*_length` and `*_truncated` fields.

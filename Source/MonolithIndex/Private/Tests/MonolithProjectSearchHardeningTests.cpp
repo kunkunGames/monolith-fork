@@ -380,6 +380,35 @@ bool FMonolithProjectSearchHardeningTest::RunTest(const FString& /*Parameters*/)
 		EMonolithProjectSearchStatus::InvalidQuery);
 	TestFalse(TEXT("Malformed FTS error is explicit"), Error.IsEmpty());
 
+	FString InvalidNearProjection;
+	FString InvalidNearProjectionError;
+	TestEqual(
+		TEXT("Non-numeric NEAR distance is rejected by the shared projector"),
+		MonolithProjectSearchQuery::Project(
+			TEXT("NEAR(CommonSearchFixture, abc)"),
+			AssetProjectionFields,
+			EnabledProjectionFields,
+			InvalidNearProjection,
+			&InvalidNearProjectionError),
+		MonolithProjectSearchQuery::EProjectionResult::Invalid);
+	TestTrue(
+		TEXT("Invalid NEAR distance reports the caller-facing contract"),
+		InvalidNearProjectionError.Contains(TEXT("NEAR distance")));
+
+	Results.Reset();
+	Error.Reset();
+	TestEqual(
+		TEXT("Non-numeric NEAR distance is classified as invalid params"),
+		Database.FullTextSearch(
+			TEXT("NEAR(CommonSearchFixture, abc)"),
+			50,
+			Results,
+			Error),
+		EMonolithProjectSearchStatus::InvalidQuery);
+	TestTrue(
+		TEXT("Database search preserves the explicit NEAR distance error"),
+		Error.Contains(TEXT("NEAR distance")));
+
 	Results.Reset();
 	Error.Reset();
 	TestEqual(

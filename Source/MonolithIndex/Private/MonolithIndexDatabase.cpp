@@ -1035,7 +1035,8 @@ static bool IsFts5QuerySyntaxError(const FString& Error)
 	return Error.Contains(TEXT("fts5: syntax error"), ESearchCase::IgnoreCase)
 		|| Error.Contains(TEXT("unterminated string"), ESearchCase::IgnoreCase)
 		|| Error.Contains(TEXT("malformed MATCH"), ESearchCase::IgnoreCase)
-		|| Error.Contains(TEXT("unknown special query"), ESearchCase::IgnoreCase);
+		|| Error.Contains(TEXT("unknown special query"), ESearchCase::IgnoreCase)
+		|| Error.Contains(TEXT("expected integer, got"), ESearchCase::IgnoreCase);
 }
 
 EMonolithProjectSearchStatus FMonolithIndexDatabase::FullTextSearch(

@@ -1,6 +1,6 @@
 # Project Search Hardening and FTS Repair Verification
 
-**Date:** 2026-07-26 (final-head reruns: 2026-07-27)
+**Date:** 2026-07-26 (review-fix reruns: 2026-07-27)
 **Scope:** Existing `fts_assets` / `fts_nodes` search contract, recursive FTS5 projection, provenance, bounded output, failure classification, and focused `repair_fts`
 **Hosts:** Disposable UE 5.8 and UE 5.7 projects outside the plugin checkout
 
@@ -30,15 +30,15 @@ Verify the maintainer-requested high-ROI slice without introducing a new index s
 |---|---|---|
 | Python syntax | PASS | `python -m py_compile Scripts\monolith_offline.py Scripts\check_offline_exe_fresh.py` |
 | Native offline query build | PASS | `Tools\MonolithQuery\build.bat` from the Visual Studio x64 developer environment |
-| Native executable freshness | PASS | `python Scripts\check_offline_exe_fresh.py`, ordered source-manifest hash `26ec011febb9f115` covers `monolith_query.cpp` and `ProjectSearchQueryProjectionCore.h` |
+| Native executable freshness | PASS | `python Scripts\check_offline_exe_fresh.py`, ordered source-manifest hash `db8c4142cf4471cd` covers `monolith_query.cpp` and `ProjectSearchQueryProjectionCore.h` |
 | Native/Python fixture parity | PASS, 25/25 | Deep-equal result payloads plus explicit asset-name/node-class matched-context assertions; also covers quoted/grouped/mixed filters, nested `AND`/`OR`, repeated `NOT`, precedence, long flat boolean chains, `éORé`, Unicode whitespace, anchors, valid zero results, malformed structure, and unknown columns |
 | SQLite FTS5 grammar acceptance | PASS, 45/45 | Shared projector output prepared successfully against SQLite for the supported phrase, prefix, anchor, `NEAR(...)`, column-filter, grouping, and boolean forms |
 | Generated semantic differential | PASS, 250/250 | Projected table-specific queries preserved both result membership and ranking against equivalent per-table reference queries |
 | Static policy differential | PASS | Newer Speed static policy reported 36 blockers on both clean upstream and this branch; this branch introduced zero blockers |
 | UE 5.8 editor build | PASS | Protected `ActivationHostEditor Win64 Development` build in `D:\P4\MonolithPR113ReviewUE58Host`; exact review source recompiled/linked `UnrealEditor-MonolithIndex.dll`, exit 0 |
-| UE 5.8 focused automation | PASS, 1/1 | `-RenderOffscreen`; report: `D:\P4\MonolithPR113ReviewUE58Host\Saved\Automation\PR113MatchedContextFinalUE58\index.json`; log: `D:\P4\MonolithPR113ReviewUE58Host\Saved\Logs\PR113MatchedContextFinalUE58.log`; one succeeded test, zero test warnings/errors, process exit 0 |
-| UE 5.7 editor build | PASS | Detached exact production/test source snapshot; protected build recompiled/linked the affected `MonolithIndex` sources and `UnrealEditor-MonolithIndex.dll`, exit 0 |
-| UE 5.7 focused automation | PASS, 1/1 | `-RenderOffscreen`; report: `D:\P4\MonolithPR113FinalUE57Host\Saved\Automation\PR113MatchedContextFinal57CUE57\index.json`; log: `D:\P4\MonolithPR113FinalUE57Host\Saved\Logs\PR113MatchedContextFinal57CUE57.log`; one succeeded test, zero test warnings/errors, process exit 0 |
+| UE 5.8 focused automation | PASS, 1/1 | Review-fix rerun under `-RenderOffscreen`; report: `D:\P4\MonolithPR113ReviewUE58Host\Saved\Automation\PR113NearDistanceFinalUE58\index.json`; log: `D:\P4\MonolithPR113ReviewUE58Host\Saved\Logs\PR113NearDistanceFinalUE58.log`; one succeeded test, zero test warnings/errors, process exit 0 |
+| UE 5.7 editor build | PASS | Detached exact production/test source snapshot; protected build recompiled/linked the affected `MonolithIndex` sources and `UnrealEditor-MonolithIndex.dll`, exit 0; isolated UBT log: `D:\P4\MonolithPR113FinalUE57Host\Saved\Logs\PR113NearDistanceBuildUE57-UBT.log` |
+| UE 5.7 focused automation | PASS, 1/1 | `-RenderOffscreen`; report: `D:\P4\MonolithPR113FinalUE57Host\Saved\Automation\PR113NearDistanceFinalUE57\index.json`; log: `D:\P4\MonolithPR113FinalUE57Host\Saved\Logs\PR113NearDistanceFinalUE57.log`; one succeeded test, zero test warnings/errors, process exit 0 |
 | Screenshot / Discord upload | N/A | Search/index infrastructure has no visual or asset-presentation change |
 
 ---
@@ -67,8 +67,8 @@ Verify the maintainer-requested high-ROI slice without introducing a new index s
 10. a syntactically valid cross-table conjunction that no single table can
    satisfy succeeds with zero results and no error;
 11. malformed syntax and unknown columns—including an unknown qualifier behind
-   an otherwise inapplicable conjunction—return `InvalidQuery` with no partial
-   result set;
+   an otherwise inapplicable conjunction and a non-numeric `NEAR` distance—return
+   `InvalidQuery` with no partial result set;
 12. a deliberately missing FTS table returns `InternalError`, with the expected
    SQLite diagnostic accounted for and no partial results;
 13. `repair_fts` defaults to dry-run and reports the selected table;
@@ -81,8 +81,9 @@ The current upstream revision predates the repository's newer hosted static
 checker and configuration. The accepted check therefore applies the exact same
 newer checker/configuration to clean upstream and this branch, with only the
 incompatible binary-freshness execution gate disabled in memory, then compares
-full finding identities. Both sides report the same 36 blockers and 13
-advisories; this branch introduces and resolves zero findings.
+full finding identities. The 2026-07-27 maintenance rerun reports the same 36
+blockers and 802 Windows-checkout advisories on both sides; this branch
+introduces and resolves zero findings.
 
 ---
 

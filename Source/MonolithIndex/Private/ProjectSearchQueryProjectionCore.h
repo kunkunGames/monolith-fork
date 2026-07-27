@@ -357,6 +357,13 @@ namespace monolith_project_search_query
 				invalid
 			};
 
+			enum class near_parse_result
+			{
+				none,
+				parsed,
+				invalid
+			};
+
 			struct parsed_filter
 			{
 				std::vector<std::string> fields;
@@ -637,9 +644,10 @@ namespace monolith_project_search_query
 				}
 				else
 				{
-					const size_t near_saved = position_;
 					std::string near_text;
-					if (try_parse_near_group(near_text))
+					const near_parse_result near_result =
+						try_parse_near_group(near_text);
+					if (near_result == near_parse_result::parsed)
 					{
 						if (has_initial_anchor)
 						{
@@ -650,9 +658,12 @@ namespace monolith_project_search_query
 						}
 						result = node::make_leaf(std::move(near_text));
 					}
+					else if (near_result == near_parse_result::invalid)
+					{
+						return nullptr;
+					}
 					else
 					{
-						position_ = near_saved;
 						std::string ignored;
 						if (!parse_string_token(ignored))
 						{
@@ -850,24 +861,25 @@ namespace monolith_project_search_query
 				}
 			}
 
-			bool try_parse_near_group(std::string& out_text)
+			near_parse_result try_parse_near_group(std::string& out_text)
 			{
 				out_text.clear();
 				const size_t start = position_;
 				if (!keyword_at(position_, "NEAR"))
 				{
-					return false;
+					return near_parse_result::none;
 				}
 				position_ += 4;
 				skip_whitespace();
 				if (at_end() || query_[position_] != '(')
 				{
 					position_ = start;
-					return false;
+					return near_parse_result::none;
 				}
 
 				int depth = 0;
 				bool in_quote = false;
+				size_t distance_comma = std::string::npos;
 				for (; position_ < query_.size(); ++position_)
 				{
 					const char character = query_[position_];
@@ -887,6 +899,18 @@ namespace monolith_project_search_query
 					{
 						continue;
 					}
+					if (character == ',' && depth == 1)
+					{
+						if (distance_comma != std::string::npos)
+						{
+							fail_at(
+								"FTS5 NEAR accepts at most one distance parameter",
+								position_);
+							return near_parse_result::invalid;
+						}
+						distance_comma = position_;
+						continue;
+					}
 					if (character == '(')
 					{
 						++depth;
@@ -896,16 +920,38 @@ namespace monolith_project_search_query
 						--depth;
 						if (depth == 0)
 						{
+							if (distance_comma != std::string::npos)
+							{
+								const std::string distance = trim(query_.substr(
+									distance_comma + 1,
+									position_ - distance_comma - 1));
+								const bool valid_distance =
+									!distance.empty()
+									&& std::all_of(
+										distance.begin(),
+										distance.end(),
+										[](char value)
+										{
+											return value >= '0' && value <= '9';
+										});
+								if (!valid_distance)
+								{
+									fail_at(
+										"FTS5 NEAR distance must be an unsigned decimal integer",
+										distance_comma + 1);
+									return near_parse_result::invalid;
+								}
+							}
 							++position_;
 							out_text = trim(query_.substr(
 								start,
 								position_ - start));
-							return true;
+							return near_parse_result::parsed;
 						}
 					}
 				}
 				fail_at("Unterminated FTS5 NEAR group", start);
-				return false;
+				return near_parse_result::invalid;
 			}
 		};
 
