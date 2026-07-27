@@ -3,6 +3,7 @@
 #include "HAL/FileManager.h"
 #include "HAL/PlatformTime.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Misc/ScopeLock.h"
 #include "MonolithJsonUtils.h"
@@ -102,14 +103,36 @@ namespace
 		return Parsed;
 	}
 
-	FConfigFile ReadConfigFile(const FString& FilePath)
+	enum class EActivationFileState : uint8
 	{
-		FConfigFile Config;
-		if (IFileManager::Get().FileExists(*FilePath))
+		Absent,
+		Read,
+		Unreadable
+	};
+
+	// An absent file legitimately means "no user override, inherit the project
+	// default". An existing file that cannot be parsed means the opposite: the
+	// user's stored choice is unknown. Those two must not collapse into the same
+	// empty config, because the defaults are enabled and that would silently
+	// re-enable a persistently stopped service.
+	EActivationFileState ReadConfigFile(const FString& FilePath, FConfigFile& OutConfig)
+	{
+		OutConfig = FConfigFile();
+		if (!IFileManager::Get().FileExists(*FilePath))
 		{
-			Config.Read(FilePath);
+			return EActivationFileState::Absent;
 		}
-		return Config;
+
+		// FConfigFile::Read returns void on both supported engines, so probe
+		// readability explicitly rather than inferring it from an empty parse.
+		FString Contents;
+		if (!FFileHelper::LoadFileToString(Contents, *FilePath))
+		{
+			return EActivationFileState::Unreadable;
+		}
+
+		OutConfig.Read(FilePath);
+		return EActivationFileState::Read;
 	}
 
 	void SyncCachedActivationFile(
@@ -260,14 +283,41 @@ namespace
 		bool bServerDefault,
 		bool bIndexingDefault)
 	{
-		FConfigFile UserConfig = ReadConfigFile(UserPath);
+		FConfigFile UserConfig;
+		const EActivationFileState UserFileState = ReadConfigFile(UserPath, UserConfig);
+		if (UserFileState == EActivationFileState::Unreadable)
+		{
+			// The user's stored choice exists but is unavailable. Inheriting the
+			// enabled-by-default policy here would restart a service the user
+			// persistently stopped, so fail closed exactly like a malformed
+			// explicit value, and do not migrate or rewrite a file we could not
+			// read.
+			UE_LOG(LogMonolith, Error,
+				TEXT("Monolith could not read the activation config at %s; failing closed with server and indexing disabled until it is readable"),
+				*UserPath);
+
+			FMonolithActivation FailedClosed;
+			FailedClosed.bServerEnabled = false;
+			FailedClosed.bIndexingEnabled = false;
+			FailedClosed.bServerUserSet = true;
+			FailedClosed.bIndexingUserSet = true;
+			return FailedClosed;
+		}
+
 		const FParsedActivationValue UserServer =
 			ReadActivationValue(UserConfig, UserActivationSection, ServerEnabledKey, UserPath);
 		const FParsedActivationValue UserIndexing =
 			ReadActivationValue(UserConfig, UserActivationSection, IndexingEnabledKey, UserPath);
 
-		FConfigFile LegacyConfig = ReadConfigFile(LegacyPath);
-		const bool bLegacyFileExists = IFileManager::Get().FileExists(*LegacyPath);
+		FConfigFile LegacyConfig;
+		const EActivationFileState LegacyFileState = ReadConfigFile(LegacyPath, LegacyConfig);
+		const bool bLegacyFileExists = LegacyFileState != EActivationFileState::Absent;
+		if (LegacyFileState == EActivationFileState::Unreadable)
+		{
+			UE_LOG(LogMonolith, Warning,
+				TEXT("Monolith could not read legacy activation state at %s; it will not be migrated or removed"),
+				*LegacyPath);
+		}
 		const FParsedActivationValue LegacyServer =
 			ReadActivationValue(LegacyConfig, LegacyActivationSection, ServerEnabledKey, LegacyPath);
 		const FParsedActivationValue LegacyIndexing =
@@ -304,7 +354,9 @@ namespace
 			bMigrationNeeded = true;
 		}
 
-		if (bLegacyFileExists)
+		// An unreadable legacy file carries no values to migrate, so deleting it
+		// would destroy the only copy of a choice that was never transferred.
+		if (bLegacyFileExists && LegacyFileState == EActivationFileState::Read)
 		{
 			FString MigrationError;
 			const bool bMigrationWriteSucceeded =
@@ -317,7 +369,7 @@ namespace
 				// The in-memory file contains the attempted migration values.
 				// Keep GConfig synchronized with the actual user file when the
 				// write fails, not with state that was never persisted.
-				UserConfig = ReadConfigFile(UserPath);
+				ReadConfigFile(UserPath, UserConfig);
 			}
 			else
 			{
@@ -390,7 +442,21 @@ namespace
 		bool bActivated,
 		FString* OutError)
 	{
-		FConfigFile UserConfig = ReadConfigFile(UserPath);
+		FConfigFile UserConfig;
+		if (ReadConfigFile(UserPath, UserConfig) == EActivationFileState::Unreadable)
+		{
+			// Writing one key into a config we could not parse would persist a
+			// file containing only that key, silently reverting the other
+			// service to its enabled-by-default policy.
+			if (OutError)
+			{
+				*OutError = FString::Printf(
+					TEXT("Refusing to write activation state: the existing config at %s could not be read, and overwriting it would discard the other activation key."),
+					*UserPath);
+			}
+			return false;
+		}
+
 		const TCHAR* Key = Feature == EActivationFeature::Server
 			? ServerEnabledKey
 			: IndexingEnabledKey;

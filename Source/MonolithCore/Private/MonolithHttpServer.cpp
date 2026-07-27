@@ -59,10 +59,26 @@ bool FMonolithHttpServer::Start(int32 Port)
 	// reactivating its routes.
 	if (!bCanReuseOwnedRouter && IsPortListening(Port))
 	{
-		UE_LOG(LogMonolith, Error,
-			TEXT("Cannot start Monolith MCP server: port %d already has a listener before bind"),
+		// Something is already listening. It is either a listener this process
+		// retained from an earlier FMonolithHttpServer instance — a MonolithCore
+		// reload unbinds routes but cannot release the listener, since UE exposes
+		// no per-port teardown — or a listener owned by another process.
+		//
+		// FHttpServerModule outlives a MonolithCore reload, so its listener map
+		// is the authority on which of the two it is: GetHttpRouter returns the
+		// existing in-process listener's router without rebinding, and yields
+		// nothing for a port held by a foreign owner.
+		if (!FHttpServerModule::Get().GetHttpRouter(Port, true).IsValid())
+		{
+			UE_LOG(LogMonolith, Error,
+				TEXT("Cannot start Monolith MCP server: port %d already has a listener before bind"),
+				Port);
+			return false;
+		}
+
+		UE_LOG(LogMonolith, Log,
+			TEXT("Monolith reacquired this process's retained HTTP listener on port %d"),
 			Port);
-		return false;
 	}
 
 	for (int32 Attempt = 1; Attempt <= MaxStartAttempts; ++Attempt)

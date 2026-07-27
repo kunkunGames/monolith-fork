@@ -592,6 +592,13 @@ bool FMonolithOccupiedServerPortTest::RunTest(const FString& Parameters)
 		return false;
 	}
 
+	// Telling Monolith's own retained listener apart from a foreign owner costs
+	// one rejected bind through FHttpServerModule, which logs at Error level.
+	// It only happens on the path that was going to fail anyway.
+	AddExpectedError(
+		TEXT("HttpListener unable to bind"),
+		EAutomationExpectedErrorFlags::Contains,
+		1);
 	AddExpectedError(
 		TEXT("Cannot start Monolith MCP server: port"),
 		EAutomationExpectedErrorFlags::Contains,
@@ -756,6 +763,78 @@ bool FMonolithFailedServerProbePreservesSharedListenersTest::RunTest(
 		TEXT("stopping Monolith still leaves the unrelated UE HTTP listener running"),
 		MonolithActivationTestDetail::CanConnectToLoopback(UnrelatedPort));
 
+	return true;
+}
+
+// A MonolithCore reload destroys FMonolithHttpServer while UE keeps the
+// listener bound, because UE exposes no per-port teardown. The replacement
+// instance starts with no router ownership, so its pre-bind check must not
+// mistake Monolith's own retained listener for a foreign owner and refuse
+// every subsequent start until the editor exits.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithReloadReclaimsRetainedListenerTest,
+	"Monolith.Activation.ReloadReclaimsRetainedListener",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithReloadReclaimsRetainedListenerTest::RunTest(const FString& /*Parameters*/)
+{
+	const int32 ReloadPort =
+		MonolithActivationTestDetail::ReserveUnusedLoopbackPort(
+			TEXT("MonolithReloadPortReservation"));
+	if (!TestTrue(
+		TEXT("fixture receives a free port for the reload test"),
+		ReloadPort > 0))
+	{
+		return false;
+	}
+
+	const auto ConfigureRealProbe = [](FMonolithHttpServer& Target)
+	{
+		Target.ConfigureStartForTests(
+			[](int32 Port)
+			{
+				return MonolithActivationTestDetail::CanConnectToLoopback(Port);
+			},
+			1,
+			0.0f,
+			0.05f);
+	};
+
+	{
+		FMonolithHttpServer FirstInstance;
+		ConfigureRealProbe(FirstInstance);
+		if (!TestTrue(
+			TEXT("the pre-reload instance starts"),
+			FirstInstance.Start(ReloadPort)))
+		{
+			return false;
+		}
+		FirstInstance.Stop();
+	}
+
+	// The destroyed instance released its router handle, but UE still owns the
+	// bound listener for the remainder of the process.
+	if (!TestTrue(
+		TEXT("the retained UE listener survives the destroyed instance"),
+		MonolithActivationTestDetail::CanConnectToLoopback(ReloadPort)))
+	{
+		return false;
+	}
+
+	FMonolithHttpServer ReloadedInstance;
+	ConfigureRealProbe(ReloadedInstance);
+	TestTrue(
+		TEXT("a fresh instance reclaims this process's retained listener"),
+		ReloadedInstance.Start(ReloadPort));
+	TestTrue(
+		TEXT("the reclaimed server reports running"),
+		ReloadedInstance.IsRunning());
+	TestEqual(
+		TEXT("the reclaimed server reports the retained port"),
+		ReloadedInstance.GetPort(),
+		ReloadPort);
+
+	ReloadedInstance.Stop();
 	return true;
 }
 

@@ -218,12 +218,33 @@ engines at the resulting head.
 | `HandleReindex` read a `bool` return out of a `ProcessEvent` parameter buffer without checking the reflected signature; `MonolithCore` reaches `MonolithIndex` only through reflection, so a future `void` return would silently read `false` from the zeroed buffer | Require `CastField<FBoolProperty>(Func->GetReturnProperty())` and return an explicit module-sync error when absent | A re-index that actually started would have been reported to the caller as `reindex_not_started` |
 | `ReconcileHttpServerActivation` carried an unreachable `!bHasResolvedServerActivation` first-tick branch — `StartupModule` sets the flag before `AddTicker`, so it could never be observed false | Removed the branch and the flag; the baseline is resolved before the ticker exists | Dead state suggested a first-tick path that does not exist, making the reconciler harder to review |
 
+A second review pass found two more defects, both fixed in the same follow-up.
+
+| Defect | Fix | Why it mattered |
+|---|---|---|
+| `ReadConfigFile` returned an empty `FConfigFile` both when the activation file was absent and when it existed but could not be read, because `FConfigFile::Read` returns `void` and its result was never probed. An unreadable file therefore resolved to the project defaults, which are enabled | Probe readability with `FFileHelper::LoadFileToString` and distinguish `Absent` / `Read` / `Unreadable`; an unreadable user file fails closed with both services disabled and is neither migrated nor rewritten | A transient permission or lock failure silently **re-enabled a persistently stopped server**, and the write path would have persisted a file containing only the key being set, reverting the other service to its enabled default |
+| After a `MonolithCore` unload/reload, the replacement `FMonolithHttpServer` has no router ownership, so the pre-bind check saw Monolith's own retained listener and refused every start for the rest of the process | Ask `FHttpServerModule` — which outlives the reload — for the port's router. It returns the existing in-process listener without rebinding, and yields nothing for a foreign owner | Persistent activation and `Monolith.StartServer` could not restore routes until the editor exited |
+
+Distinguishing the two listener cases costs one rejected bind on the foreign-owner
+path, which UE logs at `Error` level (`HttpListener unable to bind to ...`). That
+only happens where startup was going to fail anyway, and the message is accurate,
+so `Monolith.Activation.OccupiedServerPort` now expects it.
+
+`Monolith.Activation.ReloadReclaimsRetainedListener` is new and covers the reload
+path directly: it starts one instance, stops and destroys it, confirms the UE
+listener is still reachable, then asserts a fresh instance reclaims that port.
+
 | Gate | Result | Evidence |
 |---|---|---|
-| UE 5.7 editor build | PASS | `D:\P4\MonolithPR114ReviewUE57Host`: recompiled `MonolithCoreModule.cpp`, `MonolithCoreTools.cpp`, `MonolithHttpServer.cpp`, relinked `UnrealEditor-MonolithCore.dll`, `Result: Succeeded` |
-| UE 5.7 automation | PASS, 15/15 | `Monolith.Activation` + `Monolith.Source` under `-RenderOffscreen`: `succeeded=15 failed=0 notRun=0`, exit 0 |
+| UE 5.7 editor build | PASS | `D:\P4\MonolithPR114ReviewUE57Host`: recompiled `MonolithCoreModule.cpp`, `MonolithCoreTools.cpp`, `MonolithHttpServer.cpp`, `MonolithSettings.cpp`, `MonolithSettingsActivationTests.cpp`; relinked `UnrealEditor-MonolithCore.dll`; `Result: Succeeded` |
+| UE 5.7 automation | PASS, 16/16 | `Monolith.Activation` (6) + `Monolith.Source` (10) under `-RenderOffscreen`: every test `Success`, `failed=0`, exit 0 |
 | UE 5.8 editor build | PASS | `D:\P4\MonolithActivationBuildHost`: relinked `UnrealEditor-MonolithCore.dll`, `Result: Succeeded` |
-| UE 5.8 automation | PASS, 15/15 | `Monolith.Activation` + `Monolith.Source`: `succeeded=15 failed=0 notRun=0`, exit 0 |
+| UE 5.8 automation | PASS, 16/16 | Same suite: every test `Success`, `failed=0`, exit 0 |
+
+Both automation hosts pin `ServerPort=19316` in their own `Config/DefaultMonolith.ini`.
+Without that, a host started on a machine where a developer's editor already holds
+the default 9316 fails to bind and attributes the engine's bind error to whichever
+test is running. That is host configuration, not a plugin behavior.
 
 One behavior was documented rather than changed. Because UE exposes no per-port
 listener teardown, `Monolith.StopServer` unbinds routes but leaves the TCP
