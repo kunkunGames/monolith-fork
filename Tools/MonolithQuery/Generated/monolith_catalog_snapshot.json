@@ -16758,7 +16758,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1418,
+      "source_line": 1701,
       "summary": "Add a comment box to a Blueprint graph, optionally enclosing a set of nodes. If node_ids is provided, the comment box auto-sizes to contain those nodes with 50px padding.",
       "supports_progress": false,
       "writes_logs": true
@@ -16903,7 +16903,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintGraphActions.cpp",
-      "source_line": 381,
+      "source_line": 439,
       "summary": "Add a new event dispatcher (multicast delegate) to a Blueprint",
       "supports_progress": false,
       "writes_logs": true
@@ -16932,7 +16932,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1406,
+      "source_line": 1689,
       "summary": "Add a native parent or implemented-interface override event node (BeginPlay, Tick, interface BlueprintEvent, etc.) or custom event to a Blueprint event graph. Alias table: BeginPlay->ReceiveBeginPlay, Tick->ReceiveTick, EndPlay->ReceiveEndPlay, BeginOverlap->ReceiveActorBeginOverlap, EndOverlap->ReceiveActorEndOverlap, Hit->ReceiveHit, Destroyed->ReceiveDestroyed, AnyDamage->ReceiveAnyDamage, PointDamage->ReceivePointDamage, RadialDamage->ReceiveRadialDamage.",
       "supports_progress": false,
       "writes_logs": true
@@ -16961,7 +16961,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintGraphActions.cpp",
-      "source_line": 305,
+      "source_line": 363,
       "summary": "Add a new function graph to a Blueprint",
       "supports_progress": false,
       "writes_logs": true
@@ -17019,7 +17019,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintGraphActions.cpp",
-      "source_line": 356,
+      "source_line": 414,
       "summary": "Add a new macro graph to a Blueprint",
       "supports_progress": false,
       "writes_logs": true
@@ -17048,7 +17048,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1191,
+      "source_line": 1474,
       "summary": "Add a new node to a Blueprint graph. Supports CallFunction, VariableGet, VariableSet, CustomEvent, Branch, Sequence, MacroInstance, SpawnActorFromClass, DynamicCast, Self, Return, MakeStruct, BreakStruct, SwitchOnEnum, SwitchOnInt, SwitchOnString, FormatText, MakeArray, Select node types. Also supports shorthand aliases: ForEachLoop, ForLoop, ForLoopWithBreak, DoOnce, FlipFlop, Gate (macro shortcuts), IsValid, Delay, RetriggerableDelay (function shortcuts), make_struct, break_struct, switch_enum, switch_int, switch_string, format_text, make_array, select. ComponentBoundEvent (binds an event entry node to a component's BlueprintAssignable multicast delegate; requires component_name + delegate_property_name), AddDelegate (binds an event to a BlueprintAssignable multicast delegate; \"Bind Event to ...\" node), RemoveDelegate (\"Unbind Event from ...\" \u2014 removes one previously bound event), ClearDelegate (\"Unbind all Events from ...\" \u2014 clears every bound listener), CallDelegate (\"Call ...\" \u2014 broadcasts a BP-resident multicast delegate to all listeners)",
       "supports_progress": false,
       "writes_logs": true
@@ -17077,7 +17077,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1364,
+      "source_line": 1647,
       "summary": "Place multiple nodes in one transaction. Returns a temp_id -> node_id mapping so callers can immediately reference created nodes in connect_pins_bulk. Each entry: { temp_id, node_type, function_name?, target_class?, variable_name?, position? }.",
       "supports_progress": false,
       "writes_logs": true
@@ -17135,7 +17135,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1483,
+      "source_line": 1766,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -17164,7 +17164,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1501,
+      "source_line": 1784,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -17222,7 +17222,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1394,
+      "source_line": 1677,
       "summary": "Create a Timeline node in a Blueprint event graph. Handles both the UTimelineTemplate (data) and UK2Node_Timeline (graph node) creation with GUID linkage validation. Only works in event graphs (ubergraph pages), not function graphs.",
       "supports_progress": false,
       "writes_logs": true
@@ -17251,7 +17251,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1444,
+      "source_line": 1727,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -17454,7 +17454,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1351,
+      "source_line": 1634,
       "summary": "Execute multiple Blueprint write operations on a single asset in one transaction. Each operation is { \"op\": \"action_name\", ...action_params_minus_asset_path }. Supported ops: add_node, remove_node, connect_pins, disconnect_pins, set_pin_default, set_node_position, add_variable, remove_variable, rename_variable, set_variable_type, set_variable_defaults, add_local_variable, remove_local_variable, add_component, remove_component, rename_component, reparent_component, set_component_property, duplicate_component, add_function, remove_function, rename_function, add_macro, remove_macro, rename_macro, add_event_dispatcher, set_function_params, implement_interface, remove_interface, scaffold_interface_implementation, add_timeline, add_event_node, add_comment_node, promote_pin_to_variable, add_replicated_variable, save_asset.",
       "supports_progress": false,
       "writes_logs": true
@@ -17541,7 +17541,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1338,
+      "source_line": 1621,
       "summary": "Clear session-local Blueprint node aliases by asset, graph, or all aliases.",
       "supports_progress": false,
       "writes_logs": true
@@ -17686,7 +17686,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1226,
+      "source_line": 1509,
       "summary": "Connect two pins in a Blueprint graph. Source pin must be an output, target pin must be an input (or vice versa \u2014 the schema will sort it out).",
       "supports_progress": false,
       "writes_logs": true
@@ -17715,7 +17715,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1374,
+      "source_line": 1657,
       "summary": "Wire multiple pin connections in one transaction. Each entry: { source_node, source_pin, target_node, target_pin }. Returns per-connection success/error.",
       "supports_progress": false,
       "writes_logs": true
@@ -17976,7 +17976,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1346,
+      "source_line": 1629,
       "summary": "Report selected Blueprint graph-node context availability. Current Monolith action surface does not yet bind to the active graph editor selection.",
       "supports_progress": false,
       "writes_logs": true
@@ -18005,7 +18005,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1238,
+      "source_line": 1521,
       "summary": "Disconnect a pin on a Blueprint node. If target_node and target_pin are omitted, all connections on the pin are broken.",
       "supports_progress": false,
       "writes_logs": true
@@ -18846,7 +18846,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1435,
+      "source_line": 1718,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -18904,7 +18904,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintGraphActions.cpp",
-      "source_line": 399,
+      "source_line": 457,
       "summary": "Add an interface to a Blueprint's implemented interface list",
       "supports_progress": false,
       "writes_logs": true
@@ -19020,7 +19020,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintGraphActions.cpp",
-      "source_line": 331,
+      "source_line": 389,
       "summary": "Author a Blueprint override of an overridable parent function (BlueprintImplementableEvent / BlueprintNativeEvent), including those that RETURN a value (e.g. UCommonActivatableWidget::BP_GetDesiredFocusTarget -> UWidget*). add_function cannot do this and the event-node form has no ReturnValue pin. Declaring class is resolved generically by name. Returns graph_name, entry_node_id, return_pin_id/name, override_class, has_return_value.",
       "supports_progress": false,
       "writes_logs": true
@@ -19049,7 +19049,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1468,
+      "source_line": 1751,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -19194,7 +19194,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1318,
+      "source_line": 1601,
       "summary": "Bind a friendly alias to an existing graph node ID for this editor session.",
       "supports_progress": false,
       "writes_logs": true
@@ -19310,7 +19310,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintGraphActions.cpp",
-      "source_line": 426,
+      "source_line": 484,
       "summary": "Remove an event dispatcher (multicast delegate) from a Blueprint. Warns if any graph nodes still reference it.",
       "supports_progress": false,
       "writes_logs": true
@@ -19339,7 +19339,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintGraphActions.cpp",
-      "source_line": 339,
+      "source_line": 397,
       "summary": "Remove a function graph from a Blueprint by name",
       "supports_progress": false,
       "writes_logs": true
@@ -19368,7 +19368,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintGraphActions.cpp",
-      "source_line": 407,
+      "source_line": 465,
       "summary": "Remove an interface from a Blueprint",
       "supports_progress": false,
       "writes_logs": true
@@ -19426,7 +19426,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintGraphActions.cpp",
-      "source_line": 364,
+      "source_line": 422,
       "summary": "Remove a macro graph from a Blueprint by name",
       "supports_progress": false,
       "writes_logs": true
@@ -19455,7 +19455,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1217,
+      "source_line": 1500,
       "summary": "Remove a node from a Blueprint graph by node ID.",
       "supports_progress": false,
       "writes_logs": true
@@ -19629,7 +19629,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintGraphActions.cpp",
-      "source_line": 347,
+      "source_line": 405,
       "summary": "Rename an existing function graph in a Blueprint",
       "supports_progress": false,
       "writes_logs": true
@@ -19658,7 +19658,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintGraphActions.cpp",
-      "source_line": 372,
+      "source_line": 430,
       "summary": "Rename an existing macro graph in a Blueprint",
       "supports_progress": false,
       "writes_logs": true
@@ -19716,7 +19716,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintGraphActions.cpp",
-      "source_line": 416,
+      "source_line": 474,
       "summary": "Change the parent class of a Blueprint",
       "supports_progress": false,
       "writes_logs": true
@@ -19774,7 +19774,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1275,
+      "source_line": 1558,
       "summary": "Dry-run node creation \u2014 returns resolved type, class, function, and all pins with types/defaults/direction without modifying any asset. Useful for discovering what pins a node will have before adding it.",
       "supports_progress": false,
       "writes_logs": true
@@ -19803,7 +19803,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1329,
+      "source_line": 1612,
       "summary": "Resolve a friendly alias to the current node ID and graph for this editor session.",
       "supports_progress": false,
       "writes_logs": true
@@ -19890,7 +19890,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintGraphActions.cpp",
-      "source_line": 449,
+      "source_line": 507,
       "summary": "Add an interface to a Blueprint AND create all stub function graphs in one call. Returns the interface name and list of created graphs. Much more useful than implement_interface alone \u2014 this one actually wires up the stubs.",
       "supports_progress": false,
       "writes_logs": true
@@ -20093,7 +20093,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1291,
+      "source_line": 1574,
       "summary": "Search session-local spawnable Blueprint node templates and return cache IDs usable by spawn_cached_node. Covers Monolith add_node templates and Blueprint-callable functions.",
       "supports_progress": false,
       "writes_logs": true
@@ -20325,7 +20325,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintGraphActions.cpp",
-      "source_line": 437,
+      "source_line": 495,
       "summary": "Set (replace) the signature parameters on an event dispatcher. Existing params are cleared and replaced with the new list.",
       "supports_progress": false,
       "writes_logs": true
@@ -20354,7 +20354,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintGraphActions.cpp",
-      "source_line": 389,
+      "source_line": 447,
       "summary": "Add input/output parameters to a Blueprint function",
       "supports_progress": false,
       "writes_logs": true
@@ -20383,7 +20383,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintGraphActions.cpp",
-      "source_line": 322,
+      "source_line": 380,
       "summary": "Set (or clear) the 'Thread Safe' flag on an existing Blueprint function graph. Sets FKismetUserDeclaredFunctionMetadata::bThreadSafe on the function's entry node and recompiles. Required for functions called from BlueprintThreadSafeUpdateAnimation. Searches function graphs (including AnimBP function graphs).",
       "supports_progress": false,
       "writes_logs": true
@@ -20412,7 +20412,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1265,
+      "source_line": 1548,
       "summary": "Move a Blueprint graph node to a new position.",
       "supports_progress": false,
       "writes_logs": true
@@ -20441,7 +20441,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1250,
+      "source_line": 1533,
       "summary": "Set the default value of a pin on a Blueprint node.",
       "supports_progress": false,
       "writes_logs": true
@@ -20470,7 +20470,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1383,
+      "source_line": 1666,
       "summary": "Set multiple pin default values in one transaction. Each entry: { node_id, pin_name, value }. Returns per-entry success/error.",
       "supports_progress": false,
       "writes_logs": true
@@ -20557,7 +20557,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1455,
+      "source_line": 1738,
       "summary": "",
       "supports_progress": false,
       "writes_logs": true
@@ -20673,7 +20673,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1301,
+      "source_line": 1584,
       "summary": "Spawn a Blueprint node from a cache ID returned by search_spawnable_nodes. Delegates to blueprint.add_node and keeps the cache session-local.",
       "supports_progress": false,
       "writes_logs": true
@@ -20789,7 +20789,7 @@
       "skill": "blueprint",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp",
-      "source_line": 1311,
+      "source_line": 1594,
       "summary": "Validate session-local Blueprint node template cache and optional node aliases. Reports stale function templates or aliases whose target nodes no longer exist.",
       "supports_progress": false,
       "writes_logs": true
@@ -23718,7 +23718,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 743,
+      "source_line": 745,
       "summary": "Author map-level settings on the currently-open (or a specified) editor map: set the WorldSettings GameMode Override (AWorldSettings::DefaultGameMode), spawn APlayerStart actors at given transforms, and optionally spawn native/Blueprint actor instances (with reflective UPROPERTY defaults \u2014 float/int/bool/string/name, FSoftObjectPath, object & soft-object refs, CLASS / SOFTCLASS refs `_C`-normalized, and arrays of those leaf types). Generic complement to create_nav_harness_map \u2014 not tied to the nav-harness path. Only dirties packages on actual change; optionally saves.",
       "supports_progress": false,
       "writes_logs": true
@@ -23747,7 +23747,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 919,
+      "source_line": 923,
       "summary": "Preview + capture a SKELETAL ANIMATION asset (UAnimSequence | UBlendSpace | UAnimBlueprint) to PNG frames in an isolated FPreviewScene (NO PIE). For each time sample the pose is evaluated (single-node SetPosition for sequences, blend-param + SetPosition for blendspaces, AnimBlueprint mode + TickComponent for ABPs) then rendered via the shared scene-capture->PNG path. Use this for AnimBP/sequence/blendspace visual diffing \u2014 the anim counterpart to capture_sequence_frames (which is Niagara-only).",
       "supports_progress": false,
       "writes_logs": true
@@ -23776,7 +23776,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 985,
+      "source_line": 989,
       "summary": "Report asset editor viewport capture availability. Does not fall back to level viewport capture.",
       "supports_progress": false,
       "writes_logs": true
@@ -23805,7 +23805,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 995,
+      "source_line": 999,
       "summary": "Capture an asset thumbnail to PNG when thumbnail_fallback=true. Does not claim asset-editor viewport capture.",
       "supports_progress": false,
       "writes_logs": true
@@ -23834,7 +23834,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 976,
+      "source_line": 980,
       "summary": "Capture a level editor viewport to a PNG file. Errors instead of substituting a different viewport.",
       "supports_progress": false,
       "writes_logs": true
@@ -23863,7 +23863,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 882,
+      "source_line": 886,
       "summary": "Render N materials side-by-side on identical preview meshes in ONE scene, ONE camera, ONE PNG. Shares lighting + HDRI across all cells (the value-add over N separate captures). Auto-grid layout via ceil(sqrt(N)) columns unless overridden. Use when comparing material variations visually \u2014 e.g. tweaking roughness across MI tiers, A/B-testing a master vs an instance, or auditing a packs's hero/variant materials.",
       "supports_progress": false,
       "writes_logs": true
@@ -23921,7 +23921,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 843,
+      "source_line": 847,
       "summary": "Capture a screenshot of an asset (Niagara, material, static_mesh, skeletal_mesh, widget) rendered in a preview scene",
       "supports_progress": false,
       "writes_logs": true
@@ -23950,7 +23950,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 905,
+      "source_line": 909,
       "summary": "Capture multiple frames of an animated effect at specified timestamps",
       "supports_progress": false,
       "writes_logs": true
@@ -23979,8 +23979,8 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 1005,
-      "summary": "Capture a Niagara system as a sequence of PNG frames with adaptive 60 fps GIF encoding via ffmpeg or python",
+      "source_line": 1009,
+      "summary": "Capture a Niagara system as a sequence of PNG frames with adaptive 60 fps GIF encoding and ffprobe-verified exact ffmpeg frame counts",
       "supports_progress": false,
       "writes_logs": true
     },
@@ -24008,7 +24008,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 990,
+      "source_line": 994,
       "summary": "Report widget designer capture availability. Does not fall back to level viewport capture.",
       "supports_progress": false,
       "writes_logs": true
@@ -24037,7 +24037,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 894,
+      "source_line": 898,
       "summary": "Render a static mesh with an FEngineShowFlags overlay (wireframe | normals | uv_density | lightmap_density | shader_complexity). Useful for visual debugging \u2014 overdraw audits, UV-density checks, lightmap-density layout review, shader-complexity heatmaps. Static-mesh only in v1 (skeletal/material flavours can be added later).",
       "supports_progress": false,
       "writes_logs": true
@@ -24095,7 +24095,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 727,
+      "source_line": 728,
       "summary": "Build a navigation test map from a JSON spec: blank UWorld, floor, nav bounds, camera, target points, and BP/actor instances with reflective UPROPERTY defaults (scalars, FSoftObjectPath, object/soft-object refs, CLASS/SOFTCLASS refs `_C`-normalized, and arrays of those). Optional WorldSettings GameMode override + APlayerStart spawns. All spawned actors get a SetFolderPath. Rebuilds + validates nav via runtime `ai` dispatch and saves. Writes to a throwaway map path only.",
       "supports_progress": false,
       "writes_logs": true
@@ -24124,7 +24124,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 957,
+      "source_line": 961,
       "summary": "Delete UE assets by path. Optional safety: restrict to allowed path prefixes",
       "supports_progress": false,
       "writes_logs": true
@@ -24269,8 +24269,8 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 1017,
-      "summary": "Encode an existing ordered PNG frame sequence to a GIF with adaptive 60 fps target, 30/20 fps fallback, and ffmpeg/python encoders",
+      "source_line": 1021,
+      "summary": "Encode an existing ordered PNG frame sequence to a GIF with adaptive fps and ffprobe-verified exact ffmpeg frame counts",
       "supports_progress": false,
       "writes_logs": true
     },
@@ -24298,7 +24298,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 1103,
+      "source_line": 1107,
       "summary": "Export the most recent Monolith-triggered automation run report to Project/Saved/Monolith/AutomationReports.",
       "supports_progress": false,
       "writes_logs": true
@@ -24327,7 +24327,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 1042,
+      "source_line": 1046,
       "summary": "Find registered automation tests by prefix and/or case-insensitive query across full path, display name, and test name.",
       "supports_progress": false,
       "writes_logs": true
@@ -24385,7 +24385,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 1077,
+      "source_line": 1081,
       "summary": "Return current or last Monolith automation run status plus history capacity. Active asynchronous controller runs report can_stop=true.",
       "supports_progress": false,
       "writes_logs": true
@@ -24414,7 +24414,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 1096,
+      "source_line": 1100,
       "summary": "Summarize discovered automation tests and include the most recent Monolith-triggered automation run when available.",
       "supports_progress": false,
       "writes_logs": true
@@ -24443,7 +24443,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 540,
+      "source_line": 539,
       "summary": "Get build errors and warnings, scoped to a time window and bucketed into compile_errors (LogLiveCoding/LogCompile/LogLinker) vs other_errors. By default excludes LogPython + LogMonolith capture noise from the headline error_count (still visible under other_errors). Window precedence: since_marker > since_iso > since_seconds/since > last compile.",
       "supports_progress": false,
       "writes_logs": true
@@ -24472,7 +24472,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 554,
+      "source_line": 553,
       "summary": "Check compile status: compiling, last_result, last_compile_time, errors_since_compile, patch_applied",
       "supports_progress": false,
       "writes_logs": true
@@ -24501,7 +24501,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 559,
+      "source_line": 558,
       "summary": "Get summary of last build (errors, warnings, time)",
       "supports_progress": false,
       "writes_logs": true
@@ -24530,7 +24530,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 606,
+      "source_line": 605,
       "summary": "Get structured compile report: result, time, log lines from compile categories, error/warning counts, patch status",
       "supports_progress": false,
       "writes_logs": true
@@ -24559,7 +24559,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 618,
+      "source_line": 617,
       "summary": "Get last crash/ensure context information",
       "supports_progress": false,
       "writes_logs": true
@@ -24675,7 +24675,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 611,
+      "source_line": 610,
       "summary": "Return normalized Live Coding availability, compile result, diagnostic freshness, and bounded compile log excerpts.",
       "supports_progress": false,
       "writes_logs": true
@@ -24704,7 +24704,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 596,
+      "source_line": 595,
       "summary": "List active log categories",
       "supports_progress": false,
       "writes_logs": true
@@ -24733,7 +24733,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 601,
+      "source_line": 600,
       "summary": "Get log statistics by verbosity level",
       "supports_progress": false,
       "writes_logs": true
@@ -24791,7 +24791,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 572,
+      "source_line": 571,
       "summary": "Get recent editor log entries",
       "supports_progress": false,
       "writes_logs": true
@@ -24907,7 +24907,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 966,
+      "source_line": 970,
       "summary": "Get current editor viewport camera position, rotation, FOV, and resolution",
       "supports_progress": false,
       "writes_logs": true
@@ -24936,7 +24936,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 935,
+      "source_line": 939,
       "summary": "Import an external image as a UTexture2D with configurable settings",
       "supports_progress": false,
       "writes_logs": true
@@ -24965,7 +24965,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 862,
+      "source_line": 866,
       "summary": "Inspect a UMaterialInterface's PBR parameter set. Returns scalar/vector/texture parameter lists plus heuristic classification of base color / normal / roughness / metallic textures and ORM / ARM / MRA channel-packing detection. Pure reflection \u2014 no render, no thumbnail. Use this when capture_scene_preview's pixel output isn't enough and you need the actual parameter values.",
       "supports_progress": false,
       "writes_logs": true
@@ -24994,7 +24994,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 869,
+      "source_line": 873,
       "summary": "Inspect a UTexture2D's R/G/B/A channel statistics (min/max/mean per channel) plus format/dimensions/sRGB/alpha. Optional per-channel split PNGs for visual debugging. Reads source mip 0 directly \u2014 bypasses runtime mip selection and compression. Useful for ORM/ARM channel-packing audits, alpha-coverage checks, and verifying source authoring against runtime appearance.",
       "supports_progress": false,
       "writes_logs": true
@@ -25023,7 +25023,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 1089,
+      "source_line": 1093,
       "summary": "List recent compact Monolith-triggered automation run summaries newest-first.",
       "supports_progress": false,
       "writes_logs": true
@@ -25052,7 +25052,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 1032,
+      "source_line": 1036,
       "summary": "List registered automation tests, optionally filtered by prefix. Results are paged (default 500 per page); chain pages through next_cursor.",
       "supports_progress": false,
       "writes_logs": true
@@ -25110,7 +25110,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 637,
+      "source_line": 636,
       "summary": "Report loaded packages with unsaved changes (UPackage::IsDirty), optionally scoped to one or more /Game path prefixes. Returns per-package {package, is_map, disk_path, transient}. Use to audit what a save_packages call would touch.",
       "supports_progress": false,
       "writes_logs": true
@@ -25168,7 +25168,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 971,
+      "source_line": 975,
       "summary": "List open level editor viewports and their camera/source metadata.",
       "supports_progress": false,
       "writes_logs": true
@@ -25255,7 +25255,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 533,
+      "source_line": 532,
       "summary": "Trigger a Live Coding compile (alias for trigger_build)",
       "supports_progress": false,
       "writes_logs": true
@@ -25284,7 +25284,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 1113,
+      "source_line": 1117,
       "summary": "Close the current persistent level and load the specified level by /Game/... asset path. Wraps ULevelEditorSubsystem::LoadLevel. Fail-closed guards: (1) if the current level (or its external actor/data-layer packages) has unsaved changes this REFUSES with the dirty package list \u2014 LoadLevel runs unattended and would discard them silently \u2014 unless dirty_policy:\"discard\" is passed; (2) if a PIE world is still resident this REFUSES while a smoke session is running, else drives PIE teardown to completion + forces a GC before loading (prevents the 'World Memory Leaks' assert).",
       "supports_progress": false,
       "writes_logs": true
@@ -25545,7 +25545,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 789,
+      "source_line": 793,
       "summary": "Plan editor DataValidation targets from a Perforce changelist, opened files, and/or explicit depot/local/package paths. Maps package files to Unreal long package names and returns the exact validation params without saving, checkout, or mutation.",
       "supports_progress": false,
       "writes_logs": true
@@ -25574,7 +25574,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 1070,
+      "source_line": 1074,
       "summary": "Poll one Monolith automation run by run_id. Returns a current or final full report including structured per-test results.",
       "supports_progress": false,
       "writes_logs": true
@@ -25661,7 +25661,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 1051,
+      "source_line": 1055,
       "summary": "Run synchronously-completing automation tests by prefix in the running editor. This compatibility action returns final results immediately; use start_automation_tests for latent, PIE, or other multi-frame tests. Both start actions share one run slot and return automation_busy without changing run history when occupied.",
       "supports_progress": false,
       "writes_logs": true
@@ -25690,7 +25690,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 659,
+      "source_line": 658,
       "summary": "Start an ASYNC PIE smoke session on a map and RETURN IMMEDIATELY. Loads the map, starts PIE (synchronously), emits a UE_LOG marker, and registers a session that the editor's REAL frame loop advances over real frames (sampling the target pawn's AnimInstance vars). Returns {session_id, status:'running', started:true}. Poll progress / the final report with poll_pie_smoke; force-end with stop_pie_smoke. Does NOT block the editor frame (the old synchronous pump re-entered UWorld::Tick and crashed).",
       "supports_progress": false,
       "writes_logs": true
@@ -25719,7 +25719,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 647,
+      "source_line": 646,
       "summary": "Save the requested packages to disk (UPackage::SavePackage + FSavePackageArgs). A pre-save guard rejects hard references to private objects in external packages as structured per-package failures before entering the engine saver. When fail_on_unrequested_dirty=true, errors before saving anything if any dirty package exists outside the requested set (within scope_paths if given). Returns per-package save status.",
       "supports_progress": false,
       "writes_logs": true
@@ -25748,7 +25748,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 564,
+      "source_line": 563,
       "summary": "Search build log output by pattern",
       "supports_progress": false,
       "writes_logs": true
@@ -25777,7 +25777,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 579,
+      "source_line": 578,
       "summary": "Search log entries by category, verbosity, and text pattern",
       "supports_progress": false,
       "writes_logs": true
@@ -25806,7 +25806,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 754,
+      "source_line": 757,
       "summary": "Set one reflected property on the active or specified map's AWorldSettings object. Supports scalar values, object/soft-object refs, class/soft-class refs with `_C` normalization, and arrays of those leaf values. Intended for settings beyond GameMode Override, such as ALyraWorldSettings::DefaultGameplayExperience. Compares before dirtying and supports dry_run.",
       "supports_progress": false,
       "writes_logs": true
@@ -25835,7 +25835,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 1059,
+      "source_line": 1063,
       "summary": "Start an AutomationController-owned asynchronous test run by prefix. Returns immediately after queuing worker discovery; supports latent commands, PIE, polling, bounded timeout, and owned cancellation. An occupied shared run slot returns automation_busy before prefix discovery or no-match recording.",
       "supports_progress": false,
       "writes_logs": true
@@ -25864,7 +25864,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 625,
+      "source_line": 624,
       "summary": "Start a Play-In-Editor session (equivalent to pressing Cmd+P in the editor).",
       "supports_progress": false,
       "writes_logs": true
@@ -25893,7 +25893,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 944,
+      "source_line": 948,
       "summary": "Stitch individual frame images into a flipbook atlas texture and import as UTexture2D",
       "supports_progress": false,
       "writes_logs": true
@@ -25922,7 +25922,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 1082,
+      "source_line": 1086,
       "summary": "Request bounded cancellation for the Monolith-owned asynchronous run. Never stops an external AutomationController run; synchronous compatibility runs remain non-cancellable.",
       "supports_progress": false,
       "writes_logs": true
@@ -25951,7 +25951,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 630,
+      "source_line": 629,
       "summary": "Stop the active Play-In-Editor session.",
       "supports_progress": false,
       "writes_logs": true
@@ -26038,7 +26038,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 589,
+      "source_line": 588,
       "summary": "Get last N log lines",
       "supports_progress": false,
       "writes_logs": true
@@ -26067,7 +26067,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 526,
+      "source_line": 525,
       "summary": "Trigger a Live Coding compile",
       "supports_progress": false,
       "writes_logs": true
@@ -26096,7 +26096,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 766,
+      "source_line": 770,
       "summary": "Run UEditorValidatorSubsystem::ValidateAssetsWithSettings for explicit package/object paths or a recursive package-path prefix. Returns aggregate counts plus optional per-asset details. This is the generic engine DataValidation wrapper; project-specific ValidateProjectSettings helpers are reported as unsupported unless implemented by a project-facing adapter.",
       "supports_progress": false,
       "writes_logs": true
@@ -26125,7 +26125,7 @@
       "skill": "editor",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithEditor/Private/MonolithEditorActions.cpp",
-      "source_line": 806,
+      "source_line": 810,
       "summary": "Resolve a Perforce changelist/opened-file set or explicit paths with plan_content_validation_changeset, then run validate_assets on the resolved package targets. Code-only changesets return a skipped validation payload rather than an error.",
       "supports_progress": false,
       "writes_logs": true
@@ -41652,7 +41652,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1704,
+      "source_line": 1702,
       "summary": "Request cooperative cancellation of an async Monolith job by job_id and return its current row. Reports disabled when async jobs are off.",
       "supports_progress": false,
       "writes_logs": true
@@ -41739,7 +41739,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1780,
+      "source_line": 1778,
       "summary": "Return one Monolith domain's profile-filtered actions and schemas without changing tools/list.",
       "supports_progress": false,
       "writes_logs": true
@@ -41768,7 +41768,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1577,
+      "source_line": 1575,
       "summary": "List available tool namespaces, actions, or an exact action schema. Pass namespace/action/mode to narrow the live registry output.",
       "supports_progress": false,
       "writes_logs": true
@@ -41826,7 +41826,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1551,
+      "source_line": 1549,
       "summary": "Find profile-allowed Monolith actions by task, namespace, category, action name, or description. Use this before monolith_discover when the exact action is unclear.",
       "supports_progress": false,
       "writes_logs": true
@@ -41855,7 +41855,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1748,
+      "source_line": 1746,
       "summary": "Measure factual discovery-planning metadata coverage across profile-allowed actions without fabricating outputs or next-action predictions.",
       "supports_progress": false,
       "writes_logs": true
@@ -41942,7 +41942,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1690,
+      "source_line": 1688,
       "summary": "Return one async Monolith job's status, progress, and result by job_id. Reports disabled when async jobs are off.",
       "supports_progress": false,
       "writes_logs": true
@@ -42000,7 +42000,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1800,
+      "source_line": 1798,
       "summary": "Return process/profile-scoped loaded domain state for the deferred domain catalog.",
       "supports_progress": false,
       "writes_logs": true
@@ -42029,7 +42029,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1739,
+      "source_line": 1737,
       "summary": "Return the current live registry discovery snapshot and refresh semantics.",
       "supports_progress": false,
       "writes_logs": true
@@ -42058,7 +42058,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1664,
+      "source_line": 1662,
       "summary": "Return Monolith MCP transport status, CORS/header policy, protocol support, route state, and request limits.",
       "supports_progress": false,
       "writes_logs": true
@@ -42087,7 +42087,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1850,
+      "source_line": 1848,
       "summary": "Return local Monolith notification preferences.",
       "supports_progress": false,
       "writes_logs": true
@@ -42116,7 +42116,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1810,
+      "source_line": 1808,
       "summary": "Return local Monolith onboarding progress, skipped steps, and next recommended setup step.",
       "supports_progress": false,
       "writes_logs": true
@@ -42145,7 +42145,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1840,
+      "source_line": 1838,
       "summary": "Return safe help text for Monolith readiness check failures without running installers.",
       "supports_progress": false,
       "writes_logs": true
@@ -42174,7 +42174,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1831,
+      "source_line": 1829,
       "summary": "Run read-only Monolith readiness checks for server, registry, index, optional modules, and settings gates.",
       "supports_progress": false,
       "writes_logs": true
@@ -42290,7 +42290,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1770,
+      "source_line": 1768,
       "summary": "Return cheap profile-filtered Monolith domain metadata without per-action schemas.",
       "supports_progress": false,
       "writes_logs": true
@@ -42319,7 +42319,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1673,
+      "source_line": 1671,
       "summary": "Report MCP session tracking availability. Current Monolith streamable HTTP mode does not persist per-client sessions.",
       "supports_progress": false,
       "writes_logs": true
@@ -42435,7 +42435,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1790,
+      "source_line": 1788,
       "summary": "Mark a Monolith domain loaded for discovery scope without exposing additional tools by default.",
       "supports_progress": false,
       "writes_logs": true
@@ -42464,7 +42464,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1643,
+      "source_line": 1641,
       "summary": "Re-index the Monolith project database. Incremental by default (delta only). Pass force=true for full wipe+rebuild.",
       "supports_progress": true,
       "writes_logs": true
@@ -42609,7 +42609,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1729,
+      "source_line": 1727,
       "summary": "Set safe MCP compatibility options. Supports browser_access=loopback_only|disabled; legacy routes remain unsupported.",
       "supports_progress": false,
       "writes_logs": true
@@ -42667,7 +42667,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1859,
+      "source_line": 1857,
       "summary": "Persist local Monolith notification preferences with boolean validation.",
       "supports_progress": false,
       "writes_logs": true
@@ -42696,7 +42696,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1819,
+      "source_line": 1817,
       "summary": "Mark a Monolith onboarding step completed, skipped, reopened, or reset.",
       "supports_progress": false,
       "writes_logs": true
@@ -42725,7 +42725,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1610,
+      "source_line": 1608,
       "summary": "Get Monolith server health: version, uptime, port, registered action count, module status.",
       "supports_progress": false,
       "writes_logs": true
@@ -42754,7 +42754,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1719,
+      "source_line": 1717,
       "summary": "Report MCP session termination availability without inventing session state.",
       "supports_progress": false,
       "writes_logs": true
@@ -42783,7 +42783,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1869,
+      "source_line": 1867,
       "summary": "Trigger a harmless local Monolith notification test when editor toasts are enabled.",
       "supports_progress": false,
       "writes_logs": true
@@ -42812,7 +42812,7 @@
       "skill": "monolith",
       "source": "cpp_registry_scan",
       "source_file": "Source/MonolithCore/Private/MonolithCoreTools.cpp",
-      "source_line": 1626,
+      "source_line": 1624,
       "summary": "Check for or install Monolith updates from GitHub Releases.",
       "supports_progress": false,
       "writes_logs": true
@@ -60254,7 +60254,7 @@
       "writes_logs": true
     }
   ],
-  "generated_at": "2026-07-27T06:21:14Z",
+  "generated_at": "2026-07-27T14:22:38Z",
   "generator": "Tools/MonolithQuery/generate_monolith_catalog_snapshot.py",
   "partial": false,
   "proof_anchors": {
@@ -60421,7 +60421,7 @@
   },
   "schema_version": 1,
   "source": "cpp_registry_scan",
-  "source_hash": "258803955290d08c864ff171f2dfb582056eb07f3b23c9d067e75b036a17e943",
+  "source_hash": "b8d22084dd2061cc81911aacbdc4ba263f7db1169e0445844f1899a5ea7dd973",
   "source_hash_kind": "action_semantics_v1",
   "source_root": "Source"
 }
