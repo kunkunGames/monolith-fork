@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.21.2 (Beta)
+**Version:** 0.21.3 (Beta)
 
 ---
 
@@ -59,7 +59,7 @@ Every non-durable role logs `Monolith — MCP host role=<role>; registered actio
 |--------|--------|---------------|
 | `MonolithMcpSchemaUtils::BuildJsonSchemaProperty` | `MonolithMcpSchemaUtils.h` (private) | Converts one internal flat param schema entry into a standard MCP JSON Schema property. For union type strings separated by `|` (for example `array|string`), emits a JSON array in the `type` field; internal `bool` is normalized to JSON Schema `boolean`; internal `any` expands to the standard JSON Schema type set (`array`, `boolean`, `integer`, `number`, `object`, `string`, `null`); and only JSON Schema-safe fields (`description`, `default`, `enum`, `minimum`, `maximum`) are forwarded. |
 | `MonolithMcpSchemaUtils::BuildInputSchema` | `MonolithMcpSchemaUtils.h` (private) | Converts a full internal Monolith param schema into a standard JSON Schema object for MCP-facing `inputSchema` fields. It skips internal root markers such as `_validate_types`, moves per-param `required: true` into the root `required` array, and delegates every property through `BuildJsonSchemaProperty`. |
-| `MonolithCore::ValidatePackagePath(const FString&)` | `MonolithPackagePathValidator.h` (inline) | Wraps `FPackageName::IsValidLongPackageName` with an empty-string-on-success / error-msg-on-failure contract. Rejects empty input, double-slash (`//Game/...`), missing `/Game/` root, trailing slash, illegal chars. Added `dv.367` after a fatal `UObjectGlobals.cpp:1012` ensure from a malformed `//Game/...` JSON payload reaching `CreatePackage`. Currently routed at three sites: `HandleCreateWidgetBlueprint` (direct crash site), `MonolithAIInternal::GetOrCreatePackage` (~17 AI callers), `MonolithGASInternal::GetOrCreatePackage` (~6 GAS callers). ~24 of 80 `CreatePackage` call sites guarded; remaining ~56 sites across MonolithBlueprint / MonolithMaterial / MonolithLogicDriver / MonolithUITemplateActions / MonolithCommonUI* / MonolithMesh are follow-up backlog. |
+| `MonolithCore::ValidatePackagePath(const FString&)` | `MonolithPackagePathValidator.h` (inline) | Wraps `FPackageName::IsValidLongPackageName` with an empty-string-on-success / error-msg-on-failure contract. Rejects empty input, double-slash (`//Game/...`), missing `/Game/` root, trailing slash, illegal chars. Added `dv.367` after a fatal `UObjectGlobals.cpp:1012` ensure from a malformed `//Game/...` JSON payload reaching `CreatePackage`. Routing is incremental and module-keyed. Current owners: MonolithUI (`HandleCreateWidgetBlueprint`, the original crash site), MonolithAI (`MonolithAIInternal::GetOrCreatePackage`), MonolithGAS (`MonolithGASInternal::GetOrCreatePackage`); MonolithBlueprint, MonolithMaterial and MonolithNiagara are being wired now. Grep the Source tree for `ValidatePackagePath` for the current owner list rather than trusting a count here. |
 
 ### Actions (curated public shortcuts — namespace: "monolith")
 

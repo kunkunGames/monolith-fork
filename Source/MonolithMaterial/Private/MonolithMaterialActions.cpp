@@ -3013,6 +3013,9 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterial(const TSharedPtr<
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at '%s'"), *AssetPath));
 	}
+	// DoesAssetExist above is an Asset-Registry query only; FullyLoad is the authoritative
+	// on-disk check (no-op when nothing is on disk) so an unindexed .uasset is merged, not clobbered.
+	Pkg->FullyLoad();
 
 	UMaterial* NewMat = NewObject<UMaterial>(Pkg, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
 	if (!NewMat)
@@ -3086,6 +3089,14 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 		return FMonolithActionResult::Error(ErrorMsg_ParentPath, FMonolithJsonUtils::ErrInvalidParams);
 	}
 
+	// Reject unmountable/malformed destinations before any registry lookup or CreatePackage
+	// (CreatePackage asserts on inputs such as "//Game/...").
+	const FString PathError = MonolithCore::ValidatePackagePath(AssetPath);
+	if (!PathError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(PathError);
+	}
+
 	// Load parent material
 	UObject* ParentObj = FMonolithAssetUtils::LoadAssetByPath(ParentPath);
 	UMaterialInterface* ParentMat = ParentObj ? Cast<UMaterialInterface>(ParentObj) : nullptr;
@@ -3095,8 +3106,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 	}
 
 	// Check if asset already exists
-	UObject* Existing = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
-	if (Existing)
+	if (UEditorAssetLibrary::DoesAssetExist(AssetPath))
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
 	}
@@ -3111,16 +3121,13 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 	AssetName = AssetPath.Mid(LastSlash + 1);
 
 	// Create package and MIC
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
-	{
-		return FMonolithActionResult::Error(ValidationError);
-	}
-
 	UPackage* Pkg = CreatePackage(*AssetPath);
 	if (!Pkg)
 	{
 		return FMonolithActionResult::Error(TEXT("Failed to create package"));
 	}
+	// Registry-only DoesAssetExist above; FullyLoad is the authoritative on-disk check.
+	Pkg->FullyLoad();
 
 	UMaterialInstanceConstant* MIC = NewObject<UMaterialInstanceConstant>(Pkg, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
 	if (!MIC)
@@ -8274,6 +8281,16 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialFunction(const TSh
 		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
 	}
 
+	// Reject unmountable/malformed destinations before any registry lookup or CreatePackage
+	// (CreatePackage asserts on inputs such as "//Game/..."). Runs BEFORE the split
+	// below because it also strips a redundant object-path suffix ("MF_Foo.MF_Foo"),
+	// which the asset name must be derived from.
+	const FString PathError = MonolithCore::ValidatePackagePath(AssetPath);
+	if (!PathError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(PathError);
+	}
+
 	// Extract package path and asset name
 	FString PackagePath, AssetName;
 	int32 LastSlash;
@@ -8293,8 +8310,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialFunction(const TSh
 	}
 
 	// Check if asset already exists
-	UObject* Existing = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
-	if (Existing)
+	if (UEditorAssetLibrary::DoesAssetExist(AssetPath))
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
 	}
@@ -8318,16 +8334,13 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialFunction(const TSh
 	}
 
 	// Create package and material function
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
-	{
-		return FMonolithActionResult::Error(ValidationError);
-	}
-
 	UPackage* Pkg = CreatePackage(*AssetPath);
 	if (!Pkg)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at '%s'"), *AssetPath));
 	}
+	// Registry-only DoesAssetExist above; FullyLoad is the authoritative on-disk check.
+	Pkg->FullyLoad();
 
 	UMaterialFunction* NewFunc = Cast<UMaterialFunction>(NewObject<UObject>(Pkg, FuncClass, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional));
 	if (!NewFunc)
@@ -10248,6 +10261,16 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 	bool bReplaceExisting = false;
 	Params->TryGetBoolField(TEXT("replace_existing"), bReplaceExisting);
 
+	// Reject unmountable/malformed destinations before any registry lookup, texture import
+	// or CreatePackage (CreatePackage asserts on inputs such as "//Game/..."). Runs BEFORE
+	// the split below because it also strips a redundant object-path suffix
+	// ("M_MyMat.M_MyMat"), which the asset name must be derived from.
+	const FString MaterialPathError = MonolithCore::ValidatePackagePath(MaterialPath);
+	if (!MaterialPathError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("material_path: %s"), *MaterialPathError));
+	}
+
 	// Validate material_path format
 	FString MaterialPackagePath, MaterialAssetName;
 	{
@@ -10275,10 +10298,44 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 		TextureBaseName = TextureBaseName.Mid(3);
 	}
 
-	// Ensure texture folder has no trailing slash
+	// Ensure texture folder has no trailing slash.
+	// This normalisation must run BEFORE validation: the trailing slash is a supported
+	// caller convenience, but IsValidLongPackageName rejects any path that ends in '/'.
 	if (TextureFolder.EndsWith(TEXT("/")))
 	{
 		TextureFolder = TextureFolder.LeftChop(1);
+	}
+
+	const FString TextureFolderError = MonolithCore::ValidatePackagePath(TextureFolder);
+	if (!TextureFolderError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("texture_folder: %s"), *TextureFolderError));
+	}
+
+	// Non-destructive collision check runs BEFORE Phase 1 so a doomed create fails without
+	// inspecting or importing any source file. The DESTRUCTIVE delete stays in Phase 2 —
+	// an import failure must never destroy the caller's existing material.
+	if (!bReplaceExisting && UEditorAssetLibrary::DoesAssetExist(MaterialPath))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Material already exists at '%s'. Set replace_existing: true to overwrite."), *MaterialPath));
+	}
+
+	// Parse enums up front so a bad option fails before any texture import
+	FString EnumError;
+	EMaterialDomain Domain;
+	if (!ParseEnum<EMaterialDomain>(DomainStr, Domain, EnumError))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("material_domain: %s"), *EnumError));
+	}
+	EBlendMode BlendMode;
+	if (!ParseEnum<EBlendMode>(BlendModeStr, BlendMode, EnumError))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("blend_mode: %s"), *EnumError));
+	}
+	EMaterialShadingModel ShadingModel;
+	if (!ParseEnum<EMaterialShadingModel>(ShadingModelStr, ShadingModel, EnumError))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("shading_model: %s"), *EnumError));
 	}
 
 	const TMap<FString, FPBRMapSettings>& SettingsTable = GetPBRMapSettingsTable();
@@ -10365,40 +10422,13 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 	// Phase 2 — Create material
 	// ========================================================================
 
-	// Handle replace_existing for the material
-	if (bReplaceExisting)
+	// Handle replace_existing for the material.
+	// DESTRUCTIVE: deliberately runs AFTER Phase 1 so a failed import cannot destroy the
+	// caller's existing material. The non-destructive !bReplaceExisting case already
+	// early-returned before Phase 1.
+	if (bReplaceExisting && UEditorAssetLibrary::DoesAssetExist(MaterialPath))
 	{
-		UObject* ExistingMat = FMonolithAssetUtils::LoadAssetByPath(MaterialPath);
-		if (ExistingMat)
-		{
-			UEditorAssetLibrary::DeleteAsset(MaterialPath);
-		}
-	}
-	else
-	{
-		UObject* ExistingMat = FMonolithAssetUtils::LoadAssetByPath(MaterialPath);
-		if (ExistingMat)
-		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("Material already exists at '%s'. Set replace_existing: true to overwrite."), *MaterialPath));
-		}
-	}
-
-	// Parse enums
-	FString EnumError;
-	EMaterialDomain Domain;
-	if (!ParseEnum<EMaterialDomain>(DomainStr, Domain, EnumError))
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("material_domain: %s"), *EnumError));
-	}
-	EBlendMode BlendMode;
-	if (!ParseEnum<EBlendMode>(BlendModeStr, BlendMode, EnumError))
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("blend_mode: %s"), *EnumError));
-	}
-	EMaterialShadingModel ShadingModel;
-	if (!ParseEnum<EMaterialShadingModel>(ShadingModelStr, ShadingModel, EnumError))
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("shading_model: %s"), *EnumError));
+		UEditorAssetLibrary::DeleteAsset(MaterialPath);
 	}
 
 	// Create package and material
@@ -10412,6 +10442,9 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at '%s'"), *MaterialPath));
 	}
+	// The DoesAssetExist probes above are registry-only; FullyLoad is the authoritative
+	// on-disk check. No-op after a successful DeleteAsset, merges an unindexed .uasset otherwise.
+	Pkg->FullyLoad();
 
 	UMaterial* NewMat = NewObject<UMaterial>(Pkg, FName(*MaterialAssetName), RF_Public | RF_Standalone | RF_Transactional);
 	if (!NewMat)
@@ -10582,14 +10615,16 @@ FMonolithActionResult FMonolithMaterialActions::CreateFunctionInstance(const TSh
 		return FMonolithActionResult::Error(ErrorMsg_ParentPath, FMonolithJsonUtils::ErrInvalidParams);
 	}
 
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	// Reject unmountable/malformed destinations before any registry lookup or CreatePackage
+	// (CreatePackage asserts on inputs such as "//Game/...").
+	const FString PathError = MonolithCore::ValidatePackagePath(AssetPath);
+	if (!PathError.IsEmpty())
 	{
-		return FMonolithActionResult::Error(ValidationError);
+		return FMonolithActionResult::Error(PathError);
 	}
 
 	// Check if asset already exists
-	UObject* Existing = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
-	if (Existing)
+	if (UEditorAssetLibrary::DoesAssetExist(AssetPath))
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
 	}
@@ -10616,6 +10651,8 @@ FMonolithActionResult FMonolithMaterialActions::CreateFunctionInstance(const TSh
 	{
 		return FMonolithActionResult::Error(TEXT("Failed to create package"));
 	}
+	// Registry-only DoesAssetExist above; FullyLoad is the authoritative on-disk check.
+	Pkg->FullyLoad();
 
 	// Determine correct instance class based on parent's usage
 	EMaterialFunctionUsage Usage = ParentFunc->GetMaterialFunctionUsage();

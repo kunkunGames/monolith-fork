@@ -1,4 +1,5 @@
 #include "MonolithConfigActions.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 #include "MonolithParamUtils.h"
@@ -19,7 +20,6 @@
 #include "UObject/UObjectGlobals.h"
 #include "UObject/Class.h"
 #include "Misc/StringOutputDevice.h"
-#include "MonolithJsonUtils.h"
 #endif // WITH_EDITOR
 
 // ============================================================================
@@ -98,20 +98,27 @@ void FMonolithConfigActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Build());
 
 	Registry.RegisterAction(TEXT("config"), TEXT("get_cvar"),
-		TEXT("Get one console variable value and flags. Read-only."),
+		TEXT("Get one live console variable value, help text, flags, and set-by source. Read-only."),
 		FMonolithActionHandler::CreateStatic(&FMonolithConfigActions::GetCVar),
 		FParamSchemaBuilder()
-			.Required(TEXT("name"), TEXT("string"), TEXT("Console variable name"))
+			.Required(TEXT("name"), TEXT("string"), TEXT("Exact console variable name"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("config"), TEXT("find_cvars"),
-		TEXT("Find console variables by prefix or substring. Read-only."),
+		TEXT("Find live console variables by prefix or substring with deterministic, bounded results. Read-only."),
 		FMonolithActionHandler::CreateStatic(&FMonolithConfigActions::FindCVars),
 		FParamSchemaBuilder()
 			.Optional(TEXT("query"), TEXT("string"), TEXT("Prefix or substring to search for"))
-			.Optional(TEXT("mode"), TEXT("string"), TEXT("prefix (default) or contains"), TEXT("prefix"))
-			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max CVars to return"), TEXT("100"))
+			.Optional(TEXT("mode"), TEXT("string"), TEXT("Search mode: prefix or contains"), TEXT("prefix"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum rows to return (1-200)"), TEXT("100"))
 			.Build());
+
+	Registry.SetActionAnnotations(
+		TEXT("config"), TEXT("get_cvar"),
+		true, false, true, TEXT("Get console variable"));
+	Registry.SetActionAnnotations(
+		TEXT("config"), TEXT("find_cvars"),
+		true, false, true, TEXT("Find console variables"));
 
 #if WITH_EDITOR
 	// DEV-ONLY (write): mutate a UDeveloperSettings CDO at runtime. Never registers
@@ -262,7 +269,7 @@ namespace
 		return Obj;
 	}
 
-	TSharedPtr<FJsonObject> CVarToJson(const FString& Name, IConsoleVariable* Variable)
+	TSharedPtr<FJsonObject> CVarToJson(const FString& Name, IConsoleVariable* Variable, bool bIncludeHelp)
 	{
 		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
 		Obj->SetStringField(TEXT("name"), Name);
@@ -273,7 +280,10 @@ namespace
 		}
 
 		Obj->SetStringField(TEXT("value"), Variable->GetString());
-		Obj->SetStringField(TEXT("help"), Variable->GetHelp());
+		if (bIncludeHelp)
+		{
+			Obj->SetStringField(TEXT("help"), Variable->GetHelp());
+		}
 		Obj->SetNumberField(TEXT("flags"), static_cast<double>(static_cast<uint32>(Variable->GetFlags())));
 		Obj->SetBoolField(TEXT("read_only"), Variable->TestFlags(ECVF_ReadOnly));
 		Obj->SetBoolField(TEXT("cheat"), Variable->TestFlags(ECVF_Cheat));
@@ -1154,7 +1164,7 @@ FMonolithActionResult FMonolithConfigActions::GetCVar(const TSharedPtr<FJsonObje
 	}
 
 	IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(*Name);
-	return FMonolithActionResult::Success(CVarToJson(Name, Variable));
+	return FMonolithActionResult::Success(CVarToJson(Name, Variable, true));
 }
 
 FMonolithActionResult FMonolithConfigActions::FindCVars(const TSharedPtr<FJsonObject>& Params)
@@ -1173,32 +1183,51 @@ FMonolithActionResult FMonolithConfigActions::FindCVars(const TSharedPtr<FJsonOb
 		{
 			return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
 		}
-		double LimitDouble = 0.0;
-		if (!MonolithParamUtils::GetOptionalClampedDoubleParam(Params, TEXT("limit"), LimitDouble, ParamError, 100.0, 1.0, 1000.0))
+
+		const TSharedPtr<FJsonValue> LimitValue = Params->TryGetField(TEXT("limit"));
+		if (LimitValue.IsValid())
 		{
-			return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
+			if (LimitValue->Type != EJson::Number)
+			{
+				return FMonolithActionResult::Error(
+					TEXT("Invalid parameter 'limit': expected integer"),
+					FMonolithJsonUtils::ErrInvalidParams);
+			}
+
+			const double RawLimit = LimitValue->AsNumber();
+			if (!FMath::IsFinite(RawLimit)
+				|| RawLimit != FMath::TruncToDouble(RawLimit)
+				|| RawLimit < 1.0
+				|| RawLimit > 200.0)
+			{
+				return FMonolithActionResult::Error(
+					TEXT("Invalid parameter 'limit': expected an integer from 1 to 200"),
+					FMonolithJsonUtils::ErrInvalidParams);
+			}
+			Limit = static_cast<int32>(RawLimit);
 		}
-		Limit = static_cast<int32>(LimitDouble);
 	}
 
-	TArray<TSharedPtr<FJsonValue>> Rows;
-	int32 Matched = 0;
+	Mode = Mode.ToLower();
+	if (Mode != TEXT("prefix") && Mode != TEXT("contains"))
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Invalid parameter 'mode': expected 'prefix' or 'contains'"),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	TArray<FString> MatchingNames;
 	FConsoleObjectVisitor Visitor = FConsoleObjectVisitor::CreateLambda(
-		[&Rows, &Matched, Limit](const TCHAR* Name, IConsoleObject* Object)
+		[&MatchingNames](const TCHAR* Name, IConsoleObject* Object)
 		{
-			if (!Object || !Object->AsVariable())
+			if (!Name || !Object || !Object->AsVariable())
 			{
 				return;
 			}
-
-			++Matched;
-			if (Rows.Num() < Limit)
-			{
-				Rows.Add(MakeShared<FJsonValueObject>(CVarToJson(Name, Object->AsVariable())));
-			}
+			MatchingNames.Add(Name);
 		});
 
-	if (Mode.Equals(TEXT("contains"), ESearchCase::IgnoreCase))
+	if (Mode == TEXT("contains") && !Query.IsEmpty())
 	{
 		IConsoleManager::Get().ForEachConsoleObjectThatContains(Visitor, *Query);
 	}
@@ -1207,16 +1236,35 @@ FMonolithActionResult FMonolithConfigActions::FindCVars(const TSharedPtr<FJsonOb
 		IConsoleManager::Get().ForEachConsoleObjectThatStartsWith(Visitor, *Query);
 	}
 
+	MatchingNames.Sort([](const FString& A, const FString& B)
+	{
+		const int32 IgnoreCaseOrder = A.Compare(B, ESearchCase::IgnoreCase);
+		return IgnoreCaseOrder == 0
+			? A.Compare(B, ESearchCase::CaseSensitive) < 0
+			: IgnoreCaseOrder < 0;
+	});
+
+	const int32 ReturnedCount = FMath::Min(Limit, MatchingNames.Num());
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	Rows.Reserve(ReturnedCount);
+	for (int32 Index = 0; Index < ReturnedCount; ++Index)
+	{
+		const FString& Name = MatchingNames[Index];
+		if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(*Name))
+		{
+			Rows.Add(MakeShared<FJsonValueObject>(CVarToJson(Name, Variable, false)));
+		}
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("query"), Query);
 	Result->SetStringField(TEXT("mode"), Mode);
-	Result->SetNumberField(TEXT("matched_count"), Matched);
+	Result->SetNumberField(TEXT("limit"), Limit);
+	Result->SetNumberField(TEXT("matched_count"), MatchingNames.Num());
 	Result->SetNumberField(TEXT("returned_count"), Rows.Num());
+	Result->SetBoolField(TEXT("truncated"), MatchingNames.Num() > Rows.Num());
+	Result->SetNumberField(TEXT("truncated_remaining"), FMath::Max(0, MatchingNames.Num() - Rows.Num()));
 	Result->SetArrayField(TEXT("cvars"), Rows);
-	if (Matched > Rows.Num())
-	{
-		Result->SetNumberField(TEXT("truncated_remaining"), Matched - Rows.Num());
-	}
 	return FMonolithActionResult::Success(Result);
 }
 

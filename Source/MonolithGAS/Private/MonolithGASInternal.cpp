@@ -65,10 +65,23 @@ UPackage* GetOrCreatePackage(const FString& SavePath, FString& OutError)
 	}
 
 	// Defensive: reject malformed paths (e.g. "//Game/...") before CreatePackage asserts and kills the editor.
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(PackageName); !ValidationError.IsEmpty())
+	FString NormalizedName;
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(PackageName, NormalizedName); !ValidationError.IsEmpty())
 	{
 		UE_LOG(LogMonolithGAS, Warning, TEXT("GetOrCreatePackage rejected path: %s"), *ValidationError);
 		OutError = ValidationError;
+		return nullptr;
+	}
+
+	// Callers derive their asset name from their own SavePath copy, so accepting an
+	// object path here would create the package at the stripped path while retaining
+	// the dotted asset name. Reject it and return the corrected package path.
+	if (NormalizedName != PackageName)
+	{
+		OutError = FString::Printf(
+			TEXT("Pass the package path, not the object path: use '%s' instead of '%s'"),
+			*NormalizedName, *PackageName);
+		UE_LOG(LogMonolithGAS, Warning, TEXT("GetOrCreatePackage rejected path: %s"), *OutError);
 		return nullptr;
 	}
 

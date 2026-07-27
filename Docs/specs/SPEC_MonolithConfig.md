@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.21.2 (Beta)
+**Version:** 0.21.3 (Beta)
 
 ---
 
@@ -30,8 +30,8 @@
 | `get_config_files` | List all .ini files with hierarchy level and sizes. Optional `category` filter |
 | `list_plugins` | List discovered plugins with enabled state and descriptor metadata. Read-only. |
 | `get_plugin` | Get descriptor metadata for one discovered plugin. Read-only. |
-| `get_cvar` | Get one console variable value and flags. Read-only. |
-| `find_cvars` | Find console variables by prefix or substring. Read-only. |
+| `get_cvar` | Get one live console variable by exact name, including value, help, flags, read-only/cheat state, and set-by source. Read-only. |
+| `find_cvars` | Find live console variables by `prefix` or `contains`; validates a strict mode enum, sorts before limiting, and caps output at 200 rows. Read-only. |
 | `set_developer_setting` | DEV-ONLY (write): set a property on a UDeveloperSettings CDO at runtime. #if WITH_EDITOR-gated. |
 
 ### Actions (10 — namespace: "localization")

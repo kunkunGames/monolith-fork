@@ -149,6 +149,13 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedSt
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: save_path"));
 	}
 
+	// Defensive: reject malformed paths (e.g. "//Game/...") before they reach the Asset
+	// Registry or CreatePackage, which asserts in UObjectGlobals.cpp and kills the editor.
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	const TArray<TSharedPtr<FJsonValue>>* FieldsArray = nullptr;
 	if (!Params->TryGetArrayField(TEXT("fields"), FieldsArray) || !FieldsArray || FieldsArray->Num() == 0)
 	{
@@ -182,10 +189,6 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedSt
 	}
 
 	// Create package
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
-	{
-		return FMonolithActionResult::Error(ValidationError);
-	}
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
 	{
@@ -319,6 +322,13 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedEn
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: save_path"));
 	}
 
+	// Defensive: reject malformed paths (e.g. "//Game/...") before they reach the Asset
+	// Registry or CreatePackage, which asserts in UObjectGlobals.cpp and kills the editor.
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	const TArray<TSharedPtr<FJsonValue>>* ValuesArray = nullptr;
 	if (!Params->TryGetArrayField(TEXT("values"), ValuesArray) || !ValuesArray || ValuesArray->Num() == 0)
 	{
@@ -352,10 +362,6 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedEn
 	}
 
 	// Create package
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
-	{
-		return FMonolithActionResult::Error(ValidationError);
-	}
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
 	{
@@ -798,6 +804,12 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateDataTable(con
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: save_path"));
 	}
 
+	// Reject malformed paths before they reach the Asset Registry or CreatePackage.
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	FString RowStructName;
 	Params->TryGetStringField(TEXT("row_struct"), RowStructName);
 	if (RowStructName.IsEmpty())
@@ -840,10 +852,6 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateDataTable(con
 	}
 
 	// Create package
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
-	{
-		return FMonolithActionResult::Error(ValidationError);
-	}
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
 	{
@@ -1410,16 +1418,17 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateDataAsset(con
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: save_path"));
 	}
 
+	// Reject malformed paths before they reach the Asset Registry or CreatePackage.
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	FString ClassName;
 	Params->TryGetStringField(TEXT("class_name"), ClassName);
 	if (ClassName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: class_name"));
-	}
-
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
-	{
-		return FMonolithActionResult::Error(ValidationError);
 	}
 
 	// Extract asset name from save path
@@ -1493,10 +1502,6 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateDataAsset(con
 	}
 
 	// Create package
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
-	{
-		return FMonolithActionResult::Error(ValidationError);
-	}
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
 	{
@@ -1586,15 +1591,16 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleSeedDataAsset(const
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: save_path"));
 	}
 
+	// Reject malformed paths before they reach the Asset Registry or CreatePackage.
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	FString ClassName;
 	if (!Params->TryGetStringField(TEXT("class_name"), ClassName) || ClassName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: class_name"));
-	}
-
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
-	{
-		return FMonolithActionResult::Error(ValidationError);
 	}
 
 	const TSharedPtr<FJsonObject>* TreePtr = nullptr;
@@ -1707,11 +1713,6 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleSeedDataAsset(const
 	{
 		return FMonolithActionResult::Error(FString::Printf(
 			TEXT("Asset already exists in memory at '%s'. Delete it first."), *SavePath));
-	}
-
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
-	{
-		return FMonolithActionResult::Error(ValidationError);
 	}
 
 	// Create package + instance.
