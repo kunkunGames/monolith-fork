@@ -53,10 +53,14 @@ namespace MonolithCollection
 	static bool GetStorageMode(const TSharedPtr<FJsonObject>& Params, ECollectionStorageMode::Type& OutMode, FString& OutError)
 	{
 		FString StorageMode;
-		if (Params.IsValid() && Params->HasField(TEXT("storage_mode")) && !Params->TryGetStringField(TEXT("storage_mode"), StorageMode))
+		if (Params.IsValid() && Params->HasField(TEXT("storage_mode")))
 		{
-			OutError = TEXT("storage_mode must be a string");
-			return false;
+			if (!Params->HasTypedField<EJson::String>(TEXT("storage_mode")))
+			{
+				OutError = TEXT("storage_mode must be a string");
+				return false;
+			}
+			StorageMode = Params->GetStringField(TEXT("storage_mode"));
 		}
 		if (StorageMode.IsEmpty() || StorageMode.Equals(TEXT("static"), ESearchCase::IgnoreCase))
 		{
@@ -76,10 +80,14 @@ namespace MonolithCollection
 	static bool GetRecursion(const TSharedPtr<FJsonObject>& Params, ECollectionRecursionFlags::Flags& OutFlags, FString& OutError)
 	{
 		FString Recursion;
-		if (Params.IsValid() && Params->HasField(TEXT("recursive")) && !Params->TryGetStringField(TEXT("recursive"), Recursion))
+		if (Params.IsValid() && Params->HasField(TEXT("recursive")))
 		{
-			OutError = TEXT("recursive must be a string");
-			return false;
+			if (!Params->HasTypedField<EJson::String>(TEXT("recursive")))
+			{
+				OutError = TEXT("recursive must be a string");
+				return false;
+			}
+			Recursion = Params->GetStringField(TEXT("recursive"));
 		}
 		if (Recursion.IsEmpty() || Recursion.Equals(TEXT("self"), ESearchCase::IgnoreCase))
 		{
@@ -132,11 +140,12 @@ namespace MonolithCollection
 			OutError = TEXT("Missing or empty required param: name");
 			return false;
 		}
-		if (!Params->TryGetStringField(TEXT("name"), Name))
+		if (!Params->HasTypedField<EJson::String>(TEXT("name")))
 		{
 			OutError = TEXT("name must be a string");
 			return false;
 		}
+		Name = Params->GetStringField(TEXT("name"));
 		if (Name.IsEmpty())
 		{
 			OutError = TEXT("Missing or empty required param: name");
@@ -151,10 +160,14 @@ namespace MonolithCollection
 		FString ShareType;
 		if (Params.IsValid())
 		{
-			if (Params->HasField(TEXT("share_type")) && !Params->TryGetStringField(TEXT("share_type"), ShareType))
+			if (Params->HasField(TEXT("share_type")))
 			{
-				OutError = TEXT("share_type must be a string");
-				return false;
+				if (!Params->HasTypedField<EJson::String>(TEXT("share_type")))
+				{
+					OutError = TEXT("share_type must be a string");
+					return false;
+				}
+				ShareType = Params->GetStringField(TEXT("share_type"));
 			}
 		}
 		if (!TryParseShareType(ShareType, OutType, bAllowAll))
@@ -188,11 +201,12 @@ namespace MonolithCollection
 		FString SinglePath;
 		if (Params->HasField(TEXT("asset_path")))
 		{
-			if (!Params->TryGetStringField(TEXT("asset_path"), SinglePath))
+			if (!Params->HasTypedField<EJson::String>(TEXT("asset_path")))
 			{
 				OutError = TEXT("asset_path must be a string");
 				return false;
 			}
+			SinglePath = Params->GetStringField(TEXT("asset_path"));
 			if (SinglePath.IsEmpty())
 			{
 				OutError = TEXT("asset_path must not be empty");
@@ -213,11 +227,12 @@ namespace MonolithCollection
 			{
 				const TSharedPtr<FJsonValue>& Value = (*PathsArray)[Index];
 				FString Path;
-				if (!Value.IsValid() || !Value->TryGetString(Path))
+				if (!Value.IsValid() || Value->Type != EJson::String)
 				{
 					OutError = FString::Printf(TEXT("asset_paths[%d] must be a string"), Index);
 					return false;
 				}
+				Path = Value->AsString();
 				if (Path.IsEmpty())
 				{
 					OutError = FString::Printf(TEXT("asset_paths[%d] must not be empty"), Index);
@@ -357,9 +372,13 @@ void FAssetCollectionActions::Register(FMonolithToolRegistry& Registry)
 FMonolithActionResult FAssetCollectionActions::ListCollections(const TSharedPtr<FJsonObject>& Params)
 {
 	FString ShareTypeText;
-	if (Params.IsValid() && Params->HasField(TEXT("share_type")) && !Params->TryGetStringField(TEXT("share_type"), ShareTypeText))
+	if (Params.IsValid() && Params->HasField(TEXT("share_type")))
 	{
-		return FMonolithActionResult::Error(TEXT("share_type must be a string"), -32602);
+		if (!Params->HasTypedField<EJson::String>(TEXT("share_type")))
+		{
+			return FMonolithActionResult::Error(TEXT("share_type must be a string"), -32602);
+		}
+		ShareTypeText = Params->GetStringField(TEXT("share_type"));
 	}
 	const bool bFilter = !ShareTypeText.IsEmpty() && !ShareTypeText.Equals(TEXT("all"), ESearchCase::IgnoreCase);
 	ECollectionShareType::Type FilterType = ECollectionShareType::CST_All;
@@ -459,9 +478,13 @@ FMonolithActionResult FAssetCollectionActions::DeleteCollection(const TSharedPtr
 	}
 
 	bool bForce = false;
-	if (Params->HasField(TEXT("force")) && !Params->TryGetBoolField(TEXT("force"), bForce))
+	if (Params->HasField(TEXT("force")))
 	{
-		return FMonolithActionResult::Error(TEXT("force must be a bool"), -32602);
+		if (!Params->HasTypedField<EJson::Boolean>(TEXT("force")))
+		{
+			return FMonolithActionResult::Error(TEXT("force must be a bool"), -32602);
+		}
+		bForce = Params->GetBoolField(TEXT("force"));
 	}
 	TArray<FSoftObjectPath> Assets;
 	MonolithCollection::Container()->GetAssetsInCollection(Name, ShareType, Assets);
@@ -606,10 +629,11 @@ FMonolithActionResult FAssetCollectionActions::ContainsAsset(const TSharedPtr<FJ
 		return FMonolithActionResult::Error(Error, -32602);
 	}
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	if (!Params->HasTypedField<EJson::String>(TEXT("asset_path")))
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path must be a string"), -32602);
 	}
+	AssetPath = Params->GetStringField(TEXT("asset_path"));
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or empty required param: asset_path"), -32602);
@@ -648,10 +672,11 @@ FMonolithActionResult FAssetCollectionActions::SetDynamicQuery(const TSharedPtr<
 		return FMonolithActionResult::Error(Error, -32602);
 	}
 	FString QueryText;
-	if (!Params->TryGetStringField(TEXT("query_text"), QueryText))
+	if (!Params->HasTypedField<EJson::String>(TEXT("query_text")))
 	{
 		return FMonolithActionResult::Error(TEXT("query_text must be a string"), -32602);
 	}
+	QueryText = Params->GetStringField(TEXT("query_text"));
 	ECollectionShareType::Type ShareType;
 	if (!MonolithCollection::GetShareType(Params, ShareType, Error))
 	{
@@ -718,7 +743,10 @@ FMonolithActionResult FAssetCollectionActions::SetCollectionColor(const TSharedP
 	const TSharedPtr<FJsonObject>* ColorObj = nullptr;
 	if (Params->HasField(TEXT("color")))
 	{
-		if (!Params->TryGetObjectField(TEXT("color"), ColorObj) || !ColorObj || !ColorObj->IsValid())
+		if (!Params->HasTypedField<EJson::Object>(TEXT("color"))
+			|| !Params->TryGetObjectField(TEXT("color"), ColorObj)
+			|| !ColorObj
+			|| !ColorObj->IsValid())
 		{
 			return FMonolithActionResult::Error(TEXT("color must be an object"), -32602);
 		}
@@ -727,15 +755,22 @@ FMonolithActionResult FAssetCollectionActions::SetCollectionColor(const TSharedP
 		double G = 0.0;
 		double B = 0.0;
 		double A = 1.0;
-		if (!(*ColorObj)->TryGetNumberField(TEXT("r"), R)
-			|| !(*ColorObj)->TryGetNumberField(TEXT("g"), G)
-			|| !(*ColorObj)->TryGetNumberField(TEXT("b"), B))
+		if (!(*ColorObj)->HasTypedField<EJson::Number>(TEXT("r"))
+			|| !(*ColorObj)->HasTypedField<EJson::Number>(TEXT("g"))
+			|| !(*ColorObj)->HasTypedField<EJson::Number>(TEXT("b")))
 		{
 			return FMonolithActionResult::Error(TEXT("color must contain numeric r, g, and b fields"), -32602);
 		}
-		if ((*ColorObj)->HasField(TEXT("a")) && !(*ColorObj)->TryGetNumberField(TEXT("a"), A))
+		R = (*ColorObj)->GetNumberField(TEXT("r"));
+		G = (*ColorObj)->GetNumberField(TEXT("g"));
+		B = (*ColorObj)->GetNumberField(TEXT("b"));
+		if ((*ColorObj)->HasField(TEXT("a")))
 		{
-			return FMonolithActionResult::Error(TEXT("color.a must be numeric"), -32602);
+			if (!(*ColorObj)->HasTypedField<EJson::Number>(TEXT("a")))
+			{
+				return FMonolithActionResult::Error(TEXT("color.a must be numeric"), -32602);
+			}
+			A = (*ColorObj)->GetNumberField(TEXT("a"));
 		}
 		if (!FMath::IsFinite(R) || !FMath::IsFinite(G) || !FMath::IsFinite(B) || !FMath::IsFinite(A)
 			|| R < 0.0 || R > 1.0
@@ -789,10 +824,11 @@ FMonolithActionResult FAssetCollectionActions::CreateUniqueCollectionName(const 
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or empty required param: base_name"), -32602);
 	}
-	if (!Params->TryGetStringField(TEXT("base_name"), BaseName))
+	if (!Params->HasTypedField<EJson::String>(TEXT("base_name")))
 	{
 		return FMonolithActionResult::Error(TEXT("base_name must be a string"), -32602);
 	}
+	BaseName = Params->GetStringField(TEXT("base_name"));
 	if (BaseName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or empty required param: base_name"), -32602);
