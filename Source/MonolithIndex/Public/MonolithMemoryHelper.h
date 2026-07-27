@@ -5,12 +5,40 @@
 
 DECLARE_LOG_CATEGORY_EXTERN(LogMonolithMemory, Log, All);
 
+struct FMonolithMemoryHelper;
+
+/**
+ * Snapshot of whether an asset package was resident before an indexer loaded
+ * an export from it. Capture this immediately before GetAsset/LoadPackage.
+ *
+ * Package residency is the ownership boundary: FAssetData::IsAssetLoaded only
+ * reports whether that particular export is loaded, while TryUnloadPackage
+ * mutates flags on the export's outer package.
+ */
+struct MONOLITHINDEX_API FMonolithPackageResidency
+{
+	bool WasAlreadyLoaded() const { return bWasAlreadyLoaded; }
+
+private:
+	explicit FMonolithPackageResidency(bool bInWasAlreadyLoaded)
+		: bWasAlreadyLoaded(bInWasAlreadyLoaded)
+	{
+	}
+
+	bool bWasAlreadyLoaded = false;
+
+	friend struct FMonolithMemoryHelper;
+};
+
 /**
  * Helper utilities for memory management during indexing.
  * Provides memory monitoring, garbage collection, and package unloading.
  */
 struct MONOLITHINDEX_API FMonolithMemoryHelper
 {
+	/** Capture package residency immediately before loading an asset export. */
+	static FMonolithPackageResidency CapturePackageResidency(const FName& PackageName);
+
 	/**
 	 * Get the current process memory usage in megabytes.
 	 * Uses physical memory (working set) for accurate pressure detection.

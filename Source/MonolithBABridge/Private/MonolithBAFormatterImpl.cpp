@@ -210,4 +210,6 @@ TSharedPtr<FBAGraphHandler> FMonolithBAFormatterImpl::FindHandlerForGraph(UEdGra
 	return nullptr;
 }
 
+#undef MONOLITH_BA_4_9_OR_LATER
+
 #endif // WITH_BLUEPRINT_ASSIST

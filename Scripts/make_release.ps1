@@ -14,7 +14,7 @@
 #   6. Packages tracked files (ONE shared git ls-files copy) + that engine's binaries into
 #      Monolith-v<X.Y.Z>-UE5.<minor>.zip with Installed=true
 #   7. Runs the mandatory dumpbin hard-link import smoke against that zip's DLLs
-#   8. Prints the per-engine SHA256 marker for the release notes
+#   8. Prints the Windows + engine-safe v2 SHA256 marker for the release notes
 #   Finally: copies the UE5.7 zip to Monolith-v<X.Y.Z>.zip (legacy bridge for old updaters)
 #   and prints the Monolith-SHA256-v2: marker (= the UE5.7 hash). All markers use the
 #   "v2" names -- pre-v0.21.1 updaters hard-crash on the old names (#90/#94).

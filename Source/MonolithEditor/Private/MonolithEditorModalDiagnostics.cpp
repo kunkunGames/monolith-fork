@@ -86,3 +86,79 @@ bool MonolithEditorModalDiagnostics::IsAutoDismissProgressModal(const TOptional<
 {
 	return bIsSlowTaskWindow.IsSet() && bIsSlowTaskWindow.GetValue();
 }
+
+FString MonolithEditorModalDiagnostics::SlowTaskToString(const TOptional<bool>& bIsSlowTaskWindow)
+{
+	if (!bIsSlowTaskWindow.IsSet())
+	{
+		return TEXT("unknown");
+	}
+	return bIsSlowTaskWindow.GetValue() ? TEXT("true") : TEXT("false");
+}
+
+void FMonolithModalTelemetryState::RecordOpen(
+	int64 Identifier,
+	const FString& Title,
+	const TOptional<bool>& bIsSlowTaskWindow,
+	const FDateTime& OpenedAt)
+{
+	FMonolithModalOpenRecord Record;
+	Record.Identifier = Identifier;
+	Record.OpenEvent = MonolithEditorModalDiagnostics::IsAutoDismissProgressModal(bIsSlowTaskWindow)
+		? TEXT("MODAL_PROGRESS")
+		: TEXT("MODAL_OPEN");
+	Record.SlowTask = MonolithEditorModalDiagnostics::SlowTaskToString(bIsSlowTaskWindow);
+	Record.Title = Title;
+	Record.OpenedAt = OpenedAt;
+	OpenModals.Add(Identifier, MoveTemp(Record));
+}
+
+FMonolithModalCloseRecord FMonolithModalTelemetryState::RecordClose(
+	int64 Identifier,
+	const FDateTime& ClosedAt)
+{
+	FMonolithModalCloseRecord Closed;
+	Closed.Identifier = Identifier;
+
+	FMonolithModalOpenRecord Opened;
+	if (!OpenModals.RemoveAndCopyValue(Identifier, Opened))
+	{
+		return Closed;
+	}
+
+	Closed.bMatched = true;
+	Closed.OpenEvent = MoveTemp(Opened.OpenEvent);
+	Closed.SlowTask = MoveTemp(Opened.SlowTask);
+	Closed.Title = MoveTemp(Opened.Title);
+	Closed.OpenAgeSeconds = FMath::Max(0.0, (ClosedAt - Opened.OpenedAt).GetTotalSeconds());
+	return Closed;
+}
+
+int64 FMonolithModalTelemetryState::RecordLegacyOpen(
+	const FString& Title,
+	const FDateTime& OpenedAt)
+{
+	const int64 Identifier = NextLegacyIdentifier++;
+	RecordOpen(Identifier, Title, TOptional<bool>(), OpenedAt);
+	LegacyOpenOrder.Add(Identifier);
+	return Identifier;
+}
+
+FMonolithModalCloseRecord FMonolithModalTelemetryState::RecordLegacyClose(
+	const FDateTime& ClosedAt)
+{
+	if (LegacyOpenOrder.IsEmpty())
+	{
+		return FMonolithModalCloseRecord();
+	}
+
+	const int64 Identifier = LegacyOpenOrder.Pop(EAllowShrinking::No);
+	return RecordClose(Identifier, ClosedAt);
+}
+
+void FMonolithModalTelemetryState::Reset()
+{
+	OpenModals.Reset();
+	LegacyOpenOrder.Reset();
+	NextLegacyIdentifier = 1;
+}

@@ -1,5 +1,6 @@
 #include "MonolithUpdateSubsystem.h"
 #include "MonolithCoreModule.h"
+#include "MonolithHashUtils.h"
 #include "MonolithHttpServer.h"
 #include "MonolithSettings.h"
 #include "MonolithJsonUtils.h"
@@ -7,8 +8,6 @@
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
-#include "HAL/PlatformMisc.h"
-#include "Internationalization/Regex.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
@@ -348,7 +347,7 @@ void UMonolithUpdateSubsystem::CheckForUpdate()
 						{
 							UE_LOG(LogMonolith, Error,
 								TEXT("Release %s has a %s asset but no '%s' SHA256 marker - refusing to install."),
-								*RemoteVersion, *EngineTag, *TaggedPrefix);
+								*RemoteVersion, *EngineTag, *TaggedMarker);
 
 							FNotificationInfo Info(FText::Format(
 								NSLOCTEXT("Monolith", "UpdateMissingEngineSha",
@@ -365,6 +364,7 @@ void UMonolithUpdateSubsystem::CheckForUpdate()
 						Self->PendingExpectedSha256 = UMonolithUpdateSubsystem::ParseSha256FromReleaseNotes(ReleaseNotes);
 						if (Self->PendingExpectedSha256.IsEmpty())
 						{
+							const FString LegacyMarker = UMonolithUpdateSubsystem::BuildSha256MarkerName();
 							UE_LOG(LogMonolith, Warning,
 								TEXT("Release %s notes do not include a Monolith-SHA256-v2 marker — install will proceed without integrity check."),
 								*RemoteVersion);
@@ -420,7 +420,9 @@ int32 UMonolithUpdateSubsystem::CompareVersions(const FString& Current, const FS
 	return RPatch - CPatch;
 }
 
-FString UMonolithUpdateSubsystem::ParseSha256FromReleaseNotes(const FString& ReleaseNotes)
+FString UMonolithUpdateSubsystem::BuildSha256MarkerName(
+	const FString& EngineTag,
+	const FString& PlatformTag)
 {
 #if PLATFORM_MAC
 	static const FRegexPattern HashPattern(
@@ -442,9 +444,103 @@ FString UMonolithUpdateSubsystem::ParseSha256FromReleaseNotes(const FString& Rel
 	FRegexMatcher Matcher(HashPattern, ReleaseNotes);
 	if (Matcher.FindNext())
 	{
-		return Matcher.GetCaptureGroup(1).ToLower();
+#if PLATFORM_MAC
+		EffectivePlatform = TEXT("macOS");
+#elif PLATFORM_LINUX
+		EffectivePlatform = TEXT("Linux");
+#elif PLATFORM_WINDOWS
+		EffectivePlatform = TEXT("Windows");
+#else
+		return FString();
+#endif
 	}
-	return TEXT("");
+
+	FString MarkerName;
+	if (EffectivePlatform.Equals(TEXT("Windows"), ESearchCase::IgnoreCase)
+		|| EffectivePlatform.Equals(TEXT("Win64"), ESearchCase::IgnoreCase))
+	{
+		MarkerName = TEXT("Monolith-SHA256-v2");
+	}
+	else if (EffectivePlatform.Equals(TEXT("macOS"), ESearchCase::IgnoreCase)
+		|| EffectivePlatform.Equals(TEXT("Mac"), ESearchCase::IgnoreCase))
+	{
+		MarkerName = TEXT("Monolith-macOS-SHA256-v2");
+	}
+	else if (EffectivePlatform.Equals(TEXT("Linux"), ESearchCase::IgnoreCase))
+	{
+		MarkerName = TEXT("Monolith-Linux-SHA256-v2");
+	}
+	else
+	{
+		return FString();
+	}
+
+	if (!EngineTag.IsEmpty())
+	{
+		if (!EngineTag.StartsWith(TEXT("UE5."), ESearchCase::CaseSensitive) || EngineTag.Len() <= 4)
+		{
+			return FString();
+		}
+		for (int32 Index = 4; Index < EngineTag.Len(); ++Index)
+		{
+			if (!FChar::IsDigit(EngineTag[Index]))
+			{
+				return FString();
+			}
+		}
+		MarkerName += TEXT("-");
+		MarkerName += EngineTag;
+	}
+
+	return MarkerName;
+}
+
+FString UMonolithUpdateSubsystem::ParseSha256FromReleaseNotes(
+	const FString& ReleaseNotes,
+	const FString& EngineTag,
+	const FString& PlatformTag)
+{
+	const FString MarkerName = BuildSha256MarkerName(EngineTag, PlatformTag);
+	if (MarkerName.IsEmpty())
+	{
+		return FString();
+	}
+
+	const FString MarkerPrefix = MarkerName + TEXT(":");
+	int32 SearchOffset = 0;
+	while (SearchOffset < ReleaseNotes.Len())
+	{
+		const int32 MarkerIndex = ReleaseNotes.Find(
+			MarkerPrefix, ESearchCase::CaseSensitive, ESearchDir::FromStart, SearchOffset);
+		if (MarkerIndex == INDEX_NONE)
+		{
+			break;
+		}
+
+		int32 HashStart = MarkerIndex + MarkerPrefix.Len();
+		while (HashStart < ReleaseNotes.Len() && FChar::IsWhitespace(ReleaseNotes[HashStart]))
+		{
+			++HashStart;
+		}
+
+		constexpr int32 Sha256HexLength = 64;
+		const int32 RemainingLength = ReleaseNotes.Len() - HashStart;
+		bool bValidHash = RemainingLength >= Sha256HexLength;
+		const int32 HashEnd = bValidHash ? HashStart + Sha256HexLength : HashStart;
+		for (int32 Index = HashStart; bValidHash && Index < HashEnd; ++Index)
+		{
+			bValidHash = FChar::IsHexDigit(ReleaseNotes[Index]);
+		}
+		if (bValidHash && (HashEnd == ReleaseNotes.Len() || !FChar::IsHexDigit(ReleaseNotes[HashEnd])))
+		{
+			return ReleaseNotes.Mid(HashStart, Sha256HexLength).ToLower();
+		}
+
+		// A malformed occurrence must not hide a later valid exact marker.
+		SearchOffset = MarkerIndex + MarkerPrefix.Len();
+	}
+
+	return FString();
 }
 
 void UMonolithUpdateSubsystem::ShowUpdateNotification(const FString& NewVersion, const FString& ZipUrl, const FString& ReleaseNotes)
@@ -655,11 +751,9 @@ void UMonolithUpdateSubsystem::OnDownloadComplete(const FString& Version, bool b
 		return;
 	}
 
-	// Integrity check against the SHA256 advertised in the release notes
-	// (Issue #38). If the marker was missing in CheckForUpdate, PendingExpectedSha256
-	// is empty and we log a warning + continue (no regression for legacy installs).
-	// Hash MUST run before any disk write so a tampered payload never lands
-	// on the filesystem.
+	// Integrity check against the platform-safe v2 SHA256 release marker. Hashing
+	// uses Monolith's portable FIPS backend and MUST complete before any disk write
+	// so a tampered payload never reaches the filesystem.
 	if (!PendingExpectedSha256.IsEmpty())
 	{
 		// NOT FPlatformMisc::GetSHA256Signature: it has no Windows implementation and

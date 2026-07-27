@@ -14,6 +14,17 @@ namespace
 	constexpr double MinGCIntervalSeconds = 0.5;
 }
 
+FMonolithPackageResidency FMonolithMemoryHelper::CapturePackageResidency(const FName& PackageName)
+{
+	if (PackageName.IsNone())
+	{
+		return FMonolithPackageResidency(false);
+	}
+
+	return FMonolithPackageResidency(
+		FindPackage(nullptr, *PackageName.ToString()) != nullptr);
+}
+
 SIZE_T FMonolithMemoryHelper::GetCurrentMemoryUsageMB()
 {
 	FPlatformMemoryStats Stats = FPlatformMemory::GetStats();
@@ -69,6 +80,14 @@ bool FMonolithMemoryHelper::TryUnloadPackage(UObject* Asset, bool bWasAlreadyLoa
 {
 	if (!Asset)
 	{
+		return false;
+	}
+	if (Residency.WasAlreadyLoaded())
+	{
+		// The indexer does not own this residency. Clearing RF_Standalone from an
+		// externally-referenced object usually cannot collect it, but permanently
+		// strands the live object without its save-safety flag (SavePackage guard
+		// 0x10000002). Only release objects loaded by this indexing operation.
 		return false;
 	}
 

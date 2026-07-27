@@ -274,6 +274,10 @@
         "script": "Scripts/tests/test_schema_completeness_value_domain.py"
       },
       {
+        "name": "ReleaseSha256MarkerContract",
+        "script": "Scripts/tests/test_release_sha256_marker_contract.py"
+      },
+      {
         "name": "BenchmarkCIInventory",
         "script": "Scripts/tests/test_benchmark_ci_inventory.py"
       }

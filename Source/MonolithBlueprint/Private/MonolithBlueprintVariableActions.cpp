@@ -290,7 +290,12 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleAddVariable(const
 	}
 
 	FName VarName(*Name);
-	FEdGraphPinType PinType = MonolithBlueprintInternal::ParsePinTypeFromString(TypeStr);
+	FEdGraphPinType PinType;
+	FString TypeError;
+	if (!MonolithBlueprintInternal::TryParsePinTypeFromString(TypeStr, PinType, TypeError))
+	{
+		return FMonolithActionResult::Error(TypeError, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// If the resolved type is the bool fallback but the caller didn't ask for bool,
 	// the type string was unrecognized — return a clear error instead of silently creating a bool.
@@ -534,7 +539,12 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleSetVariableType(c
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Variable not found: %s"), *Name));
 	}
 
-	FEdGraphPinType NewType = MonolithBlueprintInternal::ParsePinTypeFromString(TypeStr);
+	FEdGraphPinType NewType;
+	FString TypeError;
+	if (!MonolithBlueprintInternal::TryParsePinTypeFromString(TypeStr, NewType, TypeError))
+	{
+		return FMonolithActionResult::Error(TypeError, FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FBlueprintEditorUtils::ChangeMemberVariableType(BP, VarName, NewType);
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
 
@@ -663,7 +673,12 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleAddLocalVariable(
 			TEXT("Graph '%s' is not a function graph — local variables are only supported in functions"), *FunctionName));
 	}
 
-	FEdGraphPinType PinType = MonolithBlueprintInternal::ParsePinTypeFromString(TypeStr);
+	FEdGraphPinType PinType;
+	FString TypeError;
+	if (!MonolithBlueprintInternal::TryParsePinTypeFromString(TypeStr, PinType, TypeError))
+	{
+		return FMonolithActionResult::Error(TypeError, FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString DefaultValue;
 	Params->TryGetStringField(TEXT("default_value"), DefaultValue);
 
@@ -810,7 +825,12 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleAddReplicatedVari
 	}
 
 	FName VarName(*VarNameStr);
-	FEdGraphPinType PinType = MonolithBlueprintInternal::ParsePinTypeFromString(TypeStr);
+	FEdGraphPinType PinType;
+	FString TypeError;
+	if (!MonolithBlueprintInternal::TryParsePinTypeFromString(TypeStr, PinType, TypeError))
+	{
+		return FMonolithActionResult::Error(TypeError, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Check for name collision
 	for (const FBPVariableDescription& Existing : BP->NewVariables)

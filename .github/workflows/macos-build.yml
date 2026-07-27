@@ -282,10 +282,12 @@ jobs:
             echo ""
             echo "**File:** $ZIP_NAME"
             echo ""
-            echo "**Monolith-macOS-SHA256:** $SHA"
+            # v2 is load-bearing: pre-v0.21.1 updaters can hard-assert when they
+            # recognize the old marker but reach the platform SHA fallback.
+            echo "Monolith-macOS-SHA256-v2: $SHA"
             echo ""
             echo "Paste this exact line into the GitHub Release notes body"
-            echo "if you want macOS auto-update integrity verification."
+            echo "to enable macOS auto-update integrity verification. Never emit the pre-v2 marker."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload artifact (workflow run)

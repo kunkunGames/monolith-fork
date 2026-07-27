@@ -187,7 +187,7 @@ void FMonolithBlueprintActions::RegisterActions()
 		TEXT("Find every graph node that reads or writes a Blueprint member variable. Walks all graphs (event graphs, functions, macros, delegate signatures, and interface-implementation graphs) and calls the engine's UK2Node::ReferencesVariable virtual against the Blueprint's generated class. "
 		     "Per match, 'access' is classified as: 'read' (a VariableGet, e.g. a 'Get MyVar' node), 'write' (a VariableSet, e.g. a 'Set MyVar' node), 'read' for a thread-safe Property Access node whose path resolves to the variable, or 'other' for any other referencing node (transition rules, split-struct pins, etc.). "
 		     "Each entry returns graph, graph_type, node_id, node_title, and access; Property Access matches additionally carry a 'property_access' path block. A 'summary' object reports total/reads/writes/other counts. "
-		     "By default only references scoped to this Blueprint's own class match; set include_inherited=true to also match the variable where it is scoped to a parent class. "
+		     "Inherited variable references are included by default so deletion audits do not return false zeroes; set include_inherited=false to restrict matching to this Blueprint's own class. "
 		     "v1 covers member variables only -- local function variables are out of scope."),
 		FMonolithActionHandler::CreateStatic(&HandleFindVariableReferences),
 		FParamSchemaBuilder()
@@ -389,17 +389,30 @@ FMonolithActionResult FMonolithBlueprintActions::HandleListGraphs(const TSharedP
 		Root->SetStringField(TEXT("parent_class"), BP->ParentClass->GetName());
 	}
 
+	TArray<UEdGraph*> AllGraphs;
+	MonolithBlueprintInternal::GetAllGraphsUnique(BP, AllGraphs);
 	TArray<TSharedPtr<FJsonValue>> GraphsArr;
-	GraphsArr.Reserve(BP->UbergraphPages.Num() + BP->FunctionGraphs.Num() + BP->MacroGraphs.Num() + BP->DelegateSignatureGraphs.Num());
-	MonolithBlueprintInternal::AddGraphArray(GraphsArr, BP->UbergraphPages, TEXT("event_graph"));
-	MonolithBlueprintInternal::AddGraphArray(GraphsArr, BP->FunctionGraphs, TEXT("function"));
-	MonolithBlueprintInternal::AddGraphArray(GraphsArr, BP->MacroGraphs, TEXT("macro"));
-	MonolithBlueprintInternal::AddGraphArray(GraphsArr, BP->DelegateSignatureGraphs, TEXT("delegate_signature"));
-	// Interface-implementation function graphs live on a separate array (Gap 7).
-	for (const FBPInterfaceDescription& Iface : BP->ImplementedInterfaces)
+	GraphsArr.Reserve(AllGraphs.Num());
+	for (UEdGraph* Graph : AllGraphs)
 	{
-		const FString IfaceName = Iface.Interface ? Iface.Interface->GetName() : FString();
-		MonolithBlueprintInternal::AddGraphArray(GraphsArr, Iface.Graphs, TEXT("interface"), IfaceName);
+		FString InterfaceName;
+		FString ParentGraph;
+		const FString GraphType = MonolithBlueprintInternal::ClassifyGraphType(
+			BP, Graph, InterfaceName, &ParentGraph);
+
+		TSharedPtr<FJsonObject> GraphObject = MakeShared<FJsonObject>();
+		GraphObject->SetStringField(TEXT("name"), Graph->GetName());
+		GraphObject->SetStringField(TEXT("type"), GraphType);
+		GraphObject->SetNumberField(TEXT("node_count"), Graph->Nodes.Num());
+		if (!InterfaceName.IsEmpty())
+		{
+			GraphObject->SetStringField(TEXT("interface"), InterfaceName);
+		}
+		if (!ParentGraph.IsEmpty())
+		{
+			GraphObject->SetStringField(TEXT("parent_graph"), ParentGraph);
+		}
+		GraphsArr.Add(MakeShared<FJsonValueObject>(GraphObject));
 	}
 
 	// Nested graphs (collapsed-graph composites, macro-instance internals) live
@@ -2379,7 +2392,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetEventDispatcherDetails
 	FName SigGraphFName = SigGraph->GetFName();
 
 	TArray<UEdGraph*> AllGraphs;
-	BP->GetAllGraphs(AllGraphs);
+	MonolithBlueprintInternal::GetAllGraphsUnique(BP, AllGraphs);
 
 	for (UEdGraph* Graph : AllGraphs)
 	{
@@ -2640,7 +2653,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleFindVariableReferences(co
 	const UStruct* Scope = bIncludeInherited ? nullptr : Cast<UStruct>(BP->GeneratedClass);
 
 	TArray<UEdGraph*> AllGraphs;
-	BP->GetAllGraphs(AllGraphs);
+	MonolithBlueprintInternal::GetAllGraphsUnique(BP, AllGraphs);
 
 	TArray<TSharedPtr<FJsonValue>> Matches;
 	int32 NumReads = 0;
@@ -2651,8 +2664,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleFindVariableReferences(co
 	{
 		if (!Graph) continue;
 
-		// GetAllChildrenGraphs can surface a graph more than once across the
-		// parent arrays; classify against the source graph directly each time.
+		// The shared enumerator deduplicates by graph identity before classification.
 		FString InterfaceName;
 		FString ParentGraph;
 		const FString GraphType = MonolithBlueprintInternal::ClassifyGraphType(

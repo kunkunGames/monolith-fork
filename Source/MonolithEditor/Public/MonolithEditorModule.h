@@ -7,10 +7,13 @@
 #include "Misc/EngineVersionComparison.h"
 
 class FMonolithLogCapture;
+class FMonolithModalTelemetryState;
 
 class FMonolithEditorModule : public IModuleInterface
 {
 public:
+	FMonolithEditorModule();
+	virtual ~FMonolithEditorModule() override;
 	virtual void StartupModule() override;
 	virtual void ShutdownModule() override;
 

@@ -2,6 +2,19 @@
 
 #include "MonolithIndexer.h"
 
+class UPackage;
+class UWorld;
+struct FMonolithPackageResidency;
+
+namespace MonolithLevelIndexerInternal
+{
+	/** Release a world only when the current index pass created its residency. */
+	bool TeardownLoadedWorldForIndexing(
+		UWorld* World,
+		UPackage* Package,
+		const FMonolithPackageResidency& Residency);
+}
+
 /**
  * Indexes level actors from World/Map assets.
  * Runs after all other indexers (needs all assets in DB).

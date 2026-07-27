@@ -1046,6 +1046,93 @@ TArray<FString> FMonolithParamSchema::FindUnknownKeys(
 	return Unknown;
 }
 
+int32 FMonolithParamSchema::RecoverStringEncodedComplexParams(
+	const TSharedPtr<FJsonObject>& Schema,
+	const TSharedPtr<FJsonObject>& Params)
+{
+	if (!Schema.IsValid() || !Params.IsValid())
+	{
+		return 0;
+	}
+
+	auto TypeSpecContains = [](const FString& TypeSpec, const TCHAR* ExpectedType)
+	{
+		TArray<FString> Types;
+		TypeSpec.ParseIntoArray(Types, TEXT("|"), true);
+		for (FString Type : Types)
+		{
+			Type.TrimStartAndEndInline();
+			if (Type.Equals(ExpectedType, ESearchCase::IgnoreCase))
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+
+	int32 RecoveredCount = 0;
+	for (const auto& SchemaPair : FMonolithJsonUtils::GetFields(Schema))
+	{
+		if (SchemaPair.Key.StartsWith(TEXT("_")))
+		{
+			continue;
+		}
+
+		const TSharedPtr<FJsonObject>* ParamDefinition = nullptr;
+		if (!SchemaPair.Value.IsValid()
+			|| !SchemaPair.Value->TryGetObject(ParamDefinition)
+			|| !ParamDefinition
+			|| !ParamDefinition->IsValid())
+		{
+			continue;
+		}
+
+		FString TypeSpec;
+		if (!(*ParamDefinition)->TryGetStringField(TEXT("type"), TypeSpec))
+		{
+			continue;
+		}
+
+		const bool bAllowsArray = TypeSpecContains(TypeSpec, TEXT("array"));
+		const bool bAllowsObject = TypeSpecContains(TypeSpec, TEXT("object"));
+		if (!bAllowsArray && !bAllowsObject)
+		{
+			continue;
+		}
+
+		FString EncodedValue;
+		if (!Params->TryGetStringField(SchemaPair.Key, EncodedValue) || EncodedValue.IsEmpty())
+		{
+			continue;
+		}
+
+		if (bAllowsArray)
+		{
+			TArray<TSharedPtr<FJsonValue>> ParsedArray;
+			const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(EncodedValue);
+			if (FJsonSerializer::Deserialize(Reader, ParsedArray))
+			{
+				Params->SetArrayField(SchemaPair.Key, ParsedArray);
+				++RecoveredCount;
+				continue;
+			}
+		}
+
+		if (bAllowsObject)
+		{
+			TSharedPtr<FJsonObject> ParsedObject;
+			const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(EncodedValue);
+			if (FJsonSerializer::Deserialize(Reader, ParsedObject) && ParsedObject.IsValid())
+			{
+				Params->SetObjectField(SchemaPair.Key, ParsedObject);
+				++RecoveredCount;
+			}
+		}
+	}
+
+	return RecoveredCount;
+}
+
 bool FMonolithParamSchema::ValidateTypedParams(
 	const TSharedPtr<FJsonObject>& Schema,
 	const TSharedPtr<FJsonObject>& Params,
@@ -1740,7 +1827,17 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 		return RecordAndReturn(R, TEXT("lookup"), Params);
 	}
 
-	TSharedPtr<FJsonObject> EffectiveParams = Params.IsValid() ? Params : MakeShared<FJsonObject>();
+	// Dispatch normalization (aliases, path rewrites, complex-string recovery) is
+	// intentionally local to this execution. Never mutate the caller-owned JSON object;
+	// a shallow field clone is sufficient because only top-level fields are replaced.
+	TSharedPtr<FJsonObject> EffectiveParams = MakeShared<FJsonObject>();
+	if (Params.IsValid())
+	{
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Params))
+		{
+			EffectiveParams->SetField(Pair.Key, Pair.Value);
+		}
+	}
 
 	// K2 — alias rewriting BEFORE the required-param check.
 	const double AliasStartSeconds = FMonolithToolInvocationLogger::NowSeconds();
@@ -2221,6 +2318,18 @@ bool FMonolithToolRegistry::HasAction(const FString& Namespace, const FString& A
 {
 	FScopeLock Lock(&RegistryLock);
 	return Actions.Contains(MakeKey(Namespace, Action));
+}
+
+TSharedPtr<FJsonObject> FMonolithToolRegistry::GetActionParamSchema(
+	const FString& Namespace,
+	const FString& Action) const
+{
+	FScopeLock Lock(&RegistryLock);
+	if (const FRegisteredAction* RegisteredAction = Actions.Find(MakeKey(Namespace, Action)))
+	{
+		return RegisteredAction->Info.ParamSchema;
+	}
+	return nullptr;
 }
 
 bool FMonolithToolRegistry::HasNamespace(const FString& Namespace) const

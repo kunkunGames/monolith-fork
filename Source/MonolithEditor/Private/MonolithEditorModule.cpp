@@ -231,6 +231,69 @@ void HarvestActiveModalWindow(FString& OutTitle, FMonolithModalWidgetSnapshot& O
 }
 }
 
+void HarvestLegacyModalWindow(
+	FString& OutTitle,
+	FMonolithModalWidgetSnapshot& OutSnapshot,
+	bool& bOutWindowAvailable)
+{
+	bOutWindowAvailable = false;
+	if (!FSlateApplication::IsInitialized())
+	{
+		return;
+	}
+
+	FSlateApplication& Slate = FSlateApplication::Get();
+	TSharedPtr<SWindow> Window = Slate.GetActiveModalWindow();
+	if (!Window.IsValid())
+	{
+		Window = Slate.GetActiveTopLevelWindow();
+	}
+	bOutWindowAvailable = Window.IsValid();
+	HarvestModalWindow(Window, OutTitle, OutSnapshot);
+}
+
+FString FormatOpenAge(const FMonolithModalCloseRecord& Closed)
+{
+	return Closed.bMatched
+		? FString::Printf(TEXT("%.3f"), Closed.OpenAgeSeconds)
+		: FString(TEXT("unknown"));
+}
+
+void EmitModalClose(const FMonolithModalCloseRecord& Closed)
+{
+	const FString Timestamp = FDateTime::Now().ToString(TEXT("%Y-%m-%dT%H:%M:%S"));
+	const FString OpenAge = FormatOpenAge(Closed);
+	const TCHAR* Matched = Closed.bMatched ? TEXT("true") : TEXT("false");
+	if (Closed.bMatched && Closed.OpenEvent == TEXT("MODAL_PROGRESS"))
+	{
+		UE_LOG(LogMonolith, Log,
+			TEXT("MODAL_CLOSE ts='%s' id=%lld matched=%s open_event=%s slow_task=%s title='%s' open_age_s=%s — progress modal dismissed; game thread resumed."),
+			*Timestamp,
+			Closed.Identifier,
+			Matched,
+			*Closed.OpenEvent,
+			*Closed.SlowTask,
+			*Closed.Title,
+			*OpenAge);
+		return;
+	}
+
+	UE_LOG(LogMonolith, Warning,
+		TEXT("MODAL_CLOSE ts='%s' id=%lld matched=%s open_event=%s slow_task=%s title='%s' open_age_s=%s — modal dismissed; game thread resumed."),
+		*Timestamp,
+		Closed.Identifier,
+		Matched,
+		*Closed.OpenEvent,
+		*Closed.SlowTask,
+		*Closed.Title,
+		*OpenAge);
+}
+
+}
+
+FMonolithEditorModule::FMonolithEditorModule() = default;
+FMonolithEditorModule::~FMonolithEditorModule() = default;
+
 void FMonolithEditorModule::StartupModule()
 {
 	if (!GetDefault<UMonolithSettings>()->bEnableEditor) return;

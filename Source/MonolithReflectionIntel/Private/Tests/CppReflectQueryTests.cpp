@@ -24,6 +24,7 @@
 #include "CppReflect/FCppReflectQueryAdapter.h"
 #include "CppReflect/FUHTArtefactReader.h"
 #include "MonolithJsonUtils.h"
+#include "Network/FNetworkRepIndexer.h"
 
 #include "HAL/FileManager.h"
 #include "HAL/PlatformFileManager.h"
@@ -107,9 +108,12 @@ namespace MonolithCppReflectTestDetail
 	 * module name from the directory path. Returns the absolute path to the
 	 * `<work>` root, OR empty FString on failure.
 	 */
-	static FString StageFixture(const FString& ModuleName, FString& OutWorkRoot)
+	static FString StageFixture(
+		const FString& ModuleName,
+		FString& OutWorkRoot,
+		const FString& FixtureName = TEXT("sample.gen.cpp.fixture"))
 	{
-		const FString SrcFixture = GetFixtureDir() / TEXT("sample.gen.cpp.fixture");
+		const FString SrcFixture = GetFixtureDir() / FixtureName;
 		if (!FPlatformFileManager::Get().GetPlatformFile().FileExists(*SrcFixture))
 		{
 			return FString();
@@ -223,6 +227,144 @@ bool FCppReflectUHTArtefactParseTest::RunTest(const FString& /*Parameters*/)
 		else
 		{
 			AddError(TEXT("USampleInterface implementer not found"));
+		}
+	}
+
+	Db.Close();
+	IFileManager::Get().Delete(*DbPath, false, true);
+	IFileManager::Get().DeleteDirectory(*WorkRoot, false, true);
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// UE 5.8 UHT compatibility: UHT_STATICS aliases, FTypeConstructFunc parent
+// casts, interface singletons without _NoRegister, and aliased CPF_Net rows.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FCppReflectUHT58ArtefactParseTest,
+	"Monolith.ReflectionIntel.CppReflect.UHT58ArtefactParse",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FCppReflectUHT58ArtefactParseTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MonolithCppReflectTestDetail;
+
+	FString WorkRoot;
+	const FString StagedFile = StageFixture(
+		TEXT("SamplePluginB"),
+		WorkRoot,
+		TEXT("sample_ue58.gen.cpp.fixture"));
+	if (StagedFile.IsEmpty())
+	{
+		AddError(TEXT("Failed to stage UE 5.8 CppReflect fixture"));
+		return false;
+	}
+
+	FSQLiteDatabase Db;
+	FString DbPath;
+	if (!OpenTempDb(Db, DbPath))
+	{
+		AddError(TEXT("OpenTempDb failed"));
+		IFileManager::Get().DeleteDirectory(*WorkRoot, false, true);
+		return false;
+	}
+
+	FUHTArtefactReader Reader;
+	FString Status;
+	TestTrue(
+		TEXT("UE 5.8 fixture indexes through FUHTArtefactReader"),
+		Reader.Run(Db, { WorkRoot }, false, false, Status));
+
+	{
+		FSQLitePreparedStatement Stmt;
+		TestTrue(
+			TEXT("Prepare UE 5.8 parent lookup"),
+			Stmt.Create(Db, TEXT(
+				"SELECT parent_class FROM reflect_uclasses WHERE class_name = 'AModernActor';")));
+		if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			FString ParentClass;
+			Stmt.GetColumnValueByIndex(0, ParentClass);
+			TestEqual(TEXT("FTypeConstructFunc parent resolves"), ParentClass, FString(TEXT("APawn")));
+		}
+		else
+		{
+			AddError(TEXT("AModernActor row missing from UE 5.8 fixture"));
+		}
+	}
+
+	{
+		FSQLitePreparedStatement Stmt;
+		TestTrue(
+			TEXT("Prepare UE 5.8 interface lookup"),
+			Stmt.Create(Db, TEXT(
+				"SELECT interface_name FROM reflect_uinterface_impls "
+				"WHERE implementing_class = 'AModernActor';")));
+		if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			FString InterfaceName;
+			Stmt.GetColumnValueByIndex(0, InterfaceName);
+			TestEqual(
+				TEXT("Interface singleton without _NoRegister resolves"),
+				InterfaceName,
+				FString(TEXT("UModernInterface")));
+		}
+		else
+		{
+			AddError(TEXT("AModernActor interface row missing from UE 5.8 fixture"));
+		}
+	}
+
+	{
+		FSQLitePreparedStatement Stmt;
+		TestTrue(
+			TEXT("Prepare UE 5.8 RPC lookup"),
+			Stmt.Create(Db, TEXT(
+				"SELECT specifiers FROM reflect_ufunctions "
+				"WHERE owning_class = 'AModernActor' AND function_name = 'ServerPing';")));
+		if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			FString Specifiers;
+			Stmt.GetColumnValueByIndex(0, Specifiers);
+			TestEqual(
+				TEXT("UHT_STATICS FuncParams preserves server RPC flags"),
+				Specifiers,
+				FString(TEXT("Server,Reliable")));
+		}
+		else
+		{
+			AddError(TEXT("ServerPing row missing from UE 5.8 fixture"));
+		}
+	}
+
+	FNetworkRepIndexer NetworkIndexer;
+	TestTrue(
+		TEXT("UE 5.8 fixture indexes through FNetworkRepIndexer"),
+		NetworkIndexer.Run(Db, { WorkRoot }, false, false, Status));
+	TestEqual(
+		TEXT("Both aliased CPF_Net properties are indexed"),
+		CountRows(Db, TEXT("reflect_replicated_properties")),
+		2);
+
+	{
+		FSQLitePreparedStatement Stmt;
+		TestTrue(
+			TEXT("Prepare UE 5.8 RepNotify lookup"),
+			Stmt.Create(Db, TEXT(
+				"SELECT rep_kind, rep_notify_func FROM reflect_replicated_properties "
+				"WHERE owning_class = 'AModernActor' AND property_name = 'Health';")));
+		if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			FString RepKind;
+			FString RepNotify;
+			Stmt.GetColumnValueByIndex(0, RepKind);
+			Stmt.GetColumnValueByIndex(1, RepNotify);
+			TestEqual(TEXT("Aliased CPF_Net property keeps ReplicatedUsing"), RepKind, FString(TEXT("ReplicatedUsing")));
+			TestEqual(TEXT("Aliased CPF_Net property keeps OnRep function"), RepNotify, FString(TEXT("OnRep_Health")));
+		}
+		else
+		{
+			AddError(TEXT("Health replication row missing from UE 5.8 fixture"));
 		}
 	}
 

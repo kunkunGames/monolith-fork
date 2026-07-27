@@ -1,0 +1,34 @@
+// Synthetic UE 5.8 UHT artefact. Stored as .fixture so UBT never compiles it.
+// IWYU pragma: private, include "Sample/ModernActor.h"
+
+// ********** Begin Class AModernActor ******************************************************
+struct Z_Construct_UClass_AModernActor_Statics
+{
+	static constexpr UE::CodeGen::FClassNativeFunction Funcs[] = {
+		{ .NameUTF8 = UTF8TEXT("ServerPing"), .Pointer = &AModernActor::execServerPing },
+	};
+};
+
+const FClassRegisterCompiledInInfo Z_Registration_Info_UClass_AModernActor = {};
+
+const FTypeConstructFunc Z_Construct_UClass_AModernActor_Statics::DependentSingletons[] = {
+	(FTypeConstructFunc*)Z_Construct_UClass_APawn,
+	(FTypeConstructFunc*)Z_Construct_UPackage__Script_SamplePluginB,
+};
+
+const UECodeGen_Private::FImplementedInterfaceParams Z_Construct_UClass_AModernActor_Statics::InterfaceParams[] = {
+	{ Z_Construct_UClass_UModernInterface, (int32)VTABLE_OFFSET(AModernActor, IModernInterface), false },
+};
+
+#define UHT_STATICS Z_Construct_UFunction_AModernActor_ServerPing_Statics
+UHT_STATICS::FuncParams = { { (FTypeConstructFunc*)Z_Construct_UClass_AModernActor, nullptr, "ServerPing", nullptr, nullptr, nullptr, nullptr, 0, 0, 0, (EFunctionFlags)0x002000C0, 0, 0, 0, 0 } };
+#undef UHT_STATICS
+
+#define UHT_STATICS Z_Construct_UClass_AModernActor_Statics
+UHT_STATICS::NewProp_Health = { "Health", nullptr, (EPropertyFlags)0x0000000100000020, UECodeGen_Private::EPropertyGenFlags::Float };
+UHT_STATICS::NewProp_Ammo = { "Ammo", nullptr, (EPropertyFlags)0x0000000000000020, UECodeGen_Private::EPropertyGenFlags::Int };
+#undef UHT_STATICS
+
+static constexpr UECodeGen_Private::FMetaDataPairParam NewProp_Health_MetaData[] = {
+	{ "ReplicatedUsing", "OnRep_Health" },
+};

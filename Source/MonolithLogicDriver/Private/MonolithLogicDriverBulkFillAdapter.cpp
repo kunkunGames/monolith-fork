@@ -121,7 +121,7 @@ namespace MonolithLogicDriverBulkFillInternal
 		// directly to the walker. For "*" we hand off the map as-is — the walker
 		// will write to any FProperty match on the CDO's class. Full LD-aware
 		// fanout to instanced state nodes is a v1.1 refinement.
-		for (const auto& StateKV : (*StatesObj)->Values)
+		for (const auto& StateKV : FMonolithJsonUtils::GetFields(*StatesObj))
 		{
 			const FString StateName = MonolithKeyToString(StateKV.Key);
 			const TSharedPtr<FJsonObject>* StatePropsObj = nullptr;

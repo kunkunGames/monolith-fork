@@ -152,25 +152,25 @@ namespace MonolithBlueprintInternal
 		return TryLoadLevelBlueprint(OutAssetPath);
 	}
 
-	inline void AddGraphArray(
-		TArray<TSharedPtr<FJsonValue>>& OutArr,
-		const TArray<TObjectPtr<UEdGraph>>& Graphs,
-		const FString& Type,
-		const FString& InterfaceName = FString())
+	inline void GetAllGraphsUnique(UBlueprint* BP, TArray<UEdGraph*>& OutGraphs)
 	{
-		for (const auto& Graph : Graphs)
+		OutGraphs.Reset();
+		if (!BP)
 		{
-			if (!Graph) continue;
-			TSharedPtr<FJsonObject> GObj = MakeShared<FJsonObject>();
-			GObj->SetStringField(TEXT("name"), Graph->GetName());
-			GObj->SetStringField(TEXT("type"), Type);
-			GObj->SetNumberField(TEXT("node_count"), Graph->Nodes.Num());
-			// Disambiguate interface-implementation graphs by their interface (Gap 7).
-			if (!InterfaceName.IsEmpty())
+			return;
+		}
+
+		TArray<UEdGraph*> RawGraphs;
+		BP->GetAllGraphs(RawGraphs);
+		OutGraphs.Reserve(RawGraphs.Num());
+		TSet<const UEdGraph*> Seen;
+		for (UEdGraph* Graph : RawGraphs)
+		{
+			if (Graph && !Seen.Contains(Graph))
 			{
-				GObj->SetStringField(TEXT("interface"), InterfaceName);
+				Seen.Add(Graph);
+				OutGraphs.Add(Graph);
 			}
-			OutArr.Add(MakeShared<FJsonValueObject>(GObj));
 		}
 	}
 
@@ -971,7 +971,239 @@ namespace MonolithBlueprintInternal
 	/** Returns true if a UK2Node_CustomEvent with the given name already exists in any graph of the Blueprint */
 	bool HasCustomEventNamed(UBlueprint* BP, FName EventName);
 
-	// Parse MCP-friendly type string to FEdGraphPinType
+	template <typename ObjectType>
+	inline ObjectType* ResolveNamedPinTypeObject(const FString& ObjectName)
+	{
+		ObjectType* Resolved = FindFirstObject<ObjectType>(
+			*ObjectName, EFindFirstObjectOptions::NativeFirst);
+		if (!Resolved && ObjectName.Contains(TEXT("/")))
+		{
+			Resolved = LoadObject<ObjectType>(nullptr, *ObjectName);
+		}
+		return Resolved;
+	}
+
+	// Parse one type expression from a colon-token stream. Named types consume two
+	// tokens (for example enum:EKey), which removes the old ambiguity where map
+	// parsing split enum:EKey at its internal colon. Nested containers are rejected
+	// because FEdGraphPinType cannot represent containers of containers.
+	inline bool TryParsePinTypeTokens(
+		const TArray<FString>& Tokens,
+		int32& InOutIndex,
+		FEdGraphPinType& OutPinType,
+		FString& OutError,
+		bool bAllowContainer)
+	{
+		if (!Tokens.IsValidIndex(InOutIndex) || Tokens[InOutIndex].IsEmpty())
+		{
+			OutError = TEXT("Pin type is empty or incomplete.");
+			return false;
+		}
+
+		const FString Keyword = Tokens[InOutIndex++].ToLower();
+		OutPinType = FEdGraphPinType();
+
+		if (Keyword == TEXT("array") || Keyword == TEXT("set"))
+		{
+			if (!bAllowContainer)
+			{
+				OutError = FString::Printf(
+					TEXT("Nested container type '%s' is not supported."), *Keyword);
+				return false;
+			}
+			if (!TryParsePinTypeTokens(
+				Tokens, InOutIndex, OutPinType, OutError, /*bAllowContainer=*/false))
+			{
+				return false;
+			}
+			OutPinType.ContainerType = Keyword == TEXT("array")
+				? EPinContainerType::Array
+				: EPinContainerType::Set;
+			return true;
+		}
+
+		if (Keyword == TEXT("map"))
+		{
+			if (!bAllowContainer)
+			{
+				OutError = TEXT("Nested map types are not supported.");
+				return false;
+			}
+
+			FEdGraphPinType KeyType;
+			FEdGraphPinType ValueType;
+			if (!TryParsePinTypeTokens(
+				Tokens, InOutIndex, KeyType, OutError, /*bAllowContainer=*/false)
+				|| !TryParsePinTypeTokens(
+					Tokens, InOutIndex, ValueType, OutError, /*bAllowContainer=*/false))
+			{
+				return false;
+			}
+
+			OutPinType = KeyType;
+			OutPinType.ContainerType = EPinContainerType::Map;
+			OutPinType.PinValueType = FEdGraphTerminalType();
+			OutPinType.PinValueType.TerminalCategory = ValueType.PinCategory;
+			OutPinType.PinValueType.TerminalSubCategory = ValueType.PinSubCategory;
+			OutPinType.PinValueType.TerminalSubCategoryObject = ValueType.PinSubCategoryObject;
+			return true;
+		}
+
+		if (Keyword == TEXT("bool"))
+		{
+			OutPinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
+			return true;
+		}
+		if (Keyword == TEXT("int"))
+		{
+			OutPinType.PinCategory = UEdGraphSchema_K2::PC_Int;
+			return true;
+		}
+		if (Keyword == TEXT("int64"))
+		{
+			OutPinType.PinCategory = UEdGraphSchema_K2::PC_Int64;
+			return true;
+		}
+		if (Keyword == TEXT("float") || Keyword == TEXT("double"))
+		{
+			OutPinType.PinCategory = UEdGraphSchema_K2::PC_Real;
+			OutPinType.PinSubCategory = FName(*Keyword);
+			return true;
+		}
+		if (Keyword == TEXT("string"))
+		{
+			OutPinType.PinCategory = UEdGraphSchema_K2::PC_String;
+			return true;
+		}
+		if (Keyword == TEXT("name"))
+		{
+			OutPinType.PinCategory = UEdGraphSchema_K2::PC_Name;
+			return true;
+		}
+		if (Keyword == TEXT("text"))
+		{
+			OutPinType.PinCategory = UEdGraphSchema_K2::PC_Text;
+			return true;
+		}
+		if (Keyword == TEXT("byte"))
+		{
+			OutPinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
+			return true;
+		}
+		if (Keyword == TEXT("exec"))
+		{
+			OutPinType.PinCategory = UEdGraphSchema_K2::PC_Exec;
+			return true;
+		}
+		if (Keyword == TEXT("wildcard"))
+		{
+			OutPinType.PinCategory = UEdGraphSchema_K2::PC_Wildcard;
+			return true;
+		}
+
+		const bool bNamedType = Keyword == TEXT("object")
+			|| Keyword == TEXT("class")
+			|| Keyword == TEXT("struct")
+			|| Keyword == TEXT("enum")
+			|| Keyword == TEXT("softobject")
+			|| Keyword == TEXT("softclass");
+		if (!bNamedType)
+		{
+			OutError = FString::Printf(TEXT("Unknown pin type '%s'."), *Keyword);
+			return false;
+		}
+		if (!Tokens.IsValidIndex(InOutIndex) || Tokens[InOutIndex].IsEmpty())
+		{
+			OutError = FString::Printf(TEXT("Named pin type '%s' requires a type name or object path."), *Keyword);
+			return false;
+		}
+
+		const FString ObjectName = Tokens[InOutIndex++];
+		if (Keyword == TEXT("struct"))
+		{
+			UScriptStruct* Struct = ResolveNamedPinTypeObject<UScriptStruct>(ObjectName);
+			if (!Struct)
+			{
+				OutError = FString::Printf(TEXT("Struct type '%s' could not be resolved."), *ObjectName);
+				return false;
+			}
+			OutPinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+			OutPinType.PinSubCategoryObject = Struct;
+			return true;
+		}
+		if (Keyword == TEXT("enum"))
+		{
+			UEnum* Enum = ResolveNamedPinTypeObject<UEnum>(ObjectName);
+			if (!Enum)
+			{
+				OutError = FString::Printf(
+					TEXT("Enum type '%s' could not be resolved. Use a loaded enum name or a valid UserDefinedEnum object path."),
+					*ObjectName);
+				return false;
+			}
+			// Enum data pins use PC_Byte + UEnum, matching UEdGraphSchema_K2.
+			OutPinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
+			OutPinType.PinSubCategoryObject = Enum;
+			return true;
+		}
+
+		UClass* Class = ResolveNamedPinTypeObject<UClass>(ObjectName);
+		if (!Class)
+		{
+			OutError = FString::Printf(TEXT("%s type '%s' could not be resolved."), *Keyword, *ObjectName);
+			return false;
+		}
+		if (Keyword == TEXT("object"))
+		{
+			OutPinType.PinCategory = UEdGraphSchema_K2::PC_Object;
+		}
+		else if (Keyword == TEXT("class"))
+		{
+			OutPinType.PinCategory = UEdGraphSchema_K2::PC_Class;
+		}
+		else if (Keyword == TEXT("softobject"))
+		{
+			OutPinType.PinCategory = UEdGraphSchema_K2::PC_SoftObject;
+		}
+		else
+		{
+			OutPinType.PinCategory = UEdGraphSchema_K2::PC_SoftClass;
+		}
+		OutPinType.PinSubCategoryObject = Class;
+		return true;
+	}
+
+	inline bool TryParsePinTypeFromString(
+		const FString& TypeStr,
+		FEdGraphPinType& OutPinType,
+		FString& OutError)
+	{
+		OutError.Reset();
+		TArray<FString> Tokens;
+		TypeStr.ParseIntoArray(Tokens, TEXT(":"), /*bCullEmpty=*/false);
+		for (FString& Token : Tokens)
+		{
+			Token.TrimStartAndEndInline();
+		}
+
+		int32 TokenIndex = 0;
+		if (!TryParsePinTypeTokens(
+			Tokens, TokenIndex, OutPinType, OutError, /*bAllowContainer=*/true))
+		{
+			return false;
+		}
+		if (TokenIndex != Tokens.Num())
+		{
+			OutError = FString::Printf(
+				TEXT("Unexpected type suffix beginning at '%s'."), *Tokens[TokenIndex]);
+			return false;
+		}
+		return true;
+	}
+
+	// Compatibility wrapper for any read/preview code that still expects a pin
+	// value. Authoring paths use TryParsePinTypeFromString and never persist this
+	// fallback when the type expression is invalid.
 	inline FEdGraphPinType ParsePinTypeFromString(const FString& TypeStr)
 	{
 		FEdGraphPinType PinType;
@@ -1035,6 +1267,7 @@ namespace MonolithBlueprintInternal
 
 		if (BaseType == TEXT("bool"))
 		{
+			PinType = FEdGraphPinType();
 			PinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
 		}
 		else if (BaseType == TEXT("int"))

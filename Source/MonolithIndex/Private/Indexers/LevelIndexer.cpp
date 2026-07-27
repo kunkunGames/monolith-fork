@@ -16,12 +16,19 @@
 #include "WorldPartition/WorldPartition.h"
 #include "Subsystems/WorldSubsystem.h"
 
-namespace
+namespace MonolithLevelIndexerInternal
 {
 	bool TeardownLoadedWorldForIndexing(UWorld* World, UPackage* Package, bool bWasAlreadyLoaded)
 	{
 		if (!World || !Package)
 		{
+			return false;
+		}
+		if (Residency.WasAlreadyLoaded())
+		{
+			// This world belongs to another editor workflow. Do not uninitialize its
+			// WorldPartition/subsystems or strip RF_Standalone merely because the
+			// indexer observed it.
 			return false;
 		}
 

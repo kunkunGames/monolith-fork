@@ -1,4 +1,8 @@
+#include "CoreMinimal.h"
 #include "Misc/AutomationTest.h"
+
+#if WITH_GEOMETRYSCRIPT
+
 #include "MonolithMeshArchFeatureActions.h"
 #include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
@@ -72,3 +76,5 @@ bool FMonolithWorldGenArchFeatureParamTest::RunTest(const FString& Parameters)
 
     return true;
 }
+
+#endif // WITH_GEOMETRYSCRIPT

@@ -3,6 +3,7 @@
 #include "MonolithCancellationRegistry.h"
 #include "MonolithCoreModule.h"
 #include "MonolithExecutionContext.h"
+#include "MonolithHttpDispatch.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithMcpSessionTracker.h"
 #include "MonolithMcpSchemaUtils.h"
@@ -1293,6 +1294,7 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 
 	FString Namespace;
 	FString Action;
+	TSet<FString> ReservedTransportFields;
 
 	// Determine dispatch pattern
 	if (ToolName == TEXT("monolith_query"))
@@ -1337,59 +1339,8 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 				TEXT("Missing 'action' — monolith_query requires arguments.action; call monolith_discover(\"<namespace>\") to enumerate actions."));
 		}
 
-		// Normalise the params shape: top-level extras (excluding namespace/action/params)
-		// merged with a nested "params" object or a JSON-encoded "params" string. Mirrors
-		// the *_query branch so the dispatched handler sees a single flat params object.
-		TSharedPtr<FJsonObject> TopLevelExtras = MakeShared<FJsonObject>();
-		for (const auto& Pair : FMonolithJsonUtils::GetFields(Arguments))
-		{
-			if (Pair.Key != TEXT("namespace") && Pair.Key != TEXT("action") && Pair.Key != TEXT("params"))
-			{
-				TopLevelExtras->SetField(Pair.Key, Pair.Value);
-			}
-		}
-
-		const TSharedPtr<FJsonObject>* NestedParams = nullptr;
-		TSharedPtr<FJsonObject> ParsedParamsObj;
-		bool bHasNestedParams = false;
-		if (Arguments->TryGetObjectField(TEXT("params"), NestedParams) && NestedParams)
-		{
-			bHasNestedParams = true;
-		}
-		else
-		{
-			FString ParamsStr;
-			if (const TSharedPtr<FJsonValue> ParamsStrField = Arguments->TryGetField(TEXT("params")))
-			{
-				if (!ParamsStrField->TryGetString(ParamsStr))
-				{
-					FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
-						ToolName, Namespace, Action, TEXT("malformed_dispatch"),
-						FMonolithJsonUtils::ErrInvalidParams, TEXT("Parameter 'params' must be a JSON object or string if present"));
-					return FMonolithJsonUtils::ErrorResponse(Id, FMonolithJsonUtils::ErrInvalidParams, TEXT("Parameter 'params' must be a JSON object or string if present."));
-				}
-			}
-			else if (!ParamsStr.IsEmpty())
-			{
-				TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ParamsStr);
-				if (FJsonSerializer::Deserialize(Reader, ParsedParamsObj) && ParsedParamsObj.IsValid())
-				{
-					NestedParams = &ParsedParamsObj;
-					bHasNestedParams = true;
-				}
-			}
-		}
-
-		if (bHasNestedParams && NestedParams)
-		{
-			Arguments = MakeShared<FJsonObject>();
-			for (const auto& Pair : FMonolithJsonUtils::GetFields(TopLevelExtras)) { Arguments->SetField(Pair.Key, Pair.Value); }
-			for (const auto& Pair : FMonolithJsonUtils::GetFields(*NestedParams)) { Arguments->SetField(Pair.Key, Pair.Value); }
-		}
-		else
-		{
-			Arguments = TopLevelExtras;
-		}
+		ReservedTransportFields.Add(TEXT("namespace"));
+		ReservedTransportFields.Add(TEXT("action"));
 	}
 	else if (ToolName.StartsWith(TEXT("monolith_")))
 	{
@@ -1590,6 +1541,31 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 			FString::Printf(TEXT("Unknown tool: %s — tool must start with monolith_ or end with _query; call tools/list to enumerate."), *ToolName));
 	}
 
+	// All dispatch shapes converge here. Schema awareness resolves the otherwise
+	// ambiguous `params` name: declared action fields are never mistaken for the
+	// legacy nested envelope, regardless of whether their value is object/array/string.
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	const MonolithHttpDispatch::FNormalizationResult NormalizedArguments =
+		MonolithHttpDispatch::NormalizeActionArguments(
+		Arguments,
+		ReservedTransportFields,
+		Registry.GetActionParamSchema(Namespace, Action));
+	if (!NormalizedArguments.IsSuccess())
+	{
+		FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
+			ToolName,
+			Namespace,
+			Action,
+			TEXT("malformed_dispatch"),
+			FMonolithJsonUtils::ErrInvalidParams,
+			NormalizedArguments.Error);
+		return FMonolithJsonUtils::ErrorResponse(
+			Id,
+			FMonolithJsonUtils::ErrInvalidParams,
+			NormalizedArguments.Error);
+	}
+	Arguments = NormalizedArguments.Arguments;
+
 	// Record start time for duration measurement without shadowing the server start timestamp member.
 	double ActionStartTimeSeconds = FPlatformTime::Seconds();
 
@@ -1618,7 +1594,7 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 	FScopedMonolithProgressRegistration ProgressRegistration(ExecutionContextParams.ProgressToken);
 
 	// Execute via registry
-	FMonolithActionResult ActionResult = FMonolithToolRegistry::Get().ExecuteAction(Namespace, Action, Arguments);
+	FMonolithActionResult ActionResult = Registry.ExecuteAction(Namespace, Action, Arguments);
 
 	// Calculate duration
 	double DurationMs = (FPlatformTime::Seconds() - ActionStartTimeSeconds) * 1000.0;

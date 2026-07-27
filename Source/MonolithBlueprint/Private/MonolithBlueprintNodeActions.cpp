@@ -647,7 +647,6 @@ static TArray<TSharedPtr<FJsonValue>> AddEventNodeFunctionParametersToJsonValues
 	{
 		return Params;
 	}
-
 	for (TFieldIterator<FProperty> PropIt(Func); PropIt && (PropIt->PropertyFlags & CPF_Parm); ++PropIt)
 	{
 		const FProperty* Prop = *PropIt;
@@ -860,6 +859,290 @@ static TSharedPtr<FJsonObject> MakeAddEventNodeErrorData(
 	}
 
 	return ErrorData;
+}
+
+// SetFromFunction configures node behavior (purity, enum expansion, and so on),
+// but its self-scope inference comes from the node's owning graph. resolve_node
+// deliberately uses a transient preview graph whose stand-in native class has no
+// ClassGeneratedBy; FMemberReference can therefore mistake any other native class
+// (also ClassGeneratedBy == nullptr) for self. Restamp the reference from the real
+// Blueprint context so native function-library previews resolve exactly like the
+// authored node while retaining SetFromFunction's behavioral side effects.
+static void SetCallFunctionFromResolvedFunction(
+	UK2Node_CallFunction* CallNode,
+	UBlueprint* SelfBP,
+	UFunction* Function)
+{
+	CallNode->SetFromFunction(Function);
+
+	UClass* SelfClass = SelfBP ? SelfBP->SkeletonGeneratedClass.Get() : nullptr;
+	if (!SelfClass && SelfBP)
+	{
+		SelfClass = SelfBP->GeneratedClass.Get();
+	}
+	UClass* OwnerClass = Function ? Function->GetOwnerClass() : nullptr;
+	const bool bSelfContext = SelfClass && OwnerClass && SelfClass->IsChildOf(OwnerClass);
+	CallNode->FunctionReference.SetFromField<UFunction>(Function, bSelfContext, OwnerClass);
+}
+
+// Stamp a CallFunction reference onto CallNode from FuncName + optional
+// TargetClassName, using SelfBP as the self-context Blueprint. Blueprint-authored
+// functions use member references so they survive skeleton regeneration; native
+// functions retain SetFromFunction. The caller owns pin allocation and placement.
+static bool ResolveCallFunctionReference(
+	UK2Node_CallFunction* CallNode,
+	UBlueprint* SelfBP,
+	const FString& FuncName,
+	const FString& TargetClassName,
+	FString& OutError,
+	UFunction** OutResolvedFunction = nullptr)
+{
+	if (!CallNode)
+	{
+		OutError = TEXT("Internal error: null CallFunction node");
+		return false;
+	}
+
+	TArray<FName> FuncNameCandidates;
+	FuncNameCandidates.Add(FName(*FuncName));
+	if (!FuncName.StartsWith(TEXT("K2_")))
+	{
+		FuncNameCandidates.Add(FName(*FString::Printf(TEXT("K2_%s"), *FuncName)));
+	}
+
+	auto FindCandidateOn = [&FuncNameCandidates](UClass* Class) -> UFunction*
+	{
+		if (!Class)
+		{
+			return nullptr;
+		}
+		for (const FName& Candidate : FuncNameCandidates)
+		{
+			if (UFunction* Function = Class->FindFunctionByName(Candidate))
+			{
+				return Function;
+			}
+		}
+		return nullptr;
+	};
+
+	if (!TargetClassName.IsEmpty())
+	{
+		UBlueprint* TargetBP = nullptr;
+		{
+			FString BlueprintPath = TargetClassName;
+			if (BlueprintPath.EndsWith(TEXT("_C")))
+			{
+				int32 DotIndex = INDEX_NONE;
+				if (BlueprintPath.FindLastChar(TEXT('.'), DotIndex))
+				{
+					BlueprintPath = BlueprintPath.Left(DotIndex);
+				}
+				else
+				{
+					BlueprintPath = BlueprintPath.LeftChop(2);
+				}
+			}
+			if (BlueprintPath.Contains(TEXT("/")))
+			{
+				TSharedPtr<FJsonObject> Synthetic = MakeShared<FJsonObject>();
+				Synthetic->SetStringField(TEXT("asset_path"), BlueprintPath);
+				FString ResolvedPath;
+				TargetBP = MonolithBlueprintInternal::LoadBlueprintFromParams(Synthetic, ResolvedPath);
+			}
+		}
+
+		UClass* TargetClass = nullptr;
+		if (!TargetBP)
+		{
+			TargetClass = FindFirstObject<UClass>(*TargetClassName, EFindFirstObjectOptions::NativeFirst);
+			if (!TargetClass && !TargetClassName.StartsWith(TEXT("U")))
+			{
+				TargetClass = FindFirstObject<UClass>(
+					*FString::Printf(TEXT("U%s"), *TargetClassName),
+					EFindFirstObjectOptions::NativeFirst);
+			}
+			if (!TargetClass && TargetClassName.StartsWith(TEXT("U")))
+			{
+				TargetClass = FindFirstObject<UClass>(*TargetClassName.Mid(1), EFindFirstObjectOptions::NativeFirst);
+			}
+			if (!TargetClass && !TargetClassName.EndsWith(TEXT("_C")))
+			{
+				TargetClass = FindFirstObject<UClass>(
+					*FString::Printf(TEXT("%s_C"), *TargetClassName),
+					EFindFirstObjectOptions::NativeFirst);
+			}
+			if (TargetClass)
+			{
+				TargetBP = Cast<UBlueprint>(TargetClass->ClassGeneratedBy);
+			}
+		}
+
+		if (TargetBP)
+		{
+			UClass* SkeletonClass = TargetBP->SkeletonGeneratedClass;
+			UClass* GeneratedClass = TargetBP->GeneratedClass;
+			UFunction* BlueprintFunction = FindCandidateOn(SkeletonClass);
+			if (!BlueprintFunction)
+			{
+				BlueprintFunction = FindCandidateOn(GeneratedClass);
+			}
+			if (!BlueprintFunction)
+			{
+				OutError = FString::Printf(
+					TEXT("Function '%s' not found on Blueprint '%s' (also tried K2_ prefix). Ensure the function exists and is BlueprintCallable."),
+					*FuncName,
+					*TargetClassName);
+				return false;
+			}
+
+			const FName ResolvedName = BlueprintFunction->GetFName();
+			if (OutResolvedFunction)
+			{
+				*OutResolvedFunction = BlueprintFunction;
+			}
+			if (SelfBP && TargetBP == SelfBP)
+			{
+				CallNode->FunctionReference.SetSelfMember(ResolvedName);
+			}
+			else
+			{
+				if (!GeneratedClass)
+				{
+					OutError = FString::Printf(
+						TEXT("Target Blueprint '%s' has no GeneratedClass (needs compile). Compile it, then retry."),
+						*TargetClassName);
+					return false;
+				}
+				CallNode->FunctionReference.SetExternalMember(ResolvedName, GeneratedClass);
+			}
+			return true;
+		}
+
+		if (TargetClass)
+		{
+			UFunction* Function = FindCandidateOn(TargetClass);
+			if (!Function)
+			{
+				OutError = FString::Printf(
+					TEXT("Function '%s' not found on class '%s' (also tried K2_ prefix). Ensure the function is BlueprintCallable."),
+					*FuncName,
+					*TargetClassName);
+				return false;
+			}
+			if (OutResolvedFunction)
+			{
+				*OutResolvedFunction = Function;
+			}
+			SetCallFunctionFromResolvedFunction(CallNode, SelfBP, Function);
+			return true;
+		}
+
+		OutError = FString::Printf(
+			TEXT("Class '%s' not found for CallFunction (tried native, U-prefix, '_C' generated-class name, and Blueprint asset path)."),
+			*TargetClassName);
+		return false;
+	}
+
+	UClass* SkeletonClass = SelfBP ? SelfBP->SkeletonGeneratedClass : nullptr;
+	UClass* GeneratedClass = SelfBP ? SelfBP->GeneratedClass : nullptr;
+	UFunction* SelfFunction = FindCandidateOn(SkeletonClass);
+	if (!SelfFunction)
+	{
+		SelfFunction = FindCandidateOn(GeneratedClass);
+	}
+
+	const bool bIsOwnBlueprintFunction = SelfFunction &&
+		(SelfFunction->GetOwnerClass() == SkeletonClass || SelfFunction->GetOwnerClass() == GeneratedClass);
+	if (SelfFunction && OutResolvedFunction)
+	{
+		*OutResolvedFunction = SelfFunction;
+	}
+	if (bIsOwnBlueprintFunction)
+	{
+		CallNode->FunctionReference.SetSelfMember(SelfFunction->GetFName());
+		return true;
+	}
+	if (SelfFunction)
+	{
+		SetCallFunctionFromResolvedFunction(CallNode, SelfBP, SelfFunction);
+		return true;
+	}
+
+	UFunction* Function = FindFunctionAcrossLoadedClasses(FuncNameCandidates, IsWidgetBlueprintContext(SelfBP));
+	if (!Function)
+	{
+		OutError = FString::Printf(
+			TEXT("Function '%s' not found in any loaded class (also tried K2_ prefix)"),
+			*FuncName);
+		return false;
+	}
+	if (OutResolvedFunction)
+	{
+		*OutResolvedFunction = Function;
+	}
+	SetCallFunctionFromResolvedFunction(CallNode, SelfBP, Function);
+	return true;
+}
+
+// Mirror UBlueprintFunctionNodeSpawner::Create's node-class choice so tool-created
+// call nodes get the same specialized UK2Node_CallFunction subclass the editor's
+// palette spawns. This is what makes wildcard array pins resolve on connect:
+// KismetArrayLibrary functions carry the ArrayParm metadata and the propagation
+// logic lives in UK2Node_CallArrayFunction::NotifyPinConnectionListChanged — a
+// base UK2Node_CallFunction node has no propagation machinery at all, so its
+// wildcard TargetArray/NewItem pins can never resolve, no matter how they are
+// wired. (The type-promotion branch — UK2Node_PromotableOperator — is
+// intentionally not mirrored: FTypePromotion is module-private, and a plain
+// CallFunction node remains correct for explicitly-typed operator functions.)
+static UClass* ChooseCallFunctionNodeClass(const UFunction* Function)
+{
+	if (!Function)
+	{
+		return UK2Node_CallFunction::StaticClass();
+	}
+
+	const bool bIsPure = Function->HasAllFunctionFlags(FUNC_BlueprintPure);
+	if (bIsPure && Function->HasMetaData(FBlueprintMetadata::MD_CommutativeAssociativeBinaryOperator))
+	{
+		return UK2Node_CommutativeAssociativeBinaryOperator::StaticClass();
+	}
+	if (Function->HasMetaData(FBlueprintMetadata::MD_MaterialParameterCollectionFunction))
+	{
+		return UK2Node_CallMaterialParameterCollectionFunction::StaticClass();
+	}
+	if (Function->HasMetaData(FBlueprintMetadata::MD_DataTablePin))
+	{
+		return UK2Node_CallDataTableFunction::StaticClass();
+	}
+	if (Function->HasMetaData(FBlueprintMetadata::MD_ArrayParam))
+	{
+		return UK2Node_CallArrayFunction::StaticClass();
+	}
+	return UK2Node_CallFunction::StaticClass();
+}
+
+// Bind a variable node's member reference. Local variables live on the function
+// entry node, not the class — a SetSelfMember bind for a local name resolves to
+// nothing and the node materializes with NO data pin. Mirror the editor's
+// binding (EdGraphSchema_K2.cpp: SetLocalMember(name, top-level graph name,
+// guid)) when the containing graph declares a matching local; locals shadow
+// same-named member variables, matching function-scope resolution.
+static void BindVariableNodeReference(UK2Node_Variable* VarNode, UBlueprint* BP,
+	UEdGraph* Graph, const FString& VarName)
+{
+	const FName VarFName(*VarName);
+	if (UEdGraph* TopGraph = FBlueprintEditorUtils::GetTopLevelGraph(Graph))
+	{
+		const FGuid LocalVarGuid =
+			FBlueprintEditorUtils::FindLocalVariableGuidByName(BP, TopGraph, VarFName);
+		if (LocalVarGuid.IsValid())
+		{
+			VarNode->VariableReference.SetLocalMember(VarFName, TopGraph->GetName(), LocalVarGuid);
+			return;
+		}
+	}
+	VarNode->VariableReference.SetSelfMember(VarFName);
 }
 
 // ============================================================
@@ -3544,6 +3827,12 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleBatchExecute(const TS
 	// Previously it was silently dropped (unknown-param warning) while every graph op
 	// ran against the default EventGraph — which has severed function bodies whose
 	// author believed the ops were targeting the named function graph.
+	FString TopLevelGraphName;
+	Params->TryGetStringField(TEXT("graph_name"), TopLevelGraphName);
+
+	// Apply one graph context to the whole batch while allowing an operation to
+	// target another graph explicitly. Without propagation, graph operations
+	// silently fall back to EventGraph and can author the wrong function body.
 	FString TopLevelGraphName;
 	Params->TryGetStringField(TEXT("graph_name"), TopLevelGraphName);
 

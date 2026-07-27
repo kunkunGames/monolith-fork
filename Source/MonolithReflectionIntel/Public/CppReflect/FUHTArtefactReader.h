@@ -164,7 +164,7 @@ private:
 	FRegexPattern IwyuIncludePattern;        // grabs "// IWYU pragma: private, include "<path>""
 	FRegexPattern BeginClassPattern;         // "// ********** Begin Class <Name> ***..."
 	FRegexPattern BeginInterfacePattern;     // "// ********** Begin Interface <Name> ***..."
-	FRegexPattern DependentSingletonPattern; // "(UObject* (*)())Z_Construct_UClass_<P>"
+	FRegexPattern DependentSingletonPattern; // UE 5.7 UObject cast or UE 5.8 FTypeConstructFunc cast
 	FRegexPattern ClassMetaDataParamsHeader; // start-of-Class_MetaDataParams array
 	FRegexPattern MetaDataPairPattern;       // single `{ "Key", "Value" },` row
 	FRegexPattern PropertyDeclPattern;       // F<T>PropertyParams ...::NewProp_<N> = { "<N>", ...

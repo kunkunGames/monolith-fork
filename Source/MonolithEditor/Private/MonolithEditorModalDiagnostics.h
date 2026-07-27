@@ -12,6 +12,50 @@ struct FMonolithModalWidgetSnapshot
 	bool bTruncated = false;
 };
 
+struct FMonolithModalOpenRecord
+{
+	int64 Identifier = 0;
+	FString OpenEvent = TEXT("MODAL_OPEN");
+	FString SlowTask = TEXT("unknown");
+	FString Title;
+	FDateTime OpenedAt;
+};
+
+struct FMonolithModalCloseRecord
+{
+	bool bMatched = false;
+	int64 Identifier = 0;
+	FString OpenEvent = TEXT("unknown");
+	FString SlowTask = TEXT("unknown");
+	FString Title;
+	double OpenAgeSeconds = -1.0;
+};
+
+/** Game-thread-only state used to pair modal open/close delegate broadcasts. */
+class FMonolithModalTelemetryState
+{
+public:
+	void RecordOpen(
+		int64 Identifier,
+		const FString& Title,
+		const TOptional<bool>& bIsSlowTaskWindow,
+		const FDateTime& OpenedAt);
+
+	FMonolithModalCloseRecord RecordClose(int64 Identifier, const FDateTime& ClosedAt);
+
+	/** Pre-5.8 delegates have no context identifier; pair nested modals in LIFO order. */
+	int64 RecordLegacyOpen(const FString& Title, const FDateTime& OpenedAt);
+	FMonolithModalCloseRecord RecordLegacyClose(const FDateTime& ClosedAt);
+
+	void Reset();
+	int32 NumOpen() const { return OpenModals.Num(); }
+
+private:
+	TMap<int64, FMonolithModalOpenRecord> OpenModals;
+	TArray<int64> LegacyOpenOrder;
+	int64 NextLegacyIdentifier = 1;
+};
+
 namespace MonolithEditorModalDiagnostics
 {
 	/**
@@ -30,4 +74,7 @@ namespace MonolithEditorModalDiagnostics
 	 * diagnostic evidence and never substitutes for the engine contract.
 	 */
 	bool IsAutoDismissProgressModal(const TOptional<bool>& bIsSlowTaskWindow);
+
+	/** Stable string form used by both open and cached close telemetry. */
+	FString SlowTaskToString(const TOptional<bool>& bIsSlowTaskWindow);
 }

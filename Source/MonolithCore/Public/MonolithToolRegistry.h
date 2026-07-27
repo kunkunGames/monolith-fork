@@ -284,6 +284,9 @@ public:
 	/** Check if a specific action exists */
 	bool HasAction(const FString& Namespace, const FString& Action) const;
 
+	/** Get the registered action's immutable parameter schema, or null when absent. */
+	TSharedPtr<FJsonObject> GetActionParamSchema(const FString& Namespace, const FString& Action) const;
+
 	/** Check if a namespace exists in the raw registry */
 	bool HasNamespace(const FString& Namespace) const;
 
