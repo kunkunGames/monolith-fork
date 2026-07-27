@@ -40,6 +40,20 @@ namespace
 		TMap<FString, FString> Metadata;
 	};
 
+	void SetSourceStringCompat(const FStringTableRef& Table, const FTextKey& Key, const FString& SourceString)
+	{
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8 && WITH_EDITORONLY_DATA
+		FString DevNotes;
+		if (const FStringTableEntryConstPtr ExistingEntry = Table->FindEntry(Key))
+		{
+			DevNotes = ExistingEntry->DevNotes;
+		}
+		Table->SetSourceString(Key, SourceString, DevNotes);
+#else
+		Table->SetSourceString(Key, SourceString);
+#endif
+	}
+
 	FMonolithActionResult InvalidParams(const FString& Message)
 	{
 		return FMonolithActionResult::Error(Message, -32602);
@@ -1142,7 +1156,7 @@ FMonolithActionResult FMonolithLocalizationActions::SetStringEntry(const TShared
 
 	Table->Modify();
 	FStringTableRef MutableTable = Table->GetMutableStringTable();
-	MutableTable->SetSourceString(TextKey, SourceString);
+	SetSourceStringCompat(MutableTable, TextKey, SourceString);
 	for (const TPair<FString, FString>& Pair : MetadataToSet)
 	{
 		MutableTable->SetMetaData(TextKey, FName(*Pair.Key), Pair.Value);
@@ -1414,7 +1428,7 @@ FMonolithActionResult FMonolithLocalizationActions::ImportStringTableCsv(const T
 		for (const FStringTableCsvRow& Row : Rows)
 		{
 			const FTextKey TextKey(Row.Key);
-			MutableTable->SetSourceString(TextKey, Row.SourceString);
+			SetSourceStringCompat(MutableTable, TextKey, Row.SourceString);
 			for (const TPair<FString, FString>& MetadataPair : Row.Metadata)
 			{
 				MutableTable->SetMetaData(TextKey, FName(*MetadataPair.Key), MetadataPair.Value);

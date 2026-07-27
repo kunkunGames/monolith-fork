@@ -279,6 +279,13 @@ bool FMonolithParamGuardLocalizationStringTableLifecycleTest::RunTest(const FStr
 			CreatedTable->GetStringTable()->GetSourceString(FTextKey(EntryKey), UnexpectedSource));
 	}
 
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8 && WITH_EDITORONLY_DATA
+	CreatedTable->GetMutableStringTable()->SetSourceString(
+		FTextKey(EntryKey),
+		TEXT("Before action update"),
+		TEXT("Preserve this translator context"));
+#endif
+
 	{
 		TSharedPtr<FJsonObject> Metadata = MakeShared<FJsonObject>();
 		Metadata->SetStringField(TEXT("Context"), TEXT("Main menu button"));
@@ -297,6 +304,16 @@ bool FMonolithParamGuardLocalizationStringTableLifecycleTest::RunTest(const FStr
 	FString SourceString;
 	TestTrue(TEXT("written entry exists"), CreatedTable->GetStringTable()->GetSourceString(FTextKey(EntryKey), SourceString));
 	TestEqual(TEXT("written source string round-trips"), SourceString, FString(TEXT("Play")));
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8 && WITH_EDITORONLY_DATA
+	const FStringTableEntryConstPtr UpdatedEntry = CreatedTable->GetStringTable()->FindEntry(FTextKey(EntryKey));
+	if (TestTrue(TEXT("updated UE 5.8 StringTable entry exists"), UpdatedEntry.IsValid()))
+	{
+		TestEqual(
+			TEXT("set_string_entry preserves UE 5.8 developer notes"),
+			UpdatedEntry->DevNotes,
+			FString(TEXT("Preserve this translator context")));
+	}
+#endif
 
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
