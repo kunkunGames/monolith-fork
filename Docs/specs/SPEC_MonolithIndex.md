@@ -8,13 +8,14 @@
 
 ## MonolithIndex
 
-**Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, AssetRegistry, Json, JsonUtilities, SQLiteCore, Slate, SlateCore, BlueprintGraph, KismetCompiler, EditorSubsystem
+**Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, AssetRegistry, Json, JsonUtilities, SQLiteCore, Slate, SlateCore, BlueprintGraph, KismetCompiler, EditorSubsystem, CollectionManager
 
 ### Classes
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithIndexModule` | Registers 12 project actions (7 baseline + 1 v0.17.0 cross-module `audit_orphan_assets` + 3 test/profiling harness Wave 1 + 1 (2026-06-10) `export_asset_text`, Gap 11) |
+| `FMonolithIndexModule` | Registers the module-owned `project` actions and all 13 `collection` actions, and unregisters both namespaces during shutdown |
+| `FAssetCollectionActions` | Strictly validated adapter over Unreal's `ICollectionManager` project collection container for discovery, static membership, dynamic queries, colors, and name validation |
 | `FMonolithIndexDatabase` | RAII SQLite wrapper. 13 tables + 2 FTS5 + 6 triggers + 1 meta. DELETE journal mode, 64MB cache. Schema v2: `saved_hash` column (Blake3 `FIoHash` hex), `schema_version` meta key |
 | `UMonolithIndexSubsystem` | UEditorSubsystem. 3-layer indexing (startup delta, live AR callbacks, full fallback). Hash-based startup catch-up. Live batched AR delegates on 2s timer. Deep asset indexing with game-thread batching. Batches every 100 assets. Progress notifications |
 | `IMonolithIndexer` | Pure virtual interface: GetSupportedClasses(), IndexAsset(), GetName(), IsSentinel(), SupportsIncrementalIndex(), IndexScoped() |
@@ -56,6 +57,38 @@
 | `refresh_assets` | `asset_paths[]` (required), `wait_for_asset_registry` (default true), `wait_for_disk` (default false) | Force a synchronous asset-registry rescan of the requested `/Game/...` package or directory paths (post-save freshness). `wait_for_asset_registry` drains pending registry work so subsequent queries see fresh state; `wait_for_disk` bounded-polls until each package's backing file exists with size > 0 |
 | `get_saved_asset_state` | `asset_path` (required) | Return disk-backed state for an asset — class, package, disk path, file size, mtime, dependencies, and referencers |
 | `cleanup_generated_assets` | `paths[]` (required), `dry_run` (default true), `require_no_referencers` (default true), `remove_empty_folders` (default false) | Safely delete generated throwaway assets with reference checks. **HARD allowlist guard:** refuses any path outside `/Game/Tests/Monolith/`. Dry-run by default (reports what would be deleted without touching disk); `require_no_referencers` skips any asset still referenced from outside the request set; `remove_empty_folders` prunes now-empty folders under the allowlist |
+
+### Content Browser Collections (13 — namespace: "collection")
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `list_collections` | `share_type` (`all`) | List collections with share type, storage mode, object count, and optional color |
+| `get_collection` | `name` (required), `share_type` (`local`) | Return one collection's details |
+| `create_collection` | `name` (required), `share_type` (`local`), `storage_mode` (`static`) | Create a static or dynamic collection |
+| `delete_collection` | `name` (required), `share_type` (`local`), `force` (`false`) | Delete a collection; non-empty collections require `force=true` |
+| `add_assets` | `name` (required), `share_type` (`local`), `asset_path` or `asset_paths[]` | Add at least one soft object path to a static collection |
+| `remove_assets` | `name` (required), `share_type` (`local`), `asset_path` or `asset_paths[]` | Remove at least one soft object path from a static collection |
+| `list_assets` | `name` (required), `share_type` (`local`), `recursive` (`self`) | List paths using `self`, `children`, `parents`, or `all` recursion |
+| `contains_asset` | `name` (required), `asset_path` (required), `share_type` (`local`), `recursive` (`self`) | Test membership using the selected recursion scope |
+| `set_dynamic_query` | `name` (required), `query_text` (required), `share_type` (`local`) | Set and read back a dynamic query |
+| `get_dynamic_query` | `name` (required), `share_type` (`local`) | Return a dynamic collection's query text |
+| `set_collection_color` | `name` (required), `share_type` (`local`), `color` (optional `{r,g,b,a}`) | Set an RGBA color with finite `0..1` channels, or omit `color` to clear it |
+| `validate_collection_name` | `name` (required), `share_type` (`local`, also `all`) | Validate a name through `ICollectionManager` without creating it |
+| `create_unique_collection_name` | `base_name` (required), `share_type` (`local`) | Generate a unique name without creating a collection |
+
+**Ownership and data flow:** Every handler resolves `ICollectionManager::GetProjectCollectionContainer()` and operates on the requested `local`, `private`, `shared`, or `system` share type. No alternate collection container, substituted share type, or legacy path is used. The module adds `CollectionManager` as a private dependency because the implementation is editor-only and does not widen MonolithIndex's public C++ surface.
+
+**Failure contract:** Required strings must be present, string-valued, and non-empty. `force` must be a JSON bool; color channels must be JSON numbers; `color` must be an object; and every `asset_paths` element must be a string. Invalid enum text, invalid recursion, missing paths, non-finite/out-of-range colors, non-empty deletion without `force`, and writes to read-only share types fail with `-32602`. A validated `ICollectionManager` operation failure returns `-32603`, including the engine error when supplied. The implementation never coerces scalar types or silently retries in another scope.
+
+### Collection Verification Gates
+
+| Gate | UE 5.7 | UE 5.8 | Acceptance |
+|------|--------|--------|------------|
+| Editor module build | Pass | Pass | Fresh `UnrealEditor-MonolithIndex.dll` linked from the exact tested source |
+| `Monolith.Collection.RegistrationAndValidation` | Pass | Pass | All 13 actions registered; malformed scalar/array/object values rejected |
+| `Monolith.Collection.LocalLifecycle` | Pass | Pass | Static membership/color and dynamic-query round trips complete; created collections are deleted |
+
+The focused evidence, commands, report paths, binary hashes, and rejected stale-build path are recorded in [`Docs/testing/2026-07-28-collection-action-port.md`](../testing/2026-07-28-collection-action-port.md).
 
 ### Database Schema
 

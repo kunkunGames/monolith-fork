@@ -50,7 +50,7 @@ Each module owns a specific domain:
 | **MonolithMesh** | `mesh` | Mesh inspection, scene manipulation, spatial queries, blockout, procedural geometry, lighting, experimental town gen |
 | **MonolithEditor** | `editor`, `animation` | Build triggers, live compile, log capture, crash context, scene capture, texture import |
 | **MonolithConfig** | `config` | INI resolution, explain, diff, search |
-| **MonolithIndex** | `project` | SQLite FTS5 deep project indexer |
+| **MonolithIndex** | `project`, `collection` | SQLite FTS5 deep project indexer and Content Browser collection management |
 | **MonolithSource** | `source` | Engine source lookup, call graphs, class hierarchy |
 | **MonolithUI** | `ui` | Widget Blueprint CRUD, templates, styling, animation, settings scaffolding, accessibility |
 | **MonolithGAS** | `gas` | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold (gated on `WITH_GBA`) |

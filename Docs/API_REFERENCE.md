@@ -1,6 +1,6 @@
 # Monolith API Reference
 
-**Version:** v0.21.3 · **Last updated:** 2026-07-26
+**Version:** v0.21.3 · **Last updated:** 2026-07-28
 
 **In-tree action total is approximate: ~1,400+ actions across 25+ in-tree namespaces** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
@@ -26,6 +26,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [editor](#editor) | 29 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, Python escape-hatch, persistent-level swap |
 | [config](#config) | 6 | INI config inspection and search |
 | [project](#project) | 7 | Project-wide asset index (SQLite + FTS5) |
+| [collection](#collection) | 13 | Content Browser collection discovery, membership, dynamic queries, colors, and validation |
 | [source](#source) | 11 | Unreal Engine C++ source code navigation |
 | [mesh](#mesh) | 194 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, mesh import (incl. skeletal + animation). +45 town gen registers only with `bEnableProceduralTownGen=true` (experimental, not in the public count) |
 | [ui](#ui) | 138 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, headline scaffolders, navigation/conversion gap-closure, accessibility, CommonUI, GAS UI bindings |
@@ -43,7 +44,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [network](#network) | 4 | **New v0.17.0.** Reflection Intelligence — UE 5.7 replication inspection (replicated classes, RPCs, OnRep handlers, unbalanced-OnRep audit) |
 | [pipeline](#pipeline) | 2 | **New v0.17.0.** Reflection Intelligence — read-only composer actions (`pr_review`, `release_readiness`) |
 | [reflect](#reflect) | 1 | **New v0.19.0.** Reflection Intelligence — index maintenance (`rebuild_reflection_index`, project-only force-rebuild of the RI reflection tables; WRITE/maintenance) |
-| **In-tree subtotal** | **1406** | (all default-active; +45 experimental town gen → 1451 when registered) |
+| **In-tree subtotal** | **1419** | (all default-active; +45 experimental town gen → 1464 when registered) |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -738,6 +739,30 @@ Deep details for a specific asset — nodes, variables, parameters, dependencies
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `query` | string | **required** | Substring to search for in tag names |
+
+---
+
+## collection
+
+Content Browser collection management backed by Unreal's `CollectionManager`. **13 actions.** Unless stated otherwise, `share_type` accepts `local`, `private`, `shared`, or `system` and defaults to `local`.
+
+| Action | Parameters | Behavior |
+|--------|------------|----------|
+| `collection.list_collections` | `share_type` (`all`) | List collection names, share types, storage modes, object counts, and optional colors. |
+| `collection.get_collection` | `name` (**required**), `share_type` | Return one collection's details. |
+| `collection.create_collection` | `name` (**required**), `share_type`, `storage_mode` (`static`; `static` or `dynamic`) | Create a collection and return its details. |
+| `collection.delete_collection` | `name` (**required**), `share_type`, `force` (`false`) | Delete a collection. A non-empty collection is rejected unless `force=true`. |
+| `collection.add_assets` | `name` (**required**), `share_type`, `asset_path` or `asset_paths[]` | Add one or more soft object paths to a static collection. At least one path is required. |
+| `collection.remove_assets` | `name` (**required**), `share_type`, `asset_path` or `asset_paths[]` | Remove one or more soft object paths from a static collection. At least one path is required. |
+| `collection.list_assets` | `name` (**required**), `share_type`, `recursive` (`self`; `self`, `children`, `parents`, or `all`) | List matching soft object paths with the selected collection-recursion scope. |
+| `collection.contains_asset` | `name` (**required**), `asset_path` (**required**), `share_type`, `recursive` (`self`) | Report whether the selected collection scope contains the path. |
+| `collection.set_dynamic_query` | `name` (**required**), `query_text` (**required**), `share_type` | Set a dynamic collection's query text and return the stored query. |
+| `collection.get_dynamic_query` | `name` (**required**), `share_type` | Return a dynamic collection's query text. |
+| `collection.set_collection_color` | `name` (**required**), `share_type`, `color` (`{r,g,b,a}` in `0..1`; omit to clear) | Set or clear the collection color. Alpha defaults to `1`. |
+| `collection.validate_collection_name` | `name` (**required**), `share_type` (`local`; also accepts `all`) | Ask `CollectionManager` whether a name is valid and return its validation error when invalid. |
+| `collection.create_unique_collection_name` | `base_name` (**required**), `share_type` | Generate a non-conflicting name without creating the collection. |
+
+All scalar and array element types are validated exactly. A string supplied where a bool, number, object, or array is required is not coerced. Invalid parameters return JSON-RPC `-32602`; an Unreal collection operation that fails after validation returns `-32603` and preserves the engine-provided error text when available. Mutating calls reject read-only share types rather than falling back to another scope.
 
 ---
 

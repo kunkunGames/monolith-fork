@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Content Browser collections are now a first-class `collection` namespace.** Thirteen actions cover discovery, static membership, dynamic queries, colors, validation, and unique-name generation through Unreal's `CollectionManager`. Mutating calls reject read-only share types, non-empty deletion requires `force=true`, and malformed JSON scalar types fail with `-32602` instead of being silently coerced.
+
 ## [0.21.3] - 2026-07-26
 
 This release closes out the open pull-request queue. Every fix below was reported or prototyped by a contributor — thanks to **@Thomasbehan**, **@whalemenace**, and **@kunkunGames** for the write-ups, which were detailed enough to reproduce from directly.
