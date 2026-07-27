@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **`monolith_discover` can search actions across namespaces without a new ranking tool.** Pass `filter` without `namespace` to receive a terse candidate list from the live registry; the existing `offset`/`limit` contract bounds the result. Rows carry `namespace`, `action`, and a bounded `description` in deterministic registry order. No-argument discovery still returns the unchanged namespace inventory, and MCP clients remain responsible for semantic ranking.
+- **`monolith_discover` can find which namespace owns a capability, without a ranking tool.** Pass `filter` without `namespace` to get `matched_namespaces` — every namespace containing a match, with its `match_count`, computed before pagination — alongside a terse `actions` candidate list bounded by the existing `offset`/`limit` contract. Rows carry `namespace`, `action`, and a bounded `description` in deterministic registry order. Counts describe the filtered set and never order namespaces by relevance; no scoring tiers, fuzzy distance, or alias database is introduced, and MCP clients remain responsible for semantic ranking. No-argument discovery still returns the unchanged namespace inventory.
 
 ## [0.21.3] - 2026-07-26
 

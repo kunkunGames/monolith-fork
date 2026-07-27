@@ -94,7 +94,7 @@ Core server management and introspection.
 
 ### `monolith.discover`
 
-List available tool namespaces and their actions. Pass `namespace` to inspect one namespace and optionally use `category` to narrow it (e.g. `"CommonUI"` inside `ui`). Pass `filter` without `namespace` to obtain matching actions across the live registry without introducing a separate ranking tool.
+List available tool namespaces and their actions. Pass `namespace` to inspect one namespace and optionally use `category` to narrow it (e.g. `"CommonUI"` inside `ui`). Pass `filter` without `namespace` to find which namespaces own a capability, without introducing a separate ranking tool.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -106,7 +106,13 @@ List available tool namespaces and their actions. Pass `namespace` to inspect on
 | `offset` | integer | optional | Pagination start index; meaningful when `limit > 0` |
 | `limit` | integer | optional | Maximum actions to return; `0` means all post-filter actions |
 
-**Returns:** With no `namespace`, `filter`, or positive `limit`, the namespace inventory remains unchanged. Supplying `filter` without `namespace` returns an `actions` candidate list whose rows include `namespace`, `action`, and a bounded `description`; `total` is the pre-page match count and `next_offset` appears only when more rows remain. Supplying `namespace` returns that namespace's action list. Param schemas are terse by default and available with `detail=true` or `describe_query("action_schema", ...)`.
+**Returns:** With no `namespace`, `filter`, or positive `limit`, the namespace inventory remains unchanged and carries no `matched_namespaces`. Supplying `filter` without `namespace` returns:
+
+- `matched_namespaces` — `[{ "namespace", "match_count" }]` for every namespace containing at least one match, in registry order, computed **before** pagination so a small `limit` does not narrow it. Use it to choose a namespace, then call `monolith_discover(namespace="<ns>")`. `match_count` is a count, not a relevance score; namespaces are never ordered by it.
+- `actions` — the paginated candidate list whose rows include `namespace`, `action`, and a bounded `description`.
+- `total` — the pre-page match count; `next_offset` appears only when more rows remain.
+
+Supplying `namespace` returns that namespace's action list. Param schemas are terse by default and available with `detail=true` or `describe_query("action_schema", ...)`.
 
 ---
 

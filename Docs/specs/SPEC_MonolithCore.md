@@ -49,7 +49,14 @@
 
 `monolith_discover(namespace)` is **terse by default**: for each action it returns `action` (name) + a one-line `description` only. The full per-action `params` JSON-Schema is NOT emitted by default — fetch a single action's schema with `describe_query action_schema` (the lazy-fetch target, ~54 tokens) or inline every action's schema with `detail=true`. Terse mode cuts per-namespace discover payload by ≥70% vs the pre-change shape (the win is dropping the eager `params` object, not truncating the action list).
 
-`monolith_discover(filter="<substring>", limit=N)` omits `namespace` and applies the same action-name/full-description predicate across every registered namespace. It returns a flat `actions` list with each row's `namespace`, `action`, bounded `description`, optional `category`, and optional detailed `params`. Registry order is retained; no hand-tuned semantic ranking or alias database is introduced. No-argument discovery remains the namespace inventory.
+`monolith_discover(filter="<substring>", limit=N)` omits `namespace` and applies the same action-name/full-description predicate across every registered namespace. It answers "which namespace owns this capability" for a caller that cannot name the namespace yet.
+
+The response carries two views of one filtered set:
+
+- `matched_namespaces` — every namespace containing at least one match, each with a `match_count`, in registry order. Computed **before** pagination, so a small `limit` never narrows it. This is the namespace-selection view: pick a namespace, then call `monolith_discover(namespace="<ns>")` for its full action list.
+- `actions` — the paginated flat candidate list, each row carrying `namespace`, `action`, bounded `description`, optional `category`, and optional detailed `params`.
+
+`match_count` is a count of the filtered set, not a relevance score: namespaces are never ordered by it, and no hand-tuned ranking, scoring tier, or alias database is introduced. Registry order is retained throughout, and any semantic ranking remains the MCP client's concern. No-argument discovery remains the namespace inventory and does not carry `matched_namespaces`.
 
 The editor-offline `monolith_discover` seed schemas in `Scripts/monolith_proxy.py`
 and `Tools/MonolithProxy/monolith_proxy.cpp` are unchanged by this path and
@@ -70,7 +77,7 @@ proxy seeds is tracked separately from this discovery contract.
 | `offset` | int | `0` | Opt-in pagination start, clamped to `[0, total]`. Only meaningful with `limit > 0`. |
 | `limit` | int | `0` (= ALL) | `0` = no cap (the COMPLETE post-filter action list — no action hidden). Any `limit > 0` clamps to `[0, total]`. Pagination is purely OPT-IN. |
 
-**Top-level response fields for action-list modes:** `actions`; `total` (post-filter count); `next_offset` (only when a positive `limit` was supplied AND more remain); `schema_hint` (terse only). Per-namespace rows omit the redundant namespace; cross-namespace rows include it.
+**Top-level response fields for action-list modes:** `actions`; `total` (post-filter count); `next_offset` (only when a positive `limit` was supplied AND more remain); `schema_hint` (terse only); and, in cross-namespace mode only, `matched_namespaces` (pre-pagination). Per-namespace rows omit the redundant namespace; cross-namespace rows include it.
 
 **Unchanged:** `discover()` with no namespace, filter, or positive limit still returns the namespace inventory. `describe_query action_schema` remains the lazy-fetch target for a single action's full schema.
 

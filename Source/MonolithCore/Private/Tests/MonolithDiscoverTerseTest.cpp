@@ -361,6 +361,47 @@ bool FMonolithDiscoverCrossNamespaceFilterTest::RunTest(const FString& /*Paramet
 			TEXT("next_offset presence follows the existing pagination contract"),
 			R.Result->HasField(TEXT("next_offset")),
 			ExpectedTotal > 1);
+
+		// The namespace rollup is the "which namespace do I use" answer, so it
+		// must describe the WHOLE filtered set even though limit:1 was supplied.
+		const TArray<TSharedPtr<FJsonValue>>* MatchedNamespaces = nullptr;
+		TestTrue(
+			TEXT("filtered discover reports matched namespaces"),
+			R.Result->TryGetArrayField(TEXT("matched_namespaces"), MatchedNamespaces)
+				&& MatchedNamespaces != nullptr);
+		if (MatchedNamespaces)
+		{
+			int32 SummedMatches = 0;
+			TSet<FString> SeenNamespaces;
+			bool bEveryEntryWellFormed = true;
+			for (const TSharedPtr<FJsonValue>& Value : *MatchedNamespaces)
+			{
+				const TSharedPtr<FJsonObject>* Object = nullptr;
+				FString Namespace;
+				int32 MatchCount = 0;
+				if (!Value.IsValid()
+					|| !Value->TryGetObject(Object)
+					|| !Object
+					|| !(*Object)->TryGetStringField(TEXT("namespace"), Namespace)
+					|| !(*Object)->TryGetNumberField(TEXT("match_count"), MatchCount)
+					|| Namespace.IsEmpty()
+					|| MatchCount <= 0)
+				{
+					bEveryEntryWellFormed = false;
+					continue;
+				}
+				bEveryEntryWellFormed &= !SeenNamespaces.Contains(Namespace);
+				SeenNamespaces.Add(Namespace);
+				SummedMatches += MatchCount;
+			}
+			TestTrue(
+				TEXT("every matched-namespace row is a distinct namespace with a positive count"),
+				bEveryEntryWellFormed);
+			TestEqual(
+				TEXT("matched-namespace counts sum to the pre-pagination total"),
+				SummedMatches,
+				ExpectedTotal);
+		}
 	}
 
 	const FMonolithActionResult Inventory = Discover(MakeShared<FJsonObject>());
@@ -369,6 +410,9 @@ bool FMonolithDiscoverCrossNamespaceFilterTest::RunTest(const FString& /*Paramet
 	{
 		TestTrue(TEXT("no-arg result still carries namespaces"), Inventory.Result->HasField(TEXT("namespaces")));
 		TestFalse(TEXT("no-arg result does not switch to candidate mode"), Inventory.Result->HasField(TEXT("actions")));
+		TestFalse(
+			TEXT("no-arg inventory does not carry the filtered namespace rollup"),
+			Inventory.Result->HasField(TEXT("matched_namespaces")));
 	}
 
 	TSharedPtr<FJsonObject> LimitOnlyParams = MakeShared<FJsonObject>();

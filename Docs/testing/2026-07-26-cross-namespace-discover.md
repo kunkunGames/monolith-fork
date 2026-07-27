@@ -22,6 +22,9 @@ All rows below were produced from the current head, after the scope trim that
 removed the proxy-seed synchronization and the five response-shaping schema
 properties.
 
+The current head adds the `matched_namespaces` rollup described in §3.11–3.13.
+All rows below were re-run at that head.
+
 | Gate | Result | Evidence |
 |---|---|---|
 | `git diff --check` | PASS | No whitespace errors |
@@ -51,7 +54,12 @@ The `Monolith.Discover` test prefix verifies:
     namespace inventory instead of exposing the global action catalog;
 11. the registered `discover` schema still advertises exactly the reused
     `filter` / `offset` / `limit` parameters, so the advertised contract cannot
-    drift from the handler.
+    drift from the handler;
+12. a filtered cross-namespace call returns `matched_namespaces`, every row is a
+    distinct namespace with a positive `match_count`, and those counts sum to the
+    pre-pagination `total` even when `limit=1` — so the namespace-selection view
+    describes the whole filtered set, not the page;
+13. the no-argument namespace inventory does not carry `matched_namespaces`.
 
 Both the UE 5.8 and UE 5.7 reports contain nine succeeded tests and zero failed
 tests.
@@ -73,4 +81,11 @@ surface.
 **No new advertised schema surface.** The universal `_fields` / `_omit` /
 `_row_fields` / `_path_fields` / `_compact_json` response-shaping parameters
 continue to be accepted by `FMonolithParamSchema` without being advertised on
-`discover`, matching every other registered action.
+`discover`, matching every other registered action. `matched_namespaces` is a
+response field, not a request parameter, so it adds no input surface.
+
+**No ranking, scoring, or alias data.** `match_count` is the size of the filtered
+set within a namespace. Namespaces are emitted in registry order and are never
+sorted by it, there is no distance function, weight, tier, or curated word list
+anywhere in the change, and the whole branch touches one source file plus the
+shared `MonolithToolText` helper.

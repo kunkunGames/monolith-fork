@@ -83,7 +83,7 @@ void FMonolithCoreTools::RegisterAll()
 
 		Registry.RegisterAction(
 			TEXT("monolith"), TEXT("discover"),
-			TEXT("List available tool namespaces and their actions. Pass namespace (and optional category) for one namespace, or pass filter without namespace for a cross-namespace candidate list. Action output is terse by default; pass detail=true to inline param schemas. Supports opt-in offset/limit pagination."),
+			TEXT("List available tool namespaces and their actions. Pass namespace (and optional category) for one namespace, or pass filter without namespace to find which namespaces own a capability: the response carries matched_namespaces (each with a match_count) alongside the matching actions. Action output is terse by default; pass detail=true to inline param schemas. Supports opt-in offset/limit pagination."),
 			FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleDiscover),
 			Schema
 		);
@@ -322,18 +322,44 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 	else if (!Filter.IsEmpty())
 	{
 		// A filter without a namespace is the lightweight cross-namespace search
-		// path. Keep registry order, reuse the same predicate and pagination
-		// contract as per-namespace discovery, and let the MCP client perform any
-		// semantic ranking over the bounded candidate list.
+		// path, for callers that do not know which namespace owns a capability.
+		// Keep registry order, reuse the same predicate and pagination contract as
+		// per-namespace discovery, and let the MCP client perform any semantic
+		// ranking over the bounded candidate list.
 		TArray<FMonolithActionInfo> Actions;
 		for (const FString& Namespace : Namespaces)
 		{
 			Actions.Append(Registry.GetActions(Namespace));
 		}
-		if (!Filter.IsEmpty())
+		Actions = Actions.FilterByPredicate(MatchesFilter);
+
+		// Which namespaces the filter hit, and how many actions in each. This is
+		// the "I do not know the namespace yet" answer: a caller can pick where to
+		// look without paging through every matching action, which is what makes a
+		// small limit usable. Counts are facts about the filtered set, not scores —
+		// nothing here orders namespaces by relevance. Computed before pagination,
+		// like `total`, so a page never narrows the picture.
+		TArray<FString> MatchedNamespaceOrder;
+		TMap<FString, int32> MatchesByNamespace;
+		for (const FMonolithActionInfo& Info : Actions)
 		{
-			Actions = Actions.FilterByPredicate(MatchesFilter);
+			int32& MatchCount = MatchesByNamespace.FindOrAdd(Info.Namespace);
+			if (MatchCount == 0)
+			{
+				MatchedNamespaceOrder.Add(Info.Namespace);
+			}
+			++MatchCount;
 		}
+
+		TArray<TSharedPtr<FJsonValue>> MatchedNamespaceArray;
+		for (const FString& Namespace : MatchedNamespaceOrder)
+		{
+			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("namespace"), Namespace);
+			Entry->SetNumberField(TEXT("match_count"), MatchesByNamespace[Namespace]);
+			MatchedNamespaceArray.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		Result->SetArrayField(TEXT("matched_namespaces"), MatchedNamespaceArray);
 
 		const int32 TotalCount = Actions.Num();
 		const int32 SliceStart = Limit > 0
