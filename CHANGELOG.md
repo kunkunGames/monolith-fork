@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Auto-updater source and unrelated ZIP archives are rejected.** Update discovery now accepts only explicit `Monolith-*.zip` release assets and fails closed when a release exposes only GitHub's `zipball_url` or another ZIP, because repository source archives and unrelated artifacts do not carry the precompiled plugin binaries required by Blueprint-only installations.
+
 - **FullyLoad data-loss prevention** — Replaced unsafe `CreatePackage` logic with robust data-loss prevention wrappers across multiple domains (e.g., Blueprint, LogicDriver), preventing asset corruption when mutating live packages or packages without properly loaded content (e.g. #1042).
 - **Action parameter hardening** — Hardened JSON parameter extraction across multiple domains (ComboGraph, StateTree, ConfigKeeper, Material, Niagara, Water, Editor) to properly validate payloads, reject wrong-type optional parameters, and return explicit invalid-parameter errors before dereferencing missing or null fields (e.g. #1557).
 - **CL902 merge hardening** — Tightened several high-risk merge seams before release: `monolith.discover`'s registered schema now includes every implemented terse/pagination parameter and rejects `mode=schema` without an action, `blueprint.set_property_at_path` preflights missing-map-key writes on a transient duplicate before mutating the live CDO, animation mutators now reject invalid/no-op input before dirtying assets where practical, animation docs now reflect the current ~210-action surface, and the release smoke test now fails when an enabled plugin module is missing its shipped Win64 DLL.
