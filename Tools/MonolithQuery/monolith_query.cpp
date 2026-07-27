@@ -5185,7 +5185,7 @@ public:
 
 class ProjectActions {
     Database db;
-    static constexpr int kProjectSearchMatchValuePreviewChars = 240;
+    static constexpr size_t kProjectSearchMatchValuePreviewChars = 240;
     static constexpr int kProjectMaxWindow = 100000;
 
     struct ProjectPage {
@@ -5194,10 +5194,33 @@ class ProjectActions {
         int query_limit = 101;
     };
 
+    static size_t utf8_codepoint_count(const std::string& value) {
+        size_t count = 0;
+        for (unsigned char byte : value) {
+            if ((byte & 0xC0) != 0x80)
+                ++count;
+        }
+        return count;
+    }
+
+    static std::string left_utf8_codepoints(const std::string& value, size_t max_codepoints) {
+        size_t count = 0;
+        for (size_t index = 0; index < value.size(); ++index) {
+            const unsigned char byte = static_cast<unsigned char>(value[index]);
+            if ((byte & 0xC0) != 0x80) {
+                if (count == max_codepoints)
+                    return value.substr(0, index);
+                ++count;
+            }
+        }
+        return value;
+    }
+
     static std::pair<std::string, bool> compact_match_value(const std::string& value, bool detail) {
-        if (detail || value.size() <= kProjectSearchMatchValuePreviewChars)
+        const size_t codepoint_count = utf8_codepoint_count(value);
+        if (detail || codepoint_count <= kProjectSearchMatchValuePreviewChars)
             return {value, false};
-        return {value.substr(0, kProjectSearchMatchValuePreviewChars), true};
+        return {left_utf8_codepoints(value, kProjectSearchMatchValuePreviewChars), true};
     }
 
     static bool parse_non_negative_offset(const std::string& value, int& out) {
@@ -5385,7 +5408,7 @@ public:
                     {"match_field", r.get("match_field")},
                     {"match_object_path", r.get("match_object_path")},
                     {"match_value", projected_match_value},
-                    {"match_value_length", full_match_value.size()},
+                    {"match_value_length", utf8_codepoint_count(full_match_value)},
                     {"match_value_truncated", match_value_truncated},
                     {"rank", r.get_double("rank")},
                 });

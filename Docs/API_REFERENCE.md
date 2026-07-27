@@ -1405,12 +1405,17 @@ Full-text search across all indexed project assets, nodes, variables, and parame
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `query` | string | **required** | FTS search query (automatically escaped and tokenized for prefix matching) |
-| `limit` | integer | optional | Default: `50` |
+| `limit` | integer | optional | Default: `50`; clamped to `1..1000`; fractional and non-finite numbers are rejected |
+| `offset` | integer | optional | Pagination offset in the fused result order. Default: `0`; fractional and non-finite numbers are rejected |
+| `cursor` | string | optional | Numeric offset cursor returned by a truncated response |
 | `include_content` | boolean | optional | Include variable/parameter/DataTable/actor/supplemental matches for discovery only. Default: `true` |
+| `detail` | boolean | optional | Return full `match_value` text. Default: `false` |
+| `projection` | string | optional | `compact` caps `match_value` at 240 Unicode code points; `full` returns complete values |
 | `asset_class` | string | optional | Scope results to this exact asset class (e.g. `Blueprint`, `WidgetBlueprint`). Empty = any |
 | `path_filter` | string | optional | Scope results to package paths containing this substring (e.g. `/Game/Combat`). Empty = any |
 
 Results are ranked by bm25 column weighting (name >> body) fused across FTS tables via RRF, with a de-spaced CamelCase streak superset and an `identifier_split` supplemental value for CamelCase/snake token recall.
+Compact results report `match_value_length` in Unicode code points and never split a UTF-16 surrogate pair or UTF-8 sequence at the 240-code-point boundary.
 
 ### `project.find_references`
 

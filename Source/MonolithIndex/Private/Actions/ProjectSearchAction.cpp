@@ -1,13 +1,13 @@
 #include "Actions/ProjectSearchAction.h"
 #include "MonolithIndexSubsystem.h"
 #include "MonolithParamSchema.h"
+#include "ProjectSearchTextProjection.h"
 #include "Editor.h"
 
 namespace
 {
 constexpr int32 GProjectSearchMaxLimit = 1000;
 constexpr int32 GProjectSearchMaxWindow = 100000;
-constexpr int32 GProjectSearchMatchValuePreviewChars = 240;
 
 bool TryParseProjectSearchCursor(const FString& Cursor, int32& OutOffset)
 {
@@ -31,10 +31,19 @@ bool TryParseProjectSearchCursor(const FString& Cursor, int32& OutOffset)
 	return true;
 }
 
-FString CompactProjectSearchMatchValue(const FString& Value, bool bDetail, bool& bOutTruncated)
+FString CompactProjectSearchMatchValue(
+	const FString& Value,
+	bool bDetail,
+	int32& OutLength,
+	bool& bOutTruncated)
 {
-	bOutTruncated = !bDetail && Value.Len() > GProjectSearchMatchValuePreviewChars;
-	return bOutTruncated ? Value.Left(GProjectSearchMatchValuePreviewChars) : Value;
+	OutLength = MonolithProjectSearchText::CountUnicodeCodePoints(Value);
+	bOutTruncated = !bDetail && OutLength > MonolithProjectSearchText::PreviewCodePoints;
+	return bOutTruncated
+		? MonolithProjectSearchText::LeftUnicodeCodePoints(
+			Value,
+			MonolithProjectSearchText::PreviewCodePoints)
+		: Value;
 }
 }
 
@@ -57,21 +66,27 @@ FMonolithActionResult FProjectSearchAction::Execute(const TSharedPtr<FJsonObject
 	if (Params->HasField(TEXT("limit")))
 	{
 		double LimitValue = 0.0;
-		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue)
+			|| !FMath::IsFinite(LimitValue)
+			|| FMath::FloorToDouble(LimitValue) != LimitValue)
 		{
-			return FMonolithActionResult::Error(TEXT("'limit' parameter must be a number"), -32602);
+			return FMonolithActionResult::Error(TEXT("'limit' parameter must be an integer"), -32602);
 		}
-		Limit = static_cast<int32>(LimitValue);
+		Limit = static_cast<int32>(FMath::Clamp(
+			LimitValue,
+			1.0,
+			static_cast<double>(GProjectSearchMaxLimit)));
 	}
-	Limit = FMath::Clamp(Limit, 1, GProjectSearchMaxLimit);
 
 	int32 Offset = 0;
 	if (Params->HasField(TEXT("offset")))
 	{
 		double OffsetValue = 0.0;
-		if (!Params->TryGetNumberField(TEXT("offset"), OffsetValue))
+		if (!Params->TryGetNumberField(TEXT("offset"), OffsetValue)
+			|| !FMath::IsFinite(OffsetValue)
+			|| FMath::FloorToDouble(OffsetValue) != OffsetValue)
 		{
-			return FMonolithActionResult::Error(TEXT("'offset' parameter must be a number"), -32602);
+			return FMonolithActionResult::Error(TEXT("'offset' parameter must be an integer"), -32602);
 		}
 		if (OffsetValue < 0.0 || OffsetValue > static_cast<double>(GProjectSearchMaxWindow))
 		{
@@ -146,7 +161,9 @@ FMonolithActionResult FProjectSearchAction::Execute(const TSharedPtr<FJsonObject
 		return FMonolithActionResult::Error(TEXT("'path_filter' parameter must be a string"), -32602);
 	}
 
-	UMonolithIndexSubsystem* Subsystem = GEditor->GetEditorSubsystem<UMonolithIndexSubsystem>();
+	UMonolithIndexSubsystem* Subsystem = GEditor
+		? GEditor->GetEditorSubsystem<UMonolithIndexSubsystem>()
+		: nullptr;
 	if (!Subsystem)
 	{
 		return FMonolithActionResult::Error(TEXT("Index subsystem not available"));
@@ -216,9 +233,16 @@ FMonolithActionResult FProjectSearchAction::Execute(const TSharedPtr<FJsonObject
 		Entry->SetStringField(TEXT("match_table"), SR.MatchTable);
 		Entry->SetStringField(TEXT("match_field"), SR.MatchField);
 		Entry->SetStringField(TEXT("match_object_path"), SR.MatchObjectPath);
+		int32 MatchValueLength = 0;
 		bool bMatchValueTruncated = false;
-		Entry->SetStringField(TEXT("match_value"), CompactProjectSearchMatchValue(SR.MatchValue, bDetail, bMatchValueTruncated));
-		Entry->SetNumberField(TEXT("match_value_length"), SR.MatchValue.Len());
+		Entry->SetStringField(
+			TEXT("match_value"),
+			CompactProjectSearchMatchValue(
+				SR.MatchValue,
+				bDetail,
+				MatchValueLength,
+				bMatchValueTruncated));
+		Entry->SetNumberField(TEXT("match_value_length"), MatchValueLength);
 		Entry->SetBoolField(TEXT("match_value_truncated"), bMatchValueTruncated);
 		Entry->SetNumberField(TEXT("rank"), SR.Rank);
 		// score-explain (opt-in): why this result ranked where it did (RRF provenance).
@@ -262,7 +286,9 @@ FMonolithActionResult FProjectSearchAction::Execute(const TSharedPtr<FJsonObject
 	Limits->SetNumberField(TEXT("returned"), SearchResults.Num());
 	Limits->SetNumberField(TEXT("max_limit"), GProjectSearchMaxLimit);
 	Limits->SetNumberField(TEXT("max_window"), GProjectSearchMaxWindow);
-	Limits->SetNumberField(TEXT("match_value_preview_chars"), GProjectSearchMatchValuePreviewChars);
+	Limits->SetNumberField(
+		TEXT("match_value_preview_chars"),
+		MonolithProjectSearchText::PreviewCodePoints);
 	Limits->SetBoolField(TEXT("truncated"), bTruncated);
 	Limits->SetBoolField(TEXT("include_content"), bIncludeContent);
 	Limits->SetBoolField(TEXT("detail"), bDetail);
