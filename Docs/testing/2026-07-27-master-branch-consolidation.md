@@ -130,8 +130,8 @@ the remote.
 | GitHub PRs | Closed superseded PRs `#1864`, `#1934`, `#1935`, `#1938`, `#1939`, and `#1940` after posting the consolidation disposition |
 | `origin` branches | Removed 69 branches belonging to closed PRs or this integration; retained only `master` and the recovery branch `p4-snapshot/monolith-ue58-divergent-20260620` |
 | Local branches | Removed 16 integrated, externally reproducible, or abandoned temporary branches and fast-forwarded local `master` to the verified remote |
-| Git worktrees | Removed 10 clean/temporary/corrupt worktrees, including the isolated build host, the origin-master baseline, the fork integration candidate, and the publication/recording worktrees |
-| Preserved work | Kept 13 user-owned or active external-review worktrees, including every dirty checkout and a concurrently created Interchange worktree |
+| Git worktrees | Removed every task-classified clean/temporary/corrupt worktree, including the isolated build host, the origin-master baseline, the fork integration candidate, and each short-lived publication/recording worktree |
+| Preserved work | Kept every user-owned or active external-review worktree, including all dirty checkouts and concurrently created Interchange worktrees |
 | External remotes | Did not delete any `contrib/*` or `tumourlove/*` branch |
 
 The primary checkout accumulated additional concurrent user edits while this
