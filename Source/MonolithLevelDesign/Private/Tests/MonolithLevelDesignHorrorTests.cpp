@@ -137,4 +137,79 @@ bool FMonolithLevelDesignClassifyZoneTensionParamGuardTest::RunTest(const FStrin
 	return true;
 }
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLevelDesignPredictPlayerPathsParamGuardTest, "Monolith.ParamGuard.LevelDesign.PredictPlayerPathsParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithLevelDesignPredictPlayerPathsParamGuardTest::RunTest(const FString& Parameters)
+{
+	// 1. Missing start
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+
+		TArray<TSharedPtr<FJsonValue>> EndArray;
+		EndArray.Add(MakeShared<FJsonValueNumber>(0.0));
+		EndArray.Add(MakeShared<FJsonValueNumber>(0.0));
+		EndArray.Add(MakeShared<FJsonValueNumber>(0.0));
+		Params->SetArrayField(TEXT("end"), EndArray);
+
+		FMonolithActionResult Result = ExecuteHorrorAction(TEXT("predict_player_paths"), Params);
+		TestFalse(TEXT("Missing start should fail"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention start"), Result.ErrorMessage.Contains(TEXT("start")));
+	}
+
+	// 2. Missing end
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+
+		TArray<TSharedPtr<FJsonValue>> StartArray;
+		StartArray.Add(MakeShared<FJsonValueNumber>(0.0));
+		StartArray.Add(MakeShared<FJsonValueNumber>(0.0));
+		StartArray.Add(MakeShared<FJsonValueNumber>(0.0));
+		Params->SetArrayField(TEXT("start"), StartArray);
+
+		FMonolithActionResult Result = ExecuteHorrorAction(TEXT("predict_player_paths"), Params);
+		TestFalse(TEXT("Missing end should fail"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention end"), Result.ErrorMessage.Contains(TEXT("end")));
+	}
+
+	// 3. Invalid start (wrong type)
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("start"), TEXT("NotAnArray"));
+
+		TArray<TSharedPtr<FJsonValue>> EndArray;
+		EndArray.Add(MakeShared<FJsonValueNumber>(0.0));
+		EndArray.Add(MakeShared<FJsonValueNumber>(0.0));
+		EndArray.Add(MakeShared<FJsonValueNumber>(0.0));
+		Params->SetArrayField(TEXT("end"), EndArray);
+
+		FMonolithActionResult Result = ExecuteHorrorAction(TEXT("predict_player_paths"), Params);
+		TestFalse(TEXT("Wrong type start should fail"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention start"), Result.ErrorMessage.Contains(TEXT("start")));
+	}
+
+	// 4. Valid params
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+
+		TArray<TSharedPtr<FJsonValue>> StartArray;
+		StartArray.Add(MakeShared<FJsonValueNumber>(0.0));
+		StartArray.Add(MakeShared<FJsonValueNumber>(0.0));
+		StartArray.Add(MakeShared<FJsonValueNumber>(0.0));
+		Params->SetArrayField(TEXT("start"), StartArray);
+
+		TArray<TSharedPtr<FJsonValue>> EndArray;
+		EndArray.Add(MakeShared<FJsonValueNumber>(100.0));
+		EndArray.Add(MakeShared<FJsonValueNumber>(100.0));
+		EndArray.Add(MakeShared<FJsonValueNumber>(0.0));
+		Params->SetArrayField(TEXT("end"), EndArray);
+
+		FMonolithActionResult Result = ExecuteHorrorAction(TEXT("predict_player_paths"), Params);
+		bool bIsExpectedResult = Result.bSuccess || Result.ErrorMessage.Contains(TEXT("No editor world available"));
+		TestTrue(TEXT("Valid params should succeed or fail cleanly on missing world"), bIsExpectedResult);
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
