@@ -97,7 +97,7 @@ Events are batched into a pending queue and drained on a 2-second timer tick. Th
 
 **Layer 3 — Forced Full Reindex (fallback)**
 
-`monolith_reindex()` defaults to incremental mode (Layer 1 logic). Passing `force=true` triggers a full wipe-and-rebuild: drops all table data, re-enumerates, and re-indexes every asset. Both forms require active indexing and `bEnableIndex=true`; while durably stopped they return `indexing_inactive`. The underlying full/incremental entry points return acceptance, so a process-local stop after a persistence failure or another start failure returns `reindex_not_started` rather than reporting a false start.
+`monolith_reindex()` defaults to incremental mode (Layer 1 logic). Passing `force=true` triggers a full wipe-and-rebuild: drops all table data, re-enumerates, and re-indexes every asset. Both forms require active indexing and `bEnableIndex=true`; while durably stopped they return `indexing_inactive`. The underlying full/incremental entry points return acceptance, so a process-local stop after a persistence failure or another start failure returns `reindex_not_started` rather than reporting a false start. `MonolithCore` reads that acceptance through reflection and has no compile-time dependency on `MonolithIndex`, so it verifies the reflected function exposes an `FBoolProperty` return before trusting the value; a signature that stops returning `bool` is reported as an explicit module-sync error instead of being read from a zeroed buffer as `reindex_not_started`.
 
 **Schema v2 Migration**
 

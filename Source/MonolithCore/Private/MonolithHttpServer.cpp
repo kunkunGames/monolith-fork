@@ -208,20 +208,26 @@ bool FMonolithHttpServer::ProbePort(int32 Port)
 	// startup for roughly two seconds. The probe only targets localhost, so a
 	// bounded non-blocking connect is enough to distinguish an active listener
 	// without adding an unbounded startup delay.
-	const bool bNonBlocking = Socket->SetNonBlocking(true);
-	if (bNonBlocking)
+	bool bConnected = false;
+	if (Socket->SetNonBlocking(true))
 	{
 		// A non-blocking connect commonly reports false while the connection is
 		// still pending. WaitForWrite + GetConnectionState is authoritative.
 		Socket->Connect(*Addr);
-	}
-	const bool bConnected =
-		bNonBlocking
-		&& (Socket->GetConnectionState() == SCS_Connected
+		bConnected =
+			Socket->GetConnectionState() == SCS_Connected
 			|| (Socket->Wait(
 					ESocketWaitConditions::WaitForWrite,
 					FTimespan::FromMilliseconds(100))
-				&& Socket->GetConnectionState() == SCS_Connected));
+				&& Socket->GetConnectionState() == SCS_Connected);
+	}
+	else
+	{
+		// A platform that cannot switch the socket to non-blocking must still be
+		// able to answer the question. Falling through to false here would make
+		// the post-bind probe fail forever and the server could never start.
+		bConnected = Socket->Connect(*Addr);
+	}
 	Socket->Close();
 	SocketSubsystem->DestroySocket(Socket);
 	return bConnected;

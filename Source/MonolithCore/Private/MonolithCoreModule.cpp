@@ -55,8 +55,9 @@ void FMonolithCoreModule::StartupModule()
 	// FMonolithBulkFillRegistry::RegisterAdapter — those land in Phases 1-5.
 	FMonolithBulkFillActions::RegisterAll();
 
+	// Resolve before the ticker exists, so the reconciler always starts from a
+	// known baseline and only ever reacts to a change.
 	bLastResolvedServerActivation = IsHttpServerActivationDesired();
-	bHasResolvedServerActivation = true;
 	ActivationTickerHandle = FTSTicker::GetCoreTicker().AddTicker(
 		FTickerDelegate::CreateRaw(
 			this,
@@ -162,12 +163,6 @@ bool FMonolithCoreModule::IsHttpServerActivationDesired() const
 bool FMonolithCoreModule::ReconcileHttpServerActivation(float /*DeltaTime*/)
 {
 	const bool bResolvedActivation = IsHttpServerActivationDesired();
-	if (!bHasResolvedServerActivation)
-	{
-		bLastResolvedServerActivation = bResolvedActivation;
-		bHasResolvedServerActivation = true;
-		return true;
-	}
 	if (bResolvedActivation == bLastResolvedServerActivation)
 	{
 		return true;
@@ -384,7 +379,6 @@ void FMonolithCoreModule::StartHttpServerCommand()
 	FMonolithCoreModule& Module = Get();
 	Module.bServerStoppedForProcess = false;
 	Module.bLastResolvedServerActivation = true;
-	Module.bHasResolvedServerActivation = true;
 	if (Module.StartHttpServer())
 	{
 		UE_LOG(LogMonolith, Log,
@@ -413,7 +407,6 @@ void FMonolithCoreModule::StopHttpServerCommand()
 	FMonolithCoreModule& Module = Get();
 	Module.bServerStoppedForProcess = !bPersisted;
 	Module.bLastResolvedServerActivation = false;
-	Module.bHasResolvedServerActivation = true;
 	Module.StopHttpServer();
 
 	if (bPersisted)

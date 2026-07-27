@@ -617,10 +617,25 @@ FMonolithActionResult FMonolithCoreTools::HandleReindex(const TSharedPtr<FJsonOb
 	UFunction* Func = IndexSubsystemClass->FindFunctionByName(*FuncName);
 	if (Func)
 	{
+		// MonolithCore reaches MonolithIndex only through reflection, so the
+		// acceptance contract is not checked by the compiler. If the reflected
+		// signature ever stops returning a bool, a zeroed buffer would report
+		// "not started" for work that actually started. Fail loudly instead.
+		const FBoolProperty* ReturnProperty =
+			CastField<FBoolProperty>(Func->GetReturnProperty());
+		if (!ReturnProperty)
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(
+					TEXT("%s does not return a bool; MonolithCore cannot determine whether the re-index was accepted. MonolithIndex and MonolithCore are out of sync."),
+					*FuncName));
+		}
+
 		struct
 		{
 			bool ReturnValue = false;
 		} Parms;
+		FMemory::Memzero(&Parms, sizeof(Parms));
 		IndexSubsystem->ProcessEvent(Func, &Parms);
 		if (Parms.ReturnValue)
 		{

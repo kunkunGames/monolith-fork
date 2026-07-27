@@ -207,7 +207,40 @@ finding.
 
 ---
 
-## 6. Visual and Discord Evidence
+## 6. Post-Review Hardening (2026-07-27)
+
+Three defects found in a follow-up self-review were fixed and re-verified on both
+engines at the resulting head.
+
+| Defect | Fix | Why it mattered |
+|---|---|---|
+| `ProbePort` returned `false` whenever `FSocket::SetNonBlocking(true)` failed, so the post-bind probe could never succeed on such a platform and `Start()` would exhaust all attempts on a listener that had actually bound | Fall back to the pre-existing blocking `Connect` when non-blocking setup is unavailable | Probe *setup* failure was being reported as "port not listening", turning a platform capability gap into a permanent startup failure |
+| `HandleReindex` read a `bool` return out of a `ProcessEvent` parameter buffer without checking the reflected signature; `MonolithCore` reaches `MonolithIndex` only through reflection, so a future `void` return would silently read `false` from the zeroed buffer | Require `CastField<FBoolProperty>(Func->GetReturnProperty())` and return an explicit module-sync error when absent | A re-index that actually started would have been reported to the caller as `reindex_not_started` |
+| `ReconcileHttpServerActivation` carried an unreachable `!bHasResolvedServerActivation` first-tick branch — `StartupModule` sets the flag before `AddTicker`, so it could never be observed false | Removed the branch and the flag; the baseline is resolved before the ticker exists | Dead state suggested a first-tick path that does not exist, making the reconciler harder to review |
+
+| Gate | Result | Evidence |
+|---|---|---|
+| UE 5.7 editor build | PASS | `D:\P4\MonolithPR114ReviewUE57Host`: recompiled `MonolithCoreModule.cpp`, `MonolithCoreTools.cpp`, `MonolithHttpServer.cpp`, relinked `UnrealEditor-MonolithCore.dll`, `Result: Succeeded` |
+| UE 5.7 automation | PASS, 15/15 | `Monolith.Activation` + `Monolith.Source` under `-RenderOffscreen`: `succeeded=15 failed=0 notRun=0`, exit 0 |
+| UE 5.8 editor build | PASS | `D:\P4\MonolithActivationBuildHost`: relinked `UnrealEditor-MonolithCore.dll`, `Result: Succeeded` |
+| UE 5.8 automation | PASS, 15/15 | `Monolith.Activation` + `Monolith.Source`: `succeeded=15 failed=0 notRun=0`, exit 0 |
+
+One behavior was documented rather than changed. Because UE exposes no per-port
+listener teardown, `Monolith.StopServer` unbinds routes but leaves the TCP
+listener bound for the process lifetime. A port-based liveness check is therefore
+not a valid Monolith readiness signal after a Stop — the sentinel file is. This
+is now stated in `Docs/specs/SPEC_MonolithCore.md` instead of being implied.
+
+A related residue case is known and deliberately not changed here: because
+sentinel removal is ownership-gated, a sentinel left by a crashed process is not
+cleaned up by a later editor that starts with activation off, since that editor
+never takes ownership. Ownership gating is still correct — it is what stops one
+editor from deleting another live editor's sentinel — and a stale-sentinel reaper
+belongs with the startup path rather than this activation change.
+
+---
+
+## 7. Visual and Discord Evidence
 
 Screenshot verification and Discord upload are not applicable. This change has no
 visual, UI, gameplay, level, asset-presentation, or editor-panel output; its

@@ -37,7 +37,6 @@ private:
 	TUniquePtr<FMonolithHttpServer> HttpServer;
 	bool bOwnsSentinelFile = false;
 	bool bServerStoppedForProcess = false;
-	bool bHasResolvedServerActivation = false;
 	bool bLastResolvedServerActivation = false;
 	FTSTicker::FDelegateHandle ActivationTickerHandle;
 
