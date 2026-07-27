@@ -3583,7 +3583,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleBatchExecute(const TS
 
 	for (int32 i = 0; i < Ops.Num(); ++i)
 	{
-		TSharedPtr<FJsonObject> Op = Ops[i]->AsObject();
+		const TSharedPtr<FJsonObject>* OpPtr;
+		TSharedPtr<FJsonObject> Op = Ops[i]->TryGetObject(OpPtr) ? *OpPtr : nullptr;
 		TSharedRef<FJsonObject> RO = MakeShared<FJsonObject>();
 		RO->SetNumberField(TEXT("index"), i);
 
@@ -4264,7 +4265,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNodesBulk(const TS
 
 	for (int32 i = 0; i < NodesArr.Num(); ++i)
 	{
-		TSharedPtr<FJsonObject> Entry = NodesArr[i]->AsObject();
+		const TSharedPtr<FJsonObject>* EntryPtr;
+		TSharedPtr<FJsonObject> Entry = NodesArr[i]->TryGetObject(EntryPtr) ? *EntryPtr : nullptr;
 		if (!Entry.IsValid())
 		{
 			// Skip invalid entries silently — can't report without a temp_id
@@ -4399,7 +4401,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleConnectPinsBulk(const
 
 	for (int32 i = 0; i < ConnArr.Num(); ++i)
 	{
-		TSharedPtr<FJsonObject> Entry = ConnArr[i]->AsObject();
+		const TSharedPtr<FJsonObject>* EntryPtr;
+		TSharedPtr<FJsonObject> Entry = ConnArr[i]->TryGetObject(EntryPtr) ? *EntryPtr : nullptr;
 
 		TSharedRef<FJsonObject> RO = MakeShared<FJsonObject>();
 		RO->SetNumberField(TEXT("index"), i);
@@ -4503,7 +4506,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleSetPinDefaultsBulk(co
 
 	for (int32 i = 0; i < DefaultsArr.Num(); ++i)
 	{
-		TSharedPtr<FJsonObject> Entry = DefaultsArr[i]->AsObject();
+		const TSharedPtr<FJsonObject>* EntryPtr;
+		TSharedPtr<FJsonObject> Entry = DefaultsArr[i]->TryGetObject(EntryPtr) ? *EntryPtr : nullptr;
 
 		TSharedRef<FJsonObject> RO = MakeShared<FJsonObject>();
 		RO->SetNumberField(TEXT("index"), i);
@@ -6054,7 +6058,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleSetTimelineKeys(const
 	int32 KeyCount = 0;
 	for (const TSharedPtr<FJsonValue>& KeyVal : KeysArr)
 	{
-		const TSharedPtr<FJsonObject>& KeyObj = KeyVal->AsObject();
+		const TSharedPtr<FJsonObject>* KeyObjPtr;
+		TSharedPtr<FJsonObject> KeyObj = KeyVal->TryGetObject(KeyObjPtr) ? *KeyObjPtr : nullptr;
 		if (!KeyObj.IsValid()) continue;
 
 		double Time = 0.0;
