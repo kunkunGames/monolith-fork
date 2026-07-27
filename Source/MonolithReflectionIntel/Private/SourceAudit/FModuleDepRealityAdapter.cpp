@@ -396,12 +396,24 @@ FMonolithActionResult FModuleDepRealityAdapter::HandleAuditModuleDepReality(cons
 			TEXT("EngineSource.db not available. Run source.trigger_reindex to bootstrap."));
 	}
 
-	const FString ScanRoot = Params->HasField(TEXT("scan_root"))
-		? Params->GetStringField(TEXT("scan_root")) : FString();
-	const int32 ReqLimit = Params->HasField(TEXT("limit"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
-	const FString CursorIn = Params->HasField(TEXT("cursor"))
-		? Params->GetStringField(TEXT("cursor")) : FString();
+	FString ScanRoot;
+	if (Params->HasField(TEXT("scan_root")) && !Params->TryGetStringField(TEXT("scan_root"), ScanRoot))
+	{
+		return FMonolithActionResult::Error(TEXT("`scan_root` must be a string."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	double LimitDouble = 50.0;
+	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitDouble))
+	{
+		return FMonolithActionResult::Error(TEXT("`limit` must be a number."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	const int32 ReqLimit = static_cast<int32>(LimitDouble);
+
+	FString CursorIn;
+	if (Params->HasField(TEXT("cursor")) && !Params->TryGetStringField(TEXT("cursor"), CursorIn))
+	{
+		return FMonolithActionResult::Error(TEXT("`cursor` must be a string."), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	constexpr int32 HARD_CAP = 200;
 	const int32 Limit = FMath::Clamp(ReqLimit, 1, HARD_CAP);
@@ -665,8 +677,11 @@ FMonolithActionResult FModuleDepRealityAdapter::HandleSuggestBuildCsDeps(const T
 			TEXT("EngineSource.db not available. Run source.trigger_reindex to bootstrap."));
 	}
 
-	const FString FilePath = Params->HasField(TEXT("file_path"))
-		? Params->GetStringField(TEXT("file_path")) : FString();
+	FString FilePath;
+	if (Params->HasField(TEXT("file_path")) && !Params->TryGetStringField(TEXT("file_path"), FilePath))
+	{
+		return FMonolithActionResult::Error(TEXT("`file_path` must be a string."), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Optional explicit symbol list.
 	TArray<FString> ExplicitSymbols;
