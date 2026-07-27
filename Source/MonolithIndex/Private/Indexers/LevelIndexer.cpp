@@ -261,7 +261,10 @@ bool FLevelIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedAsset
 				}
 				else
 				{
-					TeardownLoadedWorldForIndexing(World, Package, Residency);
+					MonolithLevelIndexerInternal::TeardownLoadedWorldForIndexing(
+						World,
+						Package,
+						Residency);
 				}
 			}
 
