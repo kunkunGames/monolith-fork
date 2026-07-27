@@ -49,7 +49,7 @@ Each module owns a specific domain:
 | **MonolithNiagara** | `niagara` | Particle systems, emitters, modules, renderers, HLSL, dynamic inputs, event handlers, sim stages |
 | **MonolithMesh** | `mesh` | Mesh inspection, scene manipulation, spatial queries, blockout, procedural geometry, lighting, experimental town gen |
 | **MonolithEditor** | `editor`, `animation` | Build triggers, live compile, log capture, crash context, scene capture, texture import |
-| **MonolithConfig** | `config` | INI resolution, explain, diff, search |
+| **MonolithConfig** | `config`, `localization` | INI/CVar inspection plus guarded StringTable culture, validation, mutation, and CSV round-trip workflows |
 | **MonolithIndex** | `project` | SQLite FTS5 deep project indexer |
 | **MonolithSource** | `source` | Engine source lookup, call graphs, class hierarchy |
 | **MonolithUI** | `ui` | Widget Blueprint CRUD, templates, styling, animation, settings scaffolding, accessibility |

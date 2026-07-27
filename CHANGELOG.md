@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **New guarded `localization` namespace for StringTable workflows.** Ten actions cover culture discovery, StringTable inspection and validation, asset creation, entry/metadata mutation, and CSV import/export. All writes require `dry_run=true` or `confirm=true`, package saves remain opt-in, asset paths are restricted to `/Game`, external CSV paths are restricted to the project directory, and supplied JSON values are validated without scalar coercion.
+
 ## [0.21.3] - 2026-07-26
 
 This release closes out the open pull-request queue. Every fix below was reported or prototyped by a contributor — thanks to **@Thomasbehan**, **@whalemenace**, and **@kunkunGames** for the write-ups, which were detailed enough to reproduce from directly.

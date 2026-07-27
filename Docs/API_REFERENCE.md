@@ -1,6 +1,6 @@
 # Monolith API Reference
 
-**Version:** v0.21.3 · **Last updated:** 2026-07-26
+**Version:** v0.21.3 · **Last updated:** 2026-07-28
 
 **In-tree action total is approximate: ~1,400+ actions across 25+ in-tree namespaces** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
@@ -25,6 +25,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [niagara](#niagara) | 119 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, effect types, event-aware summaries + validate_system event-chain reasoning, temporal-control composite writers + read aggregators, stateless-emitter factory) |
 | [editor](#editor) | 29 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, Python escape-hatch, persistent-level swap |
 | [config](#config) | 6 | INI config inspection and search |
+| [localization](#localization) | 10 | Culture discovery plus guarded StringTable inspect, validate, mutation, and CSV round-trip actions |
 | [project](#project) | 7 | Project-wide asset index (SQLite + FTS5) |
 | [source](#source) | 11 | Unreal Engine C++ source code navigation |
 | [mesh](#mesh) | 194 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, mesh import (incl. skeletal + animation). +45 town gen registers only with `bEnableProceduralTownGen=true` (experimental, not in the public count) |
@@ -43,7 +44,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [network](#network) | 4 | **New v0.17.0.** Reflection Intelligence — UE 5.7 replication inspection (replicated classes, RPCs, OnRep handlers, unbalanced-OnRep audit) |
 | [pipeline](#pipeline) | 2 | **New v0.17.0.** Reflection Intelligence — read-only composer actions (`pr_review`, `release_readiness`) |
 | [reflect](#reflect) | 1 | **New v0.19.0.** Reflection Intelligence — index maintenance (`rebuild_reflection_index`, project-only force-rebuild of the RI reflection tables; WRITE/maintenance) |
-| **In-tree subtotal** | **1406** | (all default-active; +45 experimental town gen → 1451 when registered) |
+| **In-tree subtotal** | **1416** | (all default-active; +45 experimental town gen → 1461 when registered) |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -682,6 +683,128 @@ List all config files with their hierarchy level.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `category` | string | optional | Filter to a specific category |
+
+---
+
+## localization
+
+Localization culture discovery and StringTable asset management. **10 actions.** The four read actions never mutate packages. Every write requires either `dry_run=true` or `confirm=true`; `save` is opt-in where applicable. StringTable assets must resolve under `/Game`, CSV paths must resolve under the project directory, and supplied JSON values are checked against their declared types without string/number/boolean coercion.
+
+### `localization.list_cultures`
+
+List available cultures known to Unreal internationalization.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `culture_names` | array | optional | Culture names to resolve; omitted returns configured/default culture context |
+| `include_derived` | boolean | optional | Include derived cultures when resolving `culture_names`. Default: `true` |
+
+### `localization.list_string_tables`
+
+List StringTable assets under a project content path.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | optional | Content path to scan. Default: `/Game` |
+| `include_entries` | boolean | optional | Include capped entry rows. Default: `false` |
+| `include_metadata` | boolean | optional | Include per-entry metadata when entries are included. Default: `false` |
+| `limit` | integer | optional | Maximum tables or entries to return. Default: `100`; clamped to `1..1000` |
+
+### `localization.get_string_table`
+
+Inspect a StringTable asset and return capped entries.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | StringTable asset path under `/Game` |
+| `include_metadata` | boolean | optional | Include per-entry metadata. Default: `true` |
+| `limit` | integer | optional | Maximum entries to return. Default: `200`; clamped to `1..1000` |
+
+### `localization.validate_string_table`
+
+Validate a StringTable for empty keys, empty source strings, duplicate-looking keys, and large-output warnings.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | StringTable asset path under `/Game` |
+
+### `localization.create_string_table`
+
+Create a StringTable asset under `/Game`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | New StringTable asset path under `/Game` |
+| `namespace` | string | optional | StringTable namespace; defaults to the asset name |
+| `dry_run` | boolean | optional | Preview without writing. Default: `false` |
+| `confirm` | boolean | optional | Must be `true` for a non-dry-run write. Default: `false` |
+| `save` | boolean | optional | Save the package after creation. Default: `false` |
+
+### `localization.set_string_entry`
+
+Add or replace one StringTable entry and optional string metadata.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | StringTable asset path under `/Game` |
+| `key` | string | **required** | Entry key |
+| `source_string` | string | **required** | Source string |
+| `metadata` | object | optional | String-to-string metadata fields |
+| `dry_run` | boolean | optional | Preview without writing. Default: `false` |
+| `confirm` | boolean | optional | Must be `true` for a non-dry-run write. Default: `false` |
+| `save` | boolean | optional | Save the package after mutation. Default: `false` |
+
+### `localization.remove_string_entry`
+
+Remove one StringTable entry by key.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | StringTable asset path under `/Game` |
+| `key` | string | **required** | Entry key |
+| `dry_run` | boolean | optional | Preview without writing. Default: `false` |
+| `confirm` | boolean | optional | Must be `true` for a non-dry-run write. Default: `false` |
+| `save` | boolean | optional | Save the package after mutation. Default: `false` |
+
+### `localization.set_string_metadata`
+
+Add, replace, or remove one metadata field on a StringTable entry.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | StringTable asset path under `/Game` |
+| `key` | string | **required** | Entry key |
+| `metadata_key` | string | **required** | Metadata key |
+| `metadata_value` | string | optional | Metadata value to set; required unless `remove=true` |
+| `remove` | boolean | optional | Remove `metadata_key` instead of setting it. Default: `false` |
+| `dry_run` | boolean | optional | Preview without writing. Default: `false` |
+| `confirm` | boolean | optional | Must be `true` for a non-dry-run write. Default: `false` |
+| `save` | boolean | optional | Save the package after mutation. Default: `false` |
+
+### `localization.import_string_table_csv`
+
+Import `key`, `source_string`, and optional metadata columns from a CSV into an existing StringTable.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | StringTable asset path under `/Game` |
+| `file_path` | string | **required** | Source CSV path under the project directory |
+| `replace_existing` | boolean | optional | Clear existing entries before import. Default: `false` |
+| `dry_run` | boolean | optional | Preview without writing. Default: `false` |
+| `confirm` | boolean | optional | Must be `true` for a non-dry-run write. Default: `false` |
+| `save` | boolean | optional | Save the package after mutation. Default: `false` |
+
+### `localization.export_string_table_csv`
+
+Export a StringTable to a CSV under the project directory.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | StringTable asset path under `/Game` |
+| `file_path` | string | **required** | Destination CSV path under the project directory |
+| `include_metadata` | boolean | optional | Include metadata columns. Default: `true` |
+| `dry_run` | boolean | optional | Preview without writing. Default: `false` |
+| `confirm` | boolean | optional | Must be `true` for a non-dry-run write. Default: `false` |
 
 ---
 
