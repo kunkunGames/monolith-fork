@@ -4,7 +4,6 @@
 #include "MonolithHttpServer.h"
 #include "MonolithSettings.h"
 #include "MonolithJsonUtils.h"
-#include "MonolithSha256.h"
 #include "MonolithUpdateReleaseSelector.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
@@ -244,53 +243,21 @@ void UMonolithUpdateSubsystem::CheckForUpdate()
 					FString ReleaseNotes;
 					JsonObj->TryGetStringField(TEXT("body"), ReleaseNotes);
 
-					// Parse the SHA256 marker added by make_release.ps1 (Issue #38).
-					// Unique sentinel prefix prevents collision with prose mentions of
-					// "SHA256" elsewhere in the release body. The trailing
-					// `(?![0-9a-fA-F])` boundary rejects 65+ char strings that would
-					// otherwise silently truncate to 64 and produce a confusing "hash
-					// mismatch" instead of "malformed marker". Stashed on the subsystem;
-					// consumed by OnDownloadComplete.
-					//
-					// "v2" marker generation (Issues #90/#94): updaters prior to the
-					// portable-SHA fix hard-assert the editor when the release notes
-					// carry a marker they recognize (their integrity check calls
-					// FPlatformMisc::GetSHA256Signature, whose generic fallback is a
-					// fatal checkf on platforms without an impl — Windows included).
-					// Releases therefore emit "Monolith-SHA256-v2-*" markers, which
-					// pre-fix updaters do NOT match: their per-engine parse aborts
-					// fail-closed (no marker found -> refuse install with a
-					// notification) and their legacy parse proceeds unverified —
-					// neither path can reach the fatal assert. Only fixed updaters
-					// (this code) parse the v2 names. Do NOT re-emit the old
-					// "Monolith-SHA256[-UE5.x]:" names on any future release.
-					//
-					// Engine-tagged asset -> require the matching
-					// "Monolith-SHA256-v2-<EngineTag>: <hex>" marker and ABORT if
-					// absent; we must NOT fall back to the engine-agnostic
-					// "Monolith-SHA256-v2:" marker, which would be a different
-					// (wrong-engine) hash.
-					// Legacy asset -> use the "Monolith-SHA256-v2:" marker.
+					// Engine-tagged assets require the exact engine + platform v2 marker.
+					// Never fall back to another engine/platform hash. Engine-agnostic
+					// assets retain the historical warning-and-proceed path if their v2
+					// marker is absent.
 					Self->PendingExpectedSha256.Empty();
 					if (bChoseEngineTaggedAsset)
 					{
-						const FString TaggedPrefix = FString::Printf(TEXT("Monolith-SHA256-v2-%s:"), *EngineTag);
-						// Escape the literal '.' in the tag (e.g. "UE5.7" -> "UE5\.7")
-						// so the regex matches a literal dot, not any char.
-						FString EngineTagRegex = EngineTag;
-						EngineTagRegex.ReplaceInline(TEXT("."), TEXT("\\."));
-						const FRegexPattern TaggedHashPattern(
-							FString::Printf(TEXT("Monolith-SHA256-v2-%s:\\s*([0-9a-fA-F]{64})(?![0-9a-fA-F])"), *EngineTagRegex));
-						FRegexMatcher Matcher(TaggedHashPattern, ReleaseNotes);
-						if (Matcher.FindNext())
-						{
-							Self->PendingExpectedSha256 = Matcher.GetCaptureGroup(1).ToLower();
-						}
-						else
+						const FString TaggedMarker = UMonolithUpdateSubsystem::BuildSha256MarkerName(EngineTag);
+						Self->PendingExpectedSha256 = UMonolithUpdateSubsystem::ParseSha256FromReleaseNotes(
+							ReleaseNotes, EngineTag);
+						if (Self->PendingExpectedSha256.IsEmpty())
 						{
 							UE_LOG(LogMonolith, Error,
-								TEXT("Release %s has a %s asset but no '%s' SHA256 marker — refusing to install (will not fall back to the legacy marker, which is a different hash)."),
-								*RemoteVersion, *EngineTag, *TaggedPrefix);
+								TEXT("Release %s has a %s asset but no '%s' SHA256 marker - refusing to install."),
+								*RemoteVersion, *EngineTag, *TaggedMarker);
 
 							FNotificationInfo Info(FText::Format(
 								NSLOCTEXT("Monolith", "UpdateMissingEngineSha",
@@ -299,7 +266,7 @@ void UMonolithUpdateSubsystem::CheckForUpdate()
 							Info.ExpireDuration = 30.0f;
 							Info.bUseThrobber = false;
 							FSlateNotificationManager::Get().AddNotification(Info);
-							return; // fail-closed: tagged asset must have a tagged marker
+							return;
 						}
 					}
 					else
@@ -307,9 +274,10 @@ void UMonolithUpdateSubsystem::CheckForUpdate()
 						Self->PendingExpectedSha256 = UMonolithUpdateSubsystem::ParseSha256FromReleaseNotes(ReleaseNotes);
 						if (Self->PendingExpectedSha256.IsEmpty())
 						{
+							const FString LegacyMarker = UMonolithUpdateSubsystem::BuildSha256MarkerName();
 							UE_LOG(LogMonolith, Warning,
-								TEXT("Release %s notes do not include a Monolith-SHA256-v2 marker — install will proceed without integrity check."),
-								*RemoteVersion);
+								TEXT("Release %s notes do not include the '%s' marker — install will proceed without integrity check."),
+								*RemoteVersion, *LegacyMarker);
 						}
 					}
 
@@ -362,25 +330,8 @@ FString UMonolithUpdateSubsystem::BuildSha256MarkerName(
 	const FString& EngineTag,
 	const FString& PlatformTag)
 {
-#if PLATFORM_MAC
-	static const FRegexPattern HashPattern(
-		TEXT("Monolith-macOS-SHA256:\\s*([0-9a-fA-F]{64})(?![0-9a-fA-F])"));
-#elif PLATFORM_LINUX
-	static const FRegexPattern HashPattern(
-		TEXT("Monolith-Linux-SHA256:\\s*([0-9a-fA-F]{64})(?![0-9a-fA-F])"));
-#else
-	// "v2" marker generation (Issues #90/#94): updaters shipped before the portable-SHA
-	// fix hard-assert the editor when release notes carry a marker they recognize, so
-	// make_release.ps1 now emits only "Monolith-SHA256-v2:" and the old
-	// "Monolith-SHA256:" name must never appear in a release body again. The macOS and
-	// Linux markers above are emitted by this fork's own CI and are unaffected: their
-	// platforms have a real FPlatformMisc::GetSHA256Signature implementation, so the
-	// fatal generic fallback that motivated the rename cannot be reached there.
-	static const FRegexPattern HashPattern(
-		TEXT("Monolith-SHA256-v2:\\s*([0-9a-fA-F]{64})(?![0-9a-fA-F])"));
-#endif
-	FRegexMatcher Matcher(HashPattern, ReleaseNotes);
-	if (Matcher.FindNext())
+	FString EffectivePlatform = PlatformTag;
+	if (EffectivePlatform.IsEmpty())
 	{
 #if PLATFORM_MAC
 		EffectivePlatform = TEXT("macOS");
@@ -694,13 +645,16 @@ void UMonolithUpdateSubsystem::OnDownloadComplete(const FString& Version, bool b
 	// so a tampered payload never reaches the filesystem.
 	if (!PendingExpectedSha256.IsEmpty())
 	{
-		// NOT FPlatformMisc::GetSHA256Signature: it has no Windows implementation and
-		// the generic fallback checkf-asserts (GenericPlatformMisc.cpp), killing the
-		// editor from an Install click. MonolithSha256 is portable and cannot fail.
-		FSHA256Signature Signature;
-		MonolithSha256::Compute(Data.GetData(), static_cast<uint64>(Data.Num()), Signature);
-		// FSHA256Signature::ToString() returns lowercase hex; ToLower() is defensive.
-		const FString ActualSha256 = Signature.ToString().ToLower();
+		FString ActualSha256;
+		if (!FMonolithHashUtils::TrySha256Bytes(MakeArrayView(Data), ActualSha256))
+		{
+			UE_LOG(LogMonolith, Error,
+				TEXT("Portable SHA256 calculation failed. Aborting auto-update."));
+			PendingExpectedSha256.Empty();
+			bUpdateInProgress = false;
+			return;
+		}
+		ActualSha256.ToLowerInline();
 		const FString ExpectedLower = PendingExpectedSha256.ToLower();
 
 		if (ActualSha256 != ExpectedLower)
