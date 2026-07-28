@@ -419,6 +419,7 @@ namespace MonolithNiagaraHelpers
 	void GetStackFunctionInputs(const UNiagaraNodeFunctionCall& Node, TArray<FNiagaraVariable>& OutInputs)
 	{
 		OutInputs.Reset();
+		OutInputs.Reserve(Node.Pins.Num());
 		for (const UEdGraphPin* Pin : Node.Pins)
 		{
 			if (Pin->Direction == EGPD_Input && !Pin->bHidden)
