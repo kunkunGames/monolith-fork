@@ -2922,6 +2922,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetTransitions(const TSha
 			TArray<TSharedPtr<FJsonValue>> RuleNodesArr;
 			if (RuleGraph)
 			{
+				RuleNodesArr.Reserve(RuleGraph->Nodes.Num());
 				for (UEdGraphNode* RuleNode : RuleGraph->Nodes)
 				{
 					TSharedPtr<FJsonObject> RuleObj = MakeShared<FJsonObject>();
@@ -3047,6 +3048,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetGraphs(const TSharedPt
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("asset_path"), AssetPath);
 	TArray<TSharedPtr<FJsonValue>> GraphsArr;
+	GraphsArr.Reserve(ABP->FunctionGraphs.Num());
 
 	for (UEdGraph* Graph : ABP->FunctionGraphs)
 	{
