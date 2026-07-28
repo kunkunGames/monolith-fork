@@ -3,6 +3,7 @@
 #include "MonolithToolRegistry.h"
 #include "MonolithUIActions.h"
 #include "MonolithUISlotActions.h"
+#include "MonolithUIStylingActions.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithUIRenameWidgetAcceptsAliasTest, "Monolith.Registry.UI.RenameWidgetAcceptsAlias", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
@@ -110,6 +111,45 @@ bool FMonolithUISetSlotPropertyBoxSizeSchemaTest::RunTest(const FString& Paramet
 	double Minimum = -1.0;
 	TestTrue(TEXT("fill_weight minimum exists"), (*FillWeightParam)->TryGetNumberField(TEXT("minimum"), Minimum));
 	TestTrue(TEXT("fill_weight minimum is zero"), FMath::IsNearlyZero(Minimum));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithUISetBrushOptionalPropertyNameSchemaTest,
+	"Monolith.Registry.UI.SetBrushOptionalPropertyNameSchema",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUISetBrushOptionalPropertyNameSchemaTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	FMonolithUIStylingActions::RegisterActions(Registry);
+
+	TSharedPtr<FJsonObject> Schema;
+	for (const FMonolithActionInfo& ActionInfo : Registry.GetActions(TEXT("ui")))
+	{
+		if (ActionInfo.Action == TEXT("set_brush"))
+		{
+			Schema = ActionInfo.ParamSchema;
+			break;
+		}
+	}
+	if (!TestTrue(TEXT("set_brush schema found"), Schema.IsValid()))
+	{
+		return false;
+	}
+
+	const TSharedPtr<FJsonObject>* PropertyNameParam = nullptr;
+	if (!TestTrue(TEXT("property_name schema exists"), Schema->TryGetObjectField(TEXT("property_name"), PropertyNameParam) && PropertyNameParam && PropertyNameParam->IsValid()))
+	{
+		return false;
+	}
+
+	bool bIsRequired = true;
+	if ((*PropertyNameParam)->TryGetBoolField(TEXT("required"), bIsRequired))
+	{
+		TestFalse(TEXT("property_name should be optional"), bIsRequired);
+	}
 
 	return true;
 }
