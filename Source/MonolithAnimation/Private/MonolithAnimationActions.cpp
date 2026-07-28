@@ -13521,23 +13521,26 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetAnimNodeFunctionBindin
 
 FMonolithActionResult FMonolithAnimationActions::HandleSetAnimNodeFunctionBinding(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString NodeId = Params->GetStringField(TEXT("node_id"));
-	FString Binding = Params->GetStringField(TEXT("binding"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	FString NodeId;
+	if (!Params->TryGetStringField(TEXT("node_id"), NodeId)) return FMonolithActionResult::Error(TEXT("Parameter 'node_id' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	FString Binding;
+	if (!Params->TryGetStringField(TEXT("binding"), Binding)) return FMonolithActionResult::Error(TEXT("Parameter 'binding' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	FString FunctionName;
-	if (Params->HasField(TEXT("function_name")) && !Params->TryGetStringField(TEXT("function_name"), FunctionName)) return FMonolithActionResult::Error(TEXT("Parameter 'function_name' must be a string"));
+	if (Params->HasField(TEXT("function_name")) && !Params->TryGetStringField(TEXT("function_name"), FunctionName)) return FMonolithActionResult::Error(TEXT("Parameter 'function_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	FString FunctionClassPath;
-	if (Params->HasField(TEXT("function_class")) && !Params->TryGetStringField(TEXT("function_class"), FunctionClassPath)) return FMonolithActionResult::Error(TEXT("Parameter 'function_class' must be a string"));
+	if (Params->HasField(TEXT("function_class")) && !Params->TryGetStringField(TEXT("function_class"), FunctionClassPath)) return FMonolithActionResult::Error(TEXT("Parameter 'function_class' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	FString GraphFilter;
-	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphFilter)) return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"));
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphFilter)) return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	bool bRecompile = true;
-	if (Params->HasField(TEXT("recompile")) && !Params->TryGetBoolField(TEXT("recompile"), bRecompile)) return FMonolithActionResult::Error(TEXT("Parameter 'recompile' must be a boolean"));
+	if (Params->HasField(TEXT("recompile")) && !Params->TryGetBoolField(TEXT("recompile"), bRecompile)) return FMonolithActionResult::Error(TEXT("Parameter 'recompile' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 	bool bAllowNonThreadSafe = false;
-	if (Params->HasField(TEXT("allow_non_thread_safe")) && !Params->TryGetBoolField(TEXT("allow_non_thread_safe"), bAllowNonThreadSafe)) return FMonolithActionResult::Error(TEXT("Parameter 'allow_non_thread_safe' must be a boolean"));
+	if (Params->HasField(TEXT("allow_non_thread_safe")) && !Params->TryGetBoolField(TEXT("allow_non_thread_safe"), bAllowNonThreadSafe)) return FMonolithActionResult::Error(TEXT("Parameter 'allow_non_thread_safe' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 
 	if (Binding != TEXT("initial_update") && Binding != TEXT("become_relevant") && Binding != TEXT("update"))
 	{
-		return FMonolithActionResult::Error(TEXT("binding must be one of: initial_update, become_relevant, update"));
+		return FMonolithActionResult::Error(TEXT("binding must be one of: initial_update, become_relevant, update"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
