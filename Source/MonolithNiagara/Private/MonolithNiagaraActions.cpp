@@ -9047,9 +9047,22 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListEmitterProperties(const
 FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleInputValue(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
-	FString InputName = Params->GetStringField(TEXT("input"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId))
+	{
+		return FMonolithActionResult::Error(TEXT("invalid-param: emitter must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FString ModuleNodeGuid;
+	if (!Params->TryGetStringField(TEXT("module_node"), ModuleNodeGuid))
+	{
+		return FMonolithActionResult::Error(TEXT("invalid-param: module_node must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString InputName;
+	if (!Params->TryGetStringField(TEXT("input"), InputName))
+	{
+		return FMonolithActionResult::Error(TEXT("invalid-param: input must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
