@@ -48,3 +48,9 @@ Prevention: Extract targeted logic into public static helper functions so they c
 **Learning:** General instructions in `AGENTS.md` to avoid random suffixes are missed unless directly included in the agent's specific instructions.
 **Prevention:** Never append numeric task IDs, UUIDs, or timestamp suffixes to branch names. If your chosen branch name is taken or overlapping work exists, stop without PR instead of renaming the branch to bypass collision checks.
 **Avoid:** Generating branches with `-<number>` suffixes.
+
+## 2026-07-28 - Enforce mandatory PR body sections
+**Compliance issue:** Sentinel Test PR #1946 (`Sentinel Test 🧪: add create_foundation param validation test for WorldGen`) omitted all mandatory PR body sections, instead submitting a freeform Korean summary (e.g., `- Source/MonolithWorldGen/Private/Tests/...`).
+**Learning:** Without explicit reminders in the agent's specific file, the mandatory PR body contract (What/Why, Duplicate check, WorkFingerprint, Verification, Blocked verification, public API impact, and docs/spec impact) is sometimes forgotten.
+**Prevention:** You must explicitly include the mandatory PR body sections (What/Why, Duplicate check, WorkFingerprint, Verification, Blocked verification, public API impact, and docs/spec impact) with full details in every PR.
+**Avoid:** Submitting PR bodies as freeform summaries that skip the required structured sections.
