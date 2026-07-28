@@ -1,5 +1,6 @@
 #include "MonolithMeshSpatialActions.h"
 #include "MonolithMeshUtils.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 
@@ -778,7 +779,11 @@ FMonolithActionResult FMonolithMeshSpatialActions::QueryNearest(const TSharedPtr
 	double LimitD;
 	if (Params->TryGetNumberField(TEXT("limit"), LimitD))
 	{
-		Limit = FMath::Clamp(static_cast<int32>(LimitD), 1, 500);
+		if (LimitD > 500.0)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("limit %g exceeds the maximum allowed (500)"), LimitD), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		Limit = FMath::Max(1, static_cast<int32>(LimitD));
 	}
 
 	// Use OverlapMultiByObjectType with sphere (physics broadphase)
