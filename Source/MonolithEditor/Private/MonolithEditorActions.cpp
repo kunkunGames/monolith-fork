@@ -1260,7 +1260,10 @@ FMonolithActionResult FMonolithEditorActions::HandleGetBuildErrors(const TShared
 	// future calls report nothing before it. Returns immediately with the new baseline —
 	// the canonical "I just triggered a build, ignore all prior log noise" reset.
 	bool bClearBaseline = false;
-	Params->TryGetBoolField(TEXT("clear_baseline"), bClearBaseline);
+	if (Params->HasField(TEXT("clear_baseline")) && !Params->TryGetBoolField(TEXT("clear_baseline"), bClearBaseline))
+	{
+		return FMonolithActionResult::Error(TEXT("clear_baseline must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (bClearBaseline)
 	{
 		LastCompileTimestamp = FPlatformTime::Seconds();
