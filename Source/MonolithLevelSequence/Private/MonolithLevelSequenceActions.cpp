@@ -1510,6 +1510,31 @@ FMonolithActionResult FMonolithLevelSequenceActions::FindDirectorFunctionCallers
 		PathClause = TEXT(" AND d.ls_path LIKE ? ESCAPE '\\'");
 	}
 
+	int64 TotalCallers = 0;
+	{
+		const FString CountSQL = FString::Printf(TEXT(
+			"SELECT COUNT(*) "
+			"FROM level_sequence_event_bindings b "
+			"JOIN level_sequence_directors d ON d.ls_asset_id = b.ls_asset_id "
+			"WHERE b.fires_function_name = ?%s"),
+			*PathClause);
+
+		FSQLitePreparedStatement CountStmt;
+		if (CountStmt.Create(*RawDB, *CountSQL))
+		{
+			CountStmt.SetBindingValueByIndex(1, FunctionName);
+			if (!PathFilter.IsEmpty())
+			{
+				CountStmt.SetBindingValueByIndex(2, LikePattern);
+			}
+			if (CountStmt.Step() == ESQLitePreparedStatementStepResult::Row)
+			{
+				CountStmt.GetColumnValueByIndex(0, TotalCallers);
+			}
+		}
+		CountStmt.Destroy();
+	}
+
 	const FString SQL = FString::Printf(TEXT(
 		"SELECT d.ls_path, b.binding_guid, b.binding_name, b.binding_kind, b.bound_class, "
 		"       b.section_kind, f.kind "
@@ -1536,6 +1561,10 @@ FMonolithActionResult FMonolithLevelSequenceActions::FindDirectorFunctionCallers
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Callers;
+	if (TotalCallers > 0)
+	{
+		Callers.Reserve(static_cast<int32>(TotalCallers));
+	}
 	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		FString LsPath, BGuid, BName, BKind, BClass, SectionKind, ResolvedKind;
