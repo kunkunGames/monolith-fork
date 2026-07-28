@@ -4643,8 +4643,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetCustomHLSLText(const TSh
 	if (Params->HasField(TEXT("node_guid")) && !Params->TryGetStringField(TEXT("node_guid"), NodeGuidStr))
 		return FMonolithActionResult::Error(TEXT("Parameter 'node_guid' must be a string"));
 
-	UNiagaraScript* Script = LoadObject<UNiagaraScript>(nullptr, *ScriptPath);
-	if (!Script) return FMonolithActionResult::Error(TEXT("Failed to load script"));
+	UNiagaraScript* Script = nullptr;
+	FString ResolvedPath, LoadError;
+	if (!FMonolithAssetUtils::TryLoadAssetByPath<UNiagaraScript>(ScriptPath, Script, ResolvedPath, LoadError))
+		return FMonolithActionResult::Error(TEXT("Failed to load script"));
 
 	UNiagaraScriptSource* Src = Cast<UNiagaraScriptSource>(Script->GetLatestSource());
 	if (!Src || !Src->NodeGraph) return FMonolithActionResult::Error(TEXT("No graph available"));
