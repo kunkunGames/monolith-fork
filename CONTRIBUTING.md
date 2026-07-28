@@ -336,9 +336,11 @@ When preparing a new release of Monolith:
    ```powershell
    powershell -ExecutionPolicy Bypass -File Scripts/make_release.ps1 -Version "X.Y.Z"
    ```
-6. **Publish:** Create a GitHub Release with the new tag and attach the generated ZIP assets (`../../Monolith-vX.Y.Z.zip`, `../../Monolith-vX.Y.Z-UE5.7.zip`, and `../../Monolith-vX.Y.Z-UE5.8.zip`).
+6. **Publish:** Create a GitHub Release with the new tag as a draft, verify the release notes, and then publish it.
    ```bash
-   gh release create vX.Y.Z "../../Monolith-vX.Y.Z.zip" "../../Monolith-vX.Y.Z-UE5.7.zip" "../../Monolith-vX.Y.Z-UE5.8.zip" --title "Monolith vX.Y.Z" --notes-file release_notes.md
+   gh release create vX.Y.Z "../../Monolith-vX.Y.Z.zip" "../../Monolith-vX.Y.Z-UE5.7.zip" "../../Monolith-vX.Y.Z-UE5.8.zip" --title "Monolith vX.Y.Z" --notes-file release_notes.md --draft
+   powershell -ExecutionPolicy Bypass -File Scripts/verify_release_body.ps1 -Version "X.Y.Z"
+   gh release edit vX.Y.Z --draft=false
    ```
    **Crucial:** You must copy the exact SHA256 marker lines printed by the release script into the release notes body before publishing. Per-engine assets use `Monolith-SHA256-v2-UE5.7: <hash>` / `Monolith-SHA256-v2-UE5.8: <hash>`, and the script also prints legacy `Monolith-SHA256-v2: <hash>` for compatibility. If the matching platform/engine marker is missing, the auto-updater aborts the installation (the "warn and proceed" fallback only applies to legacy assets).
 
