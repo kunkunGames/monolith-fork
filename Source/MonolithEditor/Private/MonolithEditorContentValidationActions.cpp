@@ -24,34 +24,6 @@ namespace
 		TEXT("silent")
 	};
 
-	FString GetStringField(const TSharedPtr<FJsonObject>& Obj, const TCHAR* FieldName)
-	{
-		FString Value;
-		if (Obj.IsValid())
-		{
-			const TSharedPtr<FJsonValue> Field = Obj->TryGetField(FieldName);
-			if (Field.IsValid() && !Field->IsNull())
-			{
-				Field->TryGetString(Value);
-			}
-		}
-		return Value;
-	}
-
-	bool GetBoolField(const TSharedPtr<FJsonObject>& Obj, const TCHAR* FieldName, bool bDefault = false)
-	{
-		bool bValue = bDefault;
-		if (Obj.IsValid())
-		{
-			const TSharedPtr<FJsonValue> Field = Obj->TryGetField(FieldName);
-			if (Field.IsValid() && !Field->IsNull())
-			{
-				Field->TryGetBool(bValue);
-			}
-		}
-		return bValue;
-	}
-
 	TArray<TSharedPtr<FJsonValue>> StringArrayToJsonValues(const TArray<FString>& Values)
 	{
 		TArray<TSharedPtr<FJsonValue>> JsonValues;
@@ -151,7 +123,8 @@ namespace
 	{
 		for (const TCHAR* FieldName : { TEXT("local_path"), TEXT("client_file"), TEXT("depot_file"), TEXT("input") })
 		{
-			FString Path = GetStringField(Row, FieldName);
+			FString Path;
+			Row->TryGetStringField(FieldName, Path);
 			if (!Path.IsEmpty())
 			{
 				return Path;
@@ -228,11 +201,17 @@ namespace
 		TSharedPtr<FJsonObject> Row = CloneJsonObject(SourceRow);
 		Row->SetStringField(TEXT("source"), SourceKind);
 
-		const FString PackagePath = GetStringField(Row, TEXT("package_path"));
-		const FString Action = GetStringField(Row, TEXT("action"));
+		FString PackagePath;
+		Row->TryGetStringField(TEXT("package_path"), PackagePath);
+		FString Action;
+		Row->TryGetStringField(TEXT("action"), Action);
 		const TSharedPtr<FJsonValue> ValidField = Row->TryGetField(TEXT("valid"));
-		const bool bValid = (!ValidField.IsValid() || ValidField->IsNull()) || GetBoolField(Row, TEXT("valid"), true);
-		const bool bIsPackage = GetBoolField(Row, TEXT("is_package"), !PackagePath.IsEmpty()) && !PackagePath.IsEmpty();
+		bool bValidTemp = true;
+		Row->TryGetBoolField(TEXT("valid"), bValidTemp);
+		const bool bValid = (!ValidField.IsValid() || ValidField->IsNull()) || bValidTemp;
+		bool bIsPackageTemp = !PackagePath.IsEmpty();
+		Row->TryGetBoolField(TEXT("is_package"), bIsPackageTemp);
+		const bool bIsPackage = bIsPackageTemp && !PackagePath.IsEmpty();
 		const bool bDeleted = IsDeleteAction(Action);
 		const FString FilesystemPath = BestFilesystemPath(Row);
 		const FString Extension = FPaths::GetExtension(FilesystemPath).ToLower();
@@ -542,9 +521,12 @@ FMonolithActionResult FMonolithEditorActions::HandleValidateChangesetAssets(cons
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetBoolField(TEXT("ok"), ValidationResult.Result.IsValid()
-		? GetBoolField(ValidationResult.Result, TEXT("ok"), false)
-		: false);
+	bool bValidationOk = false;
+	if (ValidationResult.Result.IsValid())
+	{
+		ValidationResult.Result->TryGetBoolField(TEXT("ok"), bValidationOk);
+	}
+	Result->SetBoolField(TEXT("ok"), bValidationOk);
 	Result->SetBoolField(TEXT("validation_skipped"), false);
 	Result->SetObjectField(TEXT("plan"), Plan);
 	Result->SetObjectField(TEXT("validation"), ValidationResult.Result);
