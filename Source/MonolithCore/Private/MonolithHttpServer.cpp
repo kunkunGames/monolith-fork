@@ -1549,13 +1549,16 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 		{
 			// Try parsing "params" as a JSON string (Claude Code serializes objects to strings)
 			FString ParamsStr;
-			if (Arguments->HasField(TEXT("params")) && !Arguments->TryGetStringField(TEXT("params"), ParamsStr))
+			if (const TSharedPtr<FJsonValue> ParamsStrField = Arguments->TryGetField(TEXT("params")))
 			{
-				FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
-					ToolName, Namespace, Action, TEXT("malformed_dispatch"),
-					FMonolithJsonUtils::ErrInvalidParams, TEXT("Parameter 'params' must be a JSON object or string if present"));
-				return FMonolithJsonUtils::ErrorResponse(Id, FMonolithJsonUtils::ErrInvalidParams,
-					TEXT("Parameter 'params' must be a JSON object or string if present."));
+				if (!ParamsStrField->TryGetString(ParamsStr))
+				{
+					FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
+						ToolName, Namespace, Action, TEXT("malformed_dispatch"),
+						FMonolithJsonUtils::ErrInvalidParams, TEXT("Parameter 'params' must be a JSON object or string if present"));
+					return FMonolithJsonUtils::ErrorResponse(Id, FMonolithJsonUtils::ErrInvalidParams,
+						TEXT("Parameter 'params' must be a JSON object or string if present."));
+				}
 			}
 			else if (!ParamsStr.IsEmpty())
 			{
