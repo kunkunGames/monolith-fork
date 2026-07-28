@@ -85,6 +85,8 @@ graph.db
 .code-review-graph/
 compile_commands.json
 
+Tools/MonolithQuery/Generated/
+
 # Generated tool lockfiles
 *.jsonl.lock
 monolith_proxy_tools_*.json
