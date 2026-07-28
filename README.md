@@ -236,7 +236,7 @@ Monolith.uplugin
 - **`monolith_proxy-<source-hash>.exe`** — source-addressed immutable MCP stdio↔HTTP proxy selected by `monolith_proxy.current.json`; the manifest verifies the full artifact SHA-256. Keeps AI sessions alive across editor restarts without colliding with a locked older proxy image.
 - **`monolith_query-<source-hash>.exe` + `monolith_catalog-<semantic-hash>.json`** — immutable offline Query generation selected together by `monolith_query.current.json`. Serves the engine source index, project asset index, and Reflection Intelligence surface (`decision` / `risk` / `cppreflect` / `network`) without launching UE. The fixed `monolith_query.exe` remains a direct-CLI compatibility copy; release and proxy routing use the manifest-selected pair.
 
-**~2126 in-tree actions across 52 namespaces** (v0.21.2 public release; `monolith_discover()` / `monolith_status()` are the authoritative live catalog; the per-namespace breakdown is runtime-discovered, not hand-maintained here). 45 town-gen experimental actions are disabled by default (`bEnableProceduralTownGen=false`); enabling them raises the count. This figure EXCLUDES sibling-plugin actions — sibling/private plugins ship through their own repos or channels and are not in the public release zip. Live editors with sibling plugins loaded report higher counts.
+**~2126 in-tree actions across 52 namespaces** (v0.21.3 public release; `monolith_discover()` / `monolith_status()` are the authoritative live catalog; the per-namespace breakdown is runtime-discovered, not hand-maintained here). 45 town-gen experimental actions are disabled by default (`bEnableProceduralTownGen=false`); enabling them raises the count. This figure EXCLUDES sibling-plugin actions — sibling/private plugins ship through their own repos or channels and are not in the public release zip. Live editors with sibling plugins loaded report higher counts.
 
 ### Tool Reference
 
@@ -274,7 +274,7 @@ Monolith.uplugin
 
 ## Auto-updater
 
-Off by default as of v0.14.6. Opt in via **Auto Update Enabled** in Editor Preferences > Plugins > Monolith — checks GitHub Releases on editor startup, selects the matching per-engine asset, verifies the downloaded zip's SHA256 against `Monolith-SHA256-v2-UE5.7:` / `Monolith-SHA256-v2-UE5.8:` when present. The legacy-asset fallback marker is platform-specific — `Monolith-SHA256-v2:` on Windows, `Monolith-macOS-SHA256:` on macOS, `Monolith-Linux-SHA256:` on Linux; if the matching platform/engine marker is missing, the auto-updater aborts the installation (the "warn and proceed" fallback only applies to legacy assets), swaps the plugin on editor exit (after a Y/N prompt). See [Auto-Updater wiki](https://github.com/tumourlove/monolith/wiki/Auto-Updater).
+Off by default as of v0.14.6. Opt in via **Auto Update Enabled** in Editor Preferences > Plugins > Monolith — checks GitHub Releases on editor startup, selects the matching per-engine asset, verifies the downloaded zip's SHA256 against `Monolith-SHA256-v2-UE5.7:` / `Monolith-SHA256-v2-UE5.8:` when present. The legacy-asset fallback marker is platform-specific — `Monolith-SHA256-v2:` on Windows, `Monolith-macOS-SHA256-v2:` on macOS, `Monolith-Linux-SHA256-v2:` on Linux; if the matching platform/engine marker is missing, the auto-updater aborts the installation (the "warn and proceed" fallback only applies to legacy assets), swaps the plugin on editor exit (after a Y/N prompt). See [Auto-Updater wiki](https://github.com/tumourlove/monolith/wiki/Auto-Updater).
 
 ---
 
