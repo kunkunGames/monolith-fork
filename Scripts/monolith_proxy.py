@@ -1103,12 +1103,36 @@ def handle_tools_call(msg: dict) -> str:
     repeated = bool(previous and now - previous.get("at", 0.0) <= _REPEAT_LOG_WINDOW_SECONDS)
     dedup_ms = (time.perf_counter() - dedup_start) * 1000.0
     rewrite_start = time.perf_counter()
+
+    # monolith_query unified dispatcher: rewrite to the appropriate editor tool.
+    # Domain namespaces use {ns}_query({action, params}) envelope.
+    # The "monolith" namespace exposes tools directly as monolith_{action}, not via a query envelope.
+    msg_to_forward = dict(msg)
+    if tool_name == "monolith_query":
+        q_ns = str(arguments.get("namespace", "")).strip()
+        q_action = str(arguments.get("action", "")).strip()
+        if q_ns and q_action:
+            if q_ns == "monolith":
+                # monolith_* tools are individual named tools — pass params directly as their arguments.
+                forward_name = f"monolith_{q_action}"
+                forward_args = arguments.get("params", {})
+            else:
+                # All other namespaces use the {ns}_query(action, params) envelope.
+                forward_name = f"{q_ns}_query"
+                forward_args = {"action": q_action, "params": arguments.get("params", {})}
+
+            new_params = dict(params)
+            new_params["name"] = forward_name
+            new_params["arguments"] = forward_args
+            msg_to_forward["params"] = new_params
+            _log(f"monolith_query → {forward_name}")
+
     trace_id = _make_log_id("trace", f"{start_time}:{os.getpid()}:{threading.get_ident()}:{retry_signature}")
     span_id = _make_log_id("span", f"{trace_id}:proxy:{msg.get('id')}:{start_time}")
     namespace, action = _tool_namespace_action(tool_name, arguments)
     intent, confidence = _infer_intent(namespace, action, "unknown")
     routing_context = _build_routing_context(tool_name, arguments, retry_signature, repeated, "unknown", namespace, action, intent, confidence)
-    forwarded_msg = _with_trace(msg, trace_id, span_id, routing_context, "stateless")
+    forwarded_msg = _with_trace(msg_to_forward, trace_id, span_id, routing_context, "stateless")
     rewrite_ms = (time.perf_counter() - rewrite_start) * 1000.0
 
     http_start = time.perf_counter()
