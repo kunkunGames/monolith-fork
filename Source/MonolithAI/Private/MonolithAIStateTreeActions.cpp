@@ -172,6 +172,14 @@ namespace
 		return State;
 	}
 
+
+	static UStateTreeState* ExtractStateOrError(const TSharedPtr<FJsonObject>& Params, UStateTreeEditorData* EditorData, FMonolithActionResult& OutError)
+	{
+		FString StateId;
+		Params->TryGetStringField(TEXT("state_id"), StateId);
+		return GetStateOrError(EditorData, StateId, OutError);
+	}
+
 	/** Recursively serialize a UStateTreeState to JSON. */
 	TSharedPtr<FJsonObject> SerializeState(const UStateTreeState* State)
 	{
@@ -1320,11 +1328,8 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleRemoveSTState(const TSh
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString StateId;
-
-	Params->TryGetStringField(TEXT("state_id"), StateId);
 	FMonolithActionResult StateErr;
-	UStateTreeState* State = GetStateOrError(EditorData, StateId, StateErr);
+	UStateTreeState* State = ExtractStateOrError(Params, EditorData, StateErr);
 	if (!State) return StateErr;
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Remove ST State")));
@@ -1480,11 +1485,8 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleSetSTStateProperties(co
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString StateId;
-
-	Params->TryGetStringField(TEXT("state_id"), StateId);
 	FMonolithActionResult StateErr;
-	UStateTreeState* State = GetStateOrError(EditorData, StateId, StateErr);
+	UStateTreeState* State = ExtractStateOrError(Params, EditorData, StateErr);
 	if (!State) return StateErr;
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Set ST State Properties")));
@@ -2353,11 +2355,8 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTTransitionConditio
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString StateId;
-
-	Params->TryGetStringField(TEXT("state_id"), StateId);
 	FMonolithActionResult StateErr;
-	UStateTreeState* State = GetStateOrError(EditorData, StateId, StateErr);
+	UStateTreeState* State = ExtractStateOrError(Params, EditorData, StateErr);
 	if (!State) return StateErr;
 
 	int32 TransIndex = INDEX_NONE;
@@ -2433,11 +2432,8 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTConsideration(cons
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString StateId;
-
-	Params->TryGetStringField(TEXT("state_id"), StateId);
 	FMonolithActionResult StateErr;
-	UStateTreeState* State = GetStateOrError(EditorData, StateId, StateErr);
+	UStateTreeState* State = ExtractStateOrError(Params, EditorData, StateErr);
 	if (!State) return StateErr;
 
 	FString ConsClassName;
@@ -2497,11 +2493,8 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleConfigureSTConsideratio
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString StateId;
-
-	Params->TryGetStringField(TEXT("state_id"), StateId);
 	FMonolithActionResult StateErr;
-	UStateTreeState* State = GetStateOrError(EditorData, StateId, StateErr);
+	UStateTreeState* State = ExtractStateOrError(Params, EditorData, StateErr);
 	if (!State) return StateErr;
 
 	int32 ConsIndex = INDEX_NONE;
