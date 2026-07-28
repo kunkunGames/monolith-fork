@@ -1184,27 +1184,9 @@ FMonolithActionResult FMonolithConfigActions::FindCVars(const TSharedPtr<FJsonOb
 			return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
 		}
 
-		const TSharedPtr<FJsonValue> LimitValue = Params->TryGetField(TEXT("limit"));
-		if (LimitValue.IsValid())
+		if (!MonolithParamUtils::GetOptionalClampedIntParam(Params, TEXT("limit"), Limit, ParamError, 100, 1, 200))
 		{
-			if (LimitValue->Type != EJson::Number)
-			{
-				return FMonolithActionResult::Error(
-					TEXT("Invalid parameter 'limit': expected integer"),
-					FMonolithJsonUtils::ErrInvalidParams);
-			}
-
-			const double RawLimit = LimitValue->AsNumber();
-			if (!FMath::IsFinite(RawLimit)
-				|| RawLimit != FMath::TruncToDouble(RawLimit)
-				|| RawLimit < 1.0
-				|| RawLimit > 200.0)
-			{
-				return FMonolithActionResult::Error(
-					TEXT("Invalid parameter 'limit': expected an integer from 1 to 200"),
-					FMonolithJsonUtils::ErrInvalidParams);
-			}
-			Limit = static_cast<int32>(RawLimit);
+			return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
 		}
 	}
 
