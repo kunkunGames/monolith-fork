@@ -51,7 +51,7 @@ bool FGASRuntimeSummaryPreflightShapeTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Result should expose project_index_available"),
 		Result.Result->TryGetBoolField(TEXT("project_index_available"), bProjectIndexAvailable));
 	TestTrue(TEXT("Result should expose read_only_fallback"),
-		Result.Result->HasTypedField<EJson::Object>(TEXT("read_only_fallback")));
+		Result.Result->HasTypedField(TEXT("read_only_fallback"), EJson::Object));
 
 	const TArray<TSharedPtr<FJsonValue>>* Actors = nullptr;
 	TestTrue(TEXT("Result should always expose actors array"), Result.Result->TryGetArrayField(TEXT("actors"), Actors));
