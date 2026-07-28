@@ -1493,13 +1493,12 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeEffects(cons
 		FString TagName = MonolithKeyToString(Pair.Key);
 		const TSharedPtr<FJsonObject>* ContainerObj = nullptr;
 
-		if (!Pair.Value.IsValid() || Pair.Value->Type != EJson::Object)
+		if (!Pair.Value.IsValid() || !Pair.Value->TryGetObject(ContainerObj) || !ContainerObj || !(*ContainerObj).IsValid())
 		{
 			UE_LOG(LogMonolithComboGraph, Warning,
 				TEXT("Skipping effects entry '%s': value is not an object"), *TagName);
 			continue;
 		}
-		ContainerObj = &(Pair.Value->AsObject());
 
 		// Build the text representation for this map entry
 		// Key: GameplayTag text
@@ -1522,7 +1521,8 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeEffects(cons
 			ClassPaths.Reserve(EffectClasses->Num());
 			for (const auto& Val : *EffectClasses)
 			{
-				if (Val.IsValid() && Val->Type == EJson::String) ClassPaths.Add(Val->AsString());
+				FString ParsedStr;
+				if (Val.IsValid() && Val->TryGetString(ParsedStr)) ClassPaths.Add(ParsedStr);
 			}
 			if (ClassPaths.Num() > 0)
 			{
@@ -1652,13 +1652,12 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeCues(const T
 		FString TagName = MonolithKeyToString(Pair.Key);
 		const TSharedPtr<FJsonObject>* ContainerObj = nullptr;
 
-		if (!Pair.Value.IsValid() || Pair.Value->Type != EJson::Object)
+		if (!Pair.Value.IsValid() || !Pair.Value->TryGetObject(ContainerObj) || !ContainerObj || !(*ContainerObj).IsValid())
 		{
 			UE_LOG(LogMonolithComboGraph, Warning,
 				TEXT("Skipping cues entry '%s': value is not an object"), *TagName);
 			continue;
 		}
-		ContainerObj = &(Pair.Value->AsObject());
 		const TSharedPtr<FJsonObject>& ContainerData = *ContainerObj;
 
 		FString KeyText = FString::Printf(TEXT("(TagName=\"%s\")"), *TagName);
@@ -1693,9 +1692,10 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeCues(const T
 					TagTexts.Reserve(CueTags->Num());
 					for (const auto& TV : *CueTags)
 					{
-						if (TV.IsValid() && TV->Type == EJson::String)
+						FString ParsedStr;
+						if (TV.IsValid() && TV->TryGetString(ParsedStr))
 						{
-							TagTexts.Add(FString::Printf(TEXT("(TagName=\"%s\")"), *TV->AsString()));
+							TagTexts.Add(FString::Printf(TEXT("(TagName=\"%s\")"), *ParsedStr));
 						}
 					}
 					if (TagTexts.Num() > 0)
