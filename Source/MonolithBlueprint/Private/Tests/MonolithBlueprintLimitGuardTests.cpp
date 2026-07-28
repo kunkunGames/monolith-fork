@@ -62,7 +62,7 @@ bool FMonolithBlueprintSearchFunctionsLimitTest::RunTest(const FString& Paramete
 		if (Result.Result.IsValid() && Result.Result->TryGetArrayField(TEXT("results"), Results) && Results && Results->Num() > 0)
 		{
 			const TSharedPtr<FJsonObject> FirstResult = (*Results)[0]->AsObject();
-			if (!FirstResult.IsValid() || !FirstResult->HasTypedField<EJson::Array>(TEXT("inputs")) || !FirstResult->HasTypedField<EJson::Array>(TEXT("outputs")))
+			if (!FirstResult.IsValid() || !FirstResult->HasTypedField(TEXT("inputs"), EJson::Array) || !FirstResult->HasTypedField(TEXT("outputs"), EJson::Array))
 			{
 				AddError(TEXT("search_functions detail_level=standard should include parameter arrays"));
 			}

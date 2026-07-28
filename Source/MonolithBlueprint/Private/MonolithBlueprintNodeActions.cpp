@@ -4289,7 +4289,7 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNodesBulk(const TS
 		}
 
 		// Apply auto_layout position if the entry doesn't already specify one and auto_layout is on
-		if (bAutoLayout && !Entry->HasTypedField<EJson::Array>(TEXT("position")))
+		if (bAutoLayout && !Entry->HasTypedField(TEXT("position"), EJson::Array))
 		{
 			int32 Col = i % 5;
 			int32 Row = i / 5;

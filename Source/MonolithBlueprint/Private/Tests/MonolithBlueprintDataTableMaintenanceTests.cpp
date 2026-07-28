@@ -189,7 +189,7 @@ bool FMonolithBlueprintDataTableMaintenanceDryRunTest::RunTest(const FString& Pa
 		int32 FieldsSet = 0;
 		TestEqual(TEXT("two fields are imported"), Result.Result.IsValid() && Result.Result->TryGetNumberField(TEXT("fields_set"), FieldsSet) ? FieldsSet : 0, 2);
 		TestTrue(TEXT("Count appears in set_fields"), JsonStringArrayContains(Result.Result, TEXT("set_fields"), TEXT("Count")));
-		TestFalse(TEXT("no fields are skipped"), Result.Result.IsValid() && Result.Result->HasTypedField<EJson::Array>(TEXT("skipped_fields")));
+		TestFalse(TEXT("no fields are skipped"), Result.Result.IsValid() && Result.Result->HasTypedField(TEXT("skipped_fields"), EJson::Array));
 	}
 
 	return true;
