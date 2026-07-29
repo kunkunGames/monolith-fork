@@ -825,7 +825,7 @@ Unreal Engine C++ source code navigation. 1M+ symbols indexed. **12 actions** (1
 
 ## source_control
 
-Provider-backed source-control preparation and bounded Perforce inspection. **11 actions.** The canonical path parameter is `paths`; every path action also accepts the alias `files`, and either field may contain one string or an array of strings. Relative paths resolve from the project directory, while `/Game` object/package paths resolve through Unreal package mount points.
+Provider-backed source-control preparation and bounded Perforce inspection. **11 actions.** The canonical path parameter is `paths`; every path action also accepts the alias `files`, and either field may contain one string or an array of strings. Relative paths resolve from the project directory. A slash-prefixed input is treated as an Unreal package/object path only when its package mount point exists; `/home/...` and other POSIX absolute paths remain filesystem paths.
 
 Boolean options are strict JSON booleans. Pass `true` or `false`; quoted strings, numeric substitutes, and explicit `null` values return `-32602`.
 
@@ -835,7 +835,7 @@ Boolean options are strict JSON booleans. Pass `true` or `false`; quoted strings
 | `get_status` | `paths` or `files` | Normalized files and provider state (`checked_out`, `added`, `modified`, `conflicted`, capabilities, and other-user checkout details) |
 | `checkout` | `paths`/`files`, `dry_run?=false` | Check out through the active Unreal provider |
 | `add` | `paths`/`files`, `dry_run?=false` | Mark for add through the active Unreal provider |
-| `checkout_or_add` | `paths`/`files`, `dry_run?=false` | Plan or execute checkout for tracked files and add for eligible local/new files |
+| `checkout_or_add` | `paths`/`files`, `dry_run?=false` | Plan or execute checkout for tracked files and add for eligible local/new files; reports `ok=false` and performs no provider mutation when any path is blocked by another-user checkout, stale revision, or an unsupported state |
 | `delete` | `paths`/`files`, `dry_run?=false`, `confirm?=false` | Mark for delete; requires `confirm=true` unless dry-running |
 | `mark_for_delete` | same as `delete` | Explicitly named alias of the delete provider operation |
 | `revert` | `paths`/`files`, `dry_run?=false`, `confirm?=false` | Revert files; requires `confirm=true` unless dry-running |
@@ -843,9 +843,9 @@ Boolean options are strict JSON booleans. Pass `true` or `false`; quoted strings
 | `list_opened` | `changelist?`, `resolve_packages?=true`, `limit?=200` | Bounded `p4 -ztag opened -m (limit + 1)` with optional local/package resolution; `limit` is integral `1..5000` |
 | `map_depot_paths` | `paths` or `files` | Map up to 5,000 depot/client/local/package paths, preserving one result row per input |
 
-`delete`, `mark_for_delete`, `revert`, and `revert_unchanged` return `ok=false` without executing when neither `dry_run=true` nor `confirm=true` is supplied. An unavailable provider is reported explicitly as `available=false`; the action does not edit file attributes or select an alternate provider.
+`delete`, `mark_for_delete`, `revert`, and `revert_unchanged` return `ok=false` without executing when neither `dry_run=true` nor `confirm=true` is supplied. An unavailable provider is reported explicitly as `available=false`; the action does not edit file attributes or select an alternate provider. `checkout_or_add` distinguishes benign skips (already editable, already checked out/added, or a not-yet-created path when add-missing is disabled) from blocking skips; blocking preparation is fail-closed before checkout or add begins.
 
-Perforce mapping is bounded to 128 paths and 24,000 encoded characters per `p4 where` command, at most 40 commands per call. `list_opened` exposes `observed_count`, `returned_count`, `sentinel_record_count`, `count_is_lower_bound`, `has_more`, and `truncated`; treat `count` as exact only when `count_is_lower_bound=false`.
+Perforce mapping is bounded to 128 paths and 24,000 encoded characters per `p4 where` command, at most 40 commands per call, and a 30-second deadline per process. A timeout terminates the process tree, marks the current and unstarted batches with explicit diagnostics, and launches no further batches. Windows and Unix command lines use platform-compatible argument quoting. `list_opened` exposes `observed_count`, `returned_count`, `sentinel_record_count`, `count_is_lower_bound`, `has_more`, and `truncated`; treat `count` as exact only when `count_is_lower_bound=false`.
 
 ---
 

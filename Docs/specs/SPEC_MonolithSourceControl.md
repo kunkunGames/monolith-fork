@@ -47,9 +47,9 @@ The module does not edit file contents, submit or shelve changelists, create bra
 |------|-------|----------|
 | 1. Dispatch | `FMonolithToolRegistry` | Applies aliases and required-field checks, then invokes the registered handler |
 | 2. Parameter validation | `FMonolithSourceControlActions` / `MonolithSourceControlP4` | Rejects invalid types, bounds, changelists, and command arguments before provider or process work |
-| 3. Path normalization | `FMonolithSourceControlUtils` | Resolves relative paths from `FPaths::ProjectDir()` and converts `/Game` package/object paths to filenames |
-| 4. Provider operation | Active `ISourceControlProvider` | Executes status, checkout, add, delete, or revert synchronously |
-| 5. Perforce inspection | `p4 -ztag` through `FPlatformProcess::ExecProcess` | Reads opened records or maps depot paths in bounded command batches |
+| 3. Path normalization | `FMonolithSourceControlUtils` | Resolves relative paths from `FPaths::ProjectDir()`, converts only paths with registered Unreal mount points to filenames, and preserves POSIX absolute filesystem paths |
+| 4. Provider operation | Active `ISourceControlProvider` | Classifies preparation states, fails closed before mutation when any path is blocked, then executes status, checkout, add, delete, or revert synchronously |
+| 5. Perforce inspection | `p4 -ztag` through `FPlatformProcess::CreateProc` | Captures stdout/stderr through pipes, enforces a monotonic deadline, and reads opened records or maps depot paths in bounded command batches |
 | 6. Response | Action handler | Returns provider identity, per-path state/decision rows, command result, and bounded-count details |
 
 The `files` alias is rewritten to the canonical `paths` field by the registry. Both fields accept either a single non-empty string or a non-empty string array.
@@ -64,7 +64,7 @@ The `files` alias is rewritten to the canonical `paths` field by the registry. B
 | `get_status` | `paths` or `files` | Returns normalized paths and source-control state fields when the provider is available |
 | `checkout` | `paths`/`files`, `dry_run=false` | Checks files out through the active provider; dry-run reports state without executing |
 | `add` | `paths`/`files`, `dry_run=false` | Marks files for add; dry-run reports state without executing |
-| `checkout_or_add` | `paths`/`files`, `dry_run=false` | Checks out source-controlled files and adds eligible local or not-yet-created files |
+| `checkout_or_add` | `paths`/`files`, `dry_run=false` | Checks out source-controlled files and adds eligible local or not-yet-created files; blocking preparation states abort the entire provider mutation |
 | `delete` | `paths`/`files`, `dry_run=false`, `confirm=false` | Marks files for delete; execution requires `confirm=true` |
 | `mark_for_delete` | same as `delete` | Explicitly named alias using the same provider operation and confirmation contract |
 | `revert` | `paths`/`files`, `dry_run=false`, `confirm=false` | Reverts files; execution requires `confirm=true` |
@@ -83,6 +83,8 @@ All boolean fields are strict JSON booleans. Quoted strings, numbers, and explic
 | `dry_run=true` | Reports normalized paths and provider states/decisions without executing a provider mutation |
 | Delete or revert family without `confirm=true` | Returns a successful transport result with `ok=false` and a confirmation message; no provider operation runs |
 | Provider disabled or unavailable | Returns provider details with `available=false`; no alternate provider, file-attribute edit, or local substitute is attempted |
+| Already editable, checked out, added, or intentionally not-yet-created | Reports a benign skip with `safe_to_proceed=true`; no unnecessary provider operation runs |
+| Checked out by another user, not at head revision, or otherwise unsupported | Reports a blocking skip with `safe_to_proceed=false`, returns `ok=false`, and performs no checkout/add operation for any path |
 | Provider operation succeeds/fails/cancels | Returns the explicit command result plus provider messages and refreshed states |
 | Mixed valid/invalid path array | Preserves a row for each input; execution proceeds only when at least one valid normalized file remains |
 
@@ -98,12 +100,13 @@ All boolean fields are strict JSON booleans. Quoted strings, numbers, and explic
 | Paths per `p4 where` command | 128 | Batch builder |
 | Encoded argument characters per command | 24,000 | Batch builder |
 | `p4 where` commands per call | 40 | Batch planner |
+| Perforce child-process duration | 30 seconds | Monotonic polling deadline followed by process-tree termination |
 | `list_opened` result limit | 1..5,000 | Integral parameter validation |
 | Opened-result probe | `limit + 1` | One sentinel row distinguishes exact counts from lower bounds |
 
 `list_opened` reports `observed_count`, `returned_count`, `sentinel_record_count`, `count_is_lower_bound`, `has_more`, and `truncated`; callers must not treat the bounded observation as an exact depot-wide total when `count_is_lower_bound=true`.
 
-`map_depot_paths` de-duplicates depot queries for process efficiency while preserving input order and one output row per raw input. The last matching `p4 where` record wins, including exclusion/overlay records. Control characters are rejected before command construction, and Windows arguments use explicit quoting.
+`map_depot_paths` de-duplicates depot queries for process efficiency while preserving input order and one output row per raw input. The last matching `p4 where` record wins, including exclusion/overlay records. Control characters are rejected before command construction. Windows command lines use CRT-compatible quoting; Unix command lines use Unreal child-process-compatible double-quoted arguments and reject embedded double quotes. If a Perforce child reaches the deadline, its process tree is terminated, its remaining output is drained, the current and unstarted batches receive timeout diagnostics, and no later batch launches.
 
 ---
 
@@ -112,7 +115,7 @@ All boolean fields are strict JSON booleans. Quoted strings, numbers, and explic
 | Error class | JSON-RPC code | Examples |
 |-------------|---------------|----------|
 | Invalid parameters | `-32602` | Wrong boolean type, invalid `paths`, non-integral/out-of-range `limit`, malformed changelist, excessive path count |
-| Backend/process failure | `-32603` | `p4` executable cannot start or returns an unhandled failure |
+| Backend/process failure | `-32603` | `p4` executable cannot start, exceeds the process deadline, or returns an unhandled failure |
 | Provider unavailable | Successful action envelope with `available=false` | Unreal provider disabled or disconnected |
 
 Input errors identify the rejected field. The module never silently converts string or numeric values into booleans and never substitutes a guessed changelist or depot path.
@@ -136,7 +139,8 @@ Input errors identify the rejected field. The module never silently converts str
 |------|-------------------|
 | Catalog | Generated registry scan contains exactly 11 new `source_control.*` actions and no unrelated action delta |
 | Parameter contract | `Monolith.SourceControl.ParamValidation.*` passes strict-type, alias, registration, and path-mapping cases |
-| Perforce batching | `Monolith.SourceControl.P4WhereBatch.*` passes parsing, bounds, quoting, batching, sentinel, and mapping-order cases |
+| Perforce batching | `Monolith.SourceControl.P4WhereBatch.*` passes parsing, bounds, Windows/Unix quoting, timeout termination, batching, sentinel, and mapping-order cases |
+| Preparation safety | `Monolith.SourceControl.PrepareDecision.*` proves benign and blocking provider states cannot be conflated |
 | Compile floor | Fresh linked Editor builds pass on Unreal Engine 5.7 and 5.8 |
 | Repository checks | Static checks, `git diff --check`, and a final changed-file audit pass |
 | Visual proof | Not applicable: this module has no rendered UI, gameplay, asset-presentation, or editor-panel surface |

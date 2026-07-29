@@ -36,13 +36,13 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `get_status` | `paths*` or `files*` | Return source-control status for filesystem or /Game package paths. |
 | `[w] checkout` | `paths*` or `files*`, `dry_run?=false` | Check out files through the active Unreal source-control provider. |
 | `[w] add` | `paths*` or `files*`, `dry_run?=false` | Mark files for add through the active Unreal source-control provider. |
-| `[w] checkout_or_add` | `paths*` or `files*`, `dry_run?=false` | Prepare files for mutation by checking out existing source-controlled files or adding local files. |
+| `[w] checkout_or_add` | `paths*` or `files*`, `dry_run?=false` | Prepare files for mutation by checking out existing source-controlled files or adding local files. Any other-user checkout, stale revision, or unsupported state returns `ok=false` before all provider mutations. |
 | `[w] delete` | `paths*` or `files*`, `confirm?=false`, `dry_run?=false` | Mark files for delete. Requires `confirm=true` unless `dry_run=true`. |
 | `[w] mark_for_delete` | `paths*` or `files*`, `confirm?=false`, `dry_run?=false` | Explicit mark-for-delete alias of `delete`. Requires `confirm=true` unless `dry_run=true`. |
 | `[w] revert` | `paths*` or `files*`, `confirm?=false`, `dry_run?=false` | Revert files. Requires `confirm=true` unless `dry_run=true`. |
 | `[w] revert_unchanged` | `paths*` or `files*`, `confirm?=false`, `dry_run?=false` | Revert unchanged files. Requires `confirm=true` unless `dry_run=true`. |
 | `list_opened` | `changelist?` `resolve_packages?=true` `limit?=200` (`1..5000`) | Read-only bounded `p4 -ztag opened -m (limit + 1)`, optionally scoped to empty/`default`/ASCII-decimal changelist, with depot-to-local/package mapping and explicit exact-vs-lower-bound count fields. |
-| `map_depot_paths` | `paths*` or `files*` (max 5,000 raw entries) | Read-only mapping for depot, client, local filesystem, `/Game` package, or object paths. Uses at most 40 commands, 128 paths and 24,000 encoded characters per command; control characters are rejected before process launch. |
+| `map_depot_paths` | `paths*` or `files*` (max 5,000 raw entries) | Read-only mapping for depot, client, local filesystem, `/Game` package, or object paths. Uses at most 40 commands, 128 paths and 24,000 encoded characters per command, with a 30-second process deadline; control characters are rejected before process launch. |
 
 ## Common workflows
 
@@ -118,6 +118,9 @@ source_control_query("get_status", { paths: ["/Game/UI/Icons/T_icon_skill", "/Ga
 - This skill performs the source-control verb only. Editing the file content (`.ini`, asset package) is a separate step in **unreal-config** / **unreal-asset** after checkout.
 - `list_opened` and `map_depot_paths` are explicitly read-only, bounded mapping primitives. `list_opened` never performs an unbounded exact-count query; treat `count` as exact only when `count_is_lower_bound=false`. For validation workflows, prefer `editor.plan_content_validation_changeset` / `editor.validate_changeset_assets` after this layer proves the changelist or path mapping.
 - Prefer the canonical `paths` array for file lists. The schema also accepts `files` and a single path string for compatibility. Boolean options are strict JSON booleans: pass `true` or `false`, never quoted strings or numeric substitutes. `get_status` accepts both filesystem and `/Game` package paths; resolve `/Game` asset paths through the active provider rather than assuming a depot/disk layout.
+- A slash prefix alone does not make a path an Unreal package. Registered mount points such as `/Game/...` are packages; POSIX absolute paths such as `/home/build/project/Config/DefaultEngine.ini` remain filesystem paths.
+- Treat `checkout_or_add.ok=false` or any row with `blocking=true` / `safe_to_proceed=false` as a hard stop. Do not mutate the target afterward: the file may be checked out by another user, stale, or unsupported by the provider.
+- Perforce subprocesses have a 30-second deadline. Timeout diagnostics apply to the timed-out and unstarted batches; retry only after fixing provider/network availability rather than assuming unmapped rows are valid.
 
 ## Notes
 

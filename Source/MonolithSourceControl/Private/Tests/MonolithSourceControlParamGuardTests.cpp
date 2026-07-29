@@ -282,30 +282,36 @@ bool FMonolithSourceControlDocumentedInputTest::RunTest(const FString& Parameter
 		TArray<TSharedPtr<FJsonValue>> Paths;
 		Paths.Add(MakeShared<FJsonValueString>(ProjectFilename));
 		Paths.Add(MakeShared<FJsonValueString>(TEXT("/Game/SourceControlTest/SC_TestAsset.SC_TestAsset")));
+		Paths.Add(MakeShared<FJsonValueString>(TEXT("/home/monolith/Project/Content/Foo.uasset")));
 		Paths.Add(MakeShared<FJsonValueString>(TEXT("   ")));
 		Params->SetArrayField(TEXT("files"), Paths);
 
 		const FMonolithActionResult Result =
 			FMonolithToolRegistry::Get().ExecuteAction(TEXT("source_control"), TEXT("map_depot_paths"), Params);
-		bOk &= TestTrue(TEXT("source_control.map_depot_paths accepts relative and package paths"), Result.bSuccess);
+		bOk &= TestTrue(TEXT("source_control.map_depot_paths accepts relative, package, and POSIX paths"), Result.bSuccess);
 
 		const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
 		const bool bHasExpectedRows =
 			Result.Result.IsValid()
 			&& Result.Result->TryGetArrayField(TEXT("paths"), Rows)
 			&& Rows
-			&& Rows->Num() == 3;
+			&& Rows->Num() == 4;
 		bOk &= TestTrue(TEXT("source_control.map_depot_paths returns one row per input"), bHasExpectedRows);
 		if (bHasExpectedRows)
 		{
 			const TSharedPtr<FJsonObject> RelativeRow = (*Rows)[0]->AsObject();
 			const TSharedPtr<FJsonObject> PackageRow = (*Rows)[1]->AsObject();
-			const TSharedPtr<FJsonObject> WhitespaceRow = (*Rows)[2]->AsObject();
+			const TSharedPtr<FJsonObject> PosixRow = (*Rows)[2]->AsObject();
+			const TSharedPtr<FJsonObject> WhitespaceRow = (*Rows)[3]->AsObject();
 
 			FString RelativeLocalPath;
 			FString PackageLocalPath;
+			FString PosixLocalPath;
+			FString PosixPackagePath;
 			RelativeRow->TryGetStringField(TEXT("local_path"), RelativeLocalPath);
 			PackageRow->TryGetStringField(TEXT("local_path_no_extension"), PackageLocalPath);
+			PosixRow->TryGetStringField(TEXT("local_path"), PosixLocalPath);
+			PosixRow->TryGetStringField(TEXT("package_path"), PosixPackagePath);
 
 			const FString AbsoluteProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 			FString ExpectedProjectPath = FPaths::Combine(AbsoluteProjectDir, ProjectFilename);
@@ -317,6 +323,18 @@ bool FMonolithSourceControlDocumentedInputTest::RunTest(const FString& Parameter
 			bOk &= TestTrue(
 				TEXT("package local paths point into the project Content directory"),
 				PackageLocalPath.Contains(TEXT("/Content/SourceControlTest/SC_TestAsset")));
+
+			bool bPosixValid = false;
+			bool bPosixIsPackage = true;
+			PosixRow->TryGetBoolField(TEXT("valid"), bPosixValid);
+			PosixRow->TryGetBoolField(TEXT("is_package"), bPosixIsPackage);
+			bOk &= TestTrue(TEXT("POSIX absolute paths remain valid filesystem paths"), bPosixValid);
+			bOk &= TestFalse(TEXT("POSIX absolute paths are not misclassified as package paths"), bPosixIsPackage);
+			bOk &= TestEqual(
+				TEXT("POSIX absolute paths retain their normalized local identity"),
+				PosixLocalPath,
+				FString(TEXT("/home/monolith/Project/Content/Foo.uasset")));
+			bOk &= TestTrue(TEXT("POSIX absolute paths do not acquire a package path"), PosixPackagePath.IsEmpty());
 
 			bool bWhitespaceValid = true;
 			WhitespaceRow->TryGetBoolField(TEXT("valid"), bWhitespaceValid);

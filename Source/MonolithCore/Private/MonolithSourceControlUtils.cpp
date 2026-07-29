@@ -1,5 +1,6 @@
 #include "MonolithSourceControlUtils.h"
 
+#include "MonolithSourceControlPrepareDecision.h"
 #include "Dom/JsonValue.h"
 #include "HAL/FileManager.h"
 #include "ISourceControlModule.h"
@@ -142,6 +143,46 @@ bool FMonolithSourceControlUtils::IsProviderAvailable(FString& OutReason)
 	return true;
 }
 
+bool FMonolithSourceControlUtils::TryGetMountedPackageName(
+	const FString& Input,
+	FString& OutPackageName)
+{
+	OutPackageName.Reset();
+
+	FString Candidate = Input.TrimStartAndEnd();
+	if (Candidate.IsEmpty())
+	{
+		return false;
+	}
+
+	Candidate.ReplaceInline(TEXT("\\"), TEXT("/"));
+	if (Candidate.EndsWith(TEXT("'")))
+	{
+		Candidate = FPackageName::ExportTextPathToObjectPath(Candidate);
+	}
+	if (!Candidate.StartsWith(TEXT("/")))
+	{
+		return false;
+	}
+
+	Candidate = Candidate.Contains(TEXT("."))
+		? FPackageName::ObjectPathToPackageName(Candidate)
+		: Candidate;
+	if (!FPackageName::IsValidLongPackageName(Candidate, false))
+	{
+		return false;
+	}
+
+	const FName MountPoint = FPackageName::GetPackageMountPoint(Candidate, false);
+	if (MountPoint.IsNone() || !FPackageName::MountPointExists(MountPoint.ToString()))
+	{
+		return false;
+	}
+
+	OutPackageName = MoveTemp(Candidate);
+	return true;
+}
+
 bool FMonolithSourceControlUtils::PackageNameToFilename(const FString& PackageName, FString& OutFile, FString& OutError)
 {
 	FString Normalized = PackageName.TrimStartAndEnd();
@@ -201,16 +242,10 @@ bool FMonolithSourceControlUtils::NormalizePathForSourceControl(const FString& I
 		Path = FPackageName::ExportTextPathToObjectPath(Path);
 	}
 
-	if (Path.StartsWith(TEXT("/")))
+	FString PackageName;
+	if (TryGetMountedPackageName(Path, PackageName))
 	{
-		FString PackageName = Path.Contains(TEXT("."))
-			? FPackageName::ObjectPathToPackageName(Path)
-			: Path;
-
-		if (FPackageName::IsValidLongPackageName(PackageName, false))
-		{
-			return PackageNameToFilename(PackageName, OutFile, OutError);
-		}
+		return PackageNameToFilename(PackageName, OutFile, OutError);
 	}
 
 	if (FPaths::IsRelative(Path))
@@ -220,6 +255,7 @@ bool FMonolithSourceControlUtils::NormalizePathForSourceControl(const FString& I
 
 	OutFile = FPaths::ConvertRelativePathToFull(Path);
 	FPaths::NormalizeFilename(OutFile);
+	OutError.Reset();
 	return true;
 }
 
@@ -231,6 +267,7 @@ TSharedPtr<FJsonObject> FMonolithSourceControlUtils::CheckoutOrAddFiles(
 	TArray<TSharedPtr<FJsonValue>> PathRows;
 	Files.Reserve(Inputs.Num());
 	PathRows.Reserve(Inputs.Num());
+	int32 InvalidPathCount = 0;
 
 	for (const FString& Input : Inputs)
 	{
@@ -249,6 +286,7 @@ TSharedPtr<FJsonObject> FMonolithSourceControlUtils::CheckoutOrAddFiles(
 		{
 			Row->SetBoolField(TEXT("valid"), false);
 			Row->SetStringField(TEXT("error"), Error);
+			++InvalidPathCount;
 		}
 
 		PathRows.Add(MakeShared<FJsonValueObject>(Row));
@@ -262,11 +300,14 @@ TSharedPtr<FJsonObject> FMonolithSourceControlUtils::CheckoutOrAddFiles(
 	Result->SetArrayField(TEXT("paths"), PathRows);
 	Result->SetNumberField(TEXT("input_count"), Inputs.Num());
 	Result->SetNumberField(TEXT("file_count"), Files.Num());
+	Result->SetNumberField(TEXT("invalid_path_count"), InvalidPathCount);
 
 	FString AvailabilityReason;
 	if (!IsProviderAvailable(AvailabilityReason))
 	{
-		Result->SetBoolField(TEXT("ok"), Options.bUnavailableIsSuccess);
+		Result->SetBoolField(
+			TEXT("ok"),
+			Options.bUnavailableIsSuccess && Inputs.Num() > 0 && Files.Num() > 0 && InvalidPathCount == 0);
 		Result->SetBoolField(TEXT("available"), false);
 		Result->SetBoolField(TEXT("skipped"), true);
 		Result->SetStringField(TEXT("message"), AvailabilityReason);
@@ -278,6 +319,8 @@ TSharedPtr<FJsonObject> FMonolithSourceControlUtils::CheckoutOrAddFiles(
 	TArray<FString> FilesToCheckout;
 	TArray<FString> FilesToAdd;
 	TArray<TSharedPtr<FJsonValue>> Decisions;
+	int32 BenignSkipCount = 0;
+	int32 BlockingSkipCount = 0;
 	for (const FString& File : Files)
 	{
 		FSourceControlStatePtr State = Provider.GetState(File, EStateCacheUsage::ForceUpdate);
@@ -285,30 +328,50 @@ TSharedPtr<FJsonObject> FMonolithSourceControlUtils::CheckoutOrAddFiles(
 		const bool bFileExists = IFileManager::Get().FileExists(*File);
 		Decision->SetBoolField(TEXT("file_exists"), bFileExists);
 
-		if (State.IsValid() && (State->IsCheckedOut() || State->IsAdded()))
+		MonolithSourceControlPrepare::FStateFacts StateFacts;
+		if (State.IsValid())
 		{
-			Decision->SetStringField(TEXT("planned_action"), TEXT("skip"));
-			Decision->SetStringField(TEXT("reason"), TEXT("already checked out or added"));
+			FString OtherUser;
+			StateFacts.bStateValid = true;
+			StateFacts.bSourceControlled = State->IsSourceControlled();
+			StateFacts.bCurrent = State->IsCurrent();
+			StateFacts.bCheckedOut = State->IsCheckedOut();
+			StateFacts.bAdded = State->IsAdded();
+			StateFacts.bCheckedOutOther = State->IsCheckedOutOther(&OtherUser);
+			StateFacts.bCanAdd = State->CanAdd();
+			StateFacts.bCanCheckout = State->CanCheckout();
+			StateFacts.bCanEdit = State->CanEdit();
 		}
-		else if (!bFileExists && !Options.bAddMissingFiles)
+
+		const MonolithSourceControlPrepare::FDecision PreparationDecision =
+			MonolithSourceControlPrepare::Classify(
+				StateFacts,
+				bFileExists,
+				Options.bAddMissingFiles);
+		Decision->SetStringField(
+			TEXT("planned_action"),
+			MonolithSourceControlPrepare::ToPlannedAction(PreparationDecision.Kind));
+		Decision->SetStringField(TEXT("reason"), PreparationDecision.Reason);
+		Decision->SetBoolField(
+			TEXT("blocking"),
+			PreparationDecision.Kind == MonolithSourceControlPrepare::EDecision::BlockingSkip);
+		Decision->SetBoolField(TEXT("safe_to_proceed"), PreparationDecision.bSafeToProceed);
+
+		if (PreparationDecision.Kind == MonolithSourceControlPrepare::EDecision::Add)
 		{
-			Decision->SetStringField(TEXT("planned_action"), TEXT("skip"));
-			Decision->SetStringField(TEXT("reason"), TEXT("file does not exist yet"));
-		}
-		else if (!State.IsValid() || (!State->IsSourceControlled() && State->CanAdd()))
-		{
-			Decision->SetStringField(TEXT("planned_action"), TEXT("add"));
 			FilesToAdd.Add(File);
 		}
-		else if (State->CanCheckout())
+		else if (PreparationDecision.Kind == MonolithSourceControlPrepare::EDecision::Checkout)
 		{
-			Decision->SetStringField(TEXT("planned_action"), TEXT("checkout"));
 			FilesToCheckout.Add(File);
+		}
+		else if (PreparationDecision.Kind == MonolithSourceControlPrepare::EDecision::BenignSkip)
+		{
+			++BenignSkipCount;
 		}
 		else
 		{
-			Decision->SetStringField(TEXT("planned_action"), TEXT("skip"));
-			Decision->SetStringField(TEXT("reason"), TEXT("provider state cannot be added or checked out"));
+			++BlockingSkipCount;
 		}
 
 		Decisions.Add(MakeShared<FJsonValueObject>(Decision));
@@ -317,10 +380,29 @@ TSharedPtr<FJsonObject> FMonolithSourceControlUtils::CheckoutOrAddFiles(
 	Result->SetArrayField(TEXT("decisions"), Decisions);
 	Result->SetNumberField(TEXT("checkout_count"), FilesToCheckout.Num());
 	Result->SetNumberField(TEXT("add_count"), FilesToAdd.Num());
+	Result->SetNumberField(TEXT("benign_skip_count"), BenignSkipCount);
+	Result->SetNumberField(TEXT("blocking_skip_count"), BlockingSkipCount);
+
+	const bool bPreparationSafe =
+		Inputs.Num() > 0
+		&& Files.Num() > 0
+		&& InvalidPathCount == 0
+		&& BlockingSkipCount == 0;
 
 	if (Options.bDryRun)
 	{
-		Result->SetBoolField(TEXT("ok"), true);
+		Result->SetBoolField(TEXT("ok"), bPreparationSafe);
+		return Result;
+	}
+
+	if (!bPreparationSafe)
+	{
+		Result->SetBoolField(TEXT("ok"), false);
+		Result->SetBoolField(TEXT("skipped"), true);
+		Result->SetStringField(
+			TEXT("message"),
+			TEXT("Source-control preparation was not executed because one or more paths are invalid or blocked."));
+		Result->SetArrayField(TEXT("states"), GetStateRows(Provider, Files));
 		return Result;
 	}
 

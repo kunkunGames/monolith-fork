@@ -7,6 +7,7 @@
 #include "Dom/JsonValue.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformProcess.h"
+#include "HAL/PlatformTime.h"
 #include "ISourceControlModule.h"
 #include "ISourceControlOperation.h"
 #include "ISourceControlProvider.h"
@@ -321,7 +322,108 @@ namespace
 		OutStdOut.Reset();
 		OutStdErr.Reset();
 		OutReturnCode = INDEX_NONE;
-		return FPlatformProcess::ExecProcess(TEXT("p4"), *Args, &OutReturnCode, &OutStdOut, &OutStdErr);
+
+		void* StdOutRead = nullptr;
+		void* StdOutWrite = nullptr;
+		void* StdErrRead = nullptr;
+		void* StdErrWrite = nullptr;
+		if (!FPlatformProcess::CreatePipe(StdOutRead, StdOutWrite))
+		{
+			OutStdErr = TEXT("Failed to create the p4 stdout pipe.");
+			return false;
+		}
+		if (!FPlatformProcess::CreatePipe(StdErrRead, StdErrWrite))
+		{
+			FPlatformProcess::ClosePipe(StdOutRead, StdOutWrite);
+			OutStdErr = TEXT("Failed to create the p4 stderr pipe.");
+			return false;
+		}
+
+		uint32 ProcessId = 0;
+		FProcHandle Process = FPlatformProcess::CreateProc(
+			TEXT("p4"),
+			*Args,
+			false,
+			true,
+			true,
+			&ProcessId,
+			0,
+			nullptr,
+			StdOutWrite,
+			nullptr,
+			StdErrWrite);
+		if (!Process.IsValid())
+		{
+			FPlatformProcess::ClosePipe(StdOutRead, StdOutWrite);
+			FPlatformProcess::ClosePipe(StdErrRead, StdErrWrite);
+			OutStdErr = TEXT("Failed to launch p4.");
+			return false;
+		}
+
+		// The child inherited its write handles during CreateProc; the parent
+		// keeps only the read ends so pipe lifetime cannot mask process exit.
+		FPlatformProcess::ClosePipe(nullptr, StdOutWrite);
+		FPlatformProcess::ClosePipe(nullptr, StdErrWrite);
+		StdOutWrite = nullptr;
+		StdErrWrite = nullptr;
+
+		MonolithSourceControlP4::FProcessPollCallbacks Callbacks;
+		Callbacks.IsRunning = [&Process]()
+		{
+			return FPlatformProcess::IsProcRunning(Process);
+		};
+		Callbacks.TerminateAndWait = [&Process]()
+		{
+			FPlatformProcess::TerminateProc(Process, true);
+			FPlatformProcess::WaitForProc(Process);
+		};
+		Callbacks.ReadStdOut = [StdOutRead]()
+		{
+			return FPlatformProcess::ReadPipe(StdOutRead);
+		};
+		Callbacks.ReadStdErr = [StdErrRead]()
+		{
+			return FPlatformProcess::ReadPipe(StdErrRead);
+		};
+		Callbacks.GetReturnCode = [&Process](int32& ReturnCode)
+		{
+			return FPlatformProcess::GetProcReturnCode(Process, &ReturnCode);
+		};
+		Callbacks.NowSeconds = []()
+		{
+			return FPlatformTime::Seconds();
+		};
+		Callbacks.Sleep = [](float Seconds)
+		{
+			FPlatformProcess::Sleep(Seconds);
+		};
+
+		const MonolithSourceControlP4::FProcessPollResult PollResult =
+			MonolithSourceControlP4::PollProcessWithTimeout(
+				Callbacks,
+				MonolithSourceControlP4::CommandTimeoutSeconds);
+		OutStdOut = PollResult.StdOut;
+		OutStdErr = PollResult.StdErr;
+		OutReturnCode = PollResult.ReturnCode;
+		if (PollResult.bTimedOut)
+		{
+			if (!OutStdErr.IsEmpty() && !OutStdErr.EndsWith(TEXT("\n")))
+			{
+				OutStdErr += TEXT("\n");
+			}
+			OutStdErr += FString::Printf(
+				TEXT("p4 command timed out after %.0f seconds and was terminated."),
+				MonolithSourceControlP4::CommandTimeoutSeconds);
+		}
+		else if (!PollResult.bReturnCodeAvailable)
+		{
+			OutStdErr += TEXT("p4 exited without an available return code.");
+		}
+
+		FPlatformProcess::CloseProc(Process);
+		FPlatformProcess::ClosePipe(StdOutRead, nullptr);
+		FPlatformProcess::ClosePipe(StdErrRead, nullptr);
+		return true;
 	}
 
 	TArray<TMap<FString, FString>> ParseTaggedRecords(const FString& Output)
@@ -396,10 +498,14 @@ namespace
 	FString LocalPathToPackagePath(FString LocalPath)
 	{
 		FPaths::NormalizeFilename(LocalPath);
-		FString PackageName;
-		if (FPackageName::TryConvertFilenameToLongPackageName(LocalPath, PackageName))
+		FString CandidatePackageName;
+		FString MountedPackageName;
+		if (FPackageName::TryConvertFilenameToLongPackageName(LocalPath, CandidatePackageName)
+			&& FMonolithSourceControlUtils::TryGetMountedPackageName(
+				CandidatePackageName,
+				MountedPackageName))
 		{
-			return PackageName;
+			return MountedPackageName;
 		}
 		return FString();
 	}
@@ -828,39 +934,62 @@ FMonolithActionResult FMonolithSourceControlActions::HandleMapDepotPaths(const T
 					Mapping ? Mapping->Error : TEXT("No batched p4 where result was produced for this depot path."));
 			}
 		}
-		else if (Input.StartsWith(TEXT("/")))
-		{
-			FString PackageName = Input.Contains(TEXT("."))
-				? FPackageName::ObjectPathToPackageName(Input)
-				: Input;
-			Row->SetBoolField(TEXT("valid"), true);
-			Row->SetStringField(TEXT("package_path"), PackageName);
-			FString Filename;
-			if (FPackageName::TryConvertLongPackageNameToFilename(PackageName, Filename))
-			{
-				Filename = FPaths::ConvertRelativePathToFull(Filename);
-				FPaths::NormalizeFilename(Filename);
-				Row->SetStringField(TEXT("local_path_no_extension"), Filename);
-			}
-			Row->SetBoolField(TEXT("is_package"), true);
-		}
 		else
 		{
-			if (FPaths::IsRelative(Input))
+			FString MountedPackageName;
+			if (FMonolithSourceControlUtils::TryGetMountedPackageName(Input, MountedPackageName))
 			{
-				const FString AbsoluteProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
-				LocalPath = FPaths::ConvertRelativePathToFull(AbsoluteProjectDir, Input);
+				FString Filename;
+				FString FilenameError;
+				if (!FMonolithSourceControlUtils::PackageNameToFilename(
+					MountedPackageName,
+					Filename,
+					FilenameError))
+				{
+					Row->SetBoolField(TEXT("valid"), false);
+					Row->SetStringField(TEXT("error"), FilenameError);
+					Rows.Add(MakeShared<FJsonValueObject>(Row));
+					continue;
+				}
+
+				FString FilenameWithoutExtension;
+				if (FPackageName::TryConvertLongPackageNameToFilename(
+					MountedPackageName,
+					FilenameWithoutExtension))
+				{
+					FilenameWithoutExtension =
+						FPaths::ConvertRelativePathToFull(FilenameWithoutExtension);
+					FPaths::NormalizeFilename(FilenameWithoutExtension);
+					Row->SetStringField(
+						TEXT("local_path_no_extension"),
+						FilenameWithoutExtension);
+				}
+
+				Row->SetBoolField(TEXT("valid"), true);
+				Row->SetStringField(TEXT("local_path"), Filename);
+				Row->SetStringField(TEXT("package_path"), MountedPackageName);
+				Row->SetBoolField(TEXT("is_package"), true);
 			}
 			else
 			{
-				LocalPath = FPaths::ConvertRelativePathToFull(Input);
+				FString NormalizeError;
+				if (!FMonolithSourceControlUtils::NormalizePathForSourceControl(
+					Input,
+					LocalPath,
+					NormalizeError))
+				{
+					Row->SetBoolField(TEXT("valid"), false);
+					Row->SetStringField(TEXT("error"), NormalizeError);
+					Rows.Add(MakeShared<FJsonValueObject>(Row));
+					continue;
+				}
+
+				PackagePath = LocalPathToPackagePath(LocalPath);
+				Row->SetBoolField(TEXT("valid"), true);
+				Row->SetStringField(TEXT("local_path"), LocalPath);
+				Row->SetStringField(TEXT("package_path"), PackagePath);
+				Row->SetBoolField(TEXT("is_package"), !PackagePath.IsEmpty());
 			}
-			FPaths::NormalizeFilename(LocalPath);
-			PackagePath = LocalPathToPackagePath(LocalPath);
-			Row->SetBoolField(TEXT("valid"), true);
-			Row->SetStringField(TEXT("local_path"), LocalPath);
-			Row->SetStringField(TEXT("package_path"), PackagePath);
-			Row->SetBoolField(TEXT("is_package"), !PackagePath.IsEmpty());
 		}
 
 		Rows.Add(MakeShared<FJsonValueObject>(Row));

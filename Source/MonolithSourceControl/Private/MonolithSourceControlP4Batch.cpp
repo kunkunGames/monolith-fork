@@ -254,10 +254,19 @@ namespace MonolithSourceControlP4
 #if PLATFORM_WINDOWS
 		return QuoteWindowsCommandLineArgument(Argument);
 #else
-		FString Escaped = Argument;
-		Escaped.ReplaceInline(TEXT("'"), TEXT("'\"'\"'"));
-		return TEXT("'") + Escaped + TEXT("'");
+		return QuoteUnrealUnixCommandLineArgument(Argument);
 #endif
+	}
+
+	FString QuoteUnrealUnixCommandLineArgument(const FString& Argument)
+	{
+		// FUnixPlatformProcess::CreateProc tokenizes the parameter string itself;
+		// it does not invoke a POSIX shell and therefore does not interpret
+		// shell-style single quotes. Its parser uses double quotes to retain
+		// whitespace. ValidateCommandLineArgument rejects embedded double quotes
+		// on Unix because that parser has no general-purpose escape sequence for
+		// a literal quote adjacent to arbitrary whitespace.
+		return TEXT("\"") + Argument + TEXT("\"");
 	}
 
 	bool ValidateCommandLineArgument(const FString& Argument, FString& OutError)
@@ -271,6 +280,15 @@ namespace MonolithSourceControlP4
 					Index);
 				return false;
 			}
+#if !PLATFORM_WINDOWS
+			if (Argument[Index] == TEXT('"'))
+			{
+				OutError = FString::Printf(
+					TEXT("command argument contains an unsupported double quote at index %d on this platform."),
+					Index);
+				return false;
+			}
+#endif
 		}
 		OutError.Reset();
 		return true;
@@ -373,6 +391,51 @@ namespace MonolithSourceControlP4
 		Window.bHasMore = Window.SentinelRecordCount > 0;
 		Window.bCountIsLowerBound = Window.bHasMore;
 		return Window;
+	}
+
+	FProcessPollResult PollProcessWithTimeout(
+		const FProcessPollCallbacks& Callbacks,
+		double TimeoutSeconds,
+		float PollIntervalSeconds)
+	{
+		FProcessPollResult Result;
+		if (!Callbacks.IsRunning
+			|| !Callbacks.TerminateAndWait
+			|| !Callbacks.ReadStdOut
+			|| !Callbacks.ReadStdErr
+			|| !Callbacks.GetReturnCode
+			|| !Callbacks.NowSeconds
+			|| !Callbacks.Sleep)
+		{
+			Result.StdErr = TEXT("Process polling callbacks are incomplete.");
+			return Result;
+		}
+
+		const double SafeTimeoutSeconds = FMath::Max(0.001, TimeoutSeconds);
+		const float SafePollIntervalSeconds = FMath::Max(0.001f, PollIntervalSeconds);
+		const double StartSeconds = Callbacks.NowSeconds();
+
+		while (Callbacks.IsRunning())
+		{
+			Result.StdOut += Callbacks.ReadStdOut();
+			Result.StdErr += Callbacks.ReadStdErr();
+			if (Callbacks.NowSeconds() - StartSeconds >= SafeTimeoutSeconds)
+			{
+				Callbacks.TerminateAndWait();
+				Result.bTimedOut = true;
+				Result.ReturnCode = TimedOutReturnCode;
+				break;
+			}
+			Callbacks.Sleep(SafePollIntervalSeconds);
+		}
+
+		Result.StdOut += Callbacks.ReadStdOut();
+		Result.StdErr += Callbacks.ReadStdErr();
+		if (!Result.bTimedOut)
+		{
+			Result.bReturnCodeAvailable = Callbacks.GetReturnCode(Result.ReturnCode);
+		}
+		return Result;
 	}
 
 	FDepotPathBatchResult ResolveDepotPathsBatched(
@@ -498,8 +561,9 @@ namespace MonolithSourceControlP4
 			return Result;
 		}
 
-		for (const TArray<FString>& Chunk : Chunks)
+		for (int32 ChunkIndex = 0; ChunkIndex < Chunks.Num(); ++ChunkIndex)
 		{
+			const TArray<FString>& Chunk = Chunks[ChunkIndex];
 			FString StdOut;
 			FString StdErr;
 			int32 ReturnCode = INDEX_NONE;
@@ -512,6 +576,26 @@ namespace MonolithSourceControlP4
 					Result.Mappings.FindChecked(Path).Error = TEXT("Failed to execute p4 where.");
 				}
 				continue;
+			}
+
+			if (ReturnCode == TimedOutReturnCode)
+			{
+				const FString TimeoutError = StdErr.IsEmpty()
+					? TEXT("p4 where timed out.")
+					: StdErr;
+				for (const FString& Path : Chunk)
+				{
+					Result.Mappings.FindChecked(Path).Error = TimeoutError;
+				}
+				for (int32 RemainingIndex = ChunkIndex + 1; RemainingIndex < Chunks.Num(); ++RemainingIndex)
+				{
+					for (const FString& Path : Chunks[RemainingIndex])
+					{
+						Result.Mappings.FindChecked(Path).Error =
+							TEXT("p4 where was skipped because a prior command timed out.");
+					}
+				}
+				break;
 			}
 
 			const TArray<TMap<FString, FString>> Records = ParseTaggedRecords(StdOut);

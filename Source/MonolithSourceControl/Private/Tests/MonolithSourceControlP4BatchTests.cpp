@@ -87,6 +87,38 @@ namespace
 		}
 		return Arguments;
 	}
+
+	TArray<FString> ParseUnrealUnixCommandLineReference(const FString& CommandLine)
+	{
+		TArray<FString> Arguments;
+		FString Current;
+		bool bInQuotes = false;
+		bool bHasArgument = false;
+		for (int32 Index = 0; Index <= CommandLine.Len(); ++Index)
+		{
+			const TCHAR Character =
+				Index < CommandLine.Len() ? CommandLine[Index] : TEXT('\0');
+			if (Character == TEXT('"'))
+			{
+				bInQuotes = !bInQuotes;
+				bHasArgument = true;
+				continue;
+			}
+			if (Character == TEXT('\0') || (FChar::IsWhitespace(Character) && !bInQuotes))
+			{
+				if (bHasArgument)
+				{
+					Arguments.Add(MoveTemp(Current));
+					Current.Reset();
+					bHasArgument = false;
+				}
+				continue;
+			}
+			Current.AppendChar(Character);
+			bHasArgument = true;
+		}
+		return Arguments;
+	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -150,6 +182,37 @@ bool FMonolithSourceControlP4WindowsCommandLineTest::RunTest(const FString& Para
 	bOk &= TestFalse(TEXT("embedded NUL is rejected"),
 		MonolithSourceControlP4::ValidateCommandLineArgument(EmbeddedNull, Error));
 
+	for (const FString& UnixInput : {
+		TEXT("//speed/simple.uasset"),
+		TEXT("//speed/path with spaces/file.uasset"),
+		TEXT("//speed/single'quote/file.uasset"),
+		TEXT("//speed/backslash\\file.uasset") })
+	{
+		const FString Encoded =
+			MonolithSourceControlP4::QuoteUnrealUnixCommandLineArgument(UnixInput);
+		const TArray<FString> Parsed = ParseUnrealUnixCommandLineReference(
+			TEXT("p4 ") + Encoded + TEXT(" tail"));
+		bOk &= TestEqual(
+			*FString::Printf(TEXT("Unix parser keeps '%s' in one argv"), *UnixInput),
+			Parsed.Num(),
+			3);
+		if (Parsed.Num() == 3)
+		{
+			bOk &= TestEqual(
+				*FString::Printf(TEXT("Unix parser round-trips '%s'"), *UnixInput),
+				Parsed[1],
+				UnixInput);
+		}
+	}
+
+#if !PLATFORM_WINDOWS
+	bOk &= TestFalse(
+		TEXT("Unix command arguments reject unsupported embedded double quotes"),
+		MonolithSourceControlP4::ValidateCommandLineArgument(
+			TEXT("//speed/quote\"inside.uasset"),
+			Error));
+#endif
+
 	int32 RunnerCalls = 0;
 	const MonolithSourceControlP4::FWhereBatchRunner Runner =
 		[&RunnerCalls](const TArray<FString>& Paths, FString& OutStdOut, FString& OutStdErr, int32& OutReturnCode)
@@ -159,20 +222,131 @@ bool FMonolithSourceControlP4WindowsCommandLineTest::RunTest(const FString& Para
 			OutStdOut = TaggedWhereRecord(Paths[0], 0);
 			return true;
 		};
-	const FString Encoded = MonolithSourceControlP4::QuoteCommandLineArgument(OneBackslashBeforeQuote);
+#if PLATFORM_WINDOWS
+	const FString BoundInput = OneBackslashBeforeQuote;
+#else
+	const FString BoundInput = TEXT("//speed/path with spaces/file.uasset");
+#endif
+	const FString Encoded = MonolithSourceControlP4::QuoteCommandLineArgument(BoundInput);
 	const int32 ExactCommandChars = FString(TEXT("-ztag where")).Len() + 1 + Encoded.Len();
 	const MonolithSourceControlP4::FDepotPathBatchResult FitsExactly =
 		MonolithSourceControlP4::ResolveDepotPathsBatched(
-			{ OneBackslashBeforeQuote }, Runner, 128, ExactCommandChars);
+			{ BoundInput }, Runner, 128, ExactCommandChars);
 	bOk &= TestEqual(TEXT("actual encoded length fits its exact bound"), RunnerCalls, 1);
 	bOk &= TestEqual(TEXT("exact-bound path resolves"), FitsExactly.ResolvedPathCount, 1);
 	RunnerCalls = 0;
 	const MonolithSourceControlP4::FDepotPathBatchResult OneCharTooSmall =
 		MonolithSourceControlP4::ResolveDepotPathsBatched(
-			{ OneBackslashBeforeQuote }, Runner, 128, ExactCommandChars - 1);
+			{ BoundInput }, Runner, 128, ExactCommandChars - 1);
 	bOk &= TestEqual(TEXT("one-character-short bound rejects before runner"), RunnerCalls, 0);
 	bOk &= TestEqual(TEXT("one-character-short bound records one failure"), OneCharTooSmall.FailedPathCount, 1);
 	return bOk;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithSourceControlP4ProcessDeadlineTest,
+	"Monolith.SourceControl.P4WhereBatch.ProcessDeadline",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithSourceControlP4ProcessDeadlineTest::RunTest(const FString& /*Parameters*/)
+{
+	double NowSeconds = 10.0;
+	bool bRunning = true;
+	bool bStdOutRead = false;
+	int32 TerminateCalls = 0;
+	int32 ReturnCodeCalls = 0;
+
+	MonolithSourceControlP4::FProcessPollCallbacks Callbacks;
+	Callbacks.IsRunning = [&bRunning]()
+	{
+		return bRunning;
+	};
+	Callbacks.TerminateAndWait = [&bRunning, &TerminateCalls]()
+	{
+		++TerminateCalls;
+		bRunning = false;
+	};
+	Callbacks.ReadStdOut = [&bStdOutRead]()
+	{
+		if (!bStdOutRead)
+		{
+			bStdOutRead = true;
+			return FString(TEXT("partial stdout"));
+		}
+		return FString();
+	};
+	Callbacks.ReadStdErr = []()
+	{
+		return FString();
+	};
+	Callbacks.GetReturnCode = [&ReturnCodeCalls](int32& ReturnCode)
+	{
+		++ReturnCodeCalls;
+		ReturnCode = 0;
+		return true;
+	};
+	Callbacks.NowSeconds = [&NowSeconds]()
+	{
+		return NowSeconds;
+	};
+	Callbacks.Sleep = [&NowSeconds](float Seconds)
+	{
+		NowSeconds += Seconds;
+	};
+
+	const MonolithSourceControlP4::FProcessPollResult PollResult =
+		MonolithSourceControlP4::PollProcessWithTimeout(Callbacks, 0.025, 0.01f);
+
+	bool bPassed = true;
+	bPassed &= TestTrue(TEXT("deadline marks the process as timed out"), PollResult.bTimedOut);
+	bPassed &= TestEqual(TEXT("deadline uses the stable timeout return code"),
+		PollResult.ReturnCode, MonolithSourceControlP4::TimedOutReturnCode);
+	bPassed &= TestEqual(TEXT("deadline terminates and waits exactly once"), TerminateCalls, 1);
+	bPassed &= TestEqual(TEXT("timed-out processes do not query a normal return code"), ReturnCodeCalls, 0);
+	bPassed &= TestEqual(TEXT("output is drained while polling"), PollResult.StdOut, TEXT("partial stdout"));
+
+	const TArray<FString> Paths = {
+		TEXT("//speed/timeout-a.uasset"),
+		TEXT("//speed/timeout-b.uasset"),
+		TEXT("//speed/timeout-c.uasset")
+	};
+	int32 RunnerCalls = 0;
+	const MonolithSourceControlP4::FDepotPathBatchResult BatchResult =
+		MonolithSourceControlP4::ResolveDepotPathsBatched(
+			Paths,
+			[&RunnerCalls](
+				const TArray<FString>&,
+				FString& OutStdOut,
+				FString& OutStdErr,
+				int32& OutReturnCode)
+			{
+				++RunnerCalls;
+				OutStdOut.Reset();
+				OutStdErr = TEXT("p4 command timed out after 30 seconds and was terminated.");
+				OutReturnCode = MonolithSourceControlP4::TimedOutReturnCode;
+				return true;
+			},
+			1);
+	bPassed &= TestEqual(
+		TEXT("one timed-out p4 child stops all remaining batches"),
+		RunnerCalls,
+		1);
+	bPassed &= TestEqual(
+		TEXT("all requested rows receive a timeout or skipped diagnostic"),
+		BatchResult.FailedPathCount,
+		Paths.Num());
+	bPassed &= TestFalse(
+		TEXT("a backend timeout is reported per row rather than as input rejection"),
+		BatchResult.bRejected);
+	for (const FString& Path : Paths)
+	{
+		const MonolithSourceControlP4::FDepotPathMapping* Mapping =
+			BatchResult.Mappings.Find(Path);
+		bPassed &= TestTrue(
+			*FString::Printf(TEXT("timeout row '%s' has a diagnostic"), *Path),
+			Mapping && !Mapping->Error.IsEmpty());
+	}
+	return bPassed;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
