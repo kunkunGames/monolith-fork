@@ -2755,6 +2755,7 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 			: TotalCount;
 
 		TArray<TSharedPtr<FJsonValue>> ActionArray;
+		ActionArray.Reserve(SliceEnd - SliceStart);
 		for (int32 Index = SliceStart; Index < SliceEnd; ++Index)
 		{
 			ActionArray.Add(MakeActionValue(Actions[Index], true));
