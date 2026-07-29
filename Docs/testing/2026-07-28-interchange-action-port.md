@@ -61,6 +61,8 @@ An earlier UE 5.7 direct `UnrealEditor -Plugin=...` attempt was explicitly rejec
 
 One intermediate UE 5.8 invocation at `558b3092` exposed a real cross-version compile error: UE 5.8 stores `FJsonObject::Values` under a shared-string key, so direct `Values.Find(FString)` is not portable even though it compiles on UE 5.7. The final source uses the public `FJsonObject::TryGetField` API; both accepted builds above are from that corrected `ea6bc58f` source.
 
+The next review pass at `92a0b3de` found two post-preflight gaps: typed result validation could report a plain error after Unreal had already created wrong-kind objects, and only `rename` assigned `DestinationName`, allowing sanitized `fail`/`overwrite` imports to drift from the predicted package. Code commit `450b30c7` snapshots destination object paths, rolls back new typed-mismatch assets, reports retained results as an explicit partial mutation, and assigns the resolved name for every conflict policy.
+
 ---
 
 ## 4. Automation and Live MCP Verification
@@ -72,6 +74,19 @@ One intermediate UE 5.8 invocation at `558b3092` exposed a real cross-version co
 | Test | `Monolith.ParamGuard.MonolithInterchange.ImportRejectsMalformedParams` | `Monolith.ParamGuard.MonolithInterchange.ImportRejectsMalformedParams` |
 
 The focused test verifies complete 15-action registration, absence of `import_with_options`, schema rejection for a missing source parameter, guarded handling of a missing file, audio-vs-PNG typed mismatch with the exact `typed_import_extension_mismatch` code, dry-run rejection when no exporter supports the requested extension, `can_import` destination normalization, `fail`/`rename` same-name batch preview behavior, and controlled rejection of a nonnumeric source index.
+
+### Review 3 rollback and resolved-name evidence
+
+| Gate | UE 5.7 | UE 5.8 |
+|------|--------|--------|
+| Build | Succeeded; 315,392-byte DLL, SHA256 `EB96AE51CC84717ACD4184FC5B6C430AFD8242213BB44FE43927BDB37515880F` | Succeeded; 296,448-byte DLL, SHA256 `556A743EB64F9E5B5D9CE9A98F45C06C6F0BA7B59B8A401DBC104D0E406A046B` |
+| Build log | `D:\P4\speed\Saved\ValidationHosts\MonolithPR1UE57\Saved\Logs\PR1-Rollback-Build-UE57-20260730-030405.log` | `D:\P4\speed\Saved\ValidationHosts\MonolithPR1UE58\Saved\Logs\PR1-Rollback-Incremental-Build-UE58-20260730-030252.log` |
+| Focused automation | 1 succeeded, 0 warnings, 0 errors | 1 succeeded, 0 warnings, 0 errors |
+| Report | `D:\P4\speed\Saved\ValidationHosts\MonolithPR1UE57\Saved\Automation\PR1-Interchange-Review3-Final-UE57-20260730-030432\index.json` | `D:\P4\speed\Saved\ValidationHosts\MonolithPR1UE58\Saved\Automation\PR1-Interchange-Review3-Final-UE58-20260730-030308\index.json` |
+
+The expanded automation creates a new unsaved `UTexture2D`, confirms that rollback identifies and deletes exactly one candidate, then proves an object present in the pre-import snapshot is preserved and classified as a partial-mutation result rather than falsely reported as deleted. Both fixtures are removed before the test exits.
+
+Final live MCP evidence used UE 5.8 port `9431` and fetched `describe.action_schema` before the write. Importing `Saved\Direct\123.png` through `interchange.import_texture` with `conflict_policy=fail` returned `expected_asset_name=Asset_123`, `resolved_asset_name=Asset_123`, and the exact object `/Game/Tests/Monolith/Interchange/NumericNameReview3_20260730_0306/Asset_123.Asset_123`; `matching_kind_count=1`. The editor then exited through the described `editor.run_console_command` schema, port `9431` was released, the copied source fixture was deleted, and no `Asset_123.uasset` remained. Live log: `D:\P4\speed\Saved\ValidationHosts\MonolithPR1UE58\Saved\Logs\PR1-Interchange-Review3-LiveMCP-UE58-20260730-030532.log`.
 
 Final UE 5.8 follow-up live MCP evidence at `ea6bc58f` used port `9431`; `/health` reported `status=ok`, version `0.21.3`, and 1,342 registered tools. Exact schemas were fetched through `describe_query(action_schema)` before domain calls. The editor was closed through `editor.run_console_command("QUIT_EDITOR")`; PID 49724 exited and port 9431 was released.
 
@@ -122,6 +137,8 @@ This proves the new namespace remains discoverable when an MCP client starts bef
 | Lexical root checks allowed junction escape | Live junction fixture was rejected with `linked_source_blocked`. |
 | Skill examples pointed outside allowed roots | Skill examples now use project-relative `SourceArt`/`Saved` paths and explain explicit external authorization. |
 | Dry-run ignored intra-batch conflicts | Successful preview rows reserve prospective package names; automation and live MCP prove `fail` and `rename` parity. |
+| Typed mismatch left mutated assets behind a plain error | Destination snapshots distinguish existing objects from new import results. Automation proves complete deletion and pre-existing preservation; incomplete cleanup is `partial_import`, never a plain error. |
+| `fail`/`overwrite` could ignore the predicted sanitized name | All policies assign `DestinationName`; live `123.png` import produced the predicted `Asset_123` package exactly. |
 | `can_import` contradicted import normalization | Both paths use `NormalizePackageFolder`; live preflight returned the normalized valid path. |
 | Nonnumeric source index fell back to all/default sources | Both reimport handlers use exact JSON number/integer validation; live string input returned `invalid_source_file_index`. |
 | Interchange engine plugin was not declared | `Monolith.uplugin` enables `Interchange`; UE 5.7 and UE 5.8 host builds both load the hard module dependency. |

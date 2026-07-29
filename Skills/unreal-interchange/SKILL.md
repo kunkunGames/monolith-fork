@@ -95,6 +95,7 @@ interchange_query("export_asset", { "asset_path": "/Game/Meshes/Hero", "file_pat
 - Relative import paths resolve under the project directory; relative export paths resolve under `Saved`. Absolute external paths require `allow_external: true`.
 - Default-root checks reject any source/output path that traverses a symlink or junction below an allowed root. Use a direct path; only use `allow_external: true` after caller-side policy explicitly permits it.
 - Import and reimport are high-impact mutations (`[w]`): `conflict_policy` is required, and writes need `confirm: true` unless `dry_run: true`. Use `dry_run` plus `can_import` / `can_reimport` first.
+- Typed imports can fail after Unreal creates objects. `rollback_complete=true` means Monolith removed every new returned asset; `status=partial_import` / `partial_mutation=true` means something remained and must be inspected before retrying. Do not collapse that state into an ordinary error.
 - Do not assume `[w]` actions can be reverted with editor Undo. Verify the resulting asset/import metadata after a confirmed write, and treat exported files as normal filesystem side effects.
 - A successful dry run means the concrete importer, reimport handler, or exporter exists; it is not inferred from module presence alone.
 - After importing a mesh, hand off mesh inspection/edit (LOD, collision, texel density, GeometryScript) to `unreal-mesh`; this skill owns the import pipeline, not post-import editing.

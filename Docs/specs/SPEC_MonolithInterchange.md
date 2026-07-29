@@ -23,7 +23,7 @@
 | Dependency | Purpose |
 |------------|---------|
 | `MonolithCore` | Tool registry, action result, and parameter schema contracts. |
-| `AssetTools`, `UnrealEd`, `InterchangeEngine` | Guarded import/reimport/export integration points and translator availability checks. `Monolith.uplugin` enables the owning engine `Interchange` plugin because this is a hard module dependency. |
+| `AssetRegistry`, `AssetTools`, `UnrealEd`, `InterchangeEngine` | Destination snapshots, guarded import/reimport/export integration points, rollback, and translator availability checks. `Monolith.uplugin` enables the owning engine `Interchange` plugin because this is a hard module dependency. |
 | `Json`, `JsonUtilities` | Action response payloads. |
 
 ---
@@ -59,9 +59,9 @@
 | Destination root | Import destination package paths must be valid `/Game/...` long package paths. |
 | Output root | Export destinations must stay under default roots without linked-path traversal unless `allow_external=true`. |
 | Backend availability | Import dry runs require an actual Interchange translator or legacy factory; export dry runs require a matching exporter. |
-| Typed result | Mesh, skeletal-mesh, texture, and audio entrypoints verify the imported object class before reporting success. |
+| Typed result | Mesh, skeletal-mesh, texture, and audio entrypoints verify the imported object class before reporting success. A mismatch removes newly returned asset objects; complete cleanup reports `error`, while any retained pre-existing, unmanaged, or undeletable object reports `partial_import` plus `partial_mutation=true` and structured rollback evidence. |
 | Reimport handler | Reimport and source-path updates use `FReimportManager`; every retained stored source passes existence/root/link checks, optional source indexes require exact integer JSON, and path updates report success only after handler readback matches. |
-| Conflict policy | `fail` rejects collisions, `overwrite` enables replacement, and `rename` supplies `UAssetImportTask::DestinationName` from `CreateUniqueAssetName`. |
+| Conflict policy | `fail` rejects collisions, `overwrite` enables replacement, and `rename` resolves a unique package. All three policies assign the preflight-resolved name to `UAssetImportTask::DestinationName`, including sanitized names such as `123.png` → `Asset_123`. |
 | Batch behavior | Batch actions return per-row status/messages and continue after row-level failures. Import dry-runs reserve successful prospective package names so later rows see same-batch collisions. |
 | Undo scope | `[w]` means external side effects, not universal editor Undo. Import/reimport behavior is handler-specific, reimport-path changes dirty metadata, and filesystem exports are not undoable. |
 
@@ -73,7 +73,7 @@
 |------|----------|
 | Registration | `FMonolithInterchangeModule::StartupModule` registers 15 `interchange` actions. |
 | Namespace isolation | `MonolithMesh` remains unchanged; `MonolithInterchange` alone owns registration and shutdown for the `interchange` namespace. |
-| Registration and parameter guard | `FMonolithParamGuardInterchangeImportMalformedParamsTest` verifies all 15 registrations, rejects malformed params, and proves an audio action rejects a texture extension before import. |
+| Registration and parameter guard | `FMonolithParamGuardInterchangeImportMalformedParamsTest` verifies all 15 registrations, rejects malformed params, proves an audio action rejects a texture extension before import, removes a newly created typed-mismatch fixture, and preserves a pre-existing fixture for explicit partial-mutation reporting. |
 | UE 5.7 build | Full plugin UBT build must succeed with the engine root resolved from the host `.uproject`. |
 | UE 5.8 build | Full plugin UBT build must succeed with the engine root resolved from the host `.uproject`. |
 | Live action contract | Discovery must expose all 15 actions; guarded dry runs must reject absent sources, typed mismatches, unavailable backends, and unsafe linked paths without creating content. |
