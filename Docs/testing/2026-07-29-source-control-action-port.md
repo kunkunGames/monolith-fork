@@ -1,16 +1,17 @@
 # Source Control Action Port Verification
 
-**Date:** 2026-07-29
+**Date:** 2026-07-30
 **Scope:** `source_control` namespace and shared source-control preparation utility
 **Base:** `ee1dae25f9a90a45ae768abbfcb0d9356810b0c4`
-**Verified patch ID:** `22bfa1121f61fb9bf00bd3f60049788052bbbe5c`
+**Verified code commit:** `3b0ce866b45a2a0311cfefe124d14afa38d8670e`
+**Verified stable patch ID:** `d58bb74171f10087b595999f476258acd66f49ea`
 **Engines:** Unreal Engine 5.7 and 5.8
 
 ---
 
 ## 1. Goal
 
-Verify that the independent source-control port adds exactly 11 practical actions, keeps provider mutations and Perforce inspection bounded and explicit, compiles from the same implementation patch on UE 5.7 and UE 5.8, and passes the focused automation suite on both engines.
+Verify that the independent source-control port adds exactly 11 practical actions, keeps provider mutations and Perforce inspection bounded and explicit, resolves every actionable review finding, compiles from the same implementation commit on UE 5.7 and UE 5.8, and passes the focused automation suite plus live MCP readback.
 
 ---
 
@@ -24,7 +25,11 @@ Verify that the independent source-control port adds exactly 11 practical action
 | Catalog delta | PASS | Base 1561 → head 1572; all 11 additions are in the new `source_control` namespace and no action was removed |
 | Strict JSON parameters | PASS | Optional booleans accept JSON booleans only; `limit` must be a finite integer in `[1, 5000]`; changelists accept only decimal values or `default` |
 | Destructive-operation gate | PASS | Delete and revert variants require `confirm=true` unless `dry_run=true` |
-| Bounded Perforce work | PASS | At most 5000 inputs/unique paths, 128 paths per command, 24,000 command characters, and 40 `p4 where` processes |
+| Mounted-package discrimination | PASS | Only registered Unreal mount points are interpreted as package paths; `/home/...` remains a POSIX absolute filesystem path through normalization and response mapping |
+| Preparation safety | PASS | Benign skips remain editable; other-user checkout, stale revision, and unsupported provider states set `blocking=true`, `safe_to_proceed=false`, and abort all checkout/add mutations |
+| Bounded Perforce work | PASS | At most 5000 inputs/unique paths, 128 paths per command, 24,000 command characters, 40 `p4 where` processes, and 30 seconds per child process |
+| Perforce timeout behavior | PASS | Deadline expiry terminates the process tree, drains captured output, diagnoses the current and unstarted batches, and launches no later batch |
+| Cross-platform arguments | PASS | Windows CRT quoting and Unreal Unix double-quoted argv behavior have focused round-trip coverage; unsupported Unix embedded double quotes fail validation |
 | Bounded opened window | PASS | `p4 opened` requests `limit + 1`, returns at most `limit`, and exposes sentinel/lower-bound semantics instead of issuing an unbounded count query |
 | Partial mapping behavior | PASS | Per-path failures remain row-local; successful mappings preserve input identity and order |
 | Excluded feature classes | PASS | The changed source/spec/skill contains no security, benchmark, reinforcement-learning, invocation-log, or action-search-metadata implementation |
@@ -46,26 +51,24 @@ The generated catalog contained 1572 actions across 25 namespaces. Comparison ag
 | Engine | Resolved root | Host project | Plugin source |
 |--------|---------------|--------------|---------------|
 | UE 5.7 | `D:\Engine\UE_5.7` | `D:\P4\MonolithSourceControlUE57Host\MonolithSourceControlUE57Host.uproject` | `D:\P4\MonolithForkSourceControl` |
-| UE 5.8 | `D:\Engine\UE_5.8` | `D:\P4\MonolithSourceControlUE58Host\MonolithSourceControlUE58Host.uproject` | `D:\P4\MonolithForkSourceControlUE58` |
+| UE 5.8 | `D:\Engine\UE_5.8` | `D:\P4\MonolithSourceControlUE58ReviewHost\MonolithSourceControlUE58ReviewHost.uproject` | `D:\P4\MonolithForkSourceControlUE58Review` |
 
-Each engine root was resolved from the isolated host project's `.uproject` `EngineAssociation`. The UE 5.8 host used an independent detached worktree. Before either build, `git patch-id --stable` reported `22bfa1121f61fb9bf00bd3f60049788052bbbe5c` for both worktrees.
+Each engine root was resolved from the isolated host project's `.uproject` `EngineAssociation`. The UE 5.8 host used an independent detached worktree at the exact verified code commit; the older dirty UE 5.8 verification worktree was preserved and not reset. `git diff <base> <verified-code-commit> | git patch-id --stable` reported `d58bb74171f10087b595999f476258acd66f49ea`.
 
 ---
 
 ## 4. Commands
 
-The isolated editor targets were built through each resolved engine's UnrealBuildTool:
+The isolated editor targets were built through each `.uproject`-resolved engine root. The same resolver pattern was used for both hosts:
 
 ```powershell
-& D:\Engine\UE_5.7\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe `
-    UnrealEditor Win64 Development `
-    "-Project=D:\P4\MonolithSourceControlUE57Host\MonolithSourceControlUE57Host.uproject" `
-    -WaitMutex -NoHotReloadFromIDE
+$project = "<isolated-host>.uproject"
+$engine = & D:\P4\speed\Build\BatchFiles\Script\ResolveUnrealEngine.ps1 -Project $project
+if (-not $?) { throw "ResolveUnrealEngine failed" }
 
-& D:\Engine\UE_5.8\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe `
-    UnrealEditor Win64 Development `
-    "-Project=D:\P4\MonolithSourceControlUE58Host\MonolithSourceControlUE58Host.uproject" `
-    -WaitMutex -NoHotReloadFromIDE
+& (Join-Path $engine "Engine\Build\BatchFiles\Build.bat") `
+    UnrealEditor Win64 Development "-Project=$project" `
+    -WaitMutex -NoHotReloadFromIDE "-Log=<unique-UBT-log>"
 ```
 
 Focused automation used the same test prefix on both engines:
@@ -74,17 +77,19 @@ Focused automation used the same test prefix on both engines:
 Automation RunTests Monolith.SourceControl
 ```
 
-The eight tests were:
+The ten tests were:
 
 ```text
 Monolith.SourceControl.P4WhereBatch.OpenedBounds
 Monolith.SourceControl.P4WhereBatch.PartialFailure
+Monolith.SourceControl.P4WhereBatch.ProcessDeadline
 Monolith.SourceControl.P4WhereBatch.RowLocalStderr
 Monolith.SourceControl.P4WhereBatch.Scale
 Monolith.SourceControl.P4WhereBatch.ViewOrder
 Monolith.SourceControl.P4WhereBatch.WindowsCommandLine
 Monolith.SourceControl.ParamValidation.DocumentedInput
 Monolith.SourceControl.ParamValidation.TypedParams
+Monolith.SourceControl.PrepareDecision.BlockingStates
 ```
 
 The fork base does not contain `Scripts\ci_static_checks.py` or `.github\monolith-static-ci.json`, so the prescribed checkout-local command cannot run there. The upstream checker engine was therefore run against this worktree with a temporary local configuration that enabled module-map, `Build.cs`, action-registration, automation-name, generated-header, repository, workflow, and text checks while disabling out-of-scope benchmark, analyzer/log, proxy, skill-drift, and offline checks:
@@ -103,30 +108,62 @@ The temporary configuration was removed immediately after the check and is not p
 
 | Gate | UE 5.7 | UE 5.8 |
 |------|--------|--------|
-| Full editor target build | PASS | PASS, 442 build actions |
-| Final UBT result | `Result: Succeeded`, exit 0 | `Result: Succeeded`, 192.01 seconds |
-| Focused automation | PASS, 8/8 | PASS, 8/8 |
+| Full editor target build | PASS, incremental review build | PASS, 443 build actions |
+| Final UBT result | `Result: Succeeded`, exit 0 | `Result: Succeeded`, 181.59 seconds |
+| UBT log | `D:\P4\MonolithSourceControlUE57Host\Saved\Logs\SourceControl-Review2-UBT-UE57-20260730-043502.log` | `D:\P4\MonolithSourceControlUE58ReviewHost\Saved\Logs\SourceControl-Review-UBT-UE58-20260730-043931.log` |
+| Focused automation | PASS, 10/10 | PASS, 10/10 |
 | Automation warnings / errors | 0 / 0 | 0 / 0 |
-| Automation report | `D:\P4\MonolithSourceControlUE57Host\Saved\Automation\SourceControl-20260729-222749\index.json` | `D:\P4\MonolithSourceControlUE58Host\Saved\Automation\SourceControl-20260729-223600\index.json` |
-| `UnrealEditor-MonolithCore.dll` bytes | 1,106,944 | 1,052,160 |
-| `MonolithCore` DLL SHA256 | `40DBC92D19E0C473CA5F1A76629145B03F923B421CAE245735494590947F935D` | `33D79847517EF667806A6327897CF5DD70C2955A072235E4BAB5B03D7B256354` |
-| `UnrealEditor-MonolithSourceControl.dll` bytes | 312,320 | 300,544 |
-| `MonolithSourceControl` DLL SHA256 | `7C66DC87EF1DF7039DC475FA61319B942AADA9C239D8F4CD3125C3647BEEC57A` | `B0BD3EC14C0B81290D3906EE012FB77AB654E5165DD499B5EF177C1E08FB19A8` |
+| Automation report | `D:\P4\MonolithSourceControlUE57Host\Saved\Automation\SourceControl-Review2-UE57-20260730-043518\index.json` | `D:\P4\MonolithSourceControlUE58ReviewHost\Saved\Automation\SourceControl-Review-UE58-20260730-044246\index.json` |
+| `UnrealEditor-MonolithCore.dll` bytes | 1,114,112 | 1,060,352 |
+| `MonolithCore` DLL SHA256 | `9F619DDD1AA81EC4F4A3B016712B9ED912ED4FADABF108D94CE785045FA80085` | `3338FB78FA371233B60A2047EC1E8C82DEFBE8CAE7E92A77BB39C93805143E9B` |
+| `UnrealEditor-MonolithSourceControl.dll` bytes | 334,848 | 322,560 |
+| `MonolithSourceControl` DLL SHA256 | `147423F3F28CA2337ECB3B0CB378C343C16AC4B865CE1ECD3505283C17076B9E` | `741D2FECE809AEF7A348613BE0C826EC227E9242C79284E9D5B828F72C880383` |
 
 Additional gates:
 
 | Gate | Result |
 |------|--------|
-| Hosted static-check equivalent | PASS: 0 blocking findings; 777 repository-wide CRLF/missing-external-agent advisory findings |
-| `git diff --check` | PASS |
+| Hosted static-check equivalent | PASS on the original action port: 0 blocking findings; review hardening did not change action registration or module descriptors |
+| `git diff --check` | PASS on the final review hardening diff |
 | Feature-category exclusion scan | PASS: no forbidden feature implementation found |
-| Worktree parity before build | PASS: identical stable patch ID in UE 5.7 and UE 5.8 worktrees |
+| Worktree identity before build | PASS: UE 5.8 detached worktree at exact code commit `3b0ce866b45a2a0311cfefe124d14afa38d8670e` |
 
 The UE 5.8 full target build emitted pre-existing Unreal 5.8 deprecation warnings in unrelated modules. No changed `MonolithSourceControl` or `MonolithCore` source produced a build error.
 
 ---
 
-## 6. Visual and Delivery Scope
+## 6. Live MCP Readback
+
+The verified UE 5.8 binary was started on isolated port `9436` with source control and indexing disabled. Schema discovery ran before action calls.
+
+| Gate | Result | Evidence |
+|------|--------|----------|
+| MCP initialize | PASS | Server `monolith` version `0.21.3` |
+| Exact schemas | PASS, 3/3 | `get_capabilities`, `map_depot_paths`, `checkout_or_add` |
+| Mounted package | PASS | `/Game/SourceControlTest/SC_TestAsset.SC_TestAsset` returned `is_package=true` and `/Game/SourceControlTest/SC_TestAsset` |
+| POSIX absolute path | PASS | `/home/monolith/Project/Content/Foo.uasset` retained the same local identity, `is_package=false`, and an empty `package_path` |
+| Real `p4 where` child | PASS | One bounded command launched; the intentionally non-client depot path returned one row-local diagnostic |
+| Provider-disabled preparation | PASS | `checkout_or_add(dry_run=true)` returned `ok=false`, `available=false`, `skipped=true`, and performed no mutation |
+| Shutdown | PASS | `QUIT_EDITOR` closed PID `33460`, port `9436` closed, and no residual validation editor remained |
+| Log scan | PASS | 0 fatal/assert/ensure/automation-error matches |
+
+Live log:
+
+```text
+D:\P4\MonolithSourceControlUE58ReviewHost\Saved\Logs\SourceControl-Review3-LiveMCP-UE58-20260730-045057.log
+```
+
+The log records `bEnableIndex=false`, MCP listen on `9436`, and graceful listener shutdown.
+
+---
+
+## 7. Review Regression Evidence
+
+The first UE 5.7 review run deliberately included the new POSIX contract and failed `DocumentedInput` because the action's later filename-to-package conversion still accepted the foreign root. The accepted fix revalidates the converted package against registered mount points. The final UE 5.7 and UE 5.8 reports both pass 10/10, so the review issue has a red-to-green regression proof rather than source inspection alone.
+
+---
+
+## 8. Visual and Delivery Scope
 
 | Gate | Result | Reason |
 |------|--------|--------|
@@ -135,6 +172,6 @@ The UE 5.8 full target build emitted pre-existing Unreal 5.8 deprecation warning
 
 ---
 
-## 7. Conclusion
+## 9. Conclusion
 
-PASS. The verified implementation adds exactly 11 `source_control` actions, uses strict parameter contracts, bounds Perforce process and result work, preserves row-local mapping diagnostics, builds on UE 5.7 and UE 5.8, and passes 8/8 focused automation tests with no test warnings or errors on either engine.
+PASS. The verified implementation adds exactly 11 `source_control` actions, uses strict parameter contracts, recognizes only mounted Unreal package paths, fails closed on blocking preparation states, bounds both Perforce batches and child-process lifetime, preserves row-local mapping diagnostics, builds on UE 5.7 and UE 5.8, passes 10/10 focused automation tests with no test warnings or errors on either engine, and passes live schema/action/readback validation.
