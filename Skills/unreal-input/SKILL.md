@@ -11,7 +11,9 @@ Drives the **`input`** namespace via `input_query(action, params)`: author and i
 
 ```
 monolith_discover({ namespace: "input" })
-monolith_discover({ namespace: "input", action: "<action>", mode: "schema" })
+describe_query({ action: "action_schema", params: {
+  target_namespace: "input", target_action: "<action>"
+}})
 ```
 
 ## When to use
@@ -26,7 +28,7 @@ Use a different skill for:
 
 ## Action Reference
 
-Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed, `[w]` mutates. Signatures are a snapshot of the live catalog — for the exact full schema call `monolith_discover` with `mode: "schema"`. The Discovery block above stays authoritative.
+Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed, `[w]` mutates. Signatures are a snapshot of the live catalog — call `describe_query` with `action_schema` for one action's exact schema, or use `monolith_discover({ namespace: "input", detail: true })` for all 10 schemas. The Discovery block above stays authoritative.
 
 ### Enhanced Input Assets (10)
 
@@ -104,5 +106,5 @@ input_query({ action: "validate_input_mappings", params: {
 ## Notes
 
 - This reference follows the live `RegisterAction` surface. If an action is missing or renamed, re-run `monolith_discover({ namespace: "input" })`; the catalog is the source of truth.
-- Pass `mode: "schema"` to `monolith_discover` for the exact required/optional params and types before calling an action.
+- Call `describe_query({ action: "action_schema", params: { target_namespace: "input", target_action: "<action>" }})` for exact required/optional params and types before calling an action.
 - `validate_input_mappings` flags missing actions and duplicate key conflicts within an IMC; run it after a batch of `add_input_mapping` edits.

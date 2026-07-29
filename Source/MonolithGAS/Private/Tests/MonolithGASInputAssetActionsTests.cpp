@@ -18,6 +18,7 @@
 #include "MonolithJsonUtils.h"
 #include "MonolithToolRegistry.h"
 #include "UObject/Package.h"
+#include "UObject/UObjectHash.h"
 #include "UObject/UObjectGlobals.h"
 
 namespace MonolithGASInputAssetActionsTestDetail
@@ -126,6 +127,31 @@ namespace MonolithGASInputAssetActionsTestDetail
 			ActionResult.Result->TryGetNumberField(Field, Value);
 		}
 		return static_cast<int32>(Value);
+	}
+
+	static FString GetString(
+		const FMonolithActionResult& ActionResult,
+		const TCHAR* Field,
+		const FString& Default = FString())
+	{
+		FString Value = Default;
+		if (ActionResult.Result.IsValid())
+		{
+			ActionResult.Result->TryGetStringField(Field, Value);
+		}
+		return Value;
+	}
+
+	static int32 CountLiveObjectsOfClass(const UClass* Class)
+	{
+		TArray<UObject*> Objects;
+		GetObjectsOfClass(
+			Class,
+			Objects,
+			true,
+			RF_ClassDefaultObject | RF_ArchetypeObject,
+			EInternalObjectFlags::Garbage);
+		return Objects.Num();
 	}
 
 	static UObject* FindTestAsset(const FString& PackagePath)
@@ -313,16 +339,31 @@ bool FMonolithGASInputAssetDryRunTest::RunTest(const FString& /*Parameters*/)
 	const FString ContextPath =
 		FString::Printf(TEXT("/Game/Tests/Monolith/Input/%s/IMC_DryRun"), *Suffix);
 
+	TSharedPtr<FJsonObject> ActionPreviewParams = MakeCreateParams(ActionPath, true, false);
+	ActionPreviewParams->SetStringField(TEXT("value_type"), TEXT("Axis2D"));
+	ActionPreviewParams->SetStringField(TEXT("description"), TEXT("Proposed action"));
+	ActionPreviewParams->SetBoolField(TEXT("consume_input"), false);
+	ActionPreviewParams->SetBoolField(TEXT("trigger_when_paused"), true);
+	ActionPreviewParams->SetStringField(TEXT("accumulation"), TEXT("Cumulative"));
 	const FMonolithActionResult ActionResult =
-		Execute(TEXT("create_input_action"), MakeCreateParams(ActionPath, true, false));
+		Execute(TEXT("create_input_action"), ActionPreviewParams);
+
+	TSharedPtr<FJsonObject> ContextPreviewParams = MakeCreateParams(ContextPath, true, false);
+	ContextPreviewParams->SetStringField(TEXT("description"), TEXT("Proposed context"));
 	const FMonolithActionResult ContextResult =
-		Execute(TEXT("create_input_mapping_context"), MakeCreateParams(ContextPath, true, false));
+		Execute(TEXT("create_input_mapping_context"), ContextPreviewParams);
 
 	bool bPassed = true;
 	bPassed &= TestTrue(TEXT("InputAction dry-run succeeds"), ActionResult.bSuccess);
 	bPassed &= TestTrue(TEXT("InputAction dry-run predicts creation"), GetBool(ActionResult, TEXT("would_create")));
 	bPassed &= TestFalse(TEXT("InputAction dry-run does not report creation"), GetBool(ActionResult, TEXT("created")));
 	bPassed &= TestTrue(TEXT("InputAction dry-run is marked dry_run"), GetBool(ActionResult, TEXT("dry_run")));
+	bPassed &= TestEqual(TEXT("InputAction preview returns proposed value type"), GetString(ActionResult, TEXT("value_type")), TEXT("Axis2D"));
+	bPassed &= TestEqual(TEXT("InputAction preview returns proposed description"), GetString(ActionResult, TEXT("description")), TEXT("Proposed action"));
+	bPassed &= TestFalse(TEXT("InputAction preview returns proposed consume flag"), GetBool(ActionResult, TEXT("consume_input"), true));
+	bPassed &= TestTrue(TEXT("InputAction preview returns proposed paused flag"), GetBool(ActionResult, TEXT("trigger_when_paused")));
+	bPassed &= TestEqual(TEXT("InputAction preview returns proposed accumulation"), GetString(ActionResult, TEXT("accumulation")), TEXT("Cumulative"));
+	bPassed &= TestEqual(TEXT("InputAction preview identifies proposed state"), GetString(ActionResult, TEXT("preview_state")), TEXT("proposed"));
 	bPassed &= TestNull(TEXT("InputAction dry-run creates no object"), FindTestAsset(ActionPath));
 	bPassed &= TestNull(TEXT("InputAction dry-run creates no package"), FindPackage(nullptr, *ActionPath));
 
@@ -330,6 +371,8 @@ bool FMonolithGASInputAssetDryRunTest::RunTest(const FString& /*Parameters*/)
 	bPassed &= TestTrue(TEXT("InputMappingContext dry-run predicts creation"), GetBool(ContextResult, TEXT("would_create")));
 	bPassed &= TestFalse(TEXT("InputMappingContext dry-run does not report creation"), GetBool(ContextResult, TEXT("created")));
 	bPassed &= TestTrue(TEXT("InputMappingContext dry-run is marked dry_run"), GetBool(ContextResult, TEXT("dry_run")));
+	bPassed &= TestEqual(TEXT("InputMappingContext preview returns proposed description"), GetString(ContextResult, TEXT("description")), TEXT("Proposed context"));
+	bPassed &= TestEqual(TEXT("InputMappingContext preview identifies proposed state"), GetString(ContextResult, TEXT("preview_state")), TEXT("proposed"));
 	bPassed &= TestNull(TEXT("InputMappingContext dry-run creates no object"), FindTestAsset(ContextPath));
 	bPassed &= TestNull(TEXT("InputMappingContext dry-run creates no package"), FindPackage(nullptr, *ContextPath));
 	return bPassed;
@@ -425,6 +468,61 @@ bool FMonolithGASInputAssetStrictParamsTest::RunTest(const FString& /*Parameters
 		OutsideGame
 	});
 
+	TSharedPtr<FJsonObject> NumericAssetPath = MakeCreateParams(
+		TEXT("/Game/Tests/Monolith/Input/Strict/IA_NumericPath"),
+		true,
+		false);
+	NumericAssetPath->SetNumberField(TEXT("asset_path"), 42.0);
+	Cases.Add({
+		TEXT("numeric required asset path"),
+		TEXT("create_input_action"),
+		TEXT("asset_path"),
+		NumericAssetPath
+	});
+
+	TSharedPtr<FJsonObject> NumericKey = MakeMappingParams(
+		TEXT("/Game/Tests/Monolith/Input/Strict/IMC_Missing"),
+		TEXT("/Game/Tests/Monolith/Input/Strict/IA_Missing"),
+		TEXT("SpaceBar"),
+		true,
+		false);
+	NumericKey->SetNumberField(TEXT("key"), 42.0);
+	Cases.Add({
+		TEXT("numeric required key"),
+		TEXT("add_input_mapping"),
+		TEXT("key"),
+		NumericKey
+	});
+
+	TSharedPtr<FJsonObject> MismatchedObjectPath = MakeCreateParams(
+		TEXT("/Game/Tests/Monolith/Input/Strict/IA_Mismatch.Other"),
+		true,
+		false);
+	Cases.Add({
+		TEXT("mismatched object path"),
+		TEXT("create_input_action"),
+		TEXT("object name"),
+		MismatchedObjectPath
+	});
+
+	TSharedPtr<FJsonObject> DoubleSlashRoot = MakeShared<FJsonObject>();
+	DoubleSlashRoot->SetStringField(TEXT("path"), TEXT("/Game//Input"));
+	Cases.Add({
+		TEXT("double-slash search root"),
+		TEXT("list_input_actions"),
+		TEXT("search path"),
+		DoubleSlashRoot
+	});
+
+	TSharedPtr<FJsonObject> ObjectStyleRoot = MakeShared<FJsonObject>();
+	ObjectStyleRoot->SetStringField(TEXT("path"), TEXT("/Game/Input.Bad"));
+	Cases.Add({
+		TEXT("object-style search root"),
+		TEXT("list_input_mapping_contexts"),
+		TEXT("search path"),
+		ObjectStyleRoot
+	});
+
 	bool bPassed = true;
 	for (const FInvalidCase& TestCase : Cases)
 	{
@@ -438,6 +536,19 @@ bool FMonolithGASInputAssetStrictParamsTest::RunTest(const FString& /*Parameters
 			*FString::Printf(TEXT("%s identifies the bad contract"), *TestCase.Label),
 			Result.ErrorMessage.Contains(TestCase.ExpectedField));
 	}
+
+	TSharedPtr<FJsonObject> EmptySelection = MakeShared<FJsonObject>();
+	EmptySelection->SetArrayField(TEXT("context_paths"), TArray<TSharedPtr<FJsonValue>>());
+	EmptySelection->SetStringField(TEXT("path"), TEXT("/Game//MustNotBeScanned"));
+	const FMonolithActionResult EmptySelectionResult =
+		Execute(TEXT("validate_input_mappings"), EmptySelection);
+	bPassed &= TestTrue(
+		TEXT("explicit empty context selection succeeds without global fallback"),
+		EmptySelectionResult.bSuccess);
+	bPassed &= TestEqual(
+		TEXT("explicit empty context selection checks zero contexts"),
+		GetInt(EmptySelectionResult, TEXT("contexts_checked"), -1),
+		0);
 	return bPassed;
 }
 
@@ -456,6 +567,69 @@ bool FMonolithGASInputAssetLifecycleAndCloneTest::RunTest(const FString& /*Param
 		return false;
 	}
 
+	bool bPassed = true;
+	UInputAction* PrimaryAction = Cast<UInputAction>(FindTestAsset(Assets.ActionA));
+	UInputMappingContext* Context = Assets.GetContext();
+	if (TestNotNull(TEXT("created InputAction is loadable"), PrimaryAction))
+	{
+		bPassed &= TestTrue(
+			TEXT("created InputAction participates in editor transactions"),
+			PrimaryAction->HasAnyFlags(RF_Transactional));
+	}
+	if (TestNotNull(TEXT("created mapping context is loadable"), Context))
+	{
+		bPassed &= TestTrue(
+			TEXT("created InputMappingContext participates in editor transactions"),
+			Context->HasAnyFlags(RF_Transactional));
+	}
+
+	const EInputActionValueType OriginalValueType = PrimaryAction
+		? PrimaryAction->ValueType
+		: EInputActionValueType::Boolean;
+	const FString OriginalActionDescription = PrimaryAction
+		? PrimaryAction->ActionDescription.ToString()
+		: FString();
+	const FString OriginalContextDescription = Context
+		? Context->ContextDescription.ToString()
+		: FString();
+
+	TSharedPtr<FJsonObject> OverwritePreview = MakeCreateParams(Assets.ActionA, true, false);
+	OverwritePreview->SetBoolField(TEXT("overwrite"), true);
+	OverwritePreview->SetStringField(TEXT("value_type"), TEXT("Axis2D"));
+	OverwritePreview->SetStringField(TEXT("description"), TEXT("Overwrite proposal"));
+	const FMonolithActionResult OverwritePreviewResult =
+		Execute(TEXT("create_input_action"), OverwritePreview);
+	bPassed &= TestTrue(TEXT("InputAction overwrite dry-run succeeds"), OverwritePreviewResult.bSuccess);
+	bPassed &= TestEqual(TEXT("overwrite dry-run returns proposed value type"), GetString(OverwritePreviewResult, TEXT("value_type")), TEXT("Axis2D"));
+	bPassed &= TestEqual(TEXT("overwrite dry-run returns proposed description"), GetString(OverwritePreviewResult, TEXT("description")), TEXT("Overwrite proposal"));
+
+	TSharedPtr<FJsonObject> SetPreview = MakeCreateParams(Assets.ActionA, true, false);
+	SetPreview->SetStringField(TEXT("value_type"), TEXT("Axis3D"));
+	SetPreview->SetStringField(TEXT("description"), TEXT("Set proposal"));
+	const FMonolithActionResult SetPreviewResult =
+		Execute(TEXT("set_input_action_properties"), SetPreview);
+	bPassed &= TestTrue(TEXT("InputAction property dry-run succeeds"), SetPreviewResult.bSuccess);
+	bPassed &= TestEqual(TEXT("property dry-run returns proposed value type"), GetString(SetPreviewResult, TEXT("value_type")), TEXT("Axis3D"));
+	bPassed &= TestEqual(TEXT("property dry-run returns proposed description"), GetString(SetPreviewResult, TEXT("description")), TEXT("Set proposal"));
+
+	TSharedPtr<FJsonObject> ContextPreview = MakeCreateParams(Assets.Context, true, false);
+	ContextPreview->SetBoolField(TEXT("overwrite"), true);
+	ContextPreview->SetStringField(TEXT("description"), TEXT("Context proposal"));
+	const FMonolithActionResult ContextPreviewResult =
+		Execute(TEXT("create_input_mapping_context"), ContextPreview);
+	bPassed &= TestTrue(TEXT("InputMappingContext overwrite dry-run succeeds"), ContextPreviewResult.bSuccess);
+	bPassed &= TestEqual(TEXT("context dry-run returns proposed description"), GetString(ContextPreviewResult, TEXT("description")), TEXT("Context proposal"));
+
+	if (PrimaryAction)
+	{
+		bPassed &= TestEqual(TEXT("InputAction dry-runs preserve actual value type"), PrimaryAction->ValueType, OriginalValueType);
+		bPassed &= TestEqual(TEXT("InputAction dry-runs preserve actual description"), PrimaryAction->ActionDescription.ToString(), OriginalActionDescription);
+	}
+	if (Context)
+	{
+		bPassed &= TestEqual(TEXT("context dry-run preserves actual description"), Context->ContextDescription.ToString(), OriginalContextDescription);
+	}
+
 	TSharedPtr<FJsonObject> AddPrimary = MakeMappingParams(
 		Assets.Context,
 		Assets.ActionA,
@@ -469,12 +643,50 @@ bool FMonolithGASInputAssetLifecycleAndCloneTest::RunTest(const FString& /*Param
 
 	const FMonolithActionResult PrimaryResult =
 		Execute(TEXT("add_input_mapping"), AddPrimary);
-	bool bPassed = true;
 	bPassed &= TestTrue(TEXT("explicit modifier/trigger mapping succeeds"), PrimaryResult.bSuccess);
 	bPassed &= TestTrue(TEXT("primary mapping is created"), GetBool(PrimaryResult, TEXT("created")));
 	bPassed &= TestEqual(TEXT("primary modifier count"), GetInt(PrimaryResult, TEXT("modifier_count")), 1);
 	bPassed &= TestEqual(TEXT("primary trigger count"), GetInt(PrimaryResult, TEXT("trigger_count")), 1);
 	bPassed &= TestFalse(TEXT("save=false does not write primary mapping"), GetBool(PrimaryResult, TEXT("saved")));
+
+	TSharedPtr<FJsonObject> DryRunClone = MakeMappingParams(
+		Assets.Context,
+		Assets.ActionB,
+		TEXT("Enter"),
+		true,
+		false);
+	DryRunClone->SetStringField(TEXT("source_context_path"), Assets.Context);
+	DryRunClone->SetStringField(TEXT("source_action_path"), Assets.ActionA);
+	DryRunClone->SetStringField(TEXT("source_key"), TEXT("SpaceBar"));
+	DryRunClone->SetArrayField(
+		TEXT("modifier_classes"),
+		MakeStringArray({ UInputModifierNegate::StaticClass()->GetPathName() }));
+	DryRunClone->SetArrayField(
+		TEXT("trigger_classes"),
+		MakeStringArray({ UInputTriggerHold::StaticClass()->GetPathName() }));
+	const int32 ModifierObjectsBeforeDryRun =
+		CountLiveObjectsOfClass(UInputModifierNegate::StaticClass());
+	const int32 TriggerObjectsBeforeDryRun =
+		CountLiveObjectsOfClass(UInputTriggerHold::StaticClass());
+	const int32 MappingsBeforeDryRun = Context ? Context->GetMappings().Num() : -1;
+	const FMonolithActionResult DryRunCloneResult =
+		Execute(TEXT("add_input_mapping"), DryRunClone);
+	bPassed &= TestTrue(TEXT("mapping clone dry-run succeeds"), DryRunCloneResult.bSuccess);
+	bPassed &= TestTrue(TEXT("mapping clone dry-run predicts creation"), GetBool(DryRunCloneResult, TEXT("would_create")));
+	bPassed &= TestEqual(TEXT("mapping clone dry-run reports modifier count"), GetInt(DryRunCloneResult, TEXT("modifier_count")), 1);
+	bPassed &= TestEqual(TEXT("mapping clone dry-run reports trigger count"), GetInt(DryRunCloneResult, TEXT("trigger_count")), 1);
+	bPassed &= TestEqual(
+		TEXT("mapping clone dry-run constructs no modifier UObjects"),
+		CountLiveObjectsOfClass(UInputModifierNegate::StaticClass()),
+		ModifierObjectsBeforeDryRun);
+	bPassed &= TestEqual(
+		TEXT("mapping clone dry-run constructs no trigger UObjects"),
+		CountLiveObjectsOfClass(UInputTriggerHold::StaticClass()),
+		TriggerObjectsBeforeDryRun);
+	bPassed &= TestEqual(
+		TEXT("mapping clone dry-run preserves mapping count"),
+		Context ? Context->GetMappings().Num() : -1,
+		MappingsBeforeDryRun);
 
 	TSharedPtr<FJsonObject> AddClone = MakeMappingParams(
 		Assets.Context,
@@ -490,7 +702,6 @@ bool FMonolithGASInputAssetLifecycleAndCloneTest::RunTest(const FString& /*Param
 	bPassed &= TestEqual(TEXT("cloned modifier count"), GetInt(CloneResult, TEXT("modifier_count")), 1);
 	bPassed &= TestEqual(TEXT("cloned trigger count"), GetInt(CloneResult, TEXT("trigger_count")), 1);
 
-	UInputMappingContext* Context = Assets.GetContext();
 	if (TestNotNull(TEXT("created mapping context is loadable"), Context))
 	{
 		bPassed &= TestEqual(TEXT("context contains two mappings"), Context->GetMappings().Num(), 2);

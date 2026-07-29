@@ -187,38 +187,31 @@ namespace
 		}
 	}
 
-	FString NormalizeObjectPath(const FString& Path)
-	{
-		if (Path.Contains(TEXT(".")))
-		{
-			return Path;
-		}
-		const FString AssetName = FPackageName::GetLongPackageAssetName(Path);
-		return Path + TEXT(".") + AssetName;
-	}
-
-	FString NormalizeInputAssetPackagePath(const FString& Path)
-	{
-		FString PackagePath = Path;
-		FString ObjectName;
-		if (PackagePath.Split(TEXT("."), &PackagePath, &ObjectName))
-		{
-			// PackagePath now contains the long package part of an object path.
-		}
-		if (!PackagePath.StartsWith(TEXT("/")))
-		{
-			PackagePath = TEXT("/Game/") + PackagePath;
-		}
-		return PackagePath;
-	}
-
 	bool NormalizeAndValidateInputAssetPath(
 		const FString& InputPath,
 		FString& OutPackagePath,
 		FString& OutObjectPath,
 		FString& OutError)
 	{
-		OutPackagePath = NormalizeInputAssetPackagePath(InputPath);
+		FString NormalizedInput = InputPath;
+		NormalizedInput.TrimStartAndEndInline();
+		if (NormalizedInput.IsEmpty())
+		{
+			OutError = TEXT("Input asset path must not be empty");
+			return false;
+		}
+
+		FString ExplicitObjectName;
+		const bool bHasExplicitObjectName =
+			NormalizedInput.Split(TEXT("."), &OutPackagePath, &ExplicitObjectName);
+		if (!bHasExplicitObjectName)
+		{
+			OutPackagePath = MoveTemp(NormalizedInput);
+		}
+		if (!OutPackagePath.StartsWith(TEXT("/")))
+		{
+			OutPackagePath = TEXT("/Game/") + OutPackagePath;
+		}
 		if (!OutPackagePath.StartsWith(TEXT("/Game/")))
 		{
 			OutError = FString::Printf(TEXT("Input asset path '%s' must resolve under /Game"), *InputPath);
@@ -242,7 +235,27 @@ namespace
 			return false;
 		}
 
-		OutObjectPath = NormalizeObjectPath(OutPackagePath);
+		if (bHasExplicitObjectName
+			&& !ExplicitObjectName.Equals(AssetName, ESearchCase::CaseSensitive))
+		{
+			OutError = FString::Printf(
+				TEXT("Input asset object name '%s' must match package asset name '%s' in path '%s'"),
+				*ExplicitObjectName,
+				*AssetName,
+				*InputPath);
+			return false;
+		}
+
+		OutObjectPath = OutPackagePath + TEXT(".") + AssetName;
+		FText InvalidObjectReason;
+		if (!FPackageName::IsValidObjectPath(OutObjectPath, &InvalidObjectReason))
+		{
+			OutError = FString::Printf(
+				TEXT("Invalid input asset object path '%s': %s"),
+				*OutObjectPath,
+				*InvalidObjectReason.ToString());
+			return false;
+		}
 		return true;
 	}
 
@@ -266,6 +279,18 @@ namespace
 		{
 			OutError = FString::Printf(TEXT("Input asset search path '%s' must resolve under /Game"), *InputPath);
 			return false;
+		}
+		if (OutPath != TEXT("/Game"))
+		{
+			FText InvalidReason;
+			if (!FPackageName::IsValidLongPackageName(OutPath, false, &InvalidReason))
+			{
+				OutError = FString::Printf(
+					TEXT("Invalid input asset search path '%s': %s"),
+					*OutPath,
+					*InvalidReason.ToString());
+				return false;
+			}
 		}
 		return true;
 	}
@@ -501,14 +526,6 @@ namespace
 		return INDEX_NONE;
 	}
 
-	bool AreMappingsEquivalentForAuthoring(const FEnhancedActionKeyMapping& A, const FEnhancedActionKeyMapping& B)
-	{
-		return A.Action == B.Action
-			&& A.Key == B.Key
-			&& AreInstancedObjectArraysEquivalent(A.Modifiers, B.Modifiers)
-			&& AreInstancedObjectArraysEquivalent(A.Triggers, B.Triggers);
-	}
-
 	template <typename AssetType>
 	AssetType* FindExistingInputAssetForCreate(const FString& ObjectPath, const TCHAR* ExpectedTypeName, FString& OutError)
 	{
@@ -608,6 +625,100 @@ namespace
 		return Json;
 	}
 
+	struct FInputActionPatch
+	{
+		TOptional<EInputActionValueType> ValueType;
+		TOptional<FString> Description;
+		TOptional<bool> ConsumeInput;
+		TOptional<bool> ConsumeLegacyMappings;
+		TOptional<bool> TriggerWhenPaused;
+		TOptional<bool> ReserveAllMappings;
+		TOptional<EInputActionAccumulationBehavior> AccumulationBehavior;
+	};
+
+	bool DoesInputActionPatchChange(const UInputAction* Action, const FInputActionPatch& Patch)
+	{
+		if (!Action)
+		{
+			return true;
+		}
+		return (Patch.ValueType.IsSet() && Action->ValueType != Patch.ValueType.GetValue())
+			|| (Patch.Description.IsSet() && Action->ActionDescription.ToString() != Patch.Description.GetValue())
+			|| (Patch.ConsumeInput.IsSet() && Action->bConsumeInput != Patch.ConsumeInput.GetValue())
+			|| (Patch.ConsumeLegacyMappings.IsSet()
+				&& Action->bConsumesActionAndAxisMappings != Patch.ConsumeLegacyMappings.GetValue())
+			|| (Patch.TriggerWhenPaused.IsSet()
+				&& Action->bTriggerWhenPaused != Patch.TriggerWhenPaused.GetValue())
+			|| (Patch.ReserveAllMappings.IsSet()
+				&& Action->bReserveAllMappings != Patch.ReserveAllMappings.GetValue())
+			|| (Patch.AccumulationBehavior.IsSet()
+				&& Action->AccumulationBehavior != Patch.AccumulationBehavior.GetValue());
+	}
+
+	void ApplyInputActionPatch(UInputAction* Action, const FInputActionPatch& Patch)
+	{
+		if (Patch.ValueType.IsSet()) Action->ValueType = Patch.ValueType.GetValue();
+		if (Patch.Description.IsSet()) Action->ActionDescription = FText::FromString(Patch.Description.GetValue());
+		if (Patch.ConsumeInput.IsSet()) Action->bConsumeInput = Patch.ConsumeInput.GetValue();
+		if (Patch.ConsumeLegacyMappings.IsSet())
+		{
+			Action->bConsumesActionAndAxisMappings = Patch.ConsumeLegacyMappings.GetValue();
+		}
+		if (Patch.TriggerWhenPaused.IsSet()) Action->bTriggerWhenPaused = Patch.TriggerWhenPaused.GetValue();
+		if (Patch.ReserveAllMappings.IsSet()) Action->bReserveAllMappings = Patch.ReserveAllMappings.GetValue();
+		if (Patch.AccumulationBehavior.IsSet())
+		{
+			Action->AccumulationBehavior = Patch.AccumulationBehavior.GetValue();
+		}
+	}
+
+	TSharedPtr<FJsonObject> InputActionProposalToJson(
+		const UInputAction* CurrentAction,
+		const FString& ObjectPath,
+		const FString& PackagePath,
+		const FInputActionPatch& Patch)
+	{
+		const UInputAction* Baseline = CurrentAction
+			? CurrentAction
+			: GetDefault<UInputAction>();
+		TSharedPtr<FJsonObject> Json = InputActionToJson(Baseline);
+		Json->SetStringField(TEXT("asset_path"), ObjectPath);
+		Json->SetStringField(TEXT("package_path"), PackagePath);
+		Json->SetStringField(TEXT("name"), FPackageName::GetLongPackageAssetName(PackagePath));
+		if (Patch.ValueType.IsSet())
+		{
+			Json->SetStringField(TEXT("value_type"), ValueTypeToString(Patch.ValueType.GetValue()));
+		}
+		if (Patch.Description.IsSet())
+		{
+			Json->SetStringField(TEXT("description"), Patch.Description.GetValue());
+		}
+		if (Patch.ConsumeInput.IsSet())
+		{
+			Json->SetBoolField(TEXT("consume_input"), Patch.ConsumeInput.GetValue());
+		}
+		if (Patch.ConsumeLegacyMappings.IsSet())
+		{
+			Json->SetBoolField(TEXT("consume_legacy_mappings"), Patch.ConsumeLegacyMappings.GetValue());
+		}
+		if (Patch.TriggerWhenPaused.IsSet())
+		{
+			Json->SetBoolField(TEXT("trigger_when_paused"), Patch.TriggerWhenPaused.GetValue());
+		}
+		if (Patch.ReserveAllMappings.IsSet())
+		{
+			Json->SetBoolField(TEXT("reserve_all_mappings"), Patch.ReserveAllMappings.GetValue());
+		}
+		if (Patch.AccumulationBehavior.IsSet())
+		{
+			Json->SetStringField(
+				TEXT("accumulation"),
+				AccumulationToString(Patch.AccumulationBehavior.GetValue()));
+		}
+		Json->SetStringField(TEXT("preview_state"), TEXT("proposed"));
+		return Json;
+	}
+
 	TSharedPtr<FJsonObject> MappingToJson(const FEnhancedActionKeyMapping& Mapping, int32 Index)
 	{
 		TSharedPtr<FJsonObject> Json = MakeShared<FJsonObject>();
@@ -651,6 +762,27 @@ namespace
 		return Json;
 	}
 
+	TSharedPtr<FJsonObject> MappingContextProposalToJson(
+		const UInputMappingContext* CurrentContext,
+		const FString& ObjectPath,
+		const FString& PackagePath,
+		const TOptional<FString>& Description)
+	{
+		const UInputMappingContext* Baseline = CurrentContext
+			? CurrentContext
+			: GetDefault<UInputMappingContext>();
+		TSharedPtr<FJsonObject> Json = MappingContextToJson(Baseline);
+		Json->SetStringField(TEXT("asset_path"), ObjectPath);
+		Json->SetStringField(TEXT("package_path"), PackagePath);
+		Json->SetStringField(TEXT("name"), FPackageName::GetLongPackageAssetName(PackagePath));
+		if (Description.IsSet())
+		{
+			Json->SetStringField(TEXT("description"), Description.GetValue());
+		}
+		Json->SetStringField(TEXT("preview_state"), TEXT("proposed"));
+		return Json;
+	}
+
 	bool GetAssetsByClass(UClass* Class, const TSharedPtr<FJsonObject>& Params, TArray<FAssetData>& OutAssets, FString& OutError)
 	{
 		FARFilter Filter;
@@ -680,6 +812,30 @@ namespace
 		{
 			return A.GetObjectPathString() < B.GetObjectPathString();
 		});
+		return true;
+	}
+
+	template <typename TObjectType>
+	bool AreInstancedObjectArraysEquivalentToClasses(
+		const TArray<TObjectPtr<TObjectType>>& Existing,
+		const TArray<UClass*>& DesiredClasses)
+	{
+		if (Existing.Num() != DesiredClasses.Num())
+		{
+			return false;
+		}
+		for (int32 Index = 0; Index < Existing.Num(); ++Index)
+		{
+			UClass* DesiredClass = DesiredClasses[Index];
+			const TObjectType* ExistingObject = Existing[Index].Get();
+			const TObjectType* DefaultObject = DesiredClass
+				? Cast<TObjectType>(DesiredClass->GetDefaultObject())
+				: nullptr;
+			if (!AreInstancedObjectsEquivalent(ExistingObject, DefaultObject))
+			{
+				return false;
+			}
+		}
 		return true;
 	}
 
@@ -989,19 +1145,17 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputAction(con
 		}
 	}
 
-	const bool bWouldChange = bWillCreate
-		|| (bApplyValueType && Action->ValueType != ValueType)
-		|| (bHasDescription && Action->ActionDescription.ToString() != Description)
-		|| (bHasConsumeInput && Action->bConsumeInput != bConsumeInput)
-		|| (bHasTriggerWhenPaused && Action->bTriggerWhenPaused != bTriggerWhenPaused)
-		|| (bHasAccumulation && Action->AccumulationBehavior != AccumulationBehavior);
+	FInputActionPatch Patch;
+	if (bApplyValueType) Patch.ValueType = ValueType;
+	if (bHasDescription) Patch.Description = Description;
+	if (bHasConsumeInput) Patch.ConsumeInput = bConsumeInput;
+	if (bHasTriggerWhenPaused) Patch.TriggerWhenPaused = bTriggerWhenPaused;
+	if (bHasAccumulation) Patch.AccumulationBehavior = AccumulationBehavior;
+	const bool bWouldChange = bWillCreate || DoesInputActionPatchChange(Action, Patch);
 
 	if (Options.bDryRun)
 	{
-		TSharedPtr<FJsonObject> Result = Action ? InputActionToJson(Action) : MakeShared<FJsonObject>();
-		Result->SetStringField(TEXT("asset_path"), ObjectPath);
-		Result->SetStringField(TEXT("package_path"), PackagePath);
-		Result->SetStringField(TEXT("name"), FPackageName::GetLongPackageAssetName(PackagePath));
+		TSharedPtr<FJsonObject> Result = InputActionProposalToJson(Action, ObjectPath, PackagePath, Patch);
 		Result->SetBoolField(TEXT("would_create"), bWillCreate);
 		Result->SetBoolField(TEXT("would_update"), !bWillCreate && bWouldChange);
 		Result->SetBoolField(TEXT("would_change"), bWouldChange);
@@ -1012,57 +1166,42 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputAction(con
 		return FMonolithActionResult::Success(Result);
 	}
 
-	bool bCreated = false;
-	if (!Action)
+	const FString AssetName = FPackageName::GetLongPackageAssetName(PackagePath);
+	if (bWillCreate)
 	{
-		const FString AssetName = FPackageName::GetLongPackageAssetName(PackagePath);
 		FString ExistError;
 		if (!MonolithGAS::EnsureAssetPathFree(PackagePath, AssetName, ExistError))
 		{
 			return FMonolithActionResult::Error(ExistError);
 		}
-
-		UPackage* Package = MonolithGAS::GetOrCreatePackage(PackagePath, Error);
-		if (!Package)
-		{
-			return FMonolithActionResult::Error(Error);
-		}
-
-		Action = NewObject<UInputAction>(Package, *AssetName, RF_Public | RF_Standalone);
-		if (!Action)
-		{
-			return FMonolithActionResult::Error(TEXT("Failed to create InputAction"));
-		}
-		FAssetRegistryModule::AssetCreated(Action);
-		bCreated = true;
 	}
 
+	bool bCreated = false;
 	if (bWouldChange)
 	{
 		const FScopedTransaction Transaction(NSLOCTEXT("Monolith", "CreateInputAction", "Create Input Action"));
+		if (!Action)
+		{
+			UPackage* Package = MonolithGAS::GetOrCreatePackage(PackagePath, Error);
+			if (!Package)
+			{
+				return FMonolithActionResult::Error(Error);
+			}
+
+			Action = NewObject<UInputAction>(
+				Package,
+				*AssetName,
+				RF_Public | RF_Standalone | RF_Transactional);
+			if (!Action)
+			{
+				return FMonolithActionResult::Error(TEXT("Failed to create InputAction"));
+			}
+			FAssetRegistryModule::AssetCreated(Action);
+			bCreated = true;
+		}
+		Action->SetFlags(RF_Transactional);
 		Action->Modify();
-
-		if (bApplyValueType)
-		{
-			Action->ValueType = ValueType;
-		}
-
-		if (bHasDescription)
-		{
-			Action->ActionDescription = FText::FromString(Description);
-		}
-		if (bHasConsumeInput)
-		{
-			Action->bConsumeInput = bConsumeInput;
-		}
-		if (bHasTriggerWhenPaused)
-		{
-			Action->bTriggerWhenPaused = bTriggerWhenPaused;
-		}
-		if (bHasAccumulation)
-		{
-			Action->AccumulationBehavior = AccumulationBehavior;
-		}
+		ApplyInputActionPatch(Action, Patch);
 	}
 
 	bool bSaved = false;
@@ -1164,26 +1303,22 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleSetInputActionPropert
 		return FMonolithActionResult::Error(Error);
 	}
 
-	const bool bWouldChange =
-		(bHasValueType && Action->ValueType != ValueType)
-		|| (bHasDescription && Action->ActionDescription.ToString() != Description)
-		|| (bHasConsumeInput && Action->bConsumeInput != bConsumeInput)
-		|| (bHasConsumeLegacy && Action->bConsumesActionAndAxisMappings != bConsumeLegacy)
-		|| (bHasTriggerWhenPaused && Action->bTriggerWhenPaused != bTriggerWhenPaused)
-		|| (bHasReserveMappings && Action->bReserveAllMappings != bReserveMappings)
-		|| (bHasAccumulation && Action->AccumulationBehavior != AccumulationBehavior);
+	FInputActionPatch Patch;
+	if (bHasValueType) Patch.ValueType = ValueType;
+	if (bHasDescription) Patch.Description = Description;
+	if (bHasConsumeInput) Patch.ConsumeInput = bConsumeInput;
+	if (bHasConsumeLegacy) Patch.ConsumeLegacyMappings = bConsumeLegacy;
+	if (bHasTriggerWhenPaused) Patch.TriggerWhenPaused = bTriggerWhenPaused;
+	if (bHasReserveMappings) Patch.ReserveAllMappings = bReserveMappings;
+	if (bHasAccumulation) Patch.AccumulationBehavior = AccumulationBehavior;
+	const bool bWouldChange = DoesInputActionPatchChange(Action, Patch);
 
 	if (!Options.bDryRun && bWouldChange)
 	{
 		const FScopedTransaction Transaction(NSLOCTEXT("Monolith", "SetInputActionProperties", "Set Input Action Properties"));
+		Action->SetFlags(RF_Transactional);
 		Action->Modify();
-		if (bHasValueType) Action->ValueType = ValueType;
-		if (bHasDescription) Action->ActionDescription = FText::FromString(Description);
-		if (bHasConsumeInput) Action->bConsumeInput = bConsumeInput;
-		if (bHasConsumeLegacy) Action->bConsumesActionAndAxisMappings = bConsumeLegacy;
-		if (bHasTriggerWhenPaused) Action->bTriggerWhenPaused = bTriggerWhenPaused;
-		if (bHasReserveMappings) Action->bReserveAllMappings = bReserveMappings;
-		if (bHasAccumulation) Action->AccumulationBehavior = AccumulationBehavior;
+		ApplyInputActionPatch(Action, Patch);
 	}
 
 	bool bSaved = false;
@@ -1192,7 +1327,13 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleSetInputActionPropert
 		return FMonolithActionResult::Error(Error);
 	}
 
-	TSharedPtr<FJsonObject> Result = InputActionToJson(Action);
+	TSharedPtr<FJsonObject> Result = Options.bDryRun
+		? InputActionProposalToJson(
+			Action,
+			Action->GetPathName(),
+			Action->GetOutermost()->GetName(),
+			Patch)
+		: InputActionToJson(Action);
 	Result->SetBoolField(TEXT("would_change"), bWouldChange);
 	Result->SetBoolField(TEXT("changed"), !Options.bDryRun && bWouldChange);
 	Result->SetBoolField(TEXT("dry_run"), Options.bDryRun);
@@ -1301,15 +1442,18 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputMappingCon
 	}
 
 	const bool bWillCreate = Context == nullptr;
+	TOptional<FString> ProposedDescription;
+	if (bHasDescription)
+	{
+		ProposedDescription = Description;
+	}
 	const bool bWouldChange = bWillCreate
 		|| (bHasDescription && Context->ContextDescription.ToString() != Description);
 
 	if (Options.bDryRun)
 	{
-		TSharedPtr<FJsonObject> Result = Context ? MappingContextToJson(Context) : MakeShared<FJsonObject>();
-		Result->SetStringField(TEXT("asset_path"), ObjectPath);
-		Result->SetStringField(TEXT("package_path"), PackagePath);
-		Result->SetStringField(TEXT("name"), FPackageName::GetLongPackageAssetName(PackagePath));
+		TSharedPtr<FJsonObject> Result =
+			MappingContextProposalToJson(Context, ObjectPath, PackagePath, ProposedDescription);
 		Result->SetBoolField(TEXT("would_create"), bWillCreate);
 		Result->SetBoolField(TEXT("would_update"), !bWillCreate && bWouldChange);
 		Result->SetBoolField(TEXT("would_change"), bWouldChange);
@@ -1320,34 +1464,40 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputMappingCon
 		return FMonolithActionResult::Success(Result);
 	}
 
-	bool bCreated = false;
-	if (!Context)
+	const FString AssetName = FPackageName::GetLongPackageAssetName(PackagePath);
+	if (bWillCreate)
 	{
-		const FString AssetName = FPackageName::GetLongPackageAssetName(PackagePath);
 		FString ExistError;
 		if (!MonolithGAS::EnsureAssetPathFree(PackagePath, AssetName, ExistError))
 		{
 			return FMonolithActionResult::Error(ExistError);
 		}
-
-		UPackage* Package = MonolithGAS::GetOrCreatePackage(PackagePath, Error);
-		if (!Package)
-		{
-			return FMonolithActionResult::Error(Error);
-		}
-
-		Context = NewObject<UInputMappingContext>(Package, *AssetName, RF_Public | RF_Standalone);
-		if (!Context)
-		{
-			return FMonolithActionResult::Error(TEXT("Failed to create InputMappingContext"));
-		}
-		FAssetRegistryModule::AssetCreated(Context);
-		bCreated = true;
 	}
 
+	bool bCreated = false;
 	if (bWouldChange)
 	{
 		const FScopedTransaction Transaction(NSLOCTEXT("Monolith", "CreateInputMappingContext", "Create Input Mapping Context"));
+		if (!Context)
+		{
+			UPackage* Package = MonolithGAS::GetOrCreatePackage(PackagePath, Error);
+			if (!Package)
+			{
+				return FMonolithActionResult::Error(Error);
+			}
+
+			Context = NewObject<UInputMappingContext>(
+				Package,
+				*AssetName,
+				RF_Public | RF_Standalone | RF_Transactional);
+			if (!Context)
+			{
+				return FMonolithActionResult::Error(TEXT("Failed to create InputMappingContext"));
+			}
+			FAssetRegistryModule::AssetCreated(Context);
+			bCreated = true;
+		}
+		Context->SetFlags(RF_Transactional);
 		Context->Modify();
 		if (bHasDescription)
 		{
@@ -1473,48 +1623,41 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 	const int32 Before = Context->GetMappings().Num();
 	int32 ExistingIndex = bAllowDuplicate ? INDEX_NONE : FindMappingIndexByActionAndKey(Context, Action, Key);
 
-	FEnhancedActionKeyMapping DesiredMapping(Action, Key);
-	const UObject* DesiredOuter = GetTransientPackage();
-	if (SourceMapping)
-	{
-		if (!CloneInstancedObjectArray(SourceMapping->Modifiers, const_cast<UObject*>(DesiredOuter), DesiredMapping.Modifiers, Error)
-			|| !CloneInstancedObjectArray(SourceMapping->Triggers, const_cast<UObject*>(DesiredOuter), DesiredMapping.Triggers, Error))
-		{
-			return FMonolithActionResult::Error(Error);
-		}
-	}
-	else if (ExistingIndex != INDEX_NONE)
-	{
-		const FEnhancedActionKeyMapping& ExistingMapping = Context->GetMappings()[ExistingIndex];
-		if (!CloneInstancedObjectArray(ExistingMapping.Modifiers, const_cast<UObject*>(DesiredOuter), DesiredMapping.Modifiers, Error)
-			|| !CloneInstancedObjectArray(ExistingMapping.Triggers, const_cast<UObject*>(DesiredOuter), DesiredMapping.Triggers, Error))
-		{
-			return FMonolithActionResult::Error(Error);
-		}
-	}
-
-	if (bHasModifierClasses)
-	{
-		if (!NewInstancedObjectArrayFromClasses(ModifierClasses, const_cast<UObject*>(DesiredOuter), DesiredMapping.Modifiers, Error))
-		{
-			return FMonolithActionResult::Error(Error);
-		}
-	}
-	if (bHasTriggerClasses)
-	{
-		if (!NewInstancedObjectArrayFromClasses(TriggerClasses, const_cast<UObject*>(DesiredOuter), DesiredMapping.Triggers, Error))
-		{
-			return FMonolithActionResult::Error(Error);
-		}
-	}
-
 	const bool bWouldCreate = ExistingIndex == INDEX_NONE;
 	bool bWouldUpdate = false;
 	int32 MappingIndex = ExistingIndex;
+	const FEnhancedActionKeyMapping* ExistingMapping = ExistingIndex != INDEX_NONE
+		? &Context->GetMappings()[ExistingIndex]
+		: nullptr;
+	const bool bReplaceModifiers = bHasModifierClasses || SourceMapping != nullptr;
+	const bool bReplaceTriggers = bHasTriggerClasses || SourceMapping != nullptr;
+	const int32 DesiredModifierCount = bHasModifierClasses
+		? ModifierClasses.Num()
+		: SourceMapping
+			? SourceMapping->Modifiers.Num()
+			: ExistingMapping
+				? ExistingMapping->Modifiers.Num()
+				: 0;
+	const int32 DesiredTriggerCount = bHasTriggerClasses
+		? TriggerClasses.Num()
+		: SourceMapping
+			? SourceMapping->Triggers.Num()
+			: ExistingMapping
+				? ExistingMapping->Triggers.Num()
+				: 0;
 	if (ExistingIndex != INDEX_NONE)
 	{
-		const FEnhancedActionKeyMapping& ExistingMapping = Context->GetMappings()[ExistingIndex];
-		bWouldUpdate = !AreMappingsEquivalentForAuthoring(ExistingMapping, DesiredMapping);
+		const bool bModifiersEquivalent = bHasModifierClasses
+			? AreInstancedObjectArraysEquivalentToClasses(ExistingMapping->Modifiers, ModifierClasses)
+			: SourceMapping
+				? AreInstancedObjectArraysEquivalent(ExistingMapping->Modifiers, SourceMapping->Modifiers)
+				: true;
+		const bool bTriggersEquivalent = bHasTriggerClasses
+			? AreInstancedObjectArraysEquivalentToClasses(ExistingMapping->Triggers, TriggerClasses)
+			: SourceMapping
+				? AreInstancedObjectArraysEquivalent(ExistingMapping->Triggers, SourceMapping->Triggers)
+				: true;
+		bWouldUpdate = !bModifiersEquivalent || !bTriggersEquivalent;
 	}
 
 	const bool bWouldChange = bWouldCreate || bWouldUpdate;
@@ -1526,7 +1669,32 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 	if (bWouldChange && !Options.bDryRun)
 	{
 		const FScopedTransaction Transaction(NSLOCTEXT("Monolith", "AddInputMapping", "Add Input Mapping"));
+		Context->SetFlags(RF_Transactional);
 		Context->Modify();
+
+		TArray<TObjectPtr<UInputModifier>> PreparedModifiers;
+		TArray<TObjectPtr<UInputTrigger>> PreparedTriggers;
+		if (bReplaceModifiers)
+		{
+			const bool bPreparedModifiers = bHasModifierClasses
+				? NewInstancedObjectArrayFromClasses(ModifierClasses, Context, PreparedModifiers, Error)
+				: CloneInstancedObjectArray(SourceMapping->Modifiers, Context, PreparedModifiers, Error);
+			if (!bPreparedModifiers)
+			{
+				return FMonolithActionResult::Error(Error);
+			}
+		}
+		if (bReplaceTriggers)
+		{
+			const bool bPreparedTriggers = bHasTriggerClasses
+				? NewInstancedObjectArrayFromClasses(TriggerClasses, Context, PreparedTriggers, Error)
+				: CloneInstancedObjectArray(SourceMapping->Triggers, Context, PreparedTriggers, Error);
+			if (!bPreparedTriggers)
+			{
+				return FMonolithActionResult::Error(Error);
+			}
+		}
+
 		if (bWouldCreate)
 		{
 			FEnhancedActionKeyMapping& NewMapping = Context->MapKey(Action, Key);
@@ -1540,10 +1708,13 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 		FEnhancedActionKeyMapping& TargetMapping = Context->GetMapping(MappingIndex);
 		TargetMapping.Action = Action;
 		TargetMapping.Key = Key;
-		if (!CloneInstancedObjectArray(DesiredMapping.Modifiers, Context, TargetMapping.Modifiers, Error)
-			|| !CloneInstancedObjectArray(DesiredMapping.Triggers, Context, TargetMapping.Triggers, Error))
+		if (bReplaceModifiers)
 		{
-			return FMonolithActionResult::Error(Error);
+			TargetMapping.Modifiers = MoveTemp(PreparedModifiers);
+		}
+		if (bReplaceTriggers)
+		{
+			TargetMapping.Triggers = MoveTemp(PreparedTriggers);
 		}
 	}
 
@@ -1571,8 +1742,8 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 	Result->SetBoolField(TEXT("dry_run"), Options.bDryRun);
 	Result->SetBoolField(TEXT("allow_duplicate"), bAllowDuplicate);
 	Result->SetBoolField(TEXT("cloned_from_source"), SourceMapping != nullptr);
-	Result->SetNumberField(TEXT("modifier_count"), DesiredMapping.Modifiers.Num());
-	Result->SetNumberField(TEXT("trigger_count"), DesiredMapping.Triggers.Num());
+	Result->SetNumberField(TEXT("modifier_count"), DesiredModifierCount);
+	Result->SetNumberField(TEXT("trigger_count"), DesiredTriggerCount);
 	Result->SetBoolField(TEXT("saved"), bSaved);
 	return FMonolithActionResult::Success(Result);
 }
@@ -1627,6 +1798,7 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleRemoveInputMapping(co
 	if (bWouldChange && !Options.bDryRun)
 	{
 		const FScopedTransaction Transaction(NSLOCTEXT("Monolith", "RemoveInputMapping", "Remove Input Mapping"));
+		Context->SetFlags(RF_Transactional);
 		Context->Modify();
 		Context->UnmapKey(Action, Key);
 		RemovedCount = Before - Context->GetMappings().Num();
@@ -1656,6 +1828,7 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleRemoveInputMapping(co
 
 FMonolithActionResult FMonolithGASInputAssetActions::HandleValidateInputMappings(const TSharedPtr<FJsonObject>& Params)
 {
+	const bool bHasExplicitContextPaths = HasParam(Params, TEXT("context_paths"));
 	TArray<FString> ContextPaths;
 	FString ParamError;
 	if (!ReadContextPaths(Params, ContextPaths, ParamError))
@@ -1663,7 +1836,7 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleValidateInputMappings
 		return InvalidParams(ParamError);
 	}
 
-	if (ContextPaths.Num() == 0)
+	if (!bHasExplicitContextPaths)
 	{
 		TArray<FAssetData> Assets;
 		FString Error;
@@ -1724,15 +1897,20 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleValidateInputMappings
 			}
 		}
 
-		for (const TPair<FString, TArray<FString>>& Pair : KeyToActions)
+		TArray<FString> SortedKeys;
+		KeyToActions.GetKeys(SortedKeys);
+		SortedKeys.Sort();
+		for (const FString& ConflictKey : SortedKeys)
 		{
-			if (Pair.Value.Num() > 1)
+			TArray<FString> Actions = KeyToActions.FindChecked(ConflictKey);
+			if (Actions.Num() > 1)
 			{
+				Actions.Sort();
 				TSharedPtr<FJsonObject> Issue = MakeShared<FJsonObject>();
 				Issue->SetStringField(TEXT("type"), TEXT("duplicate_key_conflict"));
-				Issue->SetStringField(TEXT("key"), Pair.Key);
+				Issue->SetStringField(TEXT("key"), ConflictKey);
 				TArray<TSharedPtr<FJsonValue>> ActionsJson;
-				for (const FString& Action : Pair.Value)
+				for (const FString& Action : Actions)
 				{
 					ActionsJson.Add(MakeShared<FJsonValueString>(Action));
 				}
