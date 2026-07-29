@@ -1,8 +1,10 @@
 #include "MonolithInterchangeActions.h"
 
 #include "MonolithAssetUtils.h"
+#include "MonolithInterchangeImportRollback.h"
 #include "MonolithParamSchema.h"
 
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetExportTask.h"
 #include "AssetImportTask.h"
 #include "AssetToolsModule.h"
@@ -730,6 +732,49 @@ namespace
 		return StringArrayToJson(Sorted);
 	}
 
+	TSet<FName> SnapshotAssetObjectPathsUnder(const FString& DestinationPath)
+	{
+		TSet<FName> ObjectPaths;
+		if (DestinationPath.IsEmpty())
+		{
+			return ObjectPaths;
+		}
+
+		FAssetRegistryModule& AssetRegistryModule =
+			FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+		TArray<FAssetData> AssetDataRows;
+		AssetRegistryModule.Get().GetAssetsByPath(
+			FName(*DestinationPath),
+			AssetDataRows,
+			true,
+			false);
+		for (const FAssetData& AssetData : AssetDataRows)
+		{
+			const FString ObjectPath = FString::Printf(
+				TEXT("%s.%s"),
+				*AssetData.PackageName.ToString(),
+				*AssetData.AssetName.ToString());
+			ObjectPaths.Add(FName(*ObjectPath));
+		}
+
+		const FString DestinationPrefix = DestinationPath + TEXT("/");
+		for (TObjectIterator<UObject> ObjectIt; ObjectIt; ++ObjectIt)
+		{
+			UObject* Object = *ObjectIt;
+			if (!Object || !Object->IsAsset() || !Object->GetOutermost())
+			{
+				continue;
+			}
+
+			const FString PackageName = Object->GetOutermost()->GetName();
+			if (PackageName == DestinationPath || PackageName.StartsWith(DestinationPrefix))
+			{
+				ObjectPaths.Add(FName(*Object->GetPathName()));
+			}
+		}
+		return ObjectPaths;
+	}
+
 	bool ValidateOutputFileRoot(const FString& FilePath, bool bAllowExternal)
 	{
 		return bAllowExternal || IsUnderDefaultImportRoots(FilePath);
@@ -900,19 +945,24 @@ namespace
 			return Row;
 		}
 
+		const bool bRequiresTypedResultValidation =
+			RequestedKind != ERequestedImportKind::Any &&
+			RequestedKind != ERequestedImportKind::Scene;
+		const TSet<FName> PreExistingObjectPaths =
+			bRequiresTypedResultValidation
+				? SnapshotAssetObjectPathsUnder(DestinationPath)
+				: TSet<FName>();
+
 		UAssetImportTask* ImportTask = NewObject<UAssetImportTask>();
 		ImportTask->AddToRoot();
 		ImportTask->Filename = NormalizedSource;
 		ImportTask->DestinationPath = DestinationPath;
+		ImportTask->DestinationName = ResolvedAssetName;
 		ImportTask->bAutomated = true;
 		ImportTask->bAsync = false;
 		ImportTask->bSave = false;
 		ImportTask->bReplaceExisting = ConflictPolicy == TEXT("overwrite");
 		ImportTask->bReplaceExistingSettings = ConflictPolicy == TEXT("overwrite");
-		if (ConflictPolicy == TEXT("rename"))
-		{
-			ImportTask->DestinationName = ResolvedAssetName;
-		}
 		if (!Backend.bInterchangeTranslator && Backend.LegacyFactoryClass)
 		{
 			ImportTask->Factory = CreateConfiguredFactory(
@@ -954,25 +1004,67 @@ namespace
 				++MatchingKindCount;
 			}
 		}
-		if (RequestedKind != ERequestedImportKind::Any &&
-			RequestedKind != ERequestedImportKind::Scene &&
-			MatchingKindCount == 0)
+		const TArray<TSharedPtr<FJsonValue>> DirtyPackagesBeforeValidation =
+			DirtyPackagesToJson(ImportedObjects);
+		if (bRequiresTypedResultValidation && MatchingKindCount == 0)
 		{
+			Row->SetArrayField(
+				TEXT("dirty_packages_before_rollback"),
+				DirtyPackagesBeforeValidation);
 			AddMessage(
 				Messages,
 				TEXT("typed_import_result_mismatch"),
 				FString::Printf(
 					TEXT("Importer returned objects but none satisfied requested kind '%s'."),
 					ImportKindToString(RequestedKind)));
-			Row->SetStringField(TEXT("status"), TEXT("error"));
+
+			const FMonolithInterchangeRollbackResult Rollback =
+				RollbackNewImportedObjects(ImportedObjects, PreExistingObjectPaths);
+			Row->SetBoolField(TEXT("rollback_attempted"), true);
+			Row->SetBoolField(TEXT("rollback_complete"), Rollback.IsComplete());
+			Row->SetNumberField(TEXT("rollback_candidate_count"), Rollback.CandidateCount);
+			Row->SetNumberField(TEXT("rollback_deleted_count"), Rollback.DeletedCount);
+			Row->SetArrayField(
+				TEXT("rollback_candidates"),
+				StringArrayToJson(Rollback.CandidateObjectPaths));
+			Row->SetArrayField(TEXT("rolled_back_assets"), StringArrayToJson(Rollback.DeletedObjectPaths));
+			Row->SetArrayField(
+				TEXT("pre_existing_import_results"),
+				StringArrayToJson(Rollback.PreExistingObjectPaths));
+			Row->SetArrayField(
+				TEXT("unmanaged_import_results"),
+				StringArrayToJson(Rollback.UnmanagedObjectPaths));
+
+			if (Rollback.IsComplete())
+			{
+				AddMessage(
+					Messages,
+					TEXT("typed_import_rollback_complete"),
+					TEXT("All newly imported assets were removed after typed result validation failed."));
+				Row->SetBoolField(TEXT("partial_mutation"), false);
+				Row->SetStringField(TEXT("status"), TEXT("error"));
+				Row->SetArrayField(
+					TEXT("dirty_packages"),
+					TArray<TSharedPtr<FJsonValue>>());
+			}
+			else
+			{
+				AddMessage(
+					Messages,
+					TEXT("typed_import_partial_mutation"),
+					TEXT("Typed result validation failed after Unreal returned pre-existing, unmanaged, or undeletable objects. The response is a partial mutation; inspect the reported assets before retrying."));
+				Row->SetBoolField(TEXT("partial_mutation"), true);
+				Row->SetStringField(TEXT("status"), TEXT("partial_import"));
+				Row->SetArrayField(TEXT("dirty_packages"), DirtyPackagesBeforeValidation);
+			}
 		}
 		else
 		{
 			Row->SetStringField(TEXT("status"), TEXT("imported"));
+			Row->SetArrayField(TEXT("dirty_packages"), DirtyPackagesBeforeValidation);
 		}
 		Row->SetNumberField(TEXT("matching_kind_count"), MatchingKindCount);
 		Row->SetArrayField(TEXT("imported_assets"), ImportedRows);
-		Row->SetArrayField(TEXT("dirty_packages"), DirtyPackagesToJson(ImportedObjects));
 		Row->SetArrayField(TEXT("messages"), Messages);
 		return Row;
 	}

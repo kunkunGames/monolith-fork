@@ -1,11 +1,15 @@
 #include "CoreMinimal.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "Dom/JsonObject.h"
 #include "HAL/FileManager.h"
+#include "Engine/Texture2D.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
 #include "MonolithInterchangeActions.h"
+#include "MonolithInterchangeImportRollback.h"
+#include "UObject/Package.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardInterchangeImportMalformedParamsTest, "Monolith.ParamGuard.MonolithInterchange.ImportRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
@@ -334,6 +338,53 @@ bool FMonolithParamGuardInterchangeImportMalformedParamsTest::RunTest(const FStr
 				TEXT("unsupported extension has no matching exporter"),
 				Result.Result->GetBoolField(TEXT("exporter_available")));
 		}
+	}
+
+	{
+		const FString RollbackId = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+		const FString NewPackagePath =
+			FString::Printf(TEXT("/Game/Tests/Monolith/Interchange/Rollback_%s/NewAsset"), *RollbackId);
+		UPackage* NewPackage = CreatePackage(*NewPackagePath);
+		UTexture2D* NewAsset = NewObject<UTexture2D>(
+			NewPackage,
+			TEXT("NewAsset"),
+			RF_Public | RF_Standalone);
+		FAssetRegistryModule::AssetCreated(NewAsset);
+
+		TArray<UObject*> NewImportResults;
+		NewImportResults.Add(NewAsset);
+		const FMonolithInterchangeRollbackResult CompleteRollback =
+			RollbackNewImportedObjects(NewImportResults, TSet<FName>());
+		TestTrue(TEXT("new typed-mismatch assets are fully rolled back"), CompleteRollback.IsComplete());
+		TestEqual(TEXT("one rollback candidate is identified"), CompleteRollback.CandidateCount, 1);
+		TestEqual(TEXT("one rollback candidate is deleted"), CompleteRollback.DeletedCount, 1);
+		TestEqual(TEXT("complete rollback reports the deleted path"), CompleteRollback.DeletedObjectPaths.Num(), 1);
+
+		const FString ExistingPackagePath =
+			FString::Printf(TEXT("/Game/Tests/Monolith/Interchange/Rollback_%s/ExistingAsset"), *RollbackId);
+		UPackage* ExistingPackage = CreatePackage(*ExistingPackagePath);
+		UTexture2D* ExistingAsset = NewObject<UTexture2D>(
+			ExistingPackage,
+			TEXT("ExistingAsset"),
+			RF_Public | RF_Standalone);
+		FAssetRegistryModule::AssetCreated(ExistingAsset);
+
+		TArray<UObject*> ExistingImportResults;
+		ExistingImportResults.Add(ExistingAsset);
+		TSet<FName> PreExistingPaths;
+		PreExistingPaths.Add(FName(*ExistingAsset->GetPathName()));
+		const FMonolithInterchangeRollbackResult PartialRollback =
+			RollbackNewImportedObjects(ExistingImportResults, PreExistingPaths);
+		TestFalse(TEXT("pre-existing typed-mismatch results are not misreported as rolled back"), PartialRollback.IsComplete());
+		TestEqual(
+			TEXT("pre-existing result is preserved for explicit partial-mutation reporting"),
+			PartialRollback.PreExistingObjectPaths.Num(),
+			1);
+		TestEqual(TEXT("pre-existing results are not rollback candidates"), PartialRollback.CandidateCount, 0);
+
+		const FMonolithInterchangeRollbackResult CleanupRollback =
+			RollbackNewImportedObjects(ExistingImportResults, TSet<FName>());
+		TestTrue(TEXT("pre-existing rollback fixture cleanup succeeds"), CleanupRollback.IsComplete());
 	}
 
 	return true;
