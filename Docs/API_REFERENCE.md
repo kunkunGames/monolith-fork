@@ -1124,6 +1124,24 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithLevelSequence.md`.
 
 ---
 
+## gameplay_message
+
+Read-only GameplayMessageRouter availability, exact channel/payload validation, and bounded static broadcaster/listener source tracing. **5 actions.** Implemented by `MonolithGameplayMessage` without a compile-time dependency on `GameplayMessageRuntime` or `GameplayMessageNodes`.
+
+| Action | Key params | Notes |
+|--------|-----------|-------|
+| `get_status` | — | Exact plugin, runtime/nodes module, subsystem class, async-listener class, listener-handle struct, and match-enum availability |
+| `describe_listener_contract` | — | Reflected listener/broadcast functions, match types, and shared channel/payload/lifetime rules |
+| `validate_message_struct` | `message_struct`, `require_blueprint_type?`, `require_no_object_references?` | Exact non-redirecting `UScriptStruct` identity plus metadata/property checks |
+| `validate_channel_contract` | `channel_tag`, `message_struct?`, `match_type?`, `require_registered_tag?`, `require_blueprint_type?` | Canonical tag syntax, exact registration/case, case-sensitive match type, and optional payload validation |
+| `trace_channel_usage` | `channel_tag?`, `source_root?`, `source_roots?`, `include_monolith_source?`, `include_engine_gameplay_message_sources?`, `max_files?`, `max_results?`, `include_line_text?` | Bounded lexical candidates only; explicit roots/limits/truncation metadata; no PIE, listeners, or broadcasts |
+
+Scalar params require exact JSON types. Object paths reject whitespace, backslashes, extensions, subobjects, redirects, case changes, and resolved-path substitutions. `max_files` is `1..5000`; `max_results` is `1..1000`; values are never clamped.
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithGameplayMessage.md`.
+
+---
+
 ## bulk_fill
 
 Reflection-walker bulk property fill across 12 per-namespace adapters. **2 actions.** Framework dispatcher in `MonolithCore` (0.15.0); each adapter self-registers from its owning module — zero compile-time linkage from core into adapter modules.
