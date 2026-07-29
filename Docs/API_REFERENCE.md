@@ -978,11 +978,13 @@ Enhanced Input asset integration. **10 actions** inspect and author `UInputActio
 
 All five writers (`create_input_action`, `set_input_action_properties`, `create_input_mapping_context`, `add_input_mapping`, `remove_input_mapping`) share the same mutation contract:
 
-- `dry_run=true` previews the result without creating an object/package, mutating an asset, dirtying a package, or saving.
+- `dry_run=true` returns the proposed values with `preview_state="proposed"` without creating an object/package, constructing modifier/trigger UObjects, mutating an asset, dirtying a package, or saving.
 - A committed write requires `confirm=true`; `save` defaults to `false`.
-- Package and asset inputs must resolve within `/Game`, and booleans, strings, and arrays are type-checked rather than coerced.
+- Package and asset inputs must resolve within `/Game`; malformed package roots and object paths whose explicit object name differs from the package asset name are rejected. Required and optional booleans, strings, and arrays are type-checked rather than coerced.
 - A semantic no-op does not call `Modify()`, dirty a package, or save it.
+- Unsaved confirmed creation is fully transactional. Undo removes the new asset from its package path and the Asset Registry; Redo restores the same object and proposed state. `save=true` is an explicit disk-persistence boundary, as with other editor asset writes.
 - `add_input_mapping` reuses the existing action+key mapping unless `allow_duplicate=true`. Source cloning requires `source_context_path`, `source_action_path`, and `source_key` together. Explicit `modifier_classes` / `trigger_classes` replace cloned or existing arrays; an explicit empty array clears them.
+- `validate_input_mappings` distinguishes omission from selection: omitted `context_paths` scans the optional `path`, while an explicit empty array checks zero contexts and does not fall back to a project-wide scan.
 - Removing an absent mapping is a successful no-op with `would_remove_count=0`.
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithGAS.md` and `Plugins/Monolith/Skills/unreal-input/SKILL.md` for the module contract and task workflow.

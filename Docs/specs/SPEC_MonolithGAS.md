@@ -48,11 +48,13 @@ The 10 `input` actions are distinct from the five `gas` ability-input bindings a
 Mutation and validation invariants:
 
 1. Every writer requires either `dry_run=true` or `confirm=true`; `save` defaults to `false`.
-2. Dry-run returns before object/package creation, mutation, dirtying, or save.
-3. Asset paths and list roots must be valid `/Game` package paths. Optional booleans, strings, class arrays, and `context_paths` retain strict JSON types.
+2. Dry-run reports the proposed state and returns before object/package creation, modifier/trigger UObject construction, mutation, dirtying, or save.
+3. Asset paths and list roots must be valid `/Game` package paths. Explicit object names must match the package asset name. Required/optional booleans, strings, class arrays, and `context_paths` retain strict JSON types.
 4. Semantic no-ops do not call `Modify()`, dirty a package, or save it.
 5. `add_input_mapping` reuses an existing action+key mapping unless `allow_duplicate=true`. Cloning requires the complete `source_context_path` + `source_action_path` + `source_key` selector. Explicit `modifier_classes` or `trigger_classes` replace the cloned/existing arrays; an explicit empty array clears one.
 6. `remove_input_mapping` reports `would_remove_count`; an absent mapping is a clean successful no-op.
+7. Omitted `context_paths` selects contexts from optional `path`; explicit `context_paths: []` selects none and never falls back to a global scan.
+8. Unsaved confirmed asset creation uses a package-stable custom transaction change. Undo removes the asset from its package path and the Asset Registry; Redo restores the same object and authored values. `save=true` is the explicit disk-persistence boundary.
 
 ### Phase J fixes touching this module
 
@@ -129,7 +131,7 @@ Returns:
 - `Plugins/Monolith/Source/MonolithGAS/Private/MonolithGASBulkFillAdapter.h` / `.cpp` — the adapter
 - `Plugins/Monolith/Source/MonolithGAS/Public/MonolithGASInputAssetActions.h` — Enhanced Input handler surface
 - `Plugins/Monolith/Source/MonolithGAS/Private/MonolithGASInputAssetActions.cpp` — 10 `input` action schemas and handlers
-- `Plugins/Monolith/Source/MonolithGAS/Private/Tests/MonolithGASInputAssetActionsTests.cpp` — registration, guard, dry-run, type, lifecycle/clone, and no-op automation
+- `Plugins/Monolith/Source/MonolithGAS/Private/Tests/MonolithGASInputAssetActionsTests.cpp` — registration, guard, allocation-free dry-run, strict type/path handling, creation Undo/Redo, lifecycle/clone, and no-op automation
 - `Plugins/Monolith/Source/MonolithGAS/Private/MonolithGASModule.cpp` — namespace registration and shutdown
 - `Plugins/Monolith/Skills/unreal-input/SKILL.md` — schema-first Enhanced Input workflow
 

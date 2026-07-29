@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **A guarded `input` namespace now covers Enhanced Input assets.** Ten actions list, inspect, create, update, validate, and edit `UInputAction` / `UInputMappingContext` assets. All five writers require `dry_run=true` or `confirm=true`, default to `save=false`, reject malformed `/Game` paths and JSON types, preserve clean no-op calls, and support deterministic mapping modifier/trigger cloning without depending on the `bEnableGAS` setting.
 
+### Fixed
+
+- **The new Enhanced Input surface now honors its strict preview and editor-transaction contracts.** Required strings reject non-string JSON, explicit object names must match the package asset name, malformed list roots fail loudly, and `context_paths: []` validates zero contexts instead of scanning the project. Dry-runs return the proposed state and compare modifier/trigger classes without constructing UObjects. Unsaved `UInputAction` and `UInputMappingContext` creation is now a complete Undo/Redo operation: Undo removes the asset from its package path and the Asset Registry, while Redo restores the same object and authored state.
+
 ## [0.21.3] - 2026-07-26
 
 This release closes out the open pull-request queue. Every fix below was reported or prototyped by a contributor — thanks to **@Thomasbehan**, **@whalemenace**, and **@kunkunGames** for the write-ups, which were detailed enough to reproduce from directly.
