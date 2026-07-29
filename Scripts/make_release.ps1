@@ -1090,7 +1090,7 @@ $trackedFiles = $allTrackedFiles | Where-Object {
         $keep = $false
     }
     # Exclude developer environment cache directories
-    if ($keep -and ($path -like ".clangd/*" -or $path -like ".mypy_cache/*" -or $path -like ".pytest_cache/*" -or $path -like ".ruff_cache/*" -or $path -like ".venv/*" -or $path -like ".vscode/*" -or $path -like ".vs/*" -or $path -like ".idea/*")) {
+    if ($keep -and ($path -like ".clangd/*" -or $path -like ".mypy_cache/*" -or $path -like ".pytest_cache/*" -or $path -like ".ruff_cache/*" -or $path -like ".venv/*" -or $path -like ".vscode/*" -or $path -like ".vs/*" -or $path -like ".idea/*" -or $path -like ".cache/*" -or $path -like ".antigravitycli/*")) {
         $keep = $false
     }
     # Strip internal testing-execution records (Docs/testing/) -- per-feature test-pass

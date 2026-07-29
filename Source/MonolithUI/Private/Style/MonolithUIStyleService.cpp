@@ -376,10 +376,7 @@ UClass* FMonolithUIStyleService::CreateNewStyleAsset(
         OutError = FString::Printf(TEXT("CreateNewStyleAsset: CreatePackage failed for '%s'"), *FinalPackageName);
         return nullptr;
     }
-    // uses CreatePackage's return value directly with no FullyLoad — calling
-    // FullyLoad on the in-memory hit path forces a serialization read that
-    // can pull stale RF_Transient flags from a leftover .uasset into the
-    // in-memory package.
+    Package->FullyLoad();
 
     // Create a Blueprint whose parent is the native style class. The 5-arg
     // overload auto-resolves BlueprintClass / BlueprintGeneratedClass — same

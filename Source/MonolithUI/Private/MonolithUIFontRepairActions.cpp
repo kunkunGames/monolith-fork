@@ -1116,10 +1116,7 @@ FMonolithActionResult FMonolithUIFontRepairActions::HandleCloneCompositeFontWith
             FString::Printf(TEXT("CreatePackage failed for '%s'."), *DestinationPackagePath),
             FMonolithJsonUtils::ErrInternalError);
     }
-    // uses CreatePackage's return value directly with no FullyLoad — calling
-    // FullyLoad on the in-memory hit path forces a serialization read that
-    // can pull stale RF_Transient flags from a leftover .uasset into the
-    // in-memory package.
+    DestinationPackage->FullyLoad();
 
     TUniquePtr<FScopedTransaction> Transaction;
     if (GEditor)

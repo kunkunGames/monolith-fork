@@ -440,10 +440,7 @@ FMonolithActionResult MonolithUI::FShadowActions::HandleApplyBoxShadow(const TSh
                     FString::Printf(TEXT("Failed to create package '%s' for saved shadow MID"), *UniquePackageName),
                     -32603);
             }
-            // uses CreatePackage's return value directly with no FullyLoad — calling
-            // FullyLoad on the in-memory hit path forces a serialization read that
-            // can pull stale RF_Transient flags from a leftover .uasset into the
-            // in-memory package.
+            Package->FullyLoad();
 
             UMaterialInstanceConstant* MIC = NewObject<UMaterialInstanceConstant>(
                 Package, FName(*UniqueAssetName),
