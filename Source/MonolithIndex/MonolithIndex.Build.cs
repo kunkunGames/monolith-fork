@@ -80,7 +80,8 @@ public class MonolithIndex : ModuleRules
 			"GameplayAbilities",
 			"EnhancedInput",
 			"Projects",
-			"CollectionManager"
+			"CollectionManager",
+			"ContentBrowserData"
 		});
 
 		// --- Conditional: MetaSound (engine-shipped Runtime plugin) ---

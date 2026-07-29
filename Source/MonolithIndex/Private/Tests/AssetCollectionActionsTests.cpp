@@ -438,6 +438,67 @@ bool FMonolithCollectionLocalLifecycleTest::RunTest(const FString& /*Parameters*
 			FString(TEXT("Type=Texture2D")));
 	}
 
+	const FMonolithActionResult DynamicDetails =
+		Invoke(TEXT("get_collection"), MakeNamedParams(DynamicName));
+	TestTrue(
+		TEXT("get_collection resolves dynamic membership"),
+		DynamicDetails.bSuccess);
+	if (TestTrue(
+		TEXT("dynamic collection details return a payload"),
+		DynamicDetails.Result.IsValid()))
+	{
+		TestTrue(
+			TEXT("dynamic collection details count matching assets"),
+			DynamicDetails.Result->GetIntegerField(TEXT("asset_count")) > 0);
+		TestEqual(
+			TEXT("dynamic collection details expose the saved query"),
+			DynamicDetails.Result->GetStringField(TEXT("query_text")),
+			FString(TEXT("Type=Texture2D")));
+	}
+
+	const FMonolithActionResult DynamicAssets =
+		Invoke(TEXT("list_assets"), MakeNamedParams(DynamicName));
+	TestTrue(
+		TEXT("list_assets resolves dynamic membership"),
+		DynamicAssets.bSuccess);
+	if (TestTrue(
+		TEXT("dynamic list_assets returns a payload"),
+		DynamicAssets.Result.IsValid()))
+	{
+		TestTrue(
+			TEXT("dynamic list_assets reports matching assets"),
+			DynamicAssets.Result->GetIntegerField(TEXT("count")) > 0);
+		const TArray<TSharedPtr<FJsonValue>>& Assets =
+			DynamicAssets.Result->GetArrayField(TEXT("assets"));
+		const bool bContainsDefaultTexture = Assets.ContainsByPredicate(
+			[&AssetPath](const TSharedPtr<FJsonValue>& Value)
+			{
+				return Value.IsValid()
+					&& Value->Type == EJson::String
+					&& Value->AsString() == AssetPath;
+			});
+		TestTrue(
+			TEXT("dynamic query includes the engine default texture"),
+			bContainsDefaultTexture);
+	}
+
+	TSharedPtr<FJsonObject> DynamicContainsParams =
+		MakeNamedParams(DynamicName);
+	DynamicContainsParams->SetStringField(TEXT("asset_path"), AssetPath);
+	const FMonolithActionResult DynamicContains =
+		Invoke(TEXT("contains_asset"), DynamicContainsParams);
+	TestTrue(
+		TEXT("contains_asset resolves dynamic membership"),
+		DynamicContains.bSuccess);
+	if (TestTrue(
+		TEXT("dynamic contains_asset returns a payload"),
+		DynamicContains.Result.IsValid()))
+	{
+		TestTrue(
+			TEXT("dynamic query contains the engine default texture"),
+			DynamicContains.Result->GetBoolField(TEXT("contains")));
+	}
+
 	const FMonolithActionResult DeleteDynamic =
 		Invoke(TEXT("delete_collection"), MakeNamedParams(DynamicName));
 	TestTrue(TEXT("delete_collection removes the dynamic collection"), DeleteDynamic.bSuccess);

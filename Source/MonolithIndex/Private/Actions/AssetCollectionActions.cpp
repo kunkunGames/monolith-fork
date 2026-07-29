@@ -1,14 +1,21 @@
 #include "Actions/AssetCollectionActions.h"
 
+#include "AssetRegistry/AssetData.h"
 #include "CollectionManagerModule.h"
 #include "CollectionManagerTypes.h"
+#include "ContentBrowserDataFilter.h"
+#include "ContentBrowserDataSubsystem.h"
+#include "ContentBrowserItem.h"
 #include "ICollectionContainer.h"
 #include "ICollectionManager.h"
+#include "IContentBrowserDataModule.h"
 #include "MonolithParamSchema.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Misc/PackageName.h"
+#include "Misc/TextFilterExpressionEvaluator.h"
+#include "Misc/TextFilterUtils.h"
 #include "UObject/SoftObjectPath.h"
 
 namespace MonolithCollection
@@ -250,7 +257,559 @@ namespace MonolithCollection
 		return true;
 	}
 
-	static TSharedPtr<FJsonObject> CollectionToJson(const FCollectionNameType& Collection)
+	static bool GatherCollectionScope(
+		const FCollectionNameType& RootCollection,
+		ECollectionRecursionFlags::Flags Recursion,
+		TArray<FCollectionNameType>& OutCollections)
+	{
+		const TSharedRef<ICollectionContainer>& C = Container();
+		TSet<FCollectionNameType> Seen;
+		Seen.Add(RootCollection);
+		OutCollections.Add(RootCollection);
+
+		if ((Recursion & ECollectionRecursionFlags::Parents) != 0)
+		{
+			FCollectionNameType Current = RootCollection;
+			while (const TOptional<FCollectionNameType> Parent =
+				C->GetParentCollection(Current.Name, Current.Type))
+			{
+				if (Seen.Contains(Parent.GetValue()))
+				{
+					break;
+				}
+				Seen.Add(Parent.GetValue());
+				OutCollections.Add(Parent.GetValue());
+				Current = Parent.GetValue();
+			}
+		}
+
+		if ((Recursion & ECollectionRecursionFlags::Children) != 0)
+		{
+			TArray<FCollectionNameType> PendingChildren;
+			PendingChildren.Add(RootCollection);
+			for (int32 CollectionIndex = 0;
+				CollectionIndex < PendingChildren.Num();
+				++CollectionIndex)
+			{
+				const FCollectionNameType Current =
+					PendingChildren[CollectionIndex];
+				TArray<FCollectionNameType> Children;
+				C->GetChildCollections(Current.Name, Current.Type, Children);
+				for (const FCollectionNameType& Child : Children)
+				{
+					if (!Seen.Contains(Child))
+					{
+						Seen.Add(Child);
+						OutCollections.Add(Child);
+						PendingChildren.Add(Child);
+					}
+				}
+			}
+		}
+
+		return OutCollections.Num() > 0;
+	}
+
+	struct FDynamicCollectionFilter
+	{
+		FCollectionNameType Collection;
+	};
+
+	class FDynamicCollectionExpressionContext
+		: public ITextFilterExpressionContext
+	{
+	public:
+		FDynamicCollectionExpressionContext(
+			const FContentBrowserItem& InItem,
+			const TArray<FCollectionNameType>& InKnownCollections)
+			: Item(InItem)
+			, KnownCollections(InKnownCollections)
+		{
+			AssetDisplayName = Item.GetDisplayName().ToString();
+
+			Item.GetVirtualPath().AppendString(AssetFullPath);
+			AssetFullPath.ParseIntoArray(AssetSplitPath, TEXT("/"));
+			Item.AppendItemReference(AssetExportTextName);
+
+			FSoftObjectPath CollectionId;
+			if (Item.TryGetCollectionId(CollectionId))
+			{
+				Container()->GetCollectionsContainingObject(
+					CollectionId,
+					ECollectionShareType::CST_All,
+					AssetCollectionNames,
+					ECollectionRecursionFlags::SelfAndChildren);
+			}
+		}
+
+		bool TestDynamicCollection(
+			const FCollectionNameType& Collection,
+			bool& OutMatches) const
+		{
+			if (const bool* Cached =
+				DynamicMembershipCache.Find(Collection))
+			{
+				OutMatches = *Cached;
+				return true;
+			}
+
+			// A dynamic query may reference another dynamic collection.
+			// Fail a cycle closed for this asset instead of recursing forever.
+			if (ActiveDynamicCollections.Contains(Collection))
+			{
+				OutMatches = false;
+				return true;
+			}
+
+			ActiveDynamicCollections.Add(Collection);
+			FText ErrorText;
+			const bool bSucceeded = Container()->TestDynamicQuery(
+				Collection.Name,
+				Collection.Type,
+				*this,
+				OutMatches,
+				&ErrorText);
+			ActiveDynamicCollections.Remove(Collection);
+			if (!bSucceeded)
+			{
+				EvaluationError = ErrorText.IsEmpty()
+					? FString::Printf(
+						TEXT("Failed to evaluate dynamic collection '%s'"),
+						*Collection.Name.ToString())
+					: ErrorText.ToString();
+				return false;
+			}
+
+			DynamicMembershipCache.Add(Collection, OutMatches);
+			return true;
+		}
+
+		const FString& GetEvaluationError() const
+		{
+			return EvaluationError;
+		}
+
+		virtual bool TestBasicStringExpression(
+			const FTextFilterString& InValue,
+			ETextFilterTextComparisonMode InTextComparisonMode)
+			const override
+		{
+			if (InValue.CompareName(
+				Item.GetItemName(), InTextComparisonMode)
+				|| InValue.CompareFString(
+					AssetDisplayName, InTextComparisonMode)
+				|| InValue.CompareFString(
+					AssetFullPath, InTextComparisonMode)
+				|| InValue.CompareFString(
+					AssetExportTextName, InTextComparisonMode))
+			{
+				return true;
+			}
+
+			for (const FString& PathPart : AssetSplitPath)
+			{
+				if (InValue.CompareFString(
+					PathPart, InTextComparisonMode))
+				{
+					return true;
+				}
+			}
+
+			const FContentBrowserItemDataAttributeValue ClassValue =
+				Item.GetItemAttribute(NAME_Class);
+			if (ClassValue.IsValid()
+				&& InValue.CompareName(
+					ClassValue.GetValue<FName>(),
+					InTextComparisonMode))
+			{
+				return true;
+			}
+
+			for (const FName& CollectionName : AssetCollectionNames)
+			{
+				if (InValue.CompareName(
+					CollectionName, InTextComparisonMode))
+				{
+					return true;
+				}
+			}
+
+			for (const FCollectionNameType& Collection : KnownCollections)
+			{
+				ECollectionStorageMode::Type StorageMode;
+				if (!InValue.CompareName(
+						Collection.Name, InTextComparisonMode)
+					|| !Container()->GetCollectionStorageMode(
+						Collection.Name,
+						Collection.Type,
+						StorageMode)
+					|| StorageMode != ECollectionStorageMode::Dynamic)
+				{
+					continue;
+				}
+
+				bool bMatches = false;
+				if (TestDynamicCollection(Collection, bMatches)
+					&& bMatches)
+				{
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		virtual bool TestComplexExpression(
+			const FName& InKey,
+			const FTextFilterString& InValue,
+			ETextFilterComparisonOperation InComparisonOperation,
+			ETextFilterTextComparisonMode InTextComparisonMode)
+			const override
+		{
+			static const FName NameKey(TEXT("Name"));
+			static const FName PathKey(TEXT("Path"));
+			static const FName ClassKey(TEXT("Class"));
+			static const FName TypeKey(TEXT("Type"));
+			static const FName CollectionKey(TEXT("Collection"));
+			static const FName TagKey(TEXT("Tag"));
+
+			const bool bEqualityOperation =
+				InComparisonOperation
+					== ETextFilterComparisonOperation::Equal
+				|| InComparisonOperation
+					== ETextFilterComparisonOperation::NotEqual;
+			if (InKey == NameKey)
+			{
+				if (!bEqualityOperation)
+				{
+					return false;
+				}
+				const bool bMatches =
+					TextFilterUtils::TestBasicStringExpression(
+						Item.GetItemName(),
+						InValue,
+						InTextComparisonMode);
+				return InComparisonOperation
+					== ETextFilterComparisonOperation::Equal
+					? bMatches
+					: !bMatches;
+			}
+
+			if (InKey == PathKey)
+			{
+				if (!bEqualityOperation)
+				{
+					return false;
+				}
+				const bool bMatches =
+					TextFilterUtils::TestBasicStringExpression(
+						Item.GetVirtualPath(),
+						InValue,
+						InTextComparisonMode)
+					|| TextFilterUtils::TestBasicStringExpression(
+						AssetFullPath,
+						InValue,
+						InTextComparisonMode);
+				return InComparisonOperation
+					== ETextFilterComparisonOperation::Equal
+					? bMatches
+					: !bMatches;
+			}
+
+			if (InKey == ClassKey || InKey == TypeKey)
+			{
+				if (!bEqualityOperation)
+				{
+					return false;
+				}
+				const FContentBrowserItemDataAttributeValue ClassValue =
+					Item.GetItemAttribute(NAME_Class);
+				const bool bMatches = ClassValue.IsValid()
+					&& TextFilterUtils::TestBasicStringExpression(
+						ClassValue.GetValue<FName>(),
+						InValue,
+						InTextComparisonMode);
+				return InComparisonOperation
+					== ETextFilterComparisonOperation::Equal
+					? bMatches
+					: !bMatches;
+			}
+
+			if (InKey == CollectionKey || InKey == TagKey)
+			{
+				if (!bEqualityOperation)
+				{
+					return false;
+				}
+
+				bool bMatches = false;
+				for (const FName& CollectionName : AssetCollectionNames)
+				{
+					if (TextFilterUtils::TestBasicStringExpression(
+						CollectionName,
+						InValue,
+						InTextComparisonMode))
+					{
+						bMatches = true;
+						break;
+					}
+				}
+
+				if (!bMatches)
+				{
+					for (const FCollectionNameType& Collection
+						: KnownCollections)
+					{
+						ECollectionStorageMode::Type StorageMode;
+						if (!TextFilterUtils::TestBasicStringExpression(
+								Collection.Name,
+								InValue,
+								InTextComparisonMode)
+							|| !Container()->GetCollectionStorageMode(
+								Collection.Name,
+								Collection.Type,
+								StorageMode)
+							|| StorageMode
+								!= ECollectionStorageMode::Dynamic)
+						{
+							continue;
+						}
+
+						if (TestDynamicCollection(
+								Collection, bMatches)
+							&& bMatches)
+						{
+							break;
+						}
+					}
+				}
+
+				return InComparisonOperation
+					== ETextFilterComparisonOperation::Equal
+					? bMatches
+					: !bMatches;
+			}
+
+			const FContentBrowserItemDataAttributeValue AttributeValue =
+				Item.GetItemAttribute(InKey);
+			return AttributeValue.IsValid()
+				&& TextFilterUtils::TestComplexExpression(
+					AttributeValue.GetValue<FString>(),
+					InValue,
+					InComparisonOperation,
+					InTextComparisonMode);
+		}
+
+	private:
+		const FContentBrowserItem& Item;
+		const TArray<FCollectionNameType>& KnownCollections;
+		FString AssetDisplayName;
+		FString AssetFullPath;
+		FString AssetExportTextName;
+		TArray<FString> AssetSplitPath;
+		TArray<FName> AssetCollectionNames;
+		mutable TSet<FCollectionNameType> ActiveDynamicCollections;
+		mutable TMap<FCollectionNameType, bool> DynamicMembershipCache;
+		mutable FString EvaluationError;
+	};
+
+	static bool CompileDynamicCollectionFilter(
+		const FCollectionNameType& Collection,
+		TOptional<FDynamicCollectionFilter>& OutFilter,
+		FString& OutError)
+	{
+		FString QueryText;
+		FText QueryError;
+		if (!Container()->GetDynamicQueryText(
+			Collection.Name, Collection.Type, QueryText, &QueryError))
+		{
+			OutError = QueryError.IsEmpty()
+				? FString::Printf(
+					TEXT("Failed to read dynamic query for collection '%s'"),
+					*Collection.Name.ToString())
+				: QueryError.ToString();
+			return false;
+		}
+
+		// A newly created dynamic collection has no saved query yet. Treat that
+		// explicit unconfigured state as empty instead of letting an empty text
+		// filter match every asset in the project.
+		if (QueryText.IsEmpty())
+		{
+			OutFilter.Reset();
+			return true;
+		}
+
+		FTextFilterExpressionEvaluator QueryValidator(
+			ETextFilterExpressionEvaluatorMode::Complex);
+		QueryValidator.SetFilterText(FText::FromString(QueryText));
+		const FText FilterError = QueryValidator.GetFilterErrorText();
+		if (!FilterError.IsEmpty())
+		{
+			OutError = FString::Printf(
+				TEXT("Dynamic query for collection '%s' is invalid: %s"),
+				*Collection.Name.ToString(),
+				*FilterError.ToString());
+			return false;
+		}
+
+		OutFilter = FDynamicCollectionFilter{
+			Collection};
+		return true;
+	}
+
+	static bool ResolveCollectionAssets(
+		const FCollectionNameType& RootCollection,
+		ECollectionRecursionFlags::Flags Recursion,
+		TArray<FSoftObjectPath>& OutAssets,
+		FString& OutError)
+	{
+		TArray<FCollectionNameType> CollectionScope;
+		GatherCollectionScope(RootCollection, Recursion, CollectionScope);
+
+		TSet<FSoftObjectPath> UniqueAssets;
+		TArray<FDynamicCollectionFilter> DynamicFilters;
+		for (const FCollectionNameType& Collection : CollectionScope)
+		{
+			ECollectionStorageMode::Type StorageMode;
+			if (!Container()->GetCollectionStorageMode(
+				Collection.Name, Collection.Type, StorageMode))
+			{
+				OutError = FString::Printf(
+					TEXT("Failed to read storage mode for collection '%s'"),
+					*Collection.Name.ToString());
+				return false;
+			}
+
+			if (StorageMode == ECollectionStorageMode::Static)
+			{
+				TArray<FSoftObjectPath> StoredAssets;
+				if (!Container()->GetAssetsInCollection(
+					Collection.Name,
+					Collection.Type,
+					StoredAssets,
+					ECollectionRecursionFlags::Self))
+				{
+					OutError = FString::Printf(
+						TEXT("Failed to read assets for collection '%s'"),
+						*Collection.Name.ToString());
+					return false;
+				}
+				for (const FSoftObjectPath& StoredAsset : StoredAssets)
+				{
+					UniqueAssets.Add(StoredAsset);
+				}
+				continue;
+			}
+
+			TOptional<FDynamicCollectionFilter> DynamicFilter;
+			if (!CompileDynamicCollectionFilter(
+				Collection, DynamicFilter, OutError))
+			{
+				return false;
+			}
+			if (DynamicFilter.IsSet())
+			{
+				DynamicFilters.Add(MoveTemp(DynamicFilter.GetValue()));
+			}
+		}
+
+		if (DynamicFilters.Num() > 0)
+		{
+			UContentBrowserDataSubsystem* ContentBrowserData =
+				IContentBrowserDataModule::Get().GetSubsystem();
+			if (!ContentBrowserData)
+			{
+				OutError = TEXT(
+					"Content Browser data subsystem is unavailable; "
+					"dynamic collection membership cannot be resolved");
+				return false;
+			}
+			if (!ContentBrowserData->GetActiveDataSources().Contains(
+				FName(TEXT("AssetData"))))
+			{
+				OutError = TEXT(
+					"Content Browser AssetData source is inactive; "
+					"dynamic collection membership cannot be resolved");
+				return false;
+			}
+
+			FContentBrowserDataFilter DataFilter;
+			DataFilter.bRecursivePaths = true;
+			DataFilter.ItemTypeFilter =
+				EContentBrowserItemTypeFilter::IncludeFiles;
+			DataFilter.ItemCategoryFilter =
+				EContentBrowserItemCategoryFilter::IncludeAssets;
+			DataFilter.ItemAttributeFilter =
+				EContentBrowserItemAttributeFilter::IncludeAll;
+
+			static const FName AllContentRoot(TEXT("/All"));
+			TArray<FCollectionNameType> KnownCollections;
+			Container()->GetCollections(KnownCollections);
+			FString EvaluationError;
+			ContentBrowserData->EnumerateItemsUnderPath(
+				AllContentRoot,
+				DataFilter,
+				[&DynamicFilters,
+				 &KnownCollections,
+				 &UniqueAssets,
+				 &EvaluationError](
+					FContentBrowserItem&& Item)
+				{
+					FDynamicCollectionExpressionContext Context(
+						Item, KnownCollections);
+					bool bMatches = false;
+					for (const FDynamicCollectionFilter& Filter
+						: DynamicFilters)
+					{
+						if (!Context.TestDynamicCollection(
+							Filter.Collection, bMatches))
+						{
+							EvaluationError =
+								Context.GetEvaluationError();
+							return false;
+						}
+						if (bMatches)
+						{
+							break;
+						}
+					}
+					if (!bMatches)
+					{
+						return true;
+					}
+
+					FAssetData AssetData;
+					if (Item.Legacy_TryGetAssetData(AssetData))
+					{
+						UniqueAssets.Add(AssetData.GetSoftObjectPath());
+					}
+					return true;
+				});
+			if (!EvaluationError.IsEmpty())
+			{
+				OutError = MoveTemp(EvaluationError);
+				return false;
+			}
+		}
+
+		OutAssets.Reserve(UniqueAssets.Num());
+		for (const FSoftObjectPath& Asset : UniqueAssets)
+		{
+			OutAssets.Add(Asset);
+		}
+		OutAssets.Sort(
+			[](const FSoftObjectPath& Left, const FSoftObjectPath& Right)
+			{
+				return Left.ToString() < Right.ToString();
+			});
+		return true;
+	}
+
+	static bool CollectionToJson(
+		const FCollectionNameType& Collection,
+		TSharedPtr<FJsonObject>& OutObject,
+		FString& OutError)
 	{
 		const TSharedRef<ICollectionContainer>& C = Container();
 		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
@@ -265,8 +824,26 @@ namespace MonolithCollection
 		}
 
 		TArray<FSoftObjectPath> Assets;
-		C->GetAssetsInCollection(Collection.Name, Collection.Type, Assets);
+		if (!ResolveCollectionAssets(
+			Collection, ECollectionRecursionFlags::Self, Assets, OutError))
+		{
+			return false;
+		}
 		Obj->SetNumberField(TEXT("asset_count"), Assets.Num());
+		if (StorageMode == ECollectionStorageMode::Dynamic)
+		{
+			FString QueryText;
+			FText QueryError;
+			if (!C->GetDynamicQueryText(
+				Collection.Name, Collection.Type, QueryText, &QueryError))
+			{
+				OutError = QueryError.IsEmpty()
+					? TEXT("Failed to read dynamic collection query")
+					: QueryError.ToString();
+				return false;
+			}
+			Obj->SetStringField(TEXT("query_text"), QueryText);
+		}
 
 		TArray<FCollectionNameType> Children;
 		C->GetChildCollections(Collection.Name, Collection.Type, Children);
@@ -290,7 +867,8 @@ namespace MonolithCollection
 			Obj->SetObjectField(TEXT("color"), ColorObj);
 		}
 
-		return Obj;
+		OutObject = MoveTemp(Obj);
+		return true;
 	}
 
 	static FMonolithActionResult MutatingReadOnlyError(ECollectionShareType::Type ShareType)
@@ -420,7 +998,14 @@ FMonolithActionResult FAssetCollectionActions::ListCollections(const TSharedPtr<
 		{
 			continue;
 		}
-		Rows.Add(MakeShared<FJsonValueObject>(MonolithCollection::CollectionToJson(Collection)));
+		TSharedPtr<FJsonObject> CollectionObject;
+		FString CollectionError;
+		if (!MonolithCollection::CollectionToJson(
+			Collection, CollectionObject, CollectionError))
+		{
+			return FMonolithActionResult::Error(CollectionError, -32603);
+		}
+		Rows.Add(MakeShared<FJsonValueObject>(CollectionObject));
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -448,7 +1033,13 @@ FMonolithActionResult FAssetCollectionActions::GetCollection(const TSharedPtr<FJ
 	{
 		return MissingCollection.GetValue();
 	}
-	return FMonolithActionResult::Success(MonolithCollection::CollectionToJson(FCollectionNameType(Name, ShareType)));
+	TSharedPtr<FJsonObject> CollectionObject;
+	if (!MonolithCollection::CollectionToJson(
+		FCollectionNameType(Name, ShareType), CollectionObject, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32603);
+	}
+	return FMonolithActionResult::Success(CollectionObject);
 }
 
 FMonolithActionResult FAssetCollectionActions::CreateCollection(const TSharedPtr<FJsonObject>& Params)
@@ -654,9 +1245,10 @@ FMonolithActionResult FAssetCollectionActions::ListAssets(const TSharedPtr<FJson
 	{
 		return MissingCollection.GetValue();
 	}
-	if (!MonolithCollection::Container()->GetAssetsInCollection(Name, ShareType, Assets, Recursion))
+	if (!MonolithCollection::ResolveCollectionAssets(
+		FCollectionNameType(Name, ShareType), Recursion, Assets, Error))
 	{
-		return MonolithCollection::CollectionNotFoundError(Name, ShareType);
+		return FMonolithActionResult::Error(Error, -32603);
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
@@ -706,17 +1298,20 @@ FMonolithActionResult FAssetCollectionActions::ContainsAsset(const TSharedPtr<FJ
 	{
 		return MissingCollection.GetValue();
 	}
-	FText ErrorText;
-	const bool bContains = MonolithCollection::Container()->IsObjectInCollection(
-		FSoftObjectPath(MonolithCollection::NormalizeObjectPath(AssetPath)), Name, ShareType, Recursion, &ErrorText);
-	if (!ErrorText.IsEmpty())
+	TArray<FSoftObjectPath> Assets;
+	if (!MonolithCollection::ResolveCollectionAssets(
+		FCollectionNameType(Name, ShareType), Recursion, Assets, Error))
 	{
-		return FMonolithActionResult::Error(ErrorText.ToString(), -32603);
+		return FMonolithActionResult::Error(Error, -32603);
 	}
+	const FString NormalizedAssetPath =
+		MonolithCollection::NormalizeObjectPath(AssetPath);
+	const bool bContains =
+		Assets.Contains(FSoftObjectPath(NormalizedAssetPath));
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("collection"), Name.ToString());
-	Result->SetStringField(TEXT("asset_path"), MonolithCollection::NormalizeObjectPath(AssetPath));
+	Result->SetStringField(TEXT("asset_path"), NormalizedAssetPath);
 	Result->SetBoolField(TEXT("contains"), bContains);
 	return FMonolithActionResult::Success(Result);
 }
