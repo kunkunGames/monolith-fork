@@ -107,7 +107,7 @@ namespace
 		{
 			return OutError.IsEmpty();
 		}
-		if (!Value->TryGetBool(InOutValue))
+		if (Value->Type != EJson::Boolean || !Value->TryGetBool(InOutValue))
 		{
 			OutError = FString::Printf(TEXT("Setting '%s' must be a boolean"), Name);
 			return false;

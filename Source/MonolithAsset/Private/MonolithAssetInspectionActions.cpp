@@ -16,6 +16,10 @@
 #include "UObject/SoftObjectPtr.h"
 #include "UObject/UnrealType.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+#include "Tests/MonolithAssetInspectionTestHooks.h"
+#endif
+
 namespace
 {
 	struct FAssetEnricherDef
@@ -114,13 +118,34 @@ namespace
 		return Ref;
 	}
 
+	bool DoesSoftReferenceExist(const FSoftObjectPath& Path)
+	{
+		if (!Path.IsValid())
+		{
+			return false;
+		}
+
+		if (Path.ResolveObject())
+		{
+			return true;
+		}
+
+		const FString AssetPath = Path.GetAssetPathString();
+		if (AssetPath.StartsWith(TEXT("/Script/"), ESearchCase::IgnoreCase))
+		{
+			return true;
+		}
+
+		return FMonolithAssetUtils::AssetExists(AssetPath);
+	}
+
 	TSharedPtr<FJsonObject> SoftObjectRefToJson(const FSoftObjectPath& Path)
 	{
 		TSharedPtr<FJsonObject> Ref = MakeShared<FJsonObject>();
 		Ref->SetStringField(TEXT("path"), Path.ToString());
 		Ref->SetStringField(TEXT("asset_path"), Path.GetAssetPathString());
 		Ref->SetBoolField(TEXT("valid"), Path.IsValid());
-		Ref->SetBoolField(TEXT("exists"), Path.IsValid() && FMonolithAssetUtils::AssetExists(Path.GetAssetPathString()));
+		Ref->SetBoolField(TEXT("exists"), DoesSoftReferenceExist(Path));
 		return Ref;
 	}
 
@@ -298,9 +323,10 @@ namespace
 		Ref->SetBoolField(TEXT("soft"), bSoft);
 		if (bSoft)
 		{
-			const FString AssetPath = FSoftObjectPath(Path).GetAssetPathString();
+			const FSoftObjectPath SoftPath(Path);
+			const FString AssetPath = SoftPath.GetAssetPathString();
 			Ref->SetStringField(TEXT("asset_path"), AssetPath);
-			Ref->SetBoolField(TEXT("exists"), AssetPath.StartsWith(TEXT("/Game")) ? FMonolithAssetUtils::AssetExists(AssetPath) : true);
+			Ref->SetBoolField(TEXT("exists"), DoesSoftReferenceExist(SoftPath));
 		}
 		OutRefs.Add(MakeShared<FJsonValueObject>(Ref));
 	}
@@ -823,3 +849,13 @@ FMonolithActionResult FMonolithAssetInspectionActions::ValidateTypedAsset(const 
 	Result->SetBoolField(TEXT("valid"), !HasBlockingValidationWarnings(Warnings));
 	return FMonolithActionResult::Success(Result);
 }
+
+#if WITH_DEV_AUTOMATION_TESTS
+namespace MonolithAsset::Tests
+{
+	bool DoesSoftReferenceExistForTest(const FSoftObjectPath& Path)
+	{
+		return DoesSoftReferenceExist(Path);
+	}
+}
+#endif

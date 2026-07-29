@@ -29,14 +29,14 @@ Every `asset` action schema opts into `FParamSchemaBuilder::StrictComplexTypes()
 |--------|-------------|---------|
 | `import_texture_from_bytes` | `MonolithAsset::FTextureIngestActions` | Decode base64 compressed image bytes and create or replace a `UTexture2D` under `/Game/...`; `conflict_policy=fail|replace|unique` defaults to exact-path `fail`, while optional `texture_role` applies Unreal texture-role import presets, role post-processing, validation metadata, and optional postprocessed PNG return. |
 | `import_font_family` | `MonolithAsset::FFontIngestActions` | Import one or more absolute `.ttf` files as a composite `UFont` plus `UFontFace` assets. Every source and requested package is preflighted before package creation; exact names are the default, while `allow_unique_names=true` explicitly opts into suffixed names. Unknown loading/hinting values and malformed booleans are errors. Headless runs skip only Slate preview-cache refresh calls. |
-| `import_texture_from_file` | `FMonolithAssetLifecycleActions` | Import an external image file to the exact requested `UTexture2D` path with validated compression, sRGB, tiling, max-size, and LOD-group settings. The action rejects malformed or duplicate setting sources and never returns a source-basename substitute; unexpected newly imported packages are cleaned and reported as an error. |
+| `import_texture_from_file` | `FMonolithAssetLifecycleActions` | Import an external image file to the exact requested `UTexture2D` path with validated compression, sRGB, tiling, max-size, and LOD-group settings. Nested and compatibility top-level sRGB/tiling values must be native JSON booleans. The action rejects malformed or duplicate setting sources and never returns a source-basename substitute; unexpected newly imported packages are cleaned and reported as an error. |
 | `save_asset` | `FMonolithAssetLifecycleActions` | Save any loaded asset package to disk, enforce clean/on-disk/non-empty-file postconditions, and optionally prove persistence through a non-interactive package reload. |
 | `delete_assets` | `FMonolithAssetLifecycleActions` | Delete assets by path with segment-bounded prefix guards, per-target postconditions, dry-run validation, non-interactive editor closing, optional source-control-aware disk-residual removal, and an all-target `require_source_control` preflight. |
 | `move_assets` | `FMonolithAssetMoveActions` | Guarded exact package moves through `IAssetTools::RenameAssets`; defaults to a no-load dry-run, never overwrites, rejects chains/cycles, verifies destination/source/redirector postconditions, and can explicitly accept only the known CDO/config warning in an interactive editor. |
 | `cleanup_moved_redirectors` | `FMonolithAssetMoveActions` | Idempotently finalize completed moves without another rename or reference rewrite by validating exact object targets, every companion redirector in each source package, zero hard/soft referencers, destination integrity, source-control state, and source-removal postconditions. |
 | `validate_naming_conventions` | `FMonolithAssetHygieneActions` | Scan assets under a content path and report prefix-rule violations. |
 | `list_supported_asset_enrichers` | `FMonolithAssetInspectionActions` | List typed read-only enrichers supported by `inspect_asset`. |
-| `inspect_asset` | `FMonolithAssetInspectionActions` | Inspect one asset with typed enrichment and optional reflected references. |
+| `inspect_asset` | `FMonolithAssetInspectionActions` | Inspect one asset with typed enrichment and optional reflected references. Soft-reference existence is resolved from loaded objects or the live AssetRegistry for project, engine, and plugin mounts; only `/Script` class paths bypass asset lookup. |
 | `inspect_assets_batch` | `FMonolithAssetInspectionActions` | Inspect multiple assets with per-row success/error results. |
 | `validate_typed_asset` | `FMonolithAssetInspectionActions` | Validate a typed asset and report warnings without mutation. |
 | `batch_rename_assets` | `FMonolithAssetHygieneActions` | Preview or apply batch asset renames through `IAssetTools::RenameAssets`. |
@@ -111,6 +111,17 @@ Preflight permits multiple AssetRegistry rows inside one source package only whe
 
 Confirmed mutation requires the editor game thread, a completed AssetRegistry scan, and an enabled/available source-control provider. The complete captured object set is revalidated immediately before one `asset.delete_assets(require_source_control=true)` call. Afterward, destination integrity and complete source package/registry/file removal are checked per row. An already-removed source is an idempotent success only when source control proves the expected delete or revert-add state; otherwise it is a source-control preflight failure. Results report `already_cleaned`, `success`, `partial_failure`, or `failed` without masking a partially cleaned batch.
 
+### 5.6 Reflected soft-reference existence
+
+`asset.inspect_asset` and typed validation serialize a soft reference as
+`path`, `asset_path`, `valid`, and `exists`. Existence is true when the exact
+soft object is already loaded or when the live AssetRegistry contains its
+mounted asset path. The same rule applies to `/Game`, `/Engine`, and plugin
+mounts; missing engine/plugin assets are not assumed to exist. `/Script`
+class paths are the explicit non-asset exception because they name reflected
+types rather than AssetRegistry content. Missing mounted content produces an
+`unresolved_soft_reference` warning.
+
 ## 6. Settings
 
 | Setting | Default | Effect |
@@ -126,7 +137,7 @@ Confirmed mutation requires the editor game thread, a completed AssetRegistry sc
 | Lifecycle | `Public/MonolithAssetLifecycleActions.h`, `Private/MonolithAssetLifecycleActions.cpp` | Owns generic file texture import, asset save, and guarded delete operations previously scattered under editor/blueprint. |
 | Exact move and cleanup | `Public/MonolithAssetMoveActions.h`, `Private/MonolithAssetMoveActions.cpp` | Owns guarded explicit package relocation, path/root validation, AssetTools rename dispatch, explicit known-CDO-warning policy, recoverable/idempotent moved-redirector cleanup, and per-row registry/file/source-control postconditions. |
 | Hygiene | `Public/MonolithAssetHygieneActions.h`, `Private/MonolithAssetHygieneActions.cpp` | Owns naming convention validation and batch rename fixup. |
-| Inspection | `Public/MonolithAssetInspectionActions.h`, `Private/MonolithAssetInspectionActions.cpp` | Former typed asset inspection surface, now independent from `MonolithMaterial`. |
+| Inspection | `Public/MonolithAssetInspectionActions.h`, `Private/MonolithAssetInspectionActions.cpp` | Former typed asset inspection surface, now independent from `MonolithMaterial`; mounted soft-reference existence uses loaded-object/AssetRegistry proof with `/Script` as the only intentional non-asset exception. |
 | Find | `Public/MonolithAssetFindActions.h`, `Private/MonolithAssetFindActions.cpp` | Fuzzy live-`AssetRegistry` search (`asset.find_assets`); thin consumer of MonolithCore `FMonolithFuzzyMatch`, owns its own corpus/fields/weights and the `allow_transposition` option. Distinct from exact-name `FMonolithAssetUtils::FindAssetCandidates` and offline `project` FTS search. |
 | Package graph | `Public/MonolithAssetPackageGraphActions.h`, `Private/MonolithAssetPackageGraphActions.cpp` | Safe content mount registration (`asset.register_content_mount_points`), copy/remap planning (`asset.plan_package_graph_copy`), guarded duplication (`asset.copy_package_graph_with_remap`), strategy planning/orchestration (`asset.copy_package_graph_with_strategy`), reflected hard/soft reference rewrite (`asset.fixup_copied_references`), optional redirector cleanup inside the strategy workflow, and dependency closure validation (`asset.validate_dependency_closure`). |
 
@@ -204,6 +215,7 @@ The action result includes `texture_role`, `settings_applied`, and `validation`.
 | Build | Build fresh UE 5.7 and UE 5.8 editor hosts with `MonolithAsset` enabled. |
 | Runtime discovery | `monolith_discover({ "namespace": "asset" })` should list 20 actions owned by `MonolithAsset`, including `move_assets` and `cleanup_moved_redirectors`. |
 | Parameter type contract | Every action schema marks arrays/objects `allow_string_encoded_complex=false`; JSON-encoded strings are rejected. Every external bool input requires `EJson::Boolean`, including nested texture settings, and malformed values return `-32602` before decode/load/mutation. |
+| Inspection reference contract | `MonolithAsset.InspectAsset.MountedSoftReferenceExistence` must reject missing plugin/engine asset paths, accept a real `/Engine` asset, and preserve `/Script` as an intentional non-asset reference. |
 | Find engine reuse | `asset.find_assets` consumes `FMonolithFuzzyMatch` (MonolithCore); it must not duplicate edit-distance/tokenization, `allow_transposition` must flow into `ScoreCandidate`, and `FMonolithAssetUtils::FindAssetCandidates` stays exact-name. |
 | Import automation | `MonolithAsset.ImportTextureFromFile`, `MonolithAsset.ImportTextureFromBytes`, and `MonolithAsset.ImportFontFamily` cover exact paths, invalid-setting rejection, explicit unique-name opt-in, source-pixel/readback metadata, save/rollback behavior, and headless operation. |
 | Package graph automation | `Monolith.Asset.PackageGraph.RegistryAndParamGuards` must cover registration, handler mutation-guard rejection, duplicate resolver rejection, same-request root conflict rejection, dry-run report shape/non-mutation, project-plugin-dir resolver dry-run with a temporary generic test folder, confirmed mount idempotency, conflicting existing mount rejection, and package graph strategy report shape. |

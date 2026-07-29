@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **`asset` namespace (20 actions).** Added a dedicated `MonolithAsset` editor module for exact-path texture and font ingest, save/delete, naming validation, guarded batch rename and package move, live AssetRegistry search, generic typed inspection, explicit content-mount registration, and dry-run/confirm package-graph plan/copy/fixup/closure workflows. Invalid texture/font settings now hard-error instead of selecting defaults, file-based texture import either produces the requested package or fails and cleans unexpected new packages, and font suffixing requires explicit `allow_unique_names=true`.
 
+### Fixed
+
+- **Asset file-import booleans and mounted soft-reference inspection now fail closed.** `import_texture_from_file` requires native JSON booleans for both nested and compatibility top-level `srgb`/`tiling`, so UE 5.7 cannot coerce `"false"` into a mutating request. Typed inspection now checks missing references under `/Engine` and plugin mounts through loaded-object/AssetRegistry state instead of treating every non-`/Game` path as present; `/Script` remains the intentional non-asset exception.
+
 ## [0.21.3] - 2026-07-26
 
 This release closes out the open pull-request queue. Every fix below was reported or prototyped by a contributor — thanks to **@Thomasbehan**, **@whalemenace**, and **@kunkunGames** for the write-ups, which were detailed enough to reproduce from directly.

@@ -632,7 +632,7 @@ Generic asset lifecycle and package-graph workflows. **20 actions.** The namespa
 |--------|------|----------|
 | `import_texture_from_bytes` | write | Decode base64 image bytes into an exact `/Game/...` `UTexture2D`; explicit `fail`, `replace`, or `unique` collision policy and strict texture-role/settings validation. |
 | `import_font_family` | write | Preflight absolute `.ttf` sources and every output package, then create a composite `UFont` plus `UFontFace` assets; suffixing requires `allow_unique_names=true`. |
-| `import_texture_from_file` | write | Import an external image to the exact requested texture path; malformed/duplicate settings and unexpected imported packages are errors. |
+| `import_texture_from_file` | write | Import an external image to the exact requested texture path; nested and compatibility top-level `srgb`/`tiling` must be native JSON booleans, and malformed/duplicate settings or unexpected imported packages are errors. |
 | `save_asset` | write | Save one loaded asset package and optionally verify persistence by a non-interactive reload. |
 | `delete_assets` | write | Guarded, non-interactive deletion with dry-run, allowed-root checks, postconditions, and optional source-control preflight. |
 | `move_assets` | write | Guarded exact package moves; defaults to dry-run, never overwrites, and rejects chains/cycles. |
@@ -641,7 +641,7 @@ Generic asset lifecycle and package-graph workflows. **20 actions.** The namespa
 | `batch_rename_assets` | write | Preview or apply batch renames through AssetTools. |
 | `find_assets` | read | Fuzzy live-AssetRegistry search with bounded integer limits/thresholds and optional adjacent-transposition matching. |
 | `list_supported_asset_enrichers` | read | List typed read-only enrichers available to inspection. |
-| `inspect_asset` | read | Inspect one asset with typed enrichment and optional reflected references. |
+| `inspect_asset` | read | Inspect one asset with typed enrichment and optional reflected references; soft-reference existence is checked for `/Game`, `/Engine`, and plugin mounts, while `/Script` class paths are the intentional non-asset exception. |
 | `inspect_assets_batch` | read | Inspect multiple assets with a success/error result for every requested row. |
 | `validate_typed_asset` | read | Run typed validation and report warnings without mutation. |
 | `register_content_mount_points` | write | Register explicit process-local content mounts; defaults to dry-run and requires exactly one resolver per mount. |
@@ -651,7 +651,9 @@ Generic asset lifecycle and package-graph workflows. **20 actions.** The namespa
 | `fixup_copied_references` | write | Rewrite reflected hard/soft references inside copied destination packages; requires dry-run or explicit confirmation. |
 | `validate_dependency_closure` | read | Verify copied destination packages no longer depend on disallowed external or legacy source roots. |
 
-All `asset` actions require native JSON arrays/objects rather than JSON-encoded strings. Boolean parameters, including nested texture settings, must be JSON booleans; strings such as `"true"`/`"false"` return `-32602` instead of being coerced by UE 5.7. Import handlers also reject unknown enum values, malformed integers, and duplicate setting sources with `-32602`; they do not silently choose a default for invalid input. File texture import succeeds only when the exact requested package is produced. Font import uses exact output names by default and performs source/output preflight before creating packages.
+All `asset` actions require native JSON arrays/objects rather than JSON-encoded strings. Boolean parameters, including nested and compatibility top-level texture settings, must be JSON booleans; strings such as `"true"`/`"false"` return `-32602` instead of being coerced by UE 5.7. Import handlers also reject unknown enum values, malformed integers, and duplicate setting sources with `-32602`; they do not silently choose a default for invalid input. File texture import succeeds only when the exact requested package is produced. Font import uses exact output names by default and performs source/output preflight before creating packages.
+
+Reflected soft-reference inspection first accepts an already loaded object, then queries the live AssetRegistry for mounted content. This applies equally to project, engine, and plugin content roots; an unregistered or missing `/Engine/...` or `/PluginName/...` asset reports `exists=false` and produces `unresolved_soft_reference`. `/Script/...` class paths are valid non-asset references and are not reported as missing.
 
 For exhaustive parameter schemas, call `describe_query("action_schema", target_namespace="asset", target_action="<action>")`. The authoritative implementation contract is [`specs/SPEC_MonolithAsset.md`](specs/SPEC_MonolithAsset.md).
 
