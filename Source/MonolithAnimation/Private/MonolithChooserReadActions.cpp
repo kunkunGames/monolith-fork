@@ -33,7 +33,7 @@ namespace MonolithChooserRead
 	{
 		TArray<TSharedPtr<FJsonValue>> Values;
 		TSet<FString> Seen;
-		TMap<FString, bool> PackageExistsCache;
+		TMap<FString, bool> AssetExistsCache;
 		bool bTruncated = false;
 	};
 
@@ -72,10 +72,16 @@ namespace MonolithChooserRead
 		FMonolithActionResult& OutError)
 	{
 		double Number = static_cast<double>(DefaultValue);
-		if (Params->HasField(Field) && !Params->TryGetNumberField(Field, Number))
+		if (Params.IsValid() && Params->HasField(Field))
 		{
-			OutError = InvalidParam(Field, TEXT("expected an integer JSON number"));
-			return false;
+			const TSharedPtr<FJsonValue> JsonValue = Params->TryGetField(Field);
+			if (!JsonValue.IsValid()
+				|| JsonValue->Type != EJson::Number
+				|| !JsonValue->TryGetNumber(Number))
+			{
+				OutError = InvalidParam(Field, TEXT("expected an integer JSON number"));
+				return false;
+			}
 		}
 
 		if (!FMath::IsFinite(Number) || Number != FMath::TruncToDouble(Number)
@@ -215,7 +221,11 @@ namespace MonolithChooserRead
 		FMonolithActionResult& OutError)
 	{
 		FString RequestedPath;
-		if (!Params->TryGetStringField(TEXT("asset_path"), RequestedPath))
+		const TSharedPtr<FJsonValue> AssetPathField =
+			Params.IsValid() ? Params->TryGetField(TEXT("asset_path")) : nullptr;
+		if (!AssetPathField.IsValid()
+			|| AssetPathField->Type != EJson::String
+			|| !AssetPathField->TryGetString(RequestedPath))
 		{
 			OutError = InvalidParam(TEXT("asset_path"), TEXT("expected a string"));
 			return nullptr;
@@ -929,7 +939,7 @@ namespace MonolithChooserRead
 		return Rows;
 	}
 
-	bool PackageExistsForSoftPath(const FSoftObjectPath& Path, FReferenceScan& Scan)
+	bool AssetExistsForSoftPath(const FSoftObjectPath& Path, FReferenceScan& Scan)
 	{
 		const FString AssetPath = Path.GetAssetPathString();
 		if (AssetPath.IsEmpty())
@@ -946,21 +956,28 @@ namespace MonolithChooserRead
 		{
 			return false;
 		}
-		if (const bool* Cached = Scan.PackageExistsCache.Find(PackageName))
+		const FString ExactPath = Path.ToString();
+		if (const bool* Cached = Scan.AssetExistsCache.Find(ExactPath))
 		{
 			return *Cached;
 		}
 
-		bool Exists = FindPackage(nullptr, *PackageName) != nullptr;
+		bool Exists = false;
+		if (const UObject* ResolvedObject = Path.ResolveObject())
+		{
+			Exists = IsValid(ResolvedObject)
+				&& ResolvedObject->GetPathName().Equals(
+					ExactPath,
+					ESearchCase::CaseSensitive);
+		}
 		if (!Exists)
 		{
-			IAssetRegistry& Registry =
-				FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-			TArray<FAssetData> PackageAssets;
-			Registry.GetAssetsByPackageName(FName(*PackageName), PackageAssets);
-			Exists = PackageAssets.Num() > 0;
+			// AssetExists performs an exact AssetRegistry object-path lookup.
+			// Package residency or on-disk package existence is deliberately not
+			// sufficient: a deleted export can leave either package behind.
+			Exists = FMonolithAssetUtils::AssetExists(AssetPath);
 		}
-		Scan.PackageExistsCache.Add(PackageName, Exists);
+		Scan.AssetExistsCache.Add(ExactPath, Exists);
 		return Exists;
 	}
 
@@ -1038,7 +1055,7 @@ namespace MonolithChooserRead
 					SoftProperty->PropertyClass ? SoftProperty->PropertyClass->GetName() : TEXT("soft_object"),
 					Path.ResolveObject() != nullptr,
 					true,
-					PackageExistsForSoftPath(Path, Scan));
+					AssetExistsForSoftPath(Path, Scan));
 			}
 			return;
 		}
@@ -1350,10 +1367,16 @@ FMonolithActionResult FMonolithChooserReadActions::HandleListChooserTables(
 	using namespace MonolithChooserRead;
 
 	FString RequestedFilter;
-	if (Params->HasField(TEXT("path_filter"))
-		&& !Params->TryGetStringField(TEXT("path_filter"), RequestedFilter))
+	if (Params.IsValid() && Params->HasField(TEXT("path_filter")))
 	{
-		return InvalidParam(TEXT("path_filter"), TEXT("expected a string"));
+		const TSharedPtr<FJsonValue> PathFilterField =
+			Params->TryGetField(TEXT("path_filter"));
+		if (!PathFilterField.IsValid()
+			|| PathFilterField->Type != EJson::String
+			|| !PathFilterField->TryGetString(RequestedFilter))
+		{
+			return InvalidParam(TEXT("path_filter"), TEXT("expected a string"));
+		}
 	}
 	FString PathFilter;
 	FMonolithActionResult Error;
@@ -1399,10 +1422,16 @@ FMonolithActionResult FMonolithChooserReadActions::HandleGetChooserTable(
 	using namespace MonolithChooserRead;
 
 	bool IncludeRows = false;
-	if (Params->HasField(TEXT("include_rows"))
-		&& !Params->TryGetBoolField(TEXT("include_rows"), IncludeRows))
+	if (Params.IsValid() && Params->HasField(TEXT("include_rows")))
 	{
-		return InvalidParam(TEXT("include_rows"), TEXT("expected a boolean"));
+		const TSharedPtr<FJsonValue> IncludeRowsField =
+			Params->TryGetField(TEXT("include_rows"));
+		if (!IncludeRowsField.IsValid()
+			|| IncludeRowsField->Type != EJson::Boolean
+			|| !IncludeRowsField->TryGetBool(IncludeRows))
+		{
+			return InvalidParam(TEXT("include_rows"), TEXT("expected a boolean"));
+		}
 	}
 	int32 RowLimit = 50;
 	FMonolithActionResult Error;
@@ -1777,7 +1806,7 @@ FMonolithActionResult FMonolithChooserReadActions::HandleValidateChooserTable(
 				WarningCount,
 				TEXT("error"),
 				TEXT("unresolved_soft_reference"),
-				FString::Printf(TEXT("Soft-reference package does not resolve: %s"), *Path));
+				FString::Printf(TEXT("Soft-reference asset does not resolve: %s"), *Path));
 		}
 	}
 	if (References.bTruncated)

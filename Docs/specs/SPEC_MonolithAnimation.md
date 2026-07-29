@@ -439,8 +439,8 @@ metadata.
 | `get_chooser_table` | Bounded summary of row/column/result/context counts, reflected column data, hard/soft references, fallback result, and optional `include_rows` readback (`row_limit` 1–500). |
 | `list_chooser_columns` | Reflected type, input/output classification, disabled state, row-value property/type/count, and bounded fields for each column. Hard cap: 512 columns with explicit `truncated`. |
 | `list_chooser_rows` | Bounded row page (`start_row`, `limit` 1–500) with result data, disabled state, and per-column cell values. |
-| `list_chooser_references` | Bounded hard/soft reference page with reflected source locations and package-level existence checks. Returns `scan_truncated`; truncation is never presented as complete validation. |
-| `validate_chooser_table` | Non-mutating row-array/column alignment and soft-reference validation. Warnings do not set `valid=false`; errors do. A bounded-scan overflow is an error and returns `complete=false`. |
+| `list_chooser_references` | Bounded hard/soft reference page with reflected source locations and exact loaded-object or AssetRegistry-object existence evidence. A resident or on-disk package without the referenced export is not asset evidence. Returns `scan_truncated`; truncation is never presented as complete validation. |
+| `validate_chooser_table` | Non-mutating row-array/column alignment and soft-reference asset validation. Warnings do not set `valid=false`; errors do. A bounded-scan overflow is an error and returns `complete=false`. |
 
 ### Deep inspection and reference editing (6)
 

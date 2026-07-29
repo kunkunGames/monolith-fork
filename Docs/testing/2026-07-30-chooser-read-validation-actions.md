@@ -40,7 +40,7 @@ accepted implementation must:
 | `chooser.get_chooser_table` | Reports table/class/result/context/column/reference summaries and optionally up to 500 bounded rows. |
 | `chooser.list_chooser_columns` | Returns bounded reflected column summaries; capped at 512 columns. |
 | `chooser.list_chooser_rows` | Pages exact rows with `start_row` and `limit`; each cell uses the local bounded serializer. |
-| `chooser.list_chooser_references` | Walks reflected hard/soft object references under explicit depth/container/result bounds. |
+| `chooser.list_chooser_references` | Walks reflected hard/soft object references under explicit depth/container/result bounds and reports existence only for an exact loaded object or exact AssetRegistry object path. |
 | `chooser.validate_chooser_table` | Reports structural errors and non-fatal warnings without compiling, saving, or modifying the table. |
 
 The existing authoring and deep-inspection actions remain unchanged. The final
@@ -63,6 +63,8 @@ catalog contains 16 total `chooser` actions: the prior 10 plus these 6.
 | Table and graph bounds | PASS — columns 512, rows 500 per request, listed tables 1,000, references 4,096, reference depth 12, and container entries per reflected reference property 4,096. |
 | Mutation | PASS — handlers do not call compile/save/modify/dirty APIs and the authoring round-trip test reads a nine-row authored table without changing it. |
 | Validation semantics | PASS — errors make `valid=false`; warnings remain separately visible and do not invalidate the table. |
+| Soft-reference identity | PASS — a loaded or on-disk package without the referenced export is not accepted as existence. The regression fixture injects a missing `FSoftAssetChooser` path while keeping an empty package shell loaded. |
+| Scalar types | PASS — bounded integers, canonical asset paths, optional path filters, and `include_rows` accept only their declared native JSON number/string/boolean types. |
 | Optional dependency | PASS — builds without Chooser retain the namespace-owned registration surface and return an explicit optional-dependency-unavailable result. |
 
 The read implementation deliberately uses a Chooser-local bounded serializer
@@ -85,10 +87,10 @@ particular:
 
 ```text
 MonolithChooserReadActions.cpp
-SHA256 7C25B778C6451F7AD47A6BA035056AE2EAE1A63678B9CC9D6B7B542C92027DF1
+SHA256 26EC40E1E535E2A3533AFA418E68A138FE49CE9EC1316ECE8872BA850C9C01D4
 
 MonolithChooserReadActionsTests.cpp
-SHA256 3817F85E78DE1F0BE4963E7F08574702736464A991D32E356B3A3F7A36CD3B46
+SHA256 2E270FC8051BB30764E3692EAB0BB1D56AD4E589C03A91A620B45AE2AEB712AA
 
 Monolith.uplugin
 SHA256 5D9139060EE41DD0E067D6DB390104B3FB73C668814A5B55F7F24F1A9618F9C8
@@ -105,10 +107,10 @@ UHT records, import libraries, and DLLs under the plugin's own
 
 | Engine | Gate | Result | Evidence |
 |---|---|---|---|
-| UE 5.7 | Physically isolated editor target build | PASS — the fresh 433-action build compiled the new test and exposed one C2446 in the new reader; the root fix and final response-bound hardening each recompiled and freshly linked `MonolithAnimation` in 4/4 actions with `Result: Succeeded`. | `D:\P4\MonolithChooserUE57Host\Build-UE57-Isolated-20260730-040247.log`; `D:\P4\MonolithChooserUE57Host\Build-UE57-FinalBounded-20260730-042239.log` |
-| UE 5.7 | Final affected DLL | PASS — 2,850,304 bytes, SHA-256 `69BF99EE34C9BBDFE5C5E0E096A3B8C6CB270607A9BDBBC540E5BDC5F0955ADF`. | `D:\P4\MonolithChooserUE57Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithAnimation.dll` |
-| UE 5.8 | Physically isolated full editor target build | PASS — 433/433 actions explicitly compiled the new reader and tests; the final response-bound hardening then recompiled and freshly linked `MonolithAnimation` in 4/4 actions with `Result: Succeeded`. | `D:\P4\MonolithChooserUE58Host\Build-UE58-Isolated-Final-20260730-040944.log`; `D:\P4\MonolithChooserUE58Host\Build-UE58-FinalBounded-20260730-042329.log` |
-| UE 5.8 | Final affected DLL | PASS — 2,682,368 bytes, SHA-256 `775C0711999BBDB9DFFE445E0A705CF8F83E738B2943FE8E2CE4CCA3D59F3BEB`. | `D:\P4\MonolithChooserUE58Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithAnimation.dll` |
+| UE 5.7 | Physically isolated editor target build | PASS — the fresh 433-action build compiled the new test and exposed one C2446 in the new reader; after the review fix, the exact reader and regression test recompiled and `MonolithAnimation` freshly linked in 5/5 actions with `Result: Succeeded`. | `D:\P4\MonolithChooserUE57Host\Build-UE57-Isolated-20260730-040247.log`; `D:\P4\MonolithChooserUE57Host\Build-UE57-ReviewFinal-20260730.log` |
+| UE 5.7 | Final affected DLL | PASS — 2,863,104 bytes, SHA-256 `5F267CBBC6C79838118834D3A68E93DF8DE5055A2F4FB4BE41C22CF8A841F7D1`. | `D:\P4\MonolithChooserUE57Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithAnimation.dll` |
+| UE 5.8 | Physically isolated full editor target build | PASS — 433/433 actions explicitly compiled the new reader and tests; after the review fix, the exact reader and regression test recompiled and `MonolithAnimation` freshly linked in 5/5 actions with `Result: Succeeded`. | `D:\P4\MonolithChooserUE58Host\Build-UE58-Isolated-Final-20260730-040944.log`; `D:\P4\MonolithChooserUE58Host\Build-UE58-ReviewFinal-20260730.log` |
+| UE 5.8 | Final affected DLL | PASS — 2,694,656 bytes, SHA-256 `0D2D4585FA7B81B6938F95F60CC5FF047C0E9E1D9BEA14E91A2E8F0A7F7CB7D0`. | `D:\P4\MonolithChooserUE58Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithAnimation.dll` |
 
 The UE 5.7 compiler error was caused by a conditional expression attempting to
 combine `TSharedRef<FJsonValueString>` and
@@ -142,21 +144,25 @@ Both engines ran:
 Automation RunTests Monolith.Chooser.Read
 ```
 
-| Engine | Success | Failed / not run | Expected warnings | Errors | Final marker | Log |
-|---|---:|---:|---:|---:|---|---|
-| UE 5.7 | 4 | 0 | 3 | 0 | `TEST COMPLETE. EXIT CODE: 0` | `D:\P4\MonolithChooserUE57Host\ChooserRead-UE57-FinalBounded-20260730-042258.log` |
-| UE 5.8 | 4 | 0 | 2 | 0 | `TEST COMPLETE. EXIT CODE: 0` | `D:\P4\MonolithChooserUE58Host\ChooserRead-UE58-FinalBounded-20260730-042355.log` |
+| Engine | Success | Failed / not run | Test errors | Final marker | Log |
+|---|---:|---:|---:|---|---|
+| UE 5.7 | 5 | 0 | 0 | `TEST COMPLETE. EXIT CODE: 0` | `D:\P4\MonolithChooserUE57Host\ChooserRead-UE57-ReviewFinal-20260730.log` |
+| UE 5.8 | 5 | 0 | 0 | `TEST COMPLETE. EXIT CODE: 0` | `D:\P4\MonolithChooserUE58Host\ChooserRead-UE58-ReviewFinal-20260730.log` |
 
-The four tests on each engine are:
+The five tests on each engine are:
 
 1. `Monolith.Chooser.Read.AuthoringRoundTrip`
-2. `Monolith.Chooser.Read.EmptyTableValidation`
-3. `Monolith.Chooser.Read.ParamGuards`
-4. `Monolith.Chooser.Read.RegistrationAndSchemas`
+2. `Monolith.Chooser.Read.DeletedAssetPackageShell`
+3. `Monolith.Chooser.Read.EmptyTableValidation`
+4. `Monolith.Chooser.Read.ParamGuards`
+5. `Monolith.Chooser.Read.RegistrationAndSchemas`
 
-The expected warnings come from the missing-asset negative-path assertion and
-confirm that no default or substitute asset was loaded. No automation
-controller error was emitted.
+The new regression writes a missing soft-object path into a Chooser row while
+the corresponding empty package shell remains loaded. Readback returns
+`exists=false`, validation returns `unresolved_soft_reference`, and the table
+package remains clean on both engines. The host startup also logged that port
+9316 was already owned by the existing Monolith endpoint; this is outside the
+headless action tests and did not produce an automation-controller error.
 
 ---
 
@@ -212,6 +218,7 @@ absent, ten Niagara raw-parameter/direct-load advisories remain, and
 
 PASS. The fork gains exactly six bounded, read-only Chooser actions without
 changing the existing ten-action authoring surface. The same source compiles
-and links on UE 5.7 and UE 5.8, passes 4/4 focused tests on each engine, changes
-the generated catalog only by the intended six actions, introduces no new
-static finding, and does not include any excluded feature class.
+and links on UE 5.7 and UE 5.8, passes 5/5 focused tests on each engine,
+rejects package-only evidence for a missing referenced export, changes the
+generated catalog only by the intended six actions, introduces no new static
+finding, and does not include any excluded feature class.

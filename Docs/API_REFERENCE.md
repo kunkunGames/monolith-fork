@@ -438,7 +438,7 @@ return `serialization`, bounded `value`, `original_char_count`, and
 | Readback | `get_chooser_table` | `asset_path`, `include_rows=false`, `row_limit=50` | Bounded counts, columns, references, fallback result, and optional rows/cells. `row_limit` is 1–500. |
 | Readback | `list_chooser_columns` | `asset_path` | Column type, input/output classification, disabled state, row-value property/type/count, and bounded reflected fields. |
 | Readback | `list_chooser_rows` | `asset_path`, `start_row=0`, `limit=100` | Bounded row page with result, disabled state, and per-column cell values. |
-| Readback | `list_chooser_references` | `asset_path`, `offset=0`, `limit=200` | Bounded hard/soft references with reflected source locations and package-level existence checks. |
+| Readback | `list_chooser_references` | `asset_path`, `offset=0`, `limit=200` | Bounded hard/soft references with reflected source locations and exact loaded-object or AssetRegistry-object existence evidence. A loaded or on-disk package without the referenced export is not evidence that the asset still exists. |
 | Validation | `validate_chooser_table` | `asset_path` | Non-mutating row-array/column alignment and reference-resolution validation. Warnings do not invalidate; errors do. A truncated bounded scan returns `complete=false` and an error. |
 | Deep read/edit | `inspect_chooser` | `asset_path`, `include_cells=false`, `recursive=false` | Deep Chooser-aware inspection, optionally including the nested chooser tree. |
 | Deep read/edit | `duplicate_chooser_tree` | `source_assets`, `destination_folder`, `remap_rules?` | Two-pass duplicate and nested/result-reference remap. |

@@ -6,11 +6,13 @@
 #include "MonolithChooserReadActions.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithToolRegistry.h"
+#include "Misc/PackageName.h"
 #include "UObject/Package.h"
 
 #if WITH_CHOOSER
 #include "Chooser.h"
 #include "Curves/CurveFloat.h"
+#include "ObjectChooser_Asset.h"
 #endif
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -315,6 +317,35 @@ bool FMonolithChooserReadParamGuardTest::RunTest(const FString& Parameters)
 			Result.ErrorCode,
 			FMonolithJsonUtils::ErrInvalidParams);
 	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetBoolField(TEXT("asset_path"), true);
+		const FMonolithActionResult Result = Registry.ExecuteAction(
+			TEXT("chooser"),
+			TEXT("get_chooser_table"),
+			Params);
+		TestFalse(TEXT("Boolean asset_path is rejected"), Result.bSuccess);
+		TestEqual(
+			TEXT("Boolean asset_path failure is ErrInvalidParams"),
+			Result.ErrorCode,
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Missing/CHT_Missing.CHT_Missing"));
+		Params->SetStringField(TEXT("include_rows"), TEXT("true"));
+		const FMonolithActionResult Result = Registry.ExecuteAction(
+			TEXT("chooser"),
+			TEXT("get_chooser_table"),
+			Params);
+		TestFalse(TEXT("String include_rows is rejected"), Result.bSuccess);
+		TestEqual(
+			TEXT("String include_rows failure is ErrInvalidParams"),
+			Result.ErrorCode,
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
 	return true;
 }
 
@@ -601,6 +632,151 @@ bool FMonolithChooserReadAuthoringRoundTripTest::RunTest(const FString& Paramete
 	TestFalse(
 		TEXT("All readback actions preserve the package's clean state"),
 		Fixture.TablePackage->IsDirty());
+	DiscardFixture(Fixture);
+	return true;
+#endif
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithChooserReadDeletedAssetPackageShellTest,
+	"Monolith.Chooser.Read.DeletedAssetPackageShell",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithChooserReadDeletedAssetPackageShellTest::RunTest(const FString& Parameters)
+{
+#if !WITH_CHOOSER
+	AddInfo(TEXT("Chooser plugin is disabled for this target; exact reference validation is covered by the enabled-host test lanes."));
+	return true;
+#else
+	using namespace MonolithChooserReadTests;
+
+	FChooserFixture Fixture = CreateFixture();
+	if (!TestNotNull(TEXT("Creates a ChooserTable fixture"), Fixture.Table)
+		|| !TestNotNull(TEXT("Creates a referenced output fixture"), Fixture.OutputAsset)
+		|| !TestNotNull(TEXT("Creates an output package fixture"), Fixture.OutputPackage))
+	{
+		DiscardFixture(Fixture);
+		return false;
+	}
+
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	RegisterChooserActions(Registry);
+
+	TSharedPtr<FJsonObject> ColumnParams = MakeShared<FJsonObject>();
+	ColumnParams->SetStringField(TEXT("asset_path"), Fixture.TableObjectPath);
+	ColumnParams->SetStringField(TEXT("column_kind"), TEXT("Bool"));
+	const FMonolithActionResult ColumnResult = Registry.ExecuteAction(
+		TEXT("chooser"),
+		TEXT("add_chooser_column"),
+		ColumnParams);
+
+	TArray<TSharedPtr<FJsonValue>> Cells;
+	Cells.Add(MakeShared<FJsonValueBoolean>(true));
+	TSharedPtr<FJsonObject> RowParams = MakeShared<FJsonObject>();
+	RowParams->SetStringField(TEXT("asset_path"), Fixture.TableObjectPath);
+	RowParams->SetArrayField(TEXT("cells"), Cells);
+	RowParams->SetStringField(TEXT("output_psd"), Fixture.OutputObjectPath);
+	const FMonolithActionResult RowResult = Registry.ExecuteAction(
+		TEXT("chooser"),
+		TEXT("add_chooser_row"),
+		RowParams);
+	if (!TestTrue(TEXT("Adds the fixture input column"), ColumnResult.bSuccess)
+		|| !TestTrue(TEXT("Adds the fixture result row"), RowResult.bSuccess))
+	{
+		DiscardFixture(Fixture);
+		return false;
+	}
+
+	const FString MissingAssetName =
+		TEXT("Curve_MissingChooserOutput_")
+		+ FGuid::NewGuid().ToString(EGuidFormats::Digits);
+	const FString MissingPackageName =
+		TEXT("/Game/Developers/MonolithTests/") + MissingAssetName;
+	const FString MissingObjectPath =
+		MissingPackageName + TEXT(".") + MissingAssetName;
+	UPackage* MissingPackage = CreatePackage(*MissingPackageName);
+	if (!TestNotNull(
+			TEXT("Creates the empty package shell used by the regression"),
+			MissingPackage)
+		|| !TestTrue(
+			TEXT("Fixture row contains a mutable result struct"),
+			Fixture.Table->ResultsStructs.IsValidIndex(0)))
+	{
+		DiscardFixture(Fixture);
+		return false;
+	}
+
+	FInstancedStruct& ResultStruct = Fixture.Table->ResultsStructs[0];
+	ResultStruct.InitializeAs(FSoftAssetChooser::StaticStruct());
+	ResultStruct.GetMutable<FSoftAssetChooser>().Asset =
+		TSoftObjectPtr<UObject>(FSoftObjectPath(MissingObjectPath));
+	Fixture.TablePackage->SetDirtyFlag(false);
+	MissingPackage->SetDirtyFlag(false);
+
+	TestNotNull(
+		TEXT("The missing asset's empty UPackage shell is loaded"),
+		FindPackage(nullptr, *MissingPackageName));
+	TestFalse(
+		TEXT("The empty package shell has no on-disk package"),
+		FPackageName::DoesPackageExist(MissingPackageName));
+
+	TSharedPtr<FJsonObject> ReadParams = MakeShared<FJsonObject>();
+	ReadParams->SetStringField(TEXT("asset_path"), Fixture.TableObjectPath);
+	const FMonolithActionResult ReferencesResult = Registry.ExecuteAction(
+		TEXT("chooser"),
+		TEXT("list_chooser_references"),
+		ReadParams);
+	const FMonolithActionResult ValidateResult = Registry.ExecuteAction(
+		TEXT("chooser"),
+		TEXT("validate_chooser_table"),
+		ReadParams);
+
+	if (!TestTrue(TEXT("Reference readback succeeds for a missing soft target"), ReferencesResult.bSuccess)
+		|| !TestTrue(TEXT("Structural validation executes for a missing soft target"), ValidateResult.bSuccess))
+	{
+		DiscardFixture(Fixture);
+		return false;
+	}
+
+	bool bFoundMissingReference = false;
+	bool bMissingReferenceExists = true;
+	const TArray<TSharedPtr<FJsonValue>>& References =
+		ReferencesResult.Result->GetArrayField(TEXT("references"));
+	for (const TSharedPtr<FJsonValue>& ReferenceValue : References)
+	{
+		const TSharedPtr<FJsonObject>* Reference = nullptr;
+		FString ReferencePath;
+		if (ReferenceValue.IsValid()
+			&& ReferenceValue->TryGetObject(Reference)
+			&& Reference
+			&& Reference->IsValid()
+			&& (*Reference)->TryGetStringField(TEXT("path"), ReferencePath)
+			&& ReferencePath.Equals(MissingObjectPath, ESearchCase::CaseSensitive))
+		{
+			bFoundMissingReference = true;
+			(*Reference)->TryGetBoolField(TEXT("exists"), bMissingReferenceExists);
+			break;
+		}
+	}
+
+	TestTrue(TEXT("Reference readback retains the missing soft path"), bFoundMissingReference);
+	TestFalse(
+		TEXT("A loaded empty package shell is not accepted as asset existence"),
+		bMissingReferenceExists);
+	TestFalse(
+		TEXT("Missing soft target makes structural validation invalid"),
+		ValidateResult.Result->GetBoolField(TEXT("valid")));
+	TestTrue(
+		TEXT("Missing soft target produces a validation error"),
+		ValidateResult.Result->GetNumberField(TEXT("error_count")) >= 1.0);
+	TestTrue(
+		TEXT("Missing soft target reports unresolved_soft_reference"),
+		JoinIssueCodes(ValidateResult.Result).Contains(TEXT("unresolved_soft_reference")));
+	TestFalse(
+		TEXT("Reference readback and validation preserve the table package's clean state"),
+		Fixture.TablePackage->IsDirty());
+
+	MissingPackage->SetDirtyFlag(false);
 	DiscardFixture(Fixture);
 	return true;
 #endif
