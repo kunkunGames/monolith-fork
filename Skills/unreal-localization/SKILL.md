@@ -35,9 +35,9 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | Action | Params | Purpose |
 |--------|--------|---------|
 | `list_cultures` | `culture_names?` `include_derived?=true` | List available cultures known to Unreal internationalization. |
-| `list_string_tables` | `path?=/Game` `include_entries?=false` `include_metadata?=false` `limit?=100` | List StringTable assets under a project content path. |
+| `list_string_tables` | `path?=/Game` `include_entries?=false` `include_metadata?=false` `limit?=100` | List StringTable assets under a project content path; one shared `limit` bounds both table summaries and aggregate returned entry rows. |
 | `get_string_table` | `asset_path*` `include_metadata?=true` `limit?=200` | Inspect a StringTable asset and return capped entries. |
-| `validate_string_table` | `asset_path*` | Validate a StringTable for empty keys, empty strings, duplicate-looking keys, and large output warnings. |
+| `validate_string_table` | `asset_path*` | Validate a StringTable; returns at most 200 issue rows plus full/returned/truncated counts. |
 | `[w] create_string_table` | `asset_path*` `namespace?` `dry_run?=false` `confirm?=false` `save?=false` | Create a StringTable asset under /Game. Requires dry_run=true or confirm=true. |
 | `[w] set_string_entry` | `asset_path*` `key*` `source_string*` `metadata?` `dry_run?=false` `confirm?=false` `save?=false` | Add or replace one StringTable entry and optional metadata. Requires dry_run=true or confirm=true. |
 | `[w] remove_string_entry` | `asset_path*` `key*` `dry_run?=false` `confirm?=false` `save?=false` | Remove one StringTable entry by key. Requires dry_run=true or confirm=true. |
@@ -74,7 +74,8 @@ localization_query({ action: "list_cultures", params: {} })
 ## Gotchas / Rules
 
 - Mutating actions (`create_string_table`, `set_string_entry`, `set_string_metadata`, `remove_string_entry`, `import_string_table_csv`, `export_string_table_csv`) require `dry_run=true` or `confirm=true`. Run `dry_run` first to preview, then re-issue with `confirm=true`.
-- `get_string_table` caps returned entries; for a full audit pair it with `validate_string_table` rather than relying on the capped list.
-- CSV headers must contain `key` and `source_string`; every additional header is treated as a per-entry metadata key. Keep StringTable keys and metadata-column names stable across export/import so rows round-trip to the intended entries.
+- `get_string_table` caps returned entries. `list_string_tables` applies one shared entry-row budget across all returned table summaries and reports `available_entry_count`, `returned_entry_count`, and `truncated_entry_count`. For a full audit pair reads with `validate_string_table`, whose `issues` array is capped at 200 but whose count fields report the full result.
+- Metadata keys with leading/trailing whitespace are rejected, as are reserved structural names. Treat metadata names as case-insensitive `FName` identities even when a client-side JSON library appears to allow case variants.
+- CSV headers must contain `key` and `source_string`. `__monolith_metadata_presence_v1` is a Monolith structural column, not metadata: export writes a per-row JSON array there so an empty metadata value remains distinguishable from an absent field, and import validates and consumes it. Do not rename or remove that column when lossless empty-versus-absent round trips matter. Every other additional header is a metadata key and may not contain edge whitespace.
 - This reference is generated from the live `RegisterAction` surface. If an action is missing or renamed, re-run `monolith_discover({ namespace: "localization" })` — the catalog is the source of truth.
 - Call `describe_query("action_schema", target_namespace="localization", target_action="<action>")` for required/optional params and types; use `monolith_discover({ namespace: "localization", detail: true })` only when every schema is needed.

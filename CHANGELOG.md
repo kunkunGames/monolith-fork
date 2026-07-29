@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- **Localization review hardening.** Capped StringTable entries are sorted before truncation; oversized integral limits clamp before integer conversion; empty metadata values can be added; replace-imports retain UE 5.8 developer notes; CSV import rejects duplicate headers and export rejects metadata names that collide with `key` or `source_string`; project-scoped CSV paths cannot escape through a symlink or junction.
+- **Localization review hardening.** Capped StringTable entries are sorted before truncation; `list_string_tables` shares one aggregate entry-row budget across returned tables and reports available/returned/truncated counts; validation returns at most 200 issue rows while retaining the full issue total; oversized integral limits clamp before integer conversion; explicit object names must match the package leaf during creation; metadata keys reject edge whitespace and reserved/case-insensitive collisions; lossless CSV exports use the structural `__monolith_metadata_presence_v1` column to distinguish an absent metadata field from a present empty string; replace-imports retain UE 5.8 developer notes; and project-scoped CSV paths cannot escape through a symlink or junction.
 - **Exact complex-type contracts can opt out of MCP compatibility coercion.** `FParamSchemaBuilder::RequiredExactType` and `OptionalExactType` annotate array/object parameters that must retain their original `EJson` type. `localization.list_cultures.culture_names` and `localization.set_string_entry.metadata` now reject JSON-encoded strings instead of being rewritten before their strict guards run.
 
 ## [0.21.3] - 2026-07-26

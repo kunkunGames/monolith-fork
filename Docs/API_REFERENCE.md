@@ -701,14 +701,16 @@ List available cultures known to Unreal internationalization.
 
 ### `localization.list_string_tables`
 
-List StringTable assets under a project content path. Included entries are sorted by key before the per-table limit is applied.
+List StringTable assets under a project content path. Included entries are sorted by key, and one shared entry-row budget is consumed across the returned table summaries rather than being reset for every table.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `path` | string | optional | Content path to scan. Default: `/Game` |
 | `include_entries` | boolean | optional | Include capped entry rows. Default: `false` |
 | `include_metadata` | boolean | optional | Include per-entry metadata when entries are included. Default: `false` |
-| `limit` | integer | optional | Maximum tables or entries to return. Default: `100`; clamped to `1..1000` |
+| `limit` | integer | optional | Maximum table summaries and aggregate entry rows to return. Default: `100`; clamped to `1..1000` |
+
+When `include_entries=true`, the response includes `entry_budget`, `available_entry_count`, `returned_entry_count`, and `truncated_entry_count`. Entry counts cover the returned table summaries; `matched_count`, `returned_count`, and `truncated_remaining` separately describe table-summary truncation.
 
 ### `localization.get_string_table`
 
@@ -722,7 +724,7 @@ Inspect a StringTable asset and return entries sorted by key before the cap is a
 
 ### `localization.validate_string_table`
 
-Validate a StringTable for empty keys, empty source strings, duplicate-looking keys, and large-output warnings.
+Validate a StringTable for empty keys, empty source strings, duplicate-looking keys, and large-output warnings. The response returns at most 200 rows in `issues`; `issue_count` remains the full total, while `returned_issue_count` and `truncated_issue_count` make truncation explicit. `valid` is based on the full total.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -730,7 +732,7 @@ Validate a StringTable for empty keys, empty source strings, duplicate-looking k
 
 ### `localization.create_string_table`
 
-Create a StringTable asset under `/Game`.
+Create a StringTable asset under `/Game`. If `asset_path` includes an explicit object segment, its object name must match the package leaf (for example, `/Game/Localization/ST_UI.ST_UI`).
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -749,7 +751,7 @@ Add or replace one StringTable entry and optional string metadata.
 | `asset_path` | string | **required** | StringTable asset path under `/Game` |
 | `key` | string | **required** | Entry key |
 | `source_string` | string | **required** | Source string |
-| `metadata` | object | optional | String-to-string metadata fields |
+| `metadata` | object | optional | String-to-string metadata fields; keys must not have leading/trailing whitespace, use reserved CSV structural names, or collide case-insensitively |
 | `dry_run` | boolean | optional | Preview without writing. Default: `false` |
 | `confirm` | boolean | optional | Must be `true` for a non-dry-run write. Default: `false` |
 | `save` | boolean | optional | Save the package after mutation. Default: `false` |
@@ -774,7 +776,7 @@ Add, replace, or remove one metadata field on a StringTable entry. An empty stri
 |-----------|------|----------|-------------|
 | `asset_path` | string | **required** | StringTable asset path under `/Game` |
 | `key` | string | **required** | Entry key |
-| `metadata_key` | string | **required** | Metadata key |
+| `metadata_key` | string | **required** | Metadata key without leading/trailing whitespace; reserved CSV structural names are rejected |
 | `metadata_value` | string | optional | Metadata value to set; required unless `remove=true` |
 | `remove` | boolean | optional | Remove `metadata_key` instead of setting it. Default: `false` |
 | `dry_run` | boolean | optional | Preview without writing. Default: `false` |
@@ -783,7 +785,7 @@ Add, replace, or remove one metadata field on a StringTable entry. An empty stri
 
 ### `localization.import_string_table_csv`
 
-Import `key`, `source_string`, and optional metadata columns from a CSV into an existing StringTable. Header names must be unique case-insensitively. On UE 5.8, `replace_existing=true` preserves developer notes for keys that are re-imported.
+Import `key`, `source_string`, and optional metadata columns from a CSV into an existing StringTable. Header names must be unique case-insensitively and must not have leading/trailing whitespace. Monolith exports may include the structural `__monolith_metadata_presence_v1` column, whose per-row JSON string array distinguishes a present empty metadata value from an absent field. The importer validates that list against actual metadata columns; legacy CSV files without the structural column retain the prior rule that an empty metadata cell is absent. On UE 5.8, `replace_existing=true` preserves developer notes for keys that are re-imported.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -796,7 +798,7 @@ Import `key`, `source_string`, and optional metadata columns from a CSV into an 
 
 ### `localization.export_string_table_csv`
 
-Export a StringTable to a CSV under the project directory. Export fails if a metadata key case-insensitively collides with the reserved `key` or `source_string` structural headers, preventing an ambiguous or destructive re-import.
+Export a StringTable to a CSV under the project directory. When metadata columns exist, export adds the structural `__monolith_metadata_presence_v1` column so present empty strings round-trip without being materialized on rows where the field was absent. Export fails if a metadata key has leading/trailing whitespace or case-insensitively collides with `key`, `source_string`, or the presence column, preventing an ambiguous or destructive re-import.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
