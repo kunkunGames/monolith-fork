@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Optional `gamefeatures` namespace (15-action full surface).** A dedicated `MonolithGameFeatures` editor module now inventories and validates Game Feature plugins, resolves and summarizes `UGameFeatureData`/ActionSet assets, discovers action classes, and provides eight guarded `dry_run`-capable writers for Primary Asset scans and instanced input, widget, component, GameplayCue, ability, and removal entries. The module exposes nine actions by default when the target explicitly enables the engine `GameFeatures` plugin, exposes all 15 when `bEnableGameFeatureActions=true`, and compiles a status-only stub when the optional dependency is unavailable.
+
 ## [0.21.3] - 2026-07-26
 
 This release closes out the open pull-request queue. Every fix below was reported or prototyped by a contributor — thanks to **@Thomasbehan**, **@whalemenace**, and **@kunkunGames** for the write-ups, which were detailed enough to reproduce from directly.

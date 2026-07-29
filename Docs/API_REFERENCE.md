@@ -1,8 +1,8 @@
 # Monolith API Reference
 
-**Version:** v0.21.3 · **Last updated:** 2026-07-26
+**Version:** v0.21.3 · **Last updated:** 2026-07-29
 
-**In-tree action total is approximate: ~1,400+ actions across 25+ in-tree namespaces** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
+**In-tree action total is approximate: ~1,400+ actions across 25+ in-tree namespaces** (public, in-tree only; most are active by default, the GameFeatures surface is optional/config-gated, and 45 experimental town-gen actions register only when `bEnableProceduralTownGen=true`). The surface is too large to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
 The per-namespace numbers in the Table of Contents and body sections below are kept for structure, not precision — they drift with every action added and are no longer maintained to the unit. Treat them as ballpark; the live figure always comes from `monolith_discover()`.
 
@@ -30,6 +30,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [mesh](#mesh) | 194 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, mesh import (incl. skeletal + animation). +45 town gen registers only with `bEnableProceduralTownGen=true` (experimental, not in the public count) |
 | [ui](#ui) | 138 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, headline scaffolders, navigation/conversion gap-closure, accessibility, CommonUI, GAS UI bindings |
 | [gas](#gas) | 135 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold |
+| [gamefeatures](#gamefeatures) | 15 | Optional Game Feature plugin/data inspection and guarded ActionSet/`UGameFeatureData` instanced-action authoring |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
 | [ai](#ai) | 221 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
@@ -43,7 +44,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [network](#network) | 4 | **New v0.17.0.** Reflection Intelligence — UE 5.7 replication inspection (replicated classes, RPCs, OnRep handlers, unbalanced-OnRep audit) |
 | [pipeline](#pipeline) | 2 | **New v0.17.0.** Reflection Intelligence — read-only composer actions (`pr_review`, `release_readiness`) |
 | [reflect](#reflect) | 1 | **New v0.19.0.** Reflection Intelligence — index maintenance (`rebuild_reflection_index`, project-only force-rebuild of the RI reflection tables; WRITE/maintenance) |
-| **In-tree subtotal** | **1406** | (all default-active; +45 experimental town gen → 1451 when registered) |
+| **In-tree subtotal** | **1421** | (full compiled/config-enabled GameFeatures surface; +45 experimental town gen → 1466 when registered) |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -956,6 +957,45 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithGAS.md` for the deep dive.
 
 ---
 
+## gamefeatures
+
+Game Feature plugin/data inspection and guarded instanced-action authoring. The
+full compiled and inspection-enabled surface has **15 actions**:
+
+- if the target does not explicitly enable the engine `GameFeatures` plugin,
+  `WITH_MONOLITH_GAMEFEATURES=0` and only `get_status` is registered;
+- when compiled with `GameFeatures`, `get_status` plus eight writer actions are
+  registered by default;
+- setting `bEnableGameFeatureActions=true` and restarting the editor registers
+  the six additional inspection actions.
+
+| Action | Core parameters | Description |
+|--------|-----------------|-------------|
+| `get_status` | none | Report compile state, inspection/creation flags, loaded modules, discovered plugin count, and the registered/available action rosters |
+| `list_plugins` | `limit?=50`, `include_engine?=false` | List bounded GameFeature-style plugin descriptors and candidate data assets |
+| `find_game_feature_data` | `plugin_name?`, `asset_path?` | Resolve one plugin or asset path to Asset Registry metadata; at least one selector is required by the handler |
+| `describe_game_feature_data` | plugin/asset selector plus bounded reflection options | Load one resolved `UGameFeatureData` and summarize its instanced actions/properties |
+| `list_action_classes` | `limit?=100`, optional module/name/property filters | List loaded `UGameFeatureAction` subclasses and bounded editable property schemas |
+| `describe_action_set` | `action_set_path`, bounded action/property options | Summarize an existing ActionSet-style asset's instanced `Actions` array |
+| `add_action_set_input_mapping` | `action_set_path`, `mapping_context_path`, optional class/name/priority/save/dry-run controls | Idempotently create/reuse an input-mapping action and mapping entry |
+| `set_primary_asset_scan` | `game_feature_data_path`, `primary_asset_type`, optional class/directory/asset/save/dry-run controls | Create or update one `PrimaryAssetTypesToScan` entry |
+| `add_game_feature_data_input_mapping` | `game_feature_data_path`, `mapping_context_path`, optional class/name/priority/save/dry-run controls | Add an input-mapping action directly to `UGameFeatureData` |
+| `add_game_feature_data_widgets` | `game_feature_data_path`, optional layout/widget arrays and property-name overrides | Add validated class plus GameplayTag widget/layout entries |
+| `add_game_feature_data_components` | `game_feature_data_path`, `actor_class`, `component_class`, optional flags/save/dry-run controls | Add one actor/component request to an AddComponents-style action |
+| `add_game_feature_data_gameplay_cue_paths` | `game_feature_data_path`, `directory_path` or `directory_paths[]`, optional class/name/save/dry-run controls | Add slash-prefixed GameplayCue directories idempotently |
+| `add_game_feature_data_abilities` | `game_feature_data_path`, `actor_class`, optional ability/attribute/ability-set arrays | Add validated actor-scoped grant entries to an AddAbilities-style action |
+| `remove_game_feature_data_action` | `game_feature_data_path` plus index, name, and/or class selector | Preview or remove the first/all matching instanced action entries |
+| `validate_plugin` | `plugin_name` | Check descriptor presence, enabled `GameFeatures` dependency, content root, data asset, and reserved creation gate |
+
+All eight writers operate only on existing assets, validate referenced
+classes/assets/tags before mutation, support `dry_run=true`, and save only when
+`save=true`. The namespace does not activate, deactivate, create, rename, or
+delete Game Feature plugins. See
+[`specs/SPEC_MonolithGameFeatures.md`](specs/SPEC_MonolithGameFeatures.md) for
+full parameter and result contracts.
+
+---
+
 ## combograph
 
 ComboGraph melee combo authoring. **13 actions.** **Conditional on `#if WITH_COMBOGRAPH`** — requires the ComboGraph marketplace plugin. Reflection-only (no direct C++ API linkage).
@@ -1698,6 +1738,7 @@ Both invoke the same SQLite indexes the live MCP uses.
 | Module | Gate | Actions when ungated |
 |--------|------|----------------------|
 | MonolithGAS | `WITH_GBA` (GameplayAbilities plugin) | 0 |
+| MonolithGameFeatures | `WITH_MONOLITH_GAMEFEATURES` plus `bEnableGameFeatureActions` | 1 status-only without the dependency; 9 compiled default; 15 with inspection enabled |
 | MonolithComboGraph | `WITH_COMBOGRAPH` (ComboGraph marketplace plugin) | 0 |
 | MonolithLogicDriver | `WITH_LOGICDRIVER` (Logic Driver Pro marketplace plugin) | 0 |
 | MonolithAI | `WITH_STATETREE` + `WITH_SMARTOBJECTS` (engine plugins) | 0 |
