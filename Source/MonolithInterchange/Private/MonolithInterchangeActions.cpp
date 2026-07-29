@@ -651,8 +651,8 @@ namespace
 			return true;
 		}
 
-		const TSharedPtr<FJsonValue>* Value = Params->Values.Find(Field);
-		if (!Value || !Value->IsValid() || (*Value)->Type != EJson::Number)
+		const TSharedPtr<FJsonValue> Value = Params->TryGetField(Field);
+		if (!Value.IsValid() || Value->Type != EJson::Number)
 		{
 			AddMessage(
 				Messages,
@@ -661,7 +661,7 @@ namespace
 			return false;
 		}
 
-		const double Number = (*Value)->AsNumber();
+		const double Number = Value->AsNumber();
 		if (!FMath::IsFinite(Number) ||
 			Number != FMath::TruncToDouble(Number) ||
 			Number < static_cast<double>(MIN_int32) ||
