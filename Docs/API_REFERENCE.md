@@ -973,7 +973,7 @@ full compiled and inspection-enabled surface has **15 actions**:
 |--------|-----------------|-------------|
 | `get_status` | none | Report compile state, inspection/creation flags, loaded modules, discovered plugin count, and the registered/available action rosters |
 | `list_plugins` | `limit?=50`, `include_engine?=false` | List bounded GameFeature-style plugin descriptors and candidate data assets |
-| `find_game_feature_data` | `plugin_name?`, `asset_path?` | Resolve one plugin or asset path to Asset Registry metadata; at least one selector is required by the handler |
+| `find_game_feature_data` | `plugin_name?`, `asset_path?` | Resolve one plugin or asset path to Asset Registry metadata; multiple unmatched data assets require an explicit `asset_path` |
 | `describe_game_feature_data` | plugin/asset selector plus bounded reflection options | Load one resolved `UGameFeatureData` and summarize its instanced actions/properties |
 | `list_action_classes` | `limit?=100`, optional module/name/property filters | List loaded `UGameFeatureAction` subclasses and bounded editable property schemas |
 | `describe_action_set` | `action_set_path`, bounded action/property options | Summarize an existing ActionSet-style asset's instanced `Actions` array |
@@ -987,10 +987,13 @@ full compiled and inspection-enabled surface has **15 actions**:
 | `remove_game_feature_data_action` | `game_feature_data_path` plus index, name, and/or class selector | Preview or remove the first/all matching instanced action entries |
 | `validate_plugin` | `plugin_name` | Check descriptor presence, enabled `GameFeatures` dependency, content root, data asset, and reserved creation gate |
 
-All eight writers operate only on existing assets, validate referenced
-classes/assets/tags before mutation, support `dry_run=true`, and save only when
-`save=true`. The namespace does not activate, deactivate, create, rename, or
-delete Game Feature plugins. See
+All eight writers operate only on existing assets, preflight the complete edit
+on a transient action copy before mutation, support `dry_run=true`, and save
+only when `save=true`. A supplied `action_name` is an exact name-and-class
+selector; rejected and idempotent no-op calls do not dirty the package. Soft
+class fields enforce their reflected `MetaClass`, and ability-related object
+types are checked in dry-run and real-write paths alike. The namespace does not
+activate, deactivate, create, rename, or delete Game Feature plugins. See
 [`specs/SPEC_MonolithGameFeatures.md`](specs/SPEC_MonolithGameFeatures.md) for
 full parameter and result contracts.
 

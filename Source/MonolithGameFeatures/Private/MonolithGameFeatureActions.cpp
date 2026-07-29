@@ -13,6 +13,7 @@
 
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Engine/AssetManagerTypes.h"
+#include "Engine/Engine.h"
 #include "GameFeatureData.h"
 #include "GameplayTagContainer.h"
 #include "HAL/FileManager.h"
@@ -30,6 +31,10 @@
 #include "UObject/TopLevelAssetPath.h"
 #include "UObject/UnrealType.h"
 #include "UObject/UObjectIterator.h"
+
+#if WITH_DEV_AUTOMATION_TESTS
+#include "Tests/MonolithGameFeatureActionTestHooks.h"
+#endif
 
 namespace MonolithGameFeatures
 {
@@ -424,17 +429,20 @@ namespace MonolithGameFeatures
 
 		if (ExpectedBaseClassPath && *ExpectedBaseClassPath)
 		{
-			if (UClass* BaseClass = StaticLoadClass(UObject::StaticClass(), nullptr, ExpectedBaseClassPath))
+			UClass* BaseClass = StaticLoadClass(UObject::StaticClass(), nullptr, ExpectedBaseClassPath);
+			if (!BaseClass)
 			{
-				if (!LoadedClass->IsChildOf(BaseClass))
-				{
-					OutError = FString::Printf(
-						TEXT("Class '%s' for '%s' is not a child of '%s'"),
-						*LoadedClass->GetPathName(),
-						ParamName,
-						*BaseClass->GetPathName());
-					return nullptr;
-				}
+				OutError = FString::Printf(TEXT("Expected base class '%s' for '%s' is unavailable"), ExpectedBaseClassPath, ParamName);
+				return nullptr;
+			}
+			if (!LoadedClass->IsChildOf(BaseClass))
+			{
+				OutError = FString::Printf(
+					TEXT("Class '%s' for '%s' is not a child of '%s'"),
+					*LoadedClass->GetPathName(),
+					ParamName,
+					*BaseClass->GetPathName());
+				return nullptr;
 			}
 		}
 
@@ -486,7 +494,8 @@ namespace MonolithGameFeatures
 			OutError = FString::Printf(TEXT("Class path for '%s' must not be empty"), FieldName);
 			return false;
 		}
-		if (!StaticLoadClass(UObject::StaticClass(), nullptr, *DesiredPath))
+		UClass* LoadedClass = StaticLoadClass(UObject::StaticClass(), nullptr, *DesiredPath);
+		if (!LoadedClass)
 		{
 			OutError = FString::Printf(TEXT("Could not load class '%s'"), *DesiredPath);
 			return false;
@@ -494,6 +503,16 @@ namespace MonolithGameFeatures
 
 		if (FSoftClassProperty* SoftClassProperty = FindFProperty<FSoftClassProperty>(Struct, FieldName))
 		{
+			if (SoftClassProperty->MetaClass && !LoadedClass->IsChildOf(SoftClassProperty->MetaClass))
+			{
+				OutError = FString::Printf(
+					TEXT("Class '%s' for '%s' is not a child of '%s'"),
+					*LoadedClass->GetPathName(),
+					FieldName,
+					*SoftClassProperty->MetaClass->GetPathName());
+				return false;
+			}
+
 			void* ValuePtr = SoftClassProperty->ContainerPtrToValuePtr<void>(StructPtr);
 			const FSoftObjectPtr ExistingPtr = SoftClassProperty->GetPropertyValue(ValuePtr);
 			if (!ExistingPtr.ToSoftObjectPath().ToString().Equals(DesiredPath, ESearchCase::IgnoreCase))
@@ -758,7 +777,7 @@ namespace MonolithGameFeatures
 		bSaved = UPackage::SavePackage(Package, Asset, *PackageFilename, SaveArgs);
 		if (!bSaved)
 		{
-			OutError = FString::Printf(TEXT("SavePackage failed for '%s'"), *PackageFilename);
+			OutError = FString::Printf(TEXT("SavePackage failed for package '%s'"), *Package->GetName());
 			return false;
 		}
 		return true;
@@ -807,13 +826,30 @@ namespace MonolithGameFeatures
 		return RemovedCount;
 	}
 
-	static UObject* FindExistingAction(
+	struct FInstancedActionEditPlan
+	{
+		UObject* ActionOwner = nullptr;
+		UClass* ActionClass = nullptr;
+		UObject* ExistingAction = nullptr;
+		UObject* ValidationAction = nullptr;
+		int32 ExistingActionIndex = INDEX_NONE;
+		int32 ProjectedActionIndex = INDEX_NONE;
+		int32 RemovedNullActionCount = 0;
+		int32 ActionCountBefore = 0;
+		int32 ActionCountAfter = 0;
+		bool bCreatedAction = false;
+	};
+
+	static bool TryFindExistingAction(
 		FScriptArrayHelper& Helper,
 		const FObjectPropertyBase* ObjectProperty,
 		UClass* ActionClass,
 		const FString& RequestedActionName,
-		int32& OutIndex)
+		UObject*& OutAction,
+		int32& OutIndex,
+		FString& OutError)
 	{
+		OutAction = nullptr;
 		OutIndex = INDEX_NONE;
 
 		if (!RequestedActionName.IsEmpty())
@@ -823,10 +859,25 @@ namespace MonolithGameFeatures
 				UObject* ActionObject = ObjectProperty->GetObjectPropertyValue(Helper.GetRawPtr(Index));
 				if (ActionObject && ActionObject->GetName().Equals(RequestedActionName, ESearchCase::IgnoreCase))
 				{
+					if (!ActionObject->IsA(ActionClass))
+					{
+						OutError = FString::Printf(
+							TEXT("Action named '%s' is class '%s', not requested class '%s'"),
+							*RequestedActionName,
+							*ActionObject->GetClass()->GetPathName(),
+							*ActionClass->GetPathName());
+						return false;
+					}
 					OutIndex = Index;
-					return ActionObject;
+					OutAction = ActionObject;
+					return true;
 				}
 			}
+
+			// A supplied name is an exact selector. If no object has that name,
+			// the writer creates a new named action rather than silently
+			// mutating the first action of the requested class.
+			return true;
 		}
 
 		for (int32 Index = 0; Index < Helper.Num(); ++Index)
@@ -835,33 +886,23 @@ namespace MonolithGameFeatures
 			if (ActionObject && ActionObject->IsA(ActionClass))
 			{
 				OutIndex = Index;
-				return ActionObject;
+				OutAction = ActionObject;
+				return true;
 			}
 		}
 
-		return nullptr;
+		return true;
 	}
 
-	static bool EnsureInstancedActionObject(
+	static bool PrepareInstancedActionEdit(
 		UObject* ActionOwner,
 		UClass* ActionClass,
 		const FString& ActionName,
 		bool bRemoveNullActions,
-		bool bDryRun,
-		UObject*& OutActionObject,
-		bool& bOutCreatedAction,
-		int32& OutActionIndex,
-		int32& OutRemovedNullActionCount,
-		int32& OutActionCountBefore,
-		int32& OutActionCountAfter,
+		FInstancedActionEditPlan& OutPlan,
 		FString& OutError)
 	{
-		OutActionObject = nullptr;
-		bOutCreatedAction = false;
-		OutActionIndex = INDEX_NONE;
-		OutRemovedNullActionCount = 0;
-		OutActionCountBefore = 0;
-		OutActionCountAfter = 0;
+		OutPlan = FInstancedActionEditPlan();
 
 		if (!ActionOwner || !ActionClass)
 		{
@@ -886,61 +927,180 @@ namespace MonolithGameFeatures
 
 		void* ActionsArrayPtr = ActionsArrayProperty->ContainerPtrToValuePtr<void>(ActionOwner);
 		FScriptArrayHelper ActionsHelper(ActionsArrayProperty, ActionsArrayPtr);
-		OutActionCountBefore = ActionsHelper.Num();
+		OutPlan.ActionOwner = ActionOwner;
+		OutPlan.ActionClass = ActionClass;
+		OutPlan.ActionCountBefore = ActionsHelper.Num();
 
-		OutActionObject = FindExistingAction(ActionsHelper, ActionsObjectProperty, ActionClass, ActionName, OutActionIndex);
-		if (!OutActionObject)
+		if (!TryFindExistingAction(
+			ActionsHelper,
+			ActionsObjectProperty,
+			ActionClass,
+			ActionName,
+			OutPlan.ExistingAction,
+			OutPlan.ExistingActionIndex,
+			OutError))
 		{
-			bOutCreatedAction = true;
-			if (!bDryRun)
+			return false;
+		}
+		OutPlan.bCreatedAction = !OutPlan.ExistingAction;
+		if (OutPlan.bCreatedAction && !ActionName.IsEmpty())
+		{
+			const FName RequestedObjectName(*ActionName);
+			if (StaticFindObjectFast(UObject::StaticClass(), ActionOwner, RequestedObjectName))
 			{
-				ActionOwner->Modify();
-				const FName BaseName = ActionName.IsEmpty() ? FName(*ActionClass->GetName()) : FName(*ActionName);
-				const FName UniqueName = MakeUniqueObjectName(ActionOwner, ActionClass, BaseName);
-				OutActionObject = NewObject<UObject>(ActionOwner, ActionClass, UniqueName, RF_Transactional);
-				if (!OutActionObject)
-				{
-					OutError = TEXT("Failed to create instanced GameFeatureAction object");
-					return false;
-				}
-				OutActionObject->Modify();
-				const int32 NewIndex = ActionsHelper.AddValue();
-				ActionsObjectProperty->SetObjectPropertyValue(ActionsHelper.GetRawPtr(NewIndex), OutActionObject);
-				OutActionIndex = NewIndex;
+				OutError = FString::Printf(
+					TEXT("Object name '%s' is already in use under '%s' but is not a selectable Actions entry"),
+					*ActionName,
+					*ActionOwner->GetPathName());
+				return false;
 			}
 		}
 
-		if (bRemoveNullActions && !bDryRun)
-		{
-			ActionOwner->Modify();
-			OutRemovedNullActionCount = RemoveNullActions(ActionsHelper, ActionsObjectProperty);
-			if (OutRemovedNullActionCount > 0 && OutActionObject)
-			{
-				OutActionIndex = INDEX_NONE;
-				for (int32 Index = 0; Index < ActionsHelper.Num(); ++Index)
-				{
-					if (ActionsObjectProperty->GetObjectPropertyValue(ActionsHelper.GetRawPtr(Index)) == OutActionObject)
-					{
-						OutActionIndex = Index;
-						break;
-					}
-				}
-			}
-		}
-		else if (bRemoveNullActions)
+		int32 NullsBeforeExistingAction = 0;
+		if (bRemoveNullActions)
 		{
 			for (int32 Index = 0; Index < ActionsHelper.Num(); ++Index)
 			{
 				if (!ActionsObjectProperty->GetObjectPropertyValue(ActionsHelper.GetRawPtr(Index)))
 				{
-					++OutRemovedNullActionCount;
+					++OutPlan.RemovedNullActionCount;
+					if (OutPlan.ExistingActionIndex != INDEX_NONE && Index < OutPlan.ExistingActionIndex)
+					{
+						++NullsBeforeExistingAction;
+					}
 				}
 			}
 		}
 
-		OutActionCountAfter = bDryRun
-			? OutActionCountBefore + (bOutCreatedAction ? 1 : 0) - OutRemovedNullActionCount
-			: ActionsHelper.Num();
+		const FName ValidationName = MakeUniqueObjectName(
+			GetTransientPackage(),
+			ActionClass,
+			FName(TEXT("MonolithValidatedGameFeatureAction")));
+		if (OutPlan.ExistingAction)
+		{
+			OutPlan.ValidationAction = DuplicateObject<UObject>(
+				OutPlan.ExistingAction,
+				GetTransientPackage(),
+				ValidationName);
+		}
+		else
+		{
+			OutPlan.ValidationAction = NewObject<UObject>(
+				GetTransientPackage(),
+				ActionClass,
+				ValidationName,
+				RF_Transient);
+		}
+		if (!OutPlan.ValidationAction)
+		{
+			OutError = TEXT("Failed to create transient GameFeatureAction object for preflight validation");
+			return false;
+		}
+		OutPlan.ValidationAction->SetFlags(RF_Transient);
+
+		OutPlan.ActionCountAfter = OutPlan.ActionCountBefore
+			+ (OutPlan.bCreatedAction ? 1 : 0)
+			- OutPlan.RemovedNullActionCount;
+		OutPlan.ProjectedActionIndex = OutPlan.bCreatedAction
+			? OutPlan.ActionCountAfter - 1
+			: OutPlan.ExistingActionIndex - NullsBeforeExistingAction;
+		return true;
+	}
+
+	static bool CommitInstancedActionEdit(
+		FInstancedActionEditPlan& Plan,
+		const FString& ActionName,
+		bool bRemoveNullActions,
+		bool bActionPropertiesChanged,
+		UObject*& OutActionObject,
+		FString& OutError)
+	{
+		OutActionObject = Plan.ExistingAction;
+		FArrayProperty* ActionsArrayProperty = nullptr;
+		FObjectPropertyBase* ActionsObjectProperty = nullptr;
+		if (!TryGetActionsArray(Plan.ActionOwner, ActionsArrayProperty, ActionsObjectProperty, OutError))
+		{
+			return false;
+		}
+
+		void* ActionsArrayPtr = ActionsArrayProperty->ContainerPtrToValuePtr<void>(Plan.ActionOwner);
+		FScriptArrayHelper ActionsHelper(ActionsArrayProperty, ActionsArrayPtr);
+		if (ActionsHelper.Num() != Plan.ActionCountBefore)
+		{
+			OutError = TEXT("Actions array changed after preflight; retry the operation");
+			return false;
+		}
+		if (Plan.ExistingAction
+			&& (Plan.ExistingActionIndex < 0
+				|| Plan.ExistingActionIndex >= ActionsHelper.Num()
+				|| ActionsObjectProperty->GetObjectPropertyValue(ActionsHelper.GetRawPtr(Plan.ExistingActionIndex)) != Plan.ExistingAction))
+		{
+			OutError = TEXT("Selected GameFeatureAction changed after preflight; retry the operation");
+			return false;
+		}
+		if (bRemoveNullActions)
+		{
+			int32 CurrentNullCount = 0;
+			for (int32 Index = 0; Index < ActionsHelper.Num(); ++Index)
+			{
+				CurrentNullCount += ActionsObjectProperty->GetObjectPropertyValue(ActionsHelper.GetRawPtr(Index)) ? 0 : 1;
+			}
+			if (CurrentNullCount != Plan.RemovedNullActionCount)
+			{
+				OutError = TEXT("Null GameFeatureAction count changed after preflight; retry the operation");
+				return false;
+			}
+		}
+
+		if (Plan.bCreatedAction)
+		{
+			const FName BaseName = ActionName.IsEmpty() ? FName(*Plan.ActionClass->GetName()) : FName(*ActionName);
+			const FName CommittedName = ActionName.IsEmpty()
+				? MakeUniqueObjectName(Plan.ActionOwner, Plan.ActionClass, BaseName)
+				: BaseName;
+			OutActionObject = DuplicateObject<UObject>(Plan.ValidationAction, Plan.ActionOwner, CommittedName);
+			if (!OutActionObject)
+			{
+				OutError = TEXT("Failed to create validated instanced GameFeatureAction object");
+				return false;
+			}
+			OutActionObject->ClearFlags(RF_Transient);
+			OutActionObject->SetFlags(RF_Transactional);
+
+			Plan.ActionOwner->Modify();
+			const int32 NewIndex = ActionsHelper.AddValue();
+			ActionsObjectProperty->SetObjectPropertyValue(ActionsHelper.GetRawPtr(NewIndex), OutActionObject);
+		}
+		else if (bActionPropertiesChanged)
+		{
+			Plan.ExistingAction->Modify();
+			UEngine::FCopyPropertiesForUnrelatedObjectsParams CopyParams;
+			CopyParams.bDoDelta = false;
+			CopyParams.bReplaceObjectClassReferences = false;
+			CopyParams.bPerformDuplication = true;
+			CopyParams.bClearReferences = false;
+			UEngine::CopyPropertiesForUnrelatedObjects(Plan.ValidationAction, Plan.ExistingAction, CopyParams);
+		}
+
+		if (bRemoveNullActions && Plan.RemovedNullActionCount > 0)
+		{
+			Plan.ActionOwner->Modify();
+			RemoveNullActions(ActionsHelper, ActionsObjectProperty);
+		}
+
+		Plan.ProjectedActionIndex = INDEX_NONE;
+		if (OutActionObject)
+		{
+			for (int32 Index = 0; Index < ActionsHelper.Num(); ++Index)
+			{
+				if (ActionsObjectProperty->GetObjectPropertyValue(ActionsHelper.GetRawPtr(Index)) == OutActionObject)
+				{
+					Plan.ProjectedActionIndex = Index;
+					break;
+				}
+			}
+		}
+		Plan.ActionCountAfter = ActionsHelper.Num();
 		return true;
 	}
 
@@ -1191,7 +1351,6 @@ namespace MonolithGameFeatures
 			ActionObject->Modify();
 			const int32 NewIndex = Helper.AddValue();
 			void* StructPtr = Helper.GetRawPtr(NewIndex);
-			StructProperty->InitializeValue(StructPtr);
 
 			bool bClassChanged = false;
 			bool bTagChanged = false;
@@ -1314,7 +1473,6 @@ namespace MonolithGameFeatures
 			ActionObject->Modify();
 			const int32 NewIndex = Helper.AddValue();
 			void* EntryPtr = Helper.GetRawPtr(NewIndex);
-			EntryStructProperty->InitializeValue(EntryPtr);
 
 			bool bActorChanged = false;
 			bool bComponentChanged = false;
@@ -1403,7 +1561,6 @@ namespace MonolithGameFeatures
 					ActionObject->Modify();
 					const int32 NewIndex = Helper.AddValue();
 					void* EntryPtr = Helper.GetRawPtr(NewIndex);
-					DirectoryStructProperty->InitializeValue(EntryPtr);
 					PathProperty->SetPropertyValue_InContainer(EntryPtr, DirectoryPath);
 				}
 			}
@@ -1477,7 +1634,6 @@ namespace MonolithGameFeatures
 			ActionObject->Modify();
 			const int32 NewIndex = Helper.AddValue();
 			void* EntryPtr = Helper.GetRawPtr(NewIndex);
-			StructProperty->InitializeValue(EntryPtr);
 			bool bChanged = false;
 			if (!TrySetSoftClassProperty(EntryPtr, StructProperty->Struct, ClassPropertyName, DesiredClassPath, bChanged, OutError))
 			{
@@ -1585,7 +1741,6 @@ namespace MonolithGameFeatures
 			ActionObject->Modify();
 			const int32 NewIndex = Helper.AddValue();
 			void* EntryPtr = Helper.GetRawPtr(NewIndex);
-			StructProperty->InitializeValue(EntryPtr);
 
 			bool bClassChanged = false;
 			bool bObjectChanged = false;
@@ -1638,13 +1793,16 @@ namespace MonolithGameFeatures
 		}
 		if (ExpectedClassPath && *ExpectedClassPath)
 		{
-			if (UClass* ExpectedClass = StaticLoadClass(UObject::StaticClass(), nullptr, ExpectedClassPath))
+			UClass* ExpectedClass = StaticLoadClass(UObject::StaticClass(), nullptr, ExpectedClassPath);
+			if (!ExpectedClass)
 			{
-				if (!LoadedObject->IsA(ExpectedClass))
-				{
-					OutError = FString::Printf(TEXT("Object '%s' is not a '%s'"), *LoadedObject->GetPathName(), *ExpectedClass->GetPathName());
-					return false;
-				}
+				OutError = FString::Printf(TEXT("Expected class '%s' for '%s' is unavailable"), ExpectedClassPath, ArrayPropertyName);
+				return false;
+			}
+			if (!LoadedObject->IsA(ExpectedClass))
+			{
+				OutError = FString::Printf(TEXT("Object '%s' is not a '%s'"), *LoadedObject->GetPathName(), *ExpectedClass->GetPathName());
+				return false;
 			}
 		}
 
@@ -1747,7 +1905,6 @@ namespace MonolithGameFeatures
 				ActionObject->Modify();
 				const int32 NewIndex = Helper.AddValue();
 				TargetEntryPtr = Helper.GetRawPtr(NewIndex);
-				EntryStructProperty->InitializeValue(TargetEntryPtr);
 				bool bActorChanged = false;
 				if (!TrySetSoftClassProperty(TargetEntryPtr, EntryStructProperty->Struct, TEXT("ActorClass"), DesiredActorClassPath, bActorChanged, OutError))
 				{
@@ -1780,14 +1937,34 @@ namespace MonolithGameFeatures
 						OutError = FString::Printf(TEXT("Could not load initialization_data '%s'"), *ObjectPath);
 						return false;
 					}
+					if (UClass* DataTableClass = StaticLoadClass(UObject::StaticClass(), nullptr, TEXT("/Script/Engine.DataTable")))
+					{
+						if (!InitializationData->IsA(DataTableClass))
+						{
+							OutError = FString::Printf(TEXT("initialization_data '%s' is not a DataTable"), *InitializationData->GetPathName());
+							return false;
+						}
+					}
 				}
 			}
 			for (const FString& AbilitySet : AbilitySets)
 			{
 				const FString ObjectPath = NormalizeObjectPath(AbilitySet);
-				if (!StaticLoadObject(UObject::StaticClass(), nullptr, *ObjectPath))
+				UObject* AbilitySetObject = StaticLoadObject(UObject::StaticClass(), nullptr, *ObjectPath);
+				if (!AbilitySetObject)
 				{
 					OutError = FString::Printf(TEXT("Could not load ability set '%s'"), *ObjectPath);
+					return false;
+				}
+				UClass* AbilitySetClass = StaticLoadClass(UObject::StaticClass(), nullptr, TEXT("/Script/LyraGame.LyraAbilitySet"));
+				if (!AbilitySetClass)
+				{
+					OutError = TEXT("Expected ability set class '/Script/LyraGame.LyraAbilitySet' is unavailable");
+					return false;
+				}
+				if (!AbilitySetObject->IsA(AbilitySetClass))
+				{
+					OutError = FString::Printf(TEXT("ability set '%s' is not a '%s'"), *AbilitySetObject->GetPathName(), *AbilitySetClass->GetPathName());
 					return false;
 				}
 			}
@@ -2019,6 +2196,33 @@ namespace MonolithGameFeatures
 		return false;
 	}
 
+	static bool TrySelectGameFeatureDataCandidate(
+		const TArray<FAssetData>& Assets,
+		const FString& DescriptorDeclaredPath,
+		FAssetData& OutAsset)
+	{
+		if (!DescriptorDeclaredPath.IsEmpty())
+		{
+			const FString DeclaredPackage = NormalizeAssetPath(DescriptorDeclaredPath);
+			for (const FAssetData& Asset : Assets)
+			{
+				if (Asset.PackageName.ToString().Equals(DeclaredPackage, ESearchCase::IgnoreCase)
+					|| Asset.GetObjectPathString().Equals(DescriptorDeclaredPath, ESearchCase::IgnoreCase))
+				{
+					OutAsset = Asset;
+					return true;
+				}
+			}
+		}
+
+		if (Assets.Num() == 1)
+		{
+			OutAsset = Assets[0];
+			return true;
+		}
+		return false;
+	}
+
 	static bool TryResolveGameFeatureData(const TSharedPtr<FJsonObject>& Params, FAssetData& OutAsset, FString& OutPluginName, FString& OutError)
 	{
 		FString AssetPath;
@@ -2058,29 +2262,26 @@ namespace MonolithGameFeatures
 				OutError = FString::Printf(TEXT("Plugin '%s' has no indexed GameFeatureData asset under %s"), *OutPluginName, *GetPackagePathForPlugin(Plugin));
 				return false;
 			}
-			// Prefer the descriptor-declared GameFeatureData asset before any
-			// heuristic candidate; a multi-data plugin must not silently
-			// resolve to an arbitrary Assets[0] that the .uplugin did not name.
+			FString DescriptorDeclaredPath;
 			if (Plugin.DescriptorJson.IsValid())
 			{
-				FString DeclaredPath;
-				if (Plugin.DescriptorJson->TryGetStringField(TEXT("GameFeatureData"), DeclaredPath)
-					&& !DeclaredPath.IsEmpty())
-				{
-					const FString DeclaredPackage = NormalizeAssetPath(DeclaredPath);
-					for (const FAssetData& Asset : Assets)
-					{
-						if (Asset.PackageName.ToString().Equals(DeclaredPackage, ESearchCase::IgnoreCase)
-							|| Asset.GetObjectPathString().Equals(DeclaredPath, ESearchCase::IgnoreCase))
-						{
-							OutAsset = Asset;
-							return true;
-						}
-					}
-				}
+				Plugin.DescriptorJson->TryGetStringField(TEXT("GameFeatureData"), DescriptorDeclaredPath);
+				DescriptorDeclaredPath.TrimStartAndEndInline();
 			}
-			OutAsset = Assets[0];
-			return true;
+
+			// A descriptor-declared asset wins. Otherwise a single indexed
+			// candidate is unambiguous; multiple candidates require the caller
+			// to supply asset_path instead of inheriting AssetRegistry order.
+			if (TrySelectGameFeatureDataCandidate(Assets, DescriptorDeclaredPath, OutAsset))
+			{
+				return true;
+			}
+
+			OutError = FString::Printf(
+				TEXT("Plugin '%s' has %d GameFeatureData assets and its descriptor does not resolve one uniquely; provide 'asset_path'"),
+				*OutPluginName,
+				Assets.Num());
+			return false;
 		}
 
 		OutError = TEXT("Provide either 'plugin_name' or 'asset_path'");
@@ -2339,6 +2540,56 @@ namespace MonolithGameFeatures
 		}));
 		return Result;
 	}
+
+#if WITH_DEV_AUTOMATION_TESTS
+	namespace TestHooks
+	{
+		bool TrySetSoftClassArrayEntry(
+			UObject* ActionObject,
+			const TCHAR* ArrayPropertyName,
+			const TCHAR* ClassPropertyName,
+			const FString& ClassPath,
+			FString& OutError)
+		{
+			if (!ActionObject)
+			{
+				OutError = TEXT("Action object is null");
+				return false;
+			}
+
+			FArrayProperty* ArrayProperty = FindFProperty<FArrayProperty>(ActionObject->GetClass(), ArrayPropertyName);
+			FStructProperty* StructProperty = ArrayProperty ? CastField<FStructProperty>(ArrayProperty->Inner) : nullptr;
+			if (!ArrayProperty || !StructProperty)
+			{
+				OutError = FString::Printf(TEXT("Action class '%s' does not expose struct array '%s'"), *ActionObject->GetClass()->GetPathName(), ArrayPropertyName);
+				return false;
+			}
+
+			void* ArrayPtr = ArrayProperty->ContainerPtrToValuePtr<void>(ActionObject);
+			FScriptArrayHelper Helper(ArrayProperty, ArrayPtr);
+			const int32 NewIndex = Helper.AddValue();
+			void* EntryPtr = Helper.GetRawPtr(NewIndex);
+			bool bChanged = false;
+			const bool bResult = TrySetSoftClassProperty(
+				EntryPtr,
+				StructProperty->Struct,
+				ClassPropertyName,
+				ClassPath,
+				bChanged,
+				OutError);
+			Helper.RemoveValues(NewIndex, 1);
+			return bResult;
+		}
+
+		bool HasUniqueGameFeatureDataCandidate(int32 CandidateCount)
+		{
+			TArray<FAssetData> Assets;
+			Assets.SetNum(FMath::Max(0, CandidateCount));
+			FAssetData SelectedAsset;
+			return TrySelectGameFeatureDataCandidate(Assets, FString(), SelectedAsset);
+		}
+	}
+#endif
 }
 
 void FMonolithGameFeatureActions::Register(FMonolithToolRegistry& Registry, bool bEnableInspectionActions)
@@ -2833,116 +3084,53 @@ FMonolithActionResult FMonolithGameFeatureActions::AddActionSetInputMapping(cons
 		}
 	}
 
-	void* ActionsArrayPtr = ActionsArrayProperty->ContainerPtrToValuePtr<void>(ActionSet);
-	FScriptArrayHelper ActionsHelper(ActionsArrayProperty, ActionsArrayPtr);
-	const int32 ActionCountBefore = ActionsHelper.Num();
+	MonolithGameFeatures::FInstancedActionEditPlan EditPlan;
+	if (!MonolithGameFeatures::PrepareInstancedActionEdit(
+		ActionSet,
+		ActionClass,
+		ActionName,
+		bRemoveNullActions,
+		EditPlan,
+		Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 
-	bool bCreatedAction = false;
 	bool bAddedMapping = false;
 	bool bUpdatedPriority = false;
 	bool bSaved = false;
-	int32 ExistingActionIndex = INDEX_NONE;
-	int32 RemovedNullActionCount = 0;
 	int32 MappingCountBefore = 0;
 	int32 MappingCountAfter = 0;
 
-	UObject* ActionObject = MonolithGameFeatures::FindExistingAction(
-		ActionsHelper,
-		ActionsObjectProperty,
-		ActionClass,
-		ActionName,
-		ExistingActionIndex);
-
-	if (!ActionObject)
+	if (!MonolithGameFeatures::EnsureInputMappingEntry(
+		EditPlan.ValidationAction,
+		MappingContextPath,
+		Priority,
+		false,
+		bAddedMapping,
+		bUpdatedPriority,
+		MappingCountBefore,
+		MappingCountAfter,
+		Error))
 	{
-		bCreatedAction = true;
-		if (!bDryRun)
-		{
-			ActionSet->Modify();
-			const FName BaseName = ActionName.IsEmpty() ? FName(TEXT("AddInputMapping")) : FName(*ActionName);
-			const FName UniqueName = MakeUniqueObjectName(ActionSet, ActionClass, BaseName);
-			ActionObject = NewObject<UObject>(ActionSet, ActionClass, UniqueName, RF_Transactional);
-			if (!ActionObject)
-			{
-				return FMonolithActionResult::Error(TEXT("Failed to create instanced GameFeatureAction object"), -32603);
-			}
-			ActionObject->Modify();
-			const int32 NewIndex = ActionsHelper.AddValue();
-			ActionsObjectProperty->SetObjectPropertyValue(ActionsHelper.GetRawPtr(NewIndex), ActionObject);
-			ExistingActionIndex = NewIndex;
-		}
+		return FMonolithActionResult::Error(Error, -32602);
 	}
 
-	if (bRemoveNullActions && !bDryRun)
+	const bool bActionPropertiesChanged = bAddedMapping || bUpdatedPriority;
+	const bool bChanged = EditPlan.bCreatedAction || bActionPropertiesChanged || EditPlan.RemovedNullActionCount > 0;
+	UObject* ActionObject = EditPlan.ExistingAction;
+	if (bChanged && !bDryRun)
 	{
-		ActionSet->Modify();
-		RemovedNullActionCount = MonolithGameFeatures::RemoveNullActions(ActionsHelper, ActionsObjectProperty);
-		if (RemovedNullActionCount > 0 && ExistingActionIndex != INDEX_NONE)
-		{
-			ExistingActionIndex = INDEX_NONE;
-			for (int32 Index = 0; Index < ActionsHelper.Num(); ++Index)
-			{
-				if (ActionsObjectProperty->GetObjectPropertyValue(ActionsHelper.GetRawPtr(Index)) == ActionObject)
-				{
-					ExistingActionIndex = Index;
-					break;
-				}
-			}
-		}
-	}
-	else if (bRemoveNullActions)
-	{
-		for (int32 Index = 0; Index < ActionsHelper.Num(); ++Index)
-		{
-			if (!ActionsObjectProperty->GetObjectPropertyValue(ActionsHelper.GetRawPtr(Index)))
-			{
-				++RemovedNullActionCount;
-			}
-		}
-	}
-
-	if (ActionObject)
-	{
-		if (!MonolithGameFeatures::EnsureInputMappingEntry(
+		if (!MonolithGameFeatures::CommitInstancedActionEdit(
+			EditPlan,
+			ActionName,
+			bRemoveNullActions,
+			bActionPropertiesChanged,
 			ActionObject,
-			MappingContextPath,
-			Priority,
-			bDryRun,
-			bAddedMapping,
-			bUpdatedPriority,
-			MappingCountBefore,
-			MappingCountAfter,
 			Error))
 		{
-			return FMonolithActionResult::Error(Error, -32602);
+			return FMonolithActionResult::Error(Error, -32603);
 		}
-	}
-	else
-	{
-		// Dry-run path for a missing action: validate by constructing a transient
-		// class default object view without modifying the asset package.
-		UObject* TransientAction = NewObject<UObject>(GetTransientPackage(), ActionClass, NAME_None, RF_Transient);
-		if (!TransientAction)
-		{
-			return FMonolithActionResult::Error(TEXT("Failed to create transient GameFeatureAction object for dry-run validation"), -32603);
-		}
-		if (!MonolithGameFeatures::EnsureInputMappingEntry(
-			TransientAction,
-			MappingContextPath,
-			Priority,
-			true,
-			bAddedMapping,
-			bUpdatedPriority,
-			MappingCountBefore,
-			MappingCountAfter,
-			Error))
-		{
-			return FMonolithActionResult::Error(Error, -32602);
-		}
-	}
-
-	if (!bDryRun && (bCreatedAction || bAddedMapping || bUpdatedPriority || RemovedNullActionCount > 0))
-	{
 		if (!MonolithGameFeatures::SaveAssetIfRequested(ActionSet, bSave, bSaved, Error))
 		{
 			return FMonolithActionResult::Error(Error, -32603);
@@ -2956,17 +3144,17 @@ FMonolithActionResult FMonolithGameFeatureActions::AddActionSetInputMapping(cons
 	Result->SetStringField(TEXT("action_class_path"), ActionClass->GetPathName());
 	Result->SetStringField(TEXT("mapping_context_path"), MonolithGameFeatures::NormalizeObjectPath(MappingContextPath));
 	Result->SetNumberField(TEXT("priority"), Priority);
-	Result->SetBoolField(TEXT("created_action"), bCreatedAction);
+	Result->SetBoolField(TEXT("created_action"), EditPlan.bCreatedAction);
 	Result->SetBoolField(TEXT("added_mapping"), bAddedMapping);
 	Result->SetBoolField(TEXT("updated_priority"), bUpdatedPriority);
-	Result->SetNumberField(TEXT("removed_null_actions"), RemovedNullActionCount);
-	Result->SetNumberField(TEXT("actions_before"), ActionCountBefore);
-	Result->SetNumberField(TEXT("actions_after"), bDryRun ? ActionCountBefore + (bCreatedAction ? 1 : 0) - RemovedNullActionCount : ActionsHelper.Num());
-	Result->SetNumberField(TEXT("action_index"), ExistingActionIndex);
+	Result->SetNumberField(TEXT("removed_null_actions"), EditPlan.RemovedNullActionCount);
+	Result->SetNumberField(TEXT("actions_before"), EditPlan.ActionCountBefore);
+	Result->SetNumberField(TEXT("actions_after"), EditPlan.ActionCountAfter);
+	Result->SetNumberField(TEXT("action_index"), EditPlan.ProjectedActionIndex);
 	Result->SetNumberField(TEXT("input_mappings_before"), MappingCountBefore);
 	Result->SetNumberField(TEXT("input_mappings_after"), MappingCountAfter);
 	Result->SetBoolField(TEXT("saved"), bSaved);
-	Result->SetBoolField(TEXT("changed"), bCreatedAction || bAddedMapping || bUpdatedPriority || RemovedNullActionCount > 0);
+	Result->SetBoolField(TEXT("changed"), bChanged);
 	if (ActionObject)
 	{
 		Result->SetStringField(TEXT("action_object_path"), ActionObject->GetPathName());
@@ -3196,24 +3384,13 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataInputMappin
 			-32602);
 	}
 
-	UObject* ActionObject = nullptr;
-	bool bCreatedAction = false;
-	int32 ActionIndex = INDEX_NONE;
-	int32 RemovedNullActionCount = 0;
-	int32 ActionCountBefore = 0;
-	int32 ActionCountAfter = 0;
-	if (!MonolithGameFeatures::EnsureInstancedActionObject(
+	MonolithGameFeatures::FInstancedActionEditPlan EditPlan;
+	if (!MonolithGameFeatures::PrepareInstancedActionEdit(
 		GameFeatureData,
 		ActionClass,
 		ActionName,
 		bRemoveNullActions,
-		bDryRun,
-		ActionObject,
-		bCreatedAction,
-		ActionIndex,
-		RemovedNullActionCount,
-		ActionCountBefore,
-		ActionCountAfter,
+		EditPlan,
 		Error))
 	{
 		return FMonolithActionResult::Error(Error, -32602);
@@ -3223,20 +3400,11 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataInputMappin
 	bool bUpdatedPriority = false;
 	int32 MappingCountBefore = 0;
 	int32 MappingCountAfter = 0;
-	UObject* MappingActionObject = ActionObject;
-	if (!MappingActionObject)
-	{
-		MappingActionObject = NewObject<UObject>(GetTransientPackage(), ActionClass, NAME_None, RF_Transient);
-		if (!MappingActionObject)
-		{
-			return FMonolithActionResult::Error(TEXT("Failed to create transient GameFeatureAction object for dry-run validation"), -32603);
-		}
-	}
 	if (!MonolithGameFeatures::EnsureInputMappingEntry(
-		MappingActionObject,
+		EditPlan.ValidationAction,
 		MappingContextPath,
 		Priority,
-		bDryRun,
+		false,
 		bAddedMapping,
 		bUpdatedPriority,
 		MappingCountBefore,
@@ -3247,9 +3415,21 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataInputMappin
 	}
 
 	bool bSaved = false;
-	const bool bChanged = bCreatedAction || bAddedMapping || bUpdatedPriority || RemovedNullActionCount > 0;
+	const bool bActionPropertiesChanged = bAddedMapping || bUpdatedPriority;
+	const bool bChanged = EditPlan.bCreatedAction || bActionPropertiesChanged || EditPlan.RemovedNullActionCount > 0;
+	UObject* ActionObject = EditPlan.ExistingAction;
 	if (bChanged && !bDryRun)
 	{
+		if (!MonolithGameFeatures::CommitInstancedActionEdit(
+			EditPlan,
+			ActionName,
+			bRemoveNullActions,
+			bActionPropertiesChanged,
+			ActionObject,
+			Error))
+		{
+			return FMonolithActionResult::Error(Error, -32603);
+		}
 		if (!MonolithGameFeatures::SaveAssetIfRequested(GameFeatureData, bSave, bSaved, Error))
 		{
 			return FMonolithActionResult::Error(Error, -32603);
@@ -3262,13 +3442,13 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataInputMappin
 	Result->SetStringField(TEXT("action_class_path"), ActionClass->GetPathName());
 	Result->SetStringField(TEXT("mapping_context_path"), MonolithGameFeatures::NormalizeObjectPath(MappingContextPath));
 	Result->SetNumberField(TEXT("priority"), Priority);
-	Result->SetBoolField(TEXT("created_action"), bCreatedAction);
+	Result->SetBoolField(TEXT("created_action"), EditPlan.bCreatedAction);
 	Result->SetBoolField(TEXT("added_mapping"), bAddedMapping);
 	Result->SetBoolField(TEXT("updated_priority"), bUpdatedPriority);
-	Result->SetNumberField(TEXT("removed_null_actions"), RemovedNullActionCount);
-	Result->SetNumberField(TEXT("actions_before"), ActionCountBefore);
-	Result->SetNumberField(TEXT("actions_after"), ActionCountAfter);
-	Result->SetNumberField(TEXT("action_index"), ActionIndex);
+	Result->SetNumberField(TEXT("removed_null_actions"), EditPlan.RemovedNullActionCount);
+	Result->SetNumberField(TEXT("actions_before"), EditPlan.ActionCountBefore);
+	Result->SetNumberField(TEXT("actions_after"), EditPlan.ActionCountAfter);
+	Result->SetNumberField(TEXT("action_index"), EditPlan.ProjectedActionIndex);
 	Result->SetNumberField(TEXT("input_mappings_before"), MappingCountBefore);
 	Result->SetNumberField(TEXT("input_mappings_after"), MappingCountAfter);
 	Result->SetBoolField(TEXT("saved"), bSaved);
@@ -3351,38 +3531,16 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataWidgets(con
 		return FMonolithActionResult::Error(Error, -32602);
 	}
 
-	UObject* ActionObject = nullptr;
-	bool bCreatedAction = false;
-	int32 ActionIndex = INDEX_NONE;
-	int32 RemovedNullActionCount = 0;
-	int32 ActionCountBefore = 0;
-	int32 ActionCountAfter = 0;
-	if (!MonolithGameFeatures::EnsureInstancedActionObject(
+	MonolithGameFeatures::FInstancedActionEditPlan EditPlan;
+	if (!MonolithGameFeatures::PrepareInstancedActionEdit(
 		GameFeatureData,
 		ActionClass,
 		ActionName,
 		bRemoveNullActions,
-		bDryRun,
-		ActionObject,
-		bCreatedAction,
-		ActionIndex,
-		RemovedNullActionCount,
-		ActionCountBefore,
-		ActionCountAfter,
+		EditPlan,
 		Error))
 	{
 		return FMonolithActionResult::Error(Error, -32602);
-	}
-
-	UObject* WidgetsActionObject = ActionObject;
-	const bool bUseTransientAction = !WidgetsActionObject;
-	if (!WidgetsActionObject)
-	{
-		WidgetsActionObject = NewObject<UObject>(GetTransientPackage(), ActionClass, NAME_None, RF_Transient);
-		if (!WidgetsActionObject)
-		{
-			return FMonolithActionResult::Error(TEXT("Failed to create transient GameFeatureAction object for dry-run validation"), -32603);
-		}
 	}
 
 	int32 LayoutsAdded = 0;
@@ -3449,7 +3607,7 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataWidgets(con
 		int32 CountBefore = 0;
 		int32 CountAfter = 0;
 		if (!EnsureEntry(
-			WidgetsActionObject,
+			EditPlan.ValidationAction,
 			Entry,
 			TEXT("layout"),
 			TEXT("layout_class"),
@@ -3457,7 +3615,7 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataWidgets(con
 			LayoutArrayPropertyName,
 			LayoutClassPropertyName,
 			LayoutTagPropertyName,
-			bDryRun && !bUseTransientAction,
+			false,
 			bAdded,
 			bUpdated,
 			CountBefore,
@@ -3476,7 +3634,7 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataWidgets(con
 		int32 CountBefore = 0;
 		int32 CountAfter = 0;
 		if (!EnsureEntry(
-			WidgetsActionObject,
+			EditPlan.ValidationAction,
 			Entry,
 			TEXT("widget"),
 			TEXT("widget_class"),
@@ -3484,7 +3642,7 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataWidgets(con
 			WidgetArrayPropertyName,
 			WidgetClassPropertyName,
 			WidgetTagPropertyName,
-			bDryRun && !bUseTransientAction,
+			false,
 			bAdded,
 			bUpdated,
 			CountBefore,
@@ -3497,9 +3655,21 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataWidgets(con
 	}
 
 	bool bSaved = false;
-	const bool bChanged = bCreatedAction || RemovedNullActionCount > 0 || LayoutsAdded > 0 || LayoutsUpdated > 0 || WidgetsAdded > 0 || WidgetsUpdated > 0;
+	const bool bActionPropertiesChanged = LayoutsAdded > 0 || LayoutsUpdated > 0 || WidgetsAdded > 0 || WidgetsUpdated > 0;
+	const bool bChanged = EditPlan.bCreatedAction || EditPlan.RemovedNullActionCount > 0 || bActionPropertiesChanged;
+	UObject* ActionObject = EditPlan.ExistingAction;
 	if (bChanged && !bDryRun)
 	{
+		if (!MonolithGameFeatures::CommitInstancedActionEdit(
+			EditPlan,
+			ActionName,
+			bRemoveNullActions,
+			bActionPropertiesChanged,
+			ActionObject,
+			Error))
+		{
+			return FMonolithActionResult::Error(Error, -32603);
+		}
 		if (!MonolithGameFeatures::SaveAssetIfRequested(GameFeatureData, bSave, bSaved, Error))
 		{
 			return FMonolithActionResult::Error(Error, -32603);
@@ -3510,11 +3680,11 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataWidgets(con
 	Result->SetBoolField(TEXT("dry_run"), bDryRun);
 	Result->SetStringField(TEXT("game_feature_data_path"), GameFeatureData->GetPathName());
 	Result->SetStringField(TEXT("action_class_path"), ActionClass->GetPathName());
-	Result->SetBoolField(TEXT("created_action"), bCreatedAction);
-	Result->SetNumberField(TEXT("removed_null_actions"), RemovedNullActionCount);
-	Result->SetNumberField(TEXT("actions_before"), ActionCountBefore);
-	Result->SetNumberField(TEXT("actions_after"), ActionCountAfter);
-	Result->SetNumberField(TEXT("action_index"), ActionIndex);
+	Result->SetBoolField(TEXT("created_action"), EditPlan.bCreatedAction);
+	Result->SetNumberField(TEXT("removed_null_actions"), EditPlan.RemovedNullActionCount);
+	Result->SetNumberField(TEXT("actions_before"), EditPlan.ActionCountBefore);
+	Result->SetNumberField(TEXT("actions_after"), EditPlan.ActionCountAfter);
+	Result->SetNumberField(TEXT("action_index"), EditPlan.ProjectedActionIndex);
 	Result->SetNumberField(TEXT("layouts_added"), LayoutsAdded);
 	Result->SetNumberField(TEXT("layouts_updated"), LayoutsUpdated);
 	Result->SetNumberField(TEXT("widgets_added"), WidgetsAdded);
@@ -3594,38 +3764,16 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataComponents(
 			-32602);
 	}
 
-	UObject* ActionObject = nullptr;
-	bool bCreatedAction = false;
-	int32 ActionIndex = INDEX_NONE;
-	int32 RemovedNullActionCount = 0;
-	int32 ActionCountBefore = 0;
-	int32 ActionCountAfter = 0;
-	if (!MonolithGameFeatures::EnsureInstancedActionObject(
+	MonolithGameFeatures::FInstancedActionEditPlan EditPlan;
+	if (!MonolithGameFeatures::PrepareInstancedActionEdit(
 		GameFeatureData,
 		ActionClass,
 		ActionName,
 		bRemoveNullActions,
-		bDryRun,
-		ActionObject,
-		bCreatedAction,
-		ActionIndex,
-		RemovedNullActionCount,
-		ActionCountBefore,
-		ActionCountAfter,
+		EditPlan,
 		Error))
 	{
 		return FMonolithActionResult::Error(Error, -32602);
-	}
-
-	UObject* ComponentsActionObject = ActionObject;
-	const bool bUseTransientAction = !ComponentsActionObject;
-	if (!ComponentsActionObject)
-	{
-		ComponentsActionObject = NewObject<UObject>(GetTransientPackage(), ActionClass, NAME_None, RF_Transient);
-		if (!ComponentsActionObject)
-		{
-			return FMonolithActionResult::Error(TEXT("Failed to create transient GameFeatureAction object for dry-run validation"), -32603);
-		}
 	}
 
 	bool bAddedComponent = false;
@@ -3633,13 +3781,13 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataComponents(
 	int32 ComponentCountBefore = 0;
 	int32 ComponentCountAfter = 0;
 	if (!MonolithGameFeatures::EnsureComponentListEntry(
-		ComponentsActionObject,
+		EditPlan.ValidationAction,
 		ActorClassPath,
 		ComponentClassPath,
 		bClientComponent,
 		bServerComponent,
 		AdditionFlags,
-		bDryRun && !bUseTransientAction,
+		false,
 		bAddedComponent,
 		bUpdatedComponent,
 		ComponentCountBefore,
@@ -3650,9 +3798,21 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataComponents(
 	}
 
 	bool bSaved = false;
-	const bool bChanged = bCreatedAction || RemovedNullActionCount > 0 || bAddedComponent || bUpdatedComponent;
+	const bool bActionPropertiesChanged = bAddedComponent || bUpdatedComponent;
+	const bool bChanged = EditPlan.bCreatedAction || EditPlan.RemovedNullActionCount > 0 || bActionPropertiesChanged;
+	UObject* ActionObject = EditPlan.ExistingAction;
 	if (bChanged && !bDryRun)
 	{
+		if (!MonolithGameFeatures::CommitInstancedActionEdit(
+			EditPlan,
+			ActionName,
+			bRemoveNullActions,
+			bActionPropertiesChanged,
+			ActionObject,
+			Error))
+		{
+			return FMonolithActionResult::Error(Error, -32603);
+		}
 		if (!MonolithGameFeatures::SaveAssetIfRequested(GameFeatureData, bSave, bSaved, Error))
 		{
 			return FMonolithActionResult::Error(Error, -32603);
@@ -3668,13 +3828,13 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataComponents(
 	Result->SetBoolField(TEXT("client_component"), bClientComponent);
 	Result->SetBoolField(TEXT("server_component"), bServerComponent);
 	Result->SetNumberField(TEXT("addition_flags"), AdditionFlags);
-	Result->SetBoolField(TEXT("created_action"), bCreatedAction);
+	Result->SetBoolField(TEXT("created_action"), EditPlan.bCreatedAction);
 	Result->SetBoolField(TEXT("added_component"), bAddedComponent);
 	Result->SetBoolField(TEXT("updated_component"), bUpdatedComponent);
-	Result->SetNumberField(TEXT("removed_null_actions"), RemovedNullActionCount);
-	Result->SetNumberField(TEXT("actions_before"), ActionCountBefore);
-	Result->SetNumberField(TEXT("actions_after"), ActionCountAfter);
-	Result->SetNumberField(TEXT("action_index"), ActionIndex);
+	Result->SetNumberField(TEXT("removed_null_actions"), EditPlan.RemovedNullActionCount);
+	Result->SetNumberField(TEXT("actions_before"), EditPlan.ActionCountBefore);
+	Result->SetNumberField(TEXT("actions_after"), EditPlan.ActionCountAfter);
+	Result->SetNumberField(TEXT("action_index"), EditPlan.ProjectedActionIndex);
 	Result->SetNumberField(TEXT("components_before"), ComponentCountBefore);
 	Result->SetNumberField(TEXT("components_after"), ComponentCountAfter);
 	Result->SetBoolField(TEXT("saved"), bSaved);
@@ -3753,38 +3913,16 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataGameplayCue
 		return FMonolithActionResult::Error(Error, -32602);
 	}
 
-	UObject* ActionObject = nullptr;
-	bool bCreatedAction = false;
-	int32 ActionIndex = INDEX_NONE;
-	int32 RemovedNullActionCount = 0;
-	int32 ActionCountBefore = 0;
-	int32 ActionCountAfter = 0;
-	if (!MonolithGameFeatures::EnsureInstancedActionObject(
+	MonolithGameFeatures::FInstancedActionEditPlan EditPlan;
+	if (!MonolithGameFeatures::PrepareInstancedActionEdit(
 		GameFeatureData,
 		ActionClass,
 		ActionName,
 		bRemoveNullActions,
-		bDryRun,
-		ActionObject,
-		bCreatedAction,
-		ActionIndex,
-		RemovedNullActionCount,
-		ActionCountBefore,
-		ActionCountAfter,
+		EditPlan,
 		Error))
 	{
 		return FMonolithActionResult::Error(Error, -32602);
-	}
-
-	UObject* GameplayCueActionObject = ActionObject;
-	const bool bUseTransientAction = !GameplayCueActionObject;
-	if (!GameplayCueActionObject)
-	{
-		GameplayCueActionObject = NewObject<UObject>(GetTransientPackage(), ActionClass, NAME_None, RF_Transient);
-		if (!GameplayCueActionObject)
-		{
-			return FMonolithActionResult::Error(TEXT("Failed to create transient GameFeatureAction object for dry-run validation"), -32603);
-		}
 	}
 
 	int32 PathsAdded = 0;
@@ -3792,10 +3930,10 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataGameplayCue
 	int32 PathsAfter = 0;
 	TArray<TSharedPtr<FJsonValue>> PathEntries;
 	if (!MonolithGameFeatures::EnsureDirectoryPathArrayValues(
-		GameplayCueActionObject,
+		EditPlan.ValidationAction,
 		DirectoryArrayPropertyName,
 		DirectoryPaths,
-		bDryRun && !bUseTransientAction,
+		false,
 		PathsAdded,
 		PathsBefore,
 		PathsAfter,
@@ -3806,9 +3944,21 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataGameplayCue
 	}
 
 	bool bSaved = false;
-	const bool bChanged = bCreatedAction || RemovedNullActionCount > 0 || PathsAdded > 0;
+	const bool bActionPropertiesChanged = PathsAdded > 0;
+	const bool bChanged = EditPlan.bCreatedAction || EditPlan.RemovedNullActionCount > 0 || bActionPropertiesChanged;
+	UObject* ActionObject = EditPlan.ExistingAction;
 	if (bChanged && !bDryRun)
 	{
+		if (!MonolithGameFeatures::CommitInstancedActionEdit(
+			EditPlan,
+			ActionName,
+			bRemoveNullActions,
+			bActionPropertiesChanged,
+			ActionObject,
+			Error))
+		{
+			return FMonolithActionResult::Error(Error, -32603);
+		}
 		if (!MonolithGameFeatures::SaveAssetIfRequested(GameFeatureData, bSave, bSaved, Error))
 		{
 			return FMonolithActionResult::Error(Error, -32603);
@@ -3819,11 +3969,11 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataGameplayCue
 	Result->SetBoolField(TEXT("dry_run"), bDryRun);
 	Result->SetStringField(TEXT("game_feature_data_path"), GameFeatureData->GetPathName());
 	Result->SetStringField(TEXT("action_class_path"), ActionClass->GetPathName());
-	Result->SetBoolField(TEXT("created_action"), bCreatedAction);
-	Result->SetNumberField(TEXT("removed_null_actions"), RemovedNullActionCount);
-	Result->SetNumberField(TEXT("actions_before"), ActionCountBefore);
-	Result->SetNumberField(TEXT("actions_after"), ActionCountAfter);
-	Result->SetNumberField(TEXT("action_index"), ActionIndex);
+	Result->SetBoolField(TEXT("created_action"), EditPlan.bCreatedAction);
+	Result->SetNumberField(TEXT("removed_null_actions"), EditPlan.RemovedNullActionCount);
+	Result->SetNumberField(TEXT("actions_before"), EditPlan.ActionCountBefore);
+	Result->SetNumberField(TEXT("actions_after"), EditPlan.ActionCountAfter);
+	Result->SetNumberField(TEXT("action_index"), EditPlan.ProjectedActionIndex);
 	Result->SetNumberField(TEXT("paths_added"), PathsAdded);
 	Result->SetNumberField(TEXT("paths_before"), PathsBefore);
 	Result->SetNumberField(TEXT("paths_after"), PathsAfter);
@@ -3894,38 +4044,16 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataAbilities(c
 		return FMonolithActionResult::Error(Error, -32602);
 	}
 
-	UObject* ActionObject = nullptr;
-	bool bCreatedAction = false;
-	int32 ActionIndex = INDEX_NONE;
-	int32 RemovedNullActionCount = 0;
-	int32 ActionCountBefore = 0;
-	int32 ActionCountAfter = 0;
-	if (!MonolithGameFeatures::EnsureInstancedActionObject(
+	MonolithGameFeatures::FInstancedActionEditPlan EditPlan;
+	if (!MonolithGameFeatures::PrepareInstancedActionEdit(
 		GameFeatureData,
 		ActionClass,
 		ActionName,
 		bRemoveNullActions,
-		bDryRun,
-		ActionObject,
-		bCreatedAction,
-		ActionIndex,
-		RemovedNullActionCount,
-		ActionCountBefore,
-		ActionCountAfter,
+		EditPlan,
 		Error))
 	{
 		return FMonolithActionResult::Error(Error, -32602);
-	}
-
-	UObject* AbilitiesActionObject = ActionObject;
-	const bool bUseTransientAction = !AbilitiesActionObject;
-	if (!AbilitiesActionObject)
-	{
-		AbilitiesActionObject = NewObject<UObject>(GetTransientPackage(), ActionClass, NAME_None, RF_Transient);
-		if (!AbilitiesActionObject)
-		{
-			return FMonolithActionResult::Error(TEXT("Failed to create transient GameFeatureAction object for dry-run validation"), -32603);
-		}
 	}
 
 	bool bCreatedEntry = false;
@@ -3936,12 +4064,12 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataAbilities(c
 	int32 AbilityEntriesBefore = 0;
 	int32 AbilityEntriesAfter = 0;
 	if (!MonolithGameFeatures::EnsureAbilitiesListEntry(
-		AbilitiesActionObject,
+		EditPlan.ValidationAction,
 		ActorClassPath,
 		AbilityClasses,
 		AttributeSets,
 		AbilitySets,
-		bDryRun && !bUseTransientAction,
+		false,
 		bCreatedEntry,
 		AbilitiesAdded,
 		AttributesAdded,
@@ -3955,15 +4083,27 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataAbilities(c
 	}
 
 	bool bSaved = false;
-	const bool bChanged = bCreatedAction
-		|| RemovedNullActionCount > 0
-		|| bCreatedEntry
+	const bool bActionPropertiesChanged = bCreatedEntry
 		|| AbilitiesAdded > 0
 		|| AttributesAdded > 0
 		|| AttributesUpdated > 0
 		|| AbilitySetsAdded > 0;
+	const bool bChanged = EditPlan.bCreatedAction
+		|| EditPlan.RemovedNullActionCount > 0
+		|| bActionPropertiesChanged;
+	UObject* ActionObject = EditPlan.ExistingAction;
 	if (bChanged && !bDryRun)
 	{
+		if (!MonolithGameFeatures::CommitInstancedActionEdit(
+			EditPlan,
+			ActionName,
+			bRemoveNullActions,
+			bActionPropertiesChanged,
+			ActionObject,
+			Error))
+		{
+			return FMonolithActionResult::Error(Error, -32603);
+		}
 		if (!MonolithGameFeatures::SaveAssetIfRequested(GameFeatureData, bSave, bSaved, Error))
 		{
 			return FMonolithActionResult::Error(Error, -32603);
@@ -3975,16 +4115,16 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataAbilities(c
 	Result->SetStringField(TEXT("game_feature_data_path"), GameFeatureData->GetPathName());
 	Result->SetStringField(TEXT("action_class_path"), ActionClass->GetPathName());
 	Result->SetStringField(TEXT("actor_class"), MonolithGameFeatures::NormalizeSoftClassPath(ActorClassPath));
-	Result->SetBoolField(TEXT("created_action"), bCreatedAction);
+	Result->SetBoolField(TEXT("created_action"), EditPlan.bCreatedAction);
 	Result->SetBoolField(TEXT("created_entry"), bCreatedEntry);
 	Result->SetNumberField(TEXT("abilities_added"), AbilitiesAdded);
 	Result->SetNumberField(TEXT("attributes_added"), AttributesAdded);
 	Result->SetNumberField(TEXT("attributes_updated"), AttributesUpdated);
 	Result->SetNumberField(TEXT("ability_sets_added"), AbilitySetsAdded);
-	Result->SetNumberField(TEXT("removed_null_actions"), RemovedNullActionCount);
-	Result->SetNumberField(TEXT("actions_before"), ActionCountBefore);
-	Result->SetNumberField(TEXT("actions_after"), ActionCountAfter);
-	Result->SetNumberField(TEXT("action_index"), ActionIndex);
+	Result->SetNumberField(TEXT("removed_null_actions"), EditPlan.RemovedNullActionCount);
+	Result->SetNumberField(TEXT("actions_before"), EditPlan.ActionCountBefore);
+	Result->SetNumberField(TEXT("actions_after"), EditPlan.ActionCountAfter);
+	Result->SetNumberField(TEXT("action_index"), EditPlan.ProjectedActionIndex);
 	Result->SetNumberField(TEXT("ability_entries_before"), AbilityEntriesBefore);
 	Result->SetNumberField(TEXT("ability_entries_after"), AbilityEntriesAfter);
 	Result->SetBoolField(TEXT("saved"), bSaved);

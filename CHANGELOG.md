@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **Optional `gamefeatures` namespace (15-action full surface).** A dedicated `MonolithGameFeatures` editor module now inventories and validates Game Feature plugins, resolves and summarizes `UGameFeatureData`/ActionSet assets, discovers action classes, and provides eight guarded `dry_run`-capable writers for Primary Asset scans and instanced input, widget, component, GameplayCue, ability, and removal entries. The module exposes nine actions by default when the target explicitly enables the engine `GameFeatures` plugin, exposes all 15 when `bEnableGameFeatureActions=true`, and compiles a status-only stub when the optional dependency is unavailable.
 
+### Fixed
+
+- **GameFeatures writers now validate the complete edit before touching the asset.** Instanced-action writers apply every requested entry to a transient action copy first, then commit once only after class, asset, tag, reflected-property, and selector validation succeeds. Failed calls no longer attach partial actions, `action_name` is an exact name-and-class selector, no-op null cleanup no longer dirties packages, soft-class properties enforce their `MetaClass`, ability dry-runs enforce DataTable/LyraAbilitySet types, multi-data plugins require `asset_path` when their descriptor is not decisive, and save failures expose the package name instead of a host filename.
+
 ## [0.21.3] - 2026-07-26
 
 This release closes out the open pull-request queue. Every fix below was reported or prototyped by a contributor — thanks to **@Thomasbehan**, **@whalemenace**, and **@kunkunGames** for the write-ups, which were detailed enough to reproduce from directly.

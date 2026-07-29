@@ -64,7 +64,7 @@ stub, so installing Monolith does not force an engine plugin onto every host.
 | Settings | `gamefeatures.get_status`, `add_action_set_input_mapping`, `set_primary_asset_scan`, `add_game_feature_data_input_mapping`, `add_game_feature_data_widgets`, `add_game_feature_data_components`, `add_game_feature_data_gameplay_cue_paths`, `add_game_feature_data_abilities`, and `remove_game_feature_data_action` are always registered. `bEnableGameFeatureActions=false` gates the six detailed inspection actions on editor restart. `bAllowGameFeaturePluginCreation=false` is reserved and reported by status only. |
 | Discovery | `gamefeatures.get_status` reports flags, module availability, plugin-root scan paths, registered actions, and actions available after opt-in. |
 | Plugin inventory | `gamefeatures.list_plugins` returns bounded GameFeature-style plugin descriptors that declare an enabled `GameFeatures` dependency, with project `Plugins/GameFeatures` path and descriptor metadata treated as diagnostic hints. |
-| Data asset lookup | `gamefeatures.find_game_feature_data` resolves by plugin name or asset path using AssetRegistry metadata, without loading assets. |
+| Data asset lookup | `gamefeatures.find_game_feature_data` resolves by plugin name or asset path using AssetRegistry metadata, without loading assets. A descriptor-declared asset wins; one indexed candidate is unambiguous; multiple candidates without a matching descriptor declaration fail and require `asset_path`. |
 | Data asset summary | `gamefeatures.describe_game_feature_data` explicitly loads a resolved `GameFeatureData` asset and returns capped reflected action objects plus optional editable property values. |
 | Action class discovery | `gamefeatures.list_action_classes` lists loaded `UGameFeatureAction` subclasses and bounded reflected editable properties/defaults for schema discovery before authoring. |
 | ActionSet summary | `gamefeatures.describe_action_set` loads an existing ActionSet-style asset and summarizes its instanced `Actions` array with bounded reflected property values. |
@@ -77,6 +77,7 @@ stub, so installing Monolith does not force an engine plugin onto every host.
 | GameFeatureData GameplayCue paths | `gamefeatures.add_game_feature_data_gameplay_cue_paths` creates or reuses an AddGameplayCuePath-style action directly on `UGameFeatureData` and adds one or more cue directory paths. |
 | GameFeatureData abilities | `gamefeatures.add_game_feature_data_abilities` creates or reuses an AddAbilities-style action directly on `UGameFeatureData` and adds actor-scoped ability, attribute-set, and ability-set grants. |
 | GameFeatureData action removal | `gamefeatures.remove_game_feature_data_action` removes one or more existing `UGameFeatureData.Actions` entries by array index, instanced object name, and/or action class, with dry-run support and bounded removed-action summaries. |
+| Instanced-action mutation boundary | Every add/update writer resolves the action and null-removal delta without mutation, applies the complete request to a transient new/duplicated action, and commits the validated property state plus array edits only after preflight succeeds. `action_name` is an exact object-name and requested-class selector; an occupied name outside the selectable `Actions` entry fails explicitly. |
 | Creation | Not implemented in this slice. Any creation action must be a later spec and require explicit confirmation plus overwrite guards. |
 
 ---
@@ -104,7 +105,8 @@ stub, so installing Monolith does not force an engine plugin onto every host.
 `list_plugins` and `find_game_feature_data` must prefer metadata and filesystem
 descriptors over UObject loading. Returned paths are normalized to project- or
 engine-relative forms where possible and never expose unrelated absolute host
-paths.
+paths. Plugin-name resolution must not select an arbitrary first AssetRegistry
+row when more than one `GameFeatureData` candidate remains.
 
 ---
 
@@ -197,7 +199,13 @@ narrowly scoped. The namespace must not:
 Writer actions must only edit existing UObject assets of the expected shape,
 must validate referenced classes/assets/tags before mutation, call `Modify()` on
 the owning object before edits, mark the package dirty only for real changes,
-and support `dry_run=true`.
+and support `dry_run=true`. Instanced-action writers perform the same property
+application against a transient validation copy for dry-run and real writes.
+They must reject a same-name action of another class, enforce
+`FSoftClassProperty::MetaClass`, enforce `UDataTable` initialization data and
+`ULyraAbilitySet` ability-set values, and never double-initialize a struct entry
+returned by `FScriptArrayHelper::AddValue()`. Save errors may identify the
+package or asset but must not include an absolute host filename.
 
 If later work adds creation, the creation path must require
 `bEnableGameFeatureActions=true`, `bAllowGameFeaturePluginCreation=true`,
@@ -217,8 +225,13 @@ Focused tests should cover:
 | Empty project | Status and list actions succeed with `count=0`. |
 | Descriptor fixture | A descriptor with enabled `GameFeatures` plugin dependency is discovered and redacted; a `Plugins/GameFeatures` path match is reported only as a discovery heuristic. |
 | AssetRegistry fixture | GameFeatureData candidates are found by class/path metadata without loading assets. |
+| Ambiguous GameFeatureData fixture | A descriptor match or exactly one candidate resolves; two unmatched candidates fail and require `asset_path`. |
 | Invalid plugin name | Validation reports a stable error/warning and never touches disk. |
 | Invalid authoring params | Writer actions reject missing paths, incompatible action classes, missing known property arrays, and invalid referenced assets/tags before mutation. |
+| Writer preflight failure | An invalid component/class/tag/object input leaves `Actions`, instanced entries, and package dirty state unchanged. |
+| Exact action selector | A same-name action of another class fails; a created named action keeps the exact requested name and an idempotent repeat neither appends nor dirties. |
+| Soft class metadata | A reflected soft-class field rejects a class outside its `MetaClass`. |
+| No-op and update commit | A repeated identical edit reports `changed=false` and leaves the package clean; a real update preserves action identity/name and changes one existing entry. |
 | Creation flag | Status reports creation disabled until both flags are true; no creation action is registered in this slice. |
 
 ---
