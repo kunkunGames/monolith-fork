@@ -1,6 +1,6 @@
 # Monolith API Reference
 
-**Version:** v0.21.3 · **Last updated:** 2026-07-26
+**Version:** v0.21.3 · **Last updated:** 2026-07-29
 
 **In-tree action total is approximate: ~1,400+ actions across 25+ in-tree namespaces** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
@@ -27,6 +27,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [config](#config) | 6 | INI config inspection and search |
 | [project](#project) | 7 | Project-wide asset index (SQLite + FTS5) |
 | [source](#source) | 11 | Unreal Engine C++ source code navigation |
+| [source_control](#source_control) | 11 | Provider-backed status/checkout/add/delete/revert plus bounded Perforce opened/path mapping |
 | [mesh](#mesh) | 194 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, mesh import (incl. skeletal + animation). +45 town gen registers only with `bEnableProceduralTownGen=true` (experimental, not in the public count) |
 | [ui](#ui) | 138 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, headline scaffolders, navigation/conversion gap-closure, accessibility, CommonUI, GAS UI bindings |
 | [gas](#gas) | 135 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold |
@@ -43,7 +44,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [network](#network) | 4 | **New v0.17.0.** Reflection Intelligence — UE 5.7 replication inspection (replicated classes, RPCs, OnRep handlers, unbalanced-OnRep audit) |
 | [pipeline](#pipeline) | 2 | **New v0.17.0.** Reflection Intelligence — read-only composer actions (`pr_review`, `release_readiness`) |
 | [reflect](#reflect) | 1 | **New v0.19.0.** Reflection Intelligence — index maintenance (`rebuild_reflection_index`, project-only force-rebuild of the RI reflection tables; WRITE/maintenance) |
-| **In-tree subtotal** | **1406** | (all default-active; +45 experimental town gen → 1451 when registered) |
+| **In-tree subtotal** | **1417** | (all default-active; +45 experimental town gen → 1462 when registered) |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -819,6 +820,32 @@ Unreal Engine C++ source code navigation. 1M+ symbols indexed. **12 actions** (1
 | `cursor` | string | optional | Opaque base64+JSON cursor from a prior `next_cursor` |
 
 **Returns:** `{ "violations": [ { "declaring_module", "source_path", "source_line", "used_type", "missing_dep" } ], "scanned_modules": N, "scanned_declarations": N, "next_cursor": "<opaque>" }`. Violations are sorted by `(declaring_module, source_path, source_line)`. Multi-argument templates extract only the first argument and typedef aliases aren't chased to the underlying type — both are documented heuristics.
+
+---
+
+## source_control
+
+Provider-backed source-control preparation and bounded Perforce inspection. **11 actions.** The canonical path parameter is `paths`; every path action also accepts the alias `files`, and either field may contain one string or an array of strings. Relative paths resolve from the project directory, while `/Game` object/package paths resolve through Unreal package mount points.
+
+Boolean options are strict JSON booleans. Pass `true` or `false`; quoted strings, numeric substitutes, and explicit `null` values return `-32602`.
+
+| Action | Parameters | Description |
+|--------|------------|-------------|
+| `get_capabilities` | none | Active provider identity, installed provider names, and supported action roster |
+| `get_status` | `paths` or `files` | Normalized files and provider state (`checked_out`, `added`, `modified`, `conflicted`, capabilities, and other-user checkout details) |
+| `checkout` | `paths`/`files`, `dry_run?=false` | Check out through the active Unreal provider |
+| `add` | `paths`/`files`, `dry_run?=false` | Mark for add through the active Unreal provider |
+| `checkout_or_add` | `paths`/`files`, `dry_run?=false` | Plan or execute checkout for tracked files and add for eligible local/new files |
+| `delete` | `paths`/`files`, `dry_run?=false`, `confirm?=false` | Mark for delete; requires `confirm=true` unless dry-running |
+| `mark_for_delete` | same as `delete` | Explicitly named alias of the delete provider operation |
+| `revert` | `paths`/`files`, `dry_run?=false`, `confirm?=false` | Revert files; requires `confirm=true` unless dry-running |
+| `revert_unchanged` | `paths`/`files`, `dry_run?=false`, `confirm?=false` | Revert unchanged files; requires `confirm=true` unless dry-running |
+| `list_opened` | `changelist?`, `resolve_packages?=true`, `limit?=200` | Bounded `p4 -ztag opened -m (limit + 1)` with optional local/package resolution; `limit` is integral `1..5000` |
+| `map_depot_paths` | `paths` or `files` | Map up to 5,000 depot/client/local/package paths, preserving one result row per input |
+
+`delete`, `mark_for_delete`, `revert`, and `revert_unchanged` return `ok=false` without executing when neither `dry_run=true` nor `confirm=true` is supplied. An unavailable provider is reported explicitly as `available=false`; the action does not edit file attributes or select an alternate provider.
+
+Perforce mapping is bounded to 128 paths and 24,000 encoded characters per `p4 where` command, at most 40 commands per call. `list_opened` exposes `observed_count`, `returned_count`, `sentinel_record_count`, `count_is_lower_bound`, `has_more`, and `truncated`; treat `count` as exact only when `count_is_lower_bound=false`.
 
 ---
 

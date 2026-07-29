@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Provider-backed `source_control` namespace (11 actions).** `get_capabilities`, `get_status`, `checkout`, `add`, `checkout_or_add`, `delete`, `mark_for_delete`, `revert`, and `revert_unchanged` route through Unreal's active source-control provider; `list_opened` and `map_depot_paths` add bounded Perforce opened-file and depot/local/package mapping. Mutation booleans are strict JSON values, delete/revert execution requires explicit confirmation, and Perforce queries enforce input, batch, command-count, and result-window limits.
+
 ## [0.21.3] - 2026-07-26
 
 This release closes out the open pull-request queue. Every fix below was reported or prototyped by a contributor — thanks to **@Thomasbehan**, **@whalemenace**, and **@kunkunGames** for the write-ups, which were detailed enough to reproduce from directly.

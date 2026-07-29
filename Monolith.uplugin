@@ -177,6 +177,11 @@
 			"LoadingPhase": "Default"
 		},
 		{
+			"Name": "MonolithSourceControl",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
 			"Name": "MonolithUI",
 			"Type": "Editor",
 			"LoadingPhase": "Default"
