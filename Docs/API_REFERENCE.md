@@ -762,7 +762,7 @@ Content Browser collection management backed by Unreal's `CollectionManager`. **
 | `collection.validate_collection_name` | `name` (**required**), `share_type` (`local`; also accepts `all`) | Ask `CollectionManager` whether a name is valid and return its validation error when invalid. |
 | `collection.create_unique_collection_name` | `base_name` (**required**), `share_type` | Generate a non-conflicting name without creating the collection. |
 
-All scalar and array element types are validated exactly. A string supplied where a bool, number, object, or array is required is not coerced. Invalid parameters return JSON-RPC `-32602`; an Unreal collection operation that fails after validation returns `-32603` and preserves the engine-provided error text when available. Mutating calls reject read-only share types rather than falling back to another scope.
+All scalar and array element types are validated exactly, and required strings such as `query_text` must be non-empty. A string supplied where a bool, number, object, or array is required is not coerced. Missing collection lookups return JSON-RPC `-32602`: `list_assets` does not masquerade as a successful empty collection, and `contains_asset` does not convert lookup failure to `contains=false`. An Unreal collection operation that fails after validation returns `-32603` and preserves the engine-provided error text when available. Mutating calls reject read-only share types rather than falling back to another scope.
 
 ---
 

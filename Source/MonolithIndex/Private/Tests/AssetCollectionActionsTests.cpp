@@ -148,6 +148,62 @@ bool FMonolithCollectionRegistrationAndValidationTest::RunTest(const FString& /*
 		BadContainsPath,
 		TEXT("asset_path"));
 
+	TSharedPtr<FJsonObject> EmptyQuery = MakeNamedParams(TEXT("MonolithValidationOnly"));
+	EmptyQuery->SetStringField(TEXT("query_text"), TEXT(""));
+	bPassed &= ExpectInvalidParams(
+		TEXT("set_dynamic_query rejects empty query_text"),
+		TEXT("set_dynamic_query"),
+		EmptyQuery,
+		TEXT("query_text"));
+
+	const FString MissingName = FString::Printf(
+		TEXT("MonolithMissing_%s"),
+		*FGuid::NewGuid().ToString(EGuidFormats::Digits));
+	bPassed &= ExpectInvalidParams(
+		TEXT("list_assets rejects a missing collection"),
+		TEXT("list_assets"),
+		MakeNamedParams(MissingName),
+		TEXT("does not exist"));
+
+	TSharedPtr<FJsonObject> MissingContains = MakeNamedParams(MissingName);
+	MissingContains->SetStringField(
+		TEXT("asset_path"),
+		TEXT("/Engine/EngineResources/DefaultTexture.DefaultTexture"));
+	bPassed &= ExpectInvalidParams(
+		TEXT("contains_asset rejects a missing collection"),
+		TEXT("contains_asset"),
+		MissingContains,
+		TEXT("does not exist"));
+
+	const FString UniqueBase = FString::Printf(
+		TEXT("MonolithUnique_%s"),
+		*FGuid::NewGuid().ToString(EGuidFormats::Digits));
+	TSharedPtr<FJsonObject> UniqueParams = MakeShared<FJsonObject>();
+	UniqueParams->SetStringField(TEXT("base_name"), UniqueBase);
+	UniqueParams->SetStringField(TEXT("share_type"), TEXT("local"));
+	const FMonolithActionResult UniqueResult =
+		Invoke(TEXT("create_unique_collection_name"), UniqueParams);
+	bPassed &= TestTrue(
+		TEXT("create_unique_collection_name returns a candidate"),
+		UniqueResult.bSuccess && UniqueResult.Result.IsValid());
+	if (UniqueResult.bSuccess && UniqueResult.Result.IsValid())
+	{
+		const FString UniqueName =
+			UniqueResult.Result->GetStringField(TEXT("unique_name"));
+		if (TestFalse(
+			TEXT("create_unique_collection_name returns a non-empty candidate"),
+			UniqueName.IsEmpty()))
+		{
+			bPassed &= TestFalse(
+				TEXT("create_unique_collection_name does not create the candidate"),
+				Invoke(TEXT("get_collection"), MakeNamedParams(UniqueName)).bSuccess);
+		}
+		else
+		{
+			bPassed = false;
+		}
+	}
+
 	TSharedPtr<FJsonObject> BadColor = MakeNamedParams(TEXT("MonolithValidationOnly"));
 	TSharedPtr<FJsonObject> Color = MakeShared<FJsonObject>();
 	Color->SetNumberField(TEXT("r"), 1.25);
@@ -208,6 +264,17 @@ bool FMonolithCollectionLocalLifecycleTest::RunTest(const FString& /*Parameters*
 			TEXT("created static collection reports storage mode"),
 			CreateStatic.Result->GetStringField(TEXT("storage_mode")),
 			FString(TEXT("static")));
+	}
+
+	const FMonolithActionResult EmptyList =
+		Invoke(TEXT("list_assets"), MakeNamedParams(StaticName));
+	TestTrue(TEXT("list_assets succeeds for an existing empty collection"), EmptyList.bSuccess);
+	if (TestTrue(TEXT("empty list_assets returns a payload"), EmptyList.Result.IsValid()))
+	{
+		TestEqual(
+			TEXT("empty collection reports zero assets"),
+			static_cast<int32>(EmptyList.Result->GetIntegerField(TEXT("count"))),
+			0);
 	}
 
 	TSharedPtr<FJsonObject> AddParams = MakeNamedParams(StaticName);

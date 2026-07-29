@@ -299,6 +299,18 @@ namespace MonolithCollection
 			FString::Printf(TEXT("Collections of share_type '%s' are read-only"), *ShareTypeToString(ShareType)),
 			-32602);
 	}
+
+	static FMonolithActionResult CollectionNotFoundError(
+		FName Name,
+		ECollectionShareType::Type ShareType)
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(
+				TEXT("Collection '%s' (%s) does not exist"),
+				*Name.ToString(),
+				*ShareTypeToString(ShareType)),
+			-32602);
+	}
 }
 
 void FAssetCollectionActions::Register(FMonolithToolRegistry& Registry)
@@ -364,7 +376,7 @@ void FAssetCollectionActions::Register(FMonolithToolRegistry& Registry)
 		FParamSchemaBuilder().Required(TEXT("name"), TEXT("string"), TEXT("Collection name")).Optional(TEXT("share_type"), TEXT("string"), TEXT("local, private, shared, system, or all"), TEXT("local")).Build());
 
 	Registry.RegisterAction(TEXT("collection"), TEXT("create_unique_collection_name"),
-		TEXT("Create a unique collection name from a base name."),
+		TEXT("Generate a unique collection name from a base name without creating a collection."),
 		FMonolithActionHandler::CreateStatic(&CreateUniqueCollectionName),
 		FParamSchemaBuilder().Required(TEXT("base_name"), TEXT("string"), TEXT("Base collection name")).Optional(TEXT("share_type"), TEXT("string"), TEXT("local, private, shared, or system"), TEXT("local")).Build());
 }
@@ -421,7 +433,7 @@ FMonolithActionResult FAssetCollectionActions::GetCollection(const TSharedPtr<FJ
 	}
 	if (!MonolithCollection::Container()->CollectionExists(Name, ShareType))
 	{
-		return FMonolithActionResult::Error(TEXT("Collection does not exist"), -32602);
+		return MonolithCollection::CollectionNotFoundError(Name, ShareType);
 	}
 	return FMonolithActionResult::Success(MonolithCollection::CollectionToJson(FCollectionNameType(Name, ShareType)));
 }
@@ -605,7 +617,10 @@ FMonolithActionResult FAssetCollectionActions::ListAssets(const TSharedPtr<FJson
 	{
 		return FMonolithActionResult::Error(Error, -32602);
 	}
-	MonolithCollection::Container()->GetAssetsInCollection(Name, ShareType, Assets, Recursion);
+	if (!MonolithCollection::Container()->GetAssetsInCollection(Name, ShareType, Assets, Recursion))
+	{
+		return MonolithCollection::CollectionNotFoundError(Name, ShareType);
+	}
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
 	Rows.Reserve(Assets.Num());
@@ -648,18 +663,22 @@ FMonolithActionResult FAssetCollectionActions::ContainsAsset(const TSharedPtr<FJ
 	{
 		return FMonolithActionResult::Error(Error, -32602);
 	}
+	if (!MonolithCollection::Container()->CollectionExists(Name, ShareType))
+	{
+		return MonolithCollection::CollectionNotFoundError(Name, ShareType);
+	}
 	FText ErrorText;
 	const bool bContains = MonolithCollection::Container()->IsObjectInCollection(
 		FSoftObjectPath(MonolithCollection::NormalizeObjectPath(AssetPath)), Name, ShareType, Recursion, &ErrorText);
+	if (!ErrorText.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ErrorText.ToString(), -32603);
+	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("collection"), Name.ToString());
 	Result->SetStringField(TEXT("asset_path"), MonolithCollection::NormalizeObjectPath(AssetPath));
 	Result->SetBoolField(TEXT("contains"), bContains);
-	if (!ErrorText.IsEmpty())
-	{
-		Result->SetStringField(TEXT("note"), ErrorText.ToString());
-	}
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -677,6 +696,10 @@ FMonolithActionResult FAssetCollectionActions::SetDynamicQuery(const TSharedPtr<
 		return FMonolithActionResult::Error(TEXT("query_text must be a string"), -32602);
 	}
 	QueryText = Params->GetStringField(TEXT("query_text"));
+	if (QueryText.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing or empty required param: query_text"), -32602);
+	}
 	ECollectionShareType::Type ShareType;
 	if (!MonolithCollection::GetShareType(Params, ShareType, Error))
 	{

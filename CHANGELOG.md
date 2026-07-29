@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **Content Browser collections are now a first-class `collection` namespace.** Thirteen actions cover discovery, static membership, dynamic queries, colors, validation, and unique-name generation through Unreal's `CollectionManager`. Mutating calls reject read-only share types, non-empty deletion requires `force=true`, and malformed JSON scalar types fail with `-32602` instead of being silently coerced.
+- **Content Browser collections are now a first-class `collection` namespace.** Thirteen actions cover discovery, static membership, dynamic queries, colors, validation, and unique-name generation through Unreal's `CollectionManager`. Mutating calls reject read-only share types, non-empty deletion requires `force=true`, required strings cannot be empty, and malformed JSON or missing collection lookups fail with `-32602` instead of being coerced into a write, empty list, or false membership result.
 
 ## [0.21.3] - 2026-07-26
 

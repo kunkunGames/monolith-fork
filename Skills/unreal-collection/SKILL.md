@@ -1,6 +1,6 @@
 ---
 name: unreal-collection
-description: Use when managing editor asset Collections via Monolith MCP - create static/dynamic collections, add/remove members, set color/dynamic query, and query collection contents. To find or query assets to populate a collection use unreal-project-search; if group/changelist means a source-control changelist use unreal-source-control; gameplay or asset metadata tags are not editor collections. Triggers on collection, asset collection, static collection, dynamic collection, group assets, collection membership, tag set, add to collection, remove from collection, collection contents, saved search collection, asset group, shared collection, local collection.
+description: Use when managing editor asset Collections via Monolith MCP - create static/dynamic collections, add/remove members, set color/dynamic query, and query collection contents. To find assets or inspect indexed metadata use unreal-project-search. Source-control changelists are outside this skill and use the host project's normal Perforce/Git workflow; gameplay tags use unreal-gas. Triggers on collection, asset collection, static collection, dynamic collection, group assets, collection membership, tag set, add to collection, remove from collection, collection contents, saved search collection, asset group, shared collection, local collection.
 ---
 
 # unreal-collection
@@ -10,20 +10,21 @@ description: Use when managing editor asset Collections via Monolith MCP - creat
 ## Discovery
 
 ```
-monolith_discover({ namespace: "collection" })                      # all actions in this namespace
-monolith_discover({ namespace: "collection", action: "<action>", mode: "schema" })  # exact params
+monolith_discover({ namespace: "collection" })  # action names + descriptions
+describe_query("action_schema", target_namespace="collection", target_action="<action>")  # one exact schema
+monolith_discover({ namespace: "collection", detail: true })  # all schemas, when the full namespace is needed
 ```
 
 ## When to use / Use a different skill for
 
 - Use this skill to create, color, populate, query, or delete Content Browser asset **Collections** and their members.
-- To find or query the assets you want to add (FTS search, references, dependencies, type filtering), use **unreal-project-search**, then feed the paths into `add_assets`.
-- When "group" or "changelist" means a source-control changelist (Perforce/Git checkout grouping), use **unreal-source-control** — not a Content Browser collection.
-- Gameplay tags and asset metadata tags are not editor collections — use **unreal-gas** for gameplay tags and **unreal-asset** for asset metadata.
+- To find assets or inspect indexed metadata (FTS search, references, dependencies, type filtering), use the shipped **unreal-project-search** skill, then feed the paths into `add_assets`.
+- When "group" or "changelist" means a Perforce/Git changelist, stop this workflow and use the host project's normal source-control tooling. This repository does not ship a source-control skill.
+- Gameplay tags are not editor collections; use the shipped **unreal-gas** skill. Asset metadata discovery belongs to **unreal-project-search**.
 
 ## Action Reference
 
-Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed values, `[w]` mutates. Signatures are a snapshot of the live catalog — for the exact, full, current schema of any action call `monolith_discover` with `mode: "schema"`.
+Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed values, `[w]` mutates. Signatures are a snapshot of the live catalog — for one exact current schema call `describe_query("action_schema", target_namespace="collection", target_action="<action>")`.
 
 ### Asset Collection (13)
 
@@ -41,11 +42,11 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `[w] remove_assets` | Remove one or more assets from a static Content Browser collection. | `name*`, `share_type=local` (local/private/shared/system), `asset_path?` (single path), `asset_paths?` (array) |
 | `[w] set_dynamic_query` | Set query text for a dynamic collection. | `name*`, `query_text*`, `share_type=local` (local/private/shared/system) |
 | `[w] set_collection_color` | Set or clear a collection color. Omit color to clear. | `name*`, `share_type=local` (local/private/shared/system), `color?` (object `{r,g,b,a}` in 0..1; omit to clear) |
-| `[w] create_unique_collection_name` | Create a unique collection name from a base name. | `base_name*`, `share_type=local` (local/private/shared/system) |
+| `create_unique_collection_name` | Generate a unique collection name from a base name without creating a collection. | `base_name*`, `share_type=local` (local/private/shared/system) |
 
 ## Common Workflows
 
-Numbered recipes use only the actions in the table above. Run `monolith_discover` with `mode: "schema"` for exact params before each call. `share_type` must stay consistent across every step of one collection (default `local`).
+Numbered recipes use only the actions in the table above. Run `describe_query("action_schema", target_namespace="collection", target_action="<action>")` for exact params before each call. `share_type` must stay consistent across every step of one collection (default `local`).
 
 ### Recipe 1 — Build and verify a static collection
 
@@ -66,9 +67,9 @@ Pitfall — deletion: `collection_query("delete_collection", { name, share_type:
 
 Pitfall — dynamic vs static membership: a dynamic collection has no fixed member list, so `add_assets`/`remove_assets` do not apply; change membership only by editing the query with `set_dynamic_query`. Conversely, a static collection has no query, so `set_dynamic_query`/`get_dynamic_query` are not valid for it. Pick `storage_mode` at `create_collection` time — it cannot be flipped later by these actions. Because the membership is recomputed from the query, `list_assets` reflects the current asset set and changes as matching assets are added or removed elsewhere.
 
-Pitfall — share_type scope: `share_type` selects which collection store the name lives in (`local`/`private`/`shared`/`system`), and a name is unique only within one store. Keep the same `share_type` on every step of one collection; the default `local` is per-user and not committed to source control, so use `shared` when other team members must see the collection (and check it out through **unreal-source-control** if your collection store is versioned).
+Pitfall — share_type scope: `share_type` selects which collection store the name lives in (`local`/`private`/`shared`/`system`), and a name is unique only within one store. Keep the same `share_type` on every step of one collection; the default `local` is per-user and not committed to source control, so use `shared` when other team members must see the collection. Coordinate versioned collection files through the host project's normal Perforce/Git workflow; source control is outside this skill.
 
 ## Notes
 
 - This reference is generated from the live `RegisterAction` surface. If an action is missing or renamed, re-run `monolith_discover({ namespace: "collection" })` — the catalog is the source of truth.
-- Pass `mode: "schema"` to `monolith_discover` for required/optional params and types before calling an action.
+- Call `describe_query("action_schema", target_namespace="collection", target_action="<action>")` for one action's required/optional params and types; use `monolith_discover({ namespace: "collection", detail: true })` only when every schema is needed.
