@@ -497,16 +497,6 @@ FMonolithActionResult FAssetCollectionActions::DeleteCollection(const TSharedPtr
 	{
 		return FMonolithActionResult::Error(Error, -32602);
 	}
-	const TOptional<FMonolithActionResult> MissingCollection =
-		MonolithCollection::GetMissingCollectionError(Name, ShareType);
-	if (MissingCollection.IsSet())
-	{
-		return MissingCollection.GetValue();
-	}
-	if (MonolithCollection::Container()->IsReadOnly(ShareType))
-	{
-		return MonolithCollection::MutatingReadOnlyError(ShareType);
-	}
 
 	bool bForce = false;
 	if (Params->HasField(TEXT("force")))
@@ -516,6 +506,16 @@ FMonolithActionResult FAssetCollectionActions::DeleteCollection(const TSharedPtr
 			return FMonolithActionResult::Error(TEXT("force must be a bool"), -32602);
 		}
 		bForce = Params->GetBoolField(TEXT("force"));
+	}
+	const TOptional<FMonolithActionResult> MissingCollection =
+		MonolithCollection::GetMissingCollectionError(Name, ShareType);
+	if (MissingCollection.IsSet())
+	{
+		return MissingCollection.GetValue();
+	}
+	if (MonolithCollection::Container()->IsReadOnly(ShareType))
+	{
+		return MonolithCollection::MutatingReadOnlyError(ShareType);
 	}
 	TArray<FSoftObjectPath> Assets;
 	MonolithCollection::Container()->GetAssetsInCollection(Name, ShareType, Assets);
@@ -550,6 +550,12 @@ FMonolithActionResult FAssetCollectionActions::AddAssets(const TSharedPtr<FJsonO
 	{
 		return FMonolithActionResult::Error(Error, -32602);
 	}
+
+	TArray<FSoftObjectPath> Paths;
+	if (!MonolithCollection::ParseAssetPaths(Params, Paths, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 	const TOptional<FMonolithActionResult> MissingCollection =
 		MonolithCollection::GetMissingCollectionError(Name, ShareType);
 	if (MissingCollection.IsSet())
@@ -559,12 +565,6 @@ FMonolithActionResult FAssetCollectionActions::AddAssets(const TSharedPtr<FJsonO
 	if (MonolithCollection::Container()->IsReadOnly(ShareType))
 	{
 		return MonolithCollection::MutatingReadOnlyError(ShareType);
-	}
-
-	TArray<FSoftObjectPath> Paths;
-	if (!MonolithCollection::ParseAssetPaths(Params, Paths, Error))
-	{
-		return FMonolithActionResult::Error(Error, -32602);
 	}
 	int32 NumAdded = 0;
 	FText ErrorText;
@@ -596,6 +596,12 @@ FMonolithActionResult FAssetCollectionActions::RemoveAssets(const TSharedPtr<FJs
 	{
 		return FMonolithActionResult::Error(Error, -32602);
 	}
+
+	TArray<FSoftObjectPath> Paths;
+	if (!MonolithCollection::ParseAssetPaths(Params, Paths, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 	const TOptional<FMonolithActionResult> MissingCollection =
 		MonolithCollection::GetMissingCollectionError(Name, ShareType);
 	if (MissingCollection.IsSet())
@@ -605,12 +611,6 @@ FMonolithActionResult FAssetCollectionActions::RemoveAssets(const TSharedPtr<FJs
 	if (MonolithCollection::Container()->IsReadOnly(ShareType))
 	{
 		return MonolithCollection::MutatingReadOnlyError(ShareType);
-	}
-
-	TArray<FSoftObjectPath> Paths;
-	if (!MonolithCollection::ParseAssetPaths(Params, Paths, Error))
-	{
-		return FMonolithActionResult::Error(Error, -32602);
 	}
 	int32 NumRemoved = 0;
 	FText ErrorText;
@@ -808,16 +808,6 @@ FMonolithActionResult FAssetCollectionActions::SetCollectionColor(const TSharedP
 	{
 		return FMonolithActionResult::Error(Error, -32602);
 	}
-	const TOptional<FMonolithActionResult> MissingCollection =
-		MonolithCollection::GetMissingCollectionError(Name, ShareType);
-	if (MissingCollection.IsSet())
-	{
-		return MissingCollection.GetValue();
-	}
-	if (MonolithCollection::Container()->IsReadOnly(ShareType))
-	{
-		return MonolithCollection::MutatingReadOnlyError(ShareType);
-	}
 
 	TOptional<FLinearColor> NewColor;
 	const TSharedPtr<FJsonObject>* ColorObj = nullptr;
@@ -861,6 +851,16 @@ FMonolithActionResult FAssetCollectionActions::SetCollectionColor(const TSharedP
 			return FMonolithActionResult::Error(TEXT("color channels must be finite numbers in the range 0..1"), -32602);
 		}
 		NewColor = FLinearColor(static_cast<float>(R), static_cast<float>(G), static_cast<float>(B), static_cast<float>(A));
+	}
+	const TOptional<FMonolithActionResult> MissingCollection =
+		MonolithCollection::GetMissingCollectionError(Name, ShareType);
+	if (MissingCollection.IsSet())
+	{
+		return MissingCollection.GetValue();
+	}
+	if (MonolithCollection::Container()->IsReadOnly(ShareType))
+	{
+		return MonolithCollection::MutatingReadOnlyError(ShareType);
 	}
 	FText ErrorText;
 	const bool bSuccess = MonolithCollection::Container()->SetCollectionColor(Name, ShareType, NewColor, &ErrorText);
