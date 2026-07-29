@@ -15,9 +15,11 @@
 #include "InputTriggers.h"
 #include "Misc/Guid.h"
 #include "Misc/PackageName.h"
+#include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithToolRegistry.h"
+#include "Serialization/Archive.h"
 #include "UObject/Package.h"
 #include "UObject/UObjectHash.h"
 #include "UObject/UObjectGlobals.h"
@@ -143,6 +145,125 @@ namespace MonolithGASInputAssetActionsTestDetail
 		return Value;
 	}
 
+	static TSharedPtr<FJsonObject> GetErrorDataObject(
+		const FMonolithActionResult& ActionResult)
+	{
+		if (!ActionResult.ErrorData.IsValid())
+		{
+			return nullptr;
+		}
+		const TSharedPtr<FJsonObject>* ErrorObject = nullptr;
+		if (!ActionResult.ErrorData->TryGetObject(ErrorObject)
+			|| !ErrorObject
+			|| !ErrorObject->IsValid())
+		{
+			return nullptr;
+		}
+		return *ErrorObject;
+	}
+
+	static bool GetErrorBool(
+		const FMonolithActionResult& ActionResult,
+		const TCHAR* Field,
+		bool Default = false)
+	{
+		bool Value = Default;
+		if (const TSharedPtr<FJsonObject> ErrorObject = GetErrorDataObject(ActionResult))
+		{
+			ErrorObject->TryGetBoolField(Field, Value);
+		}
+		return Value;
+	}
+
+	static int32 GetErrorInt(
+		const FMonolithActionResult& ActionResult,
+		const TCHAR* Field,
+		int32 Default = 0)
+	{
+		double Value = static_cast<double>(Default);
+		if (const TSharedPtr<FJsonObject> ErrorObject = GetErrorDataObject(ActionResult))
+		{
+			ErrorObject->TryGetNumberField(Field, Value);
+		}
+		return static_cast<int32>(Value);
+	}
+
+	static FString GetErrorString(
+		const FMonolithActionResult& ActionResult,
+		const TCHAR* Field,
+		const FString& Default = FString())
+	{
+		FString Value = Default;
+		if (const TSharedPtr<FJsonObject> ErrorObject = GetErrorDataObject(ActionResult))
+		{
+			ErrorObject->TryGetStringField(Field, Value);
+		}
+		return Value;
+	}
+
+	static bool ResultRowsAreScopedToGame(
+		const FMonolithActionResult& ActionResult,
+		const TCHAR* ArrayField)
+	{
+		if (!ActionResult.bSuccess || !ActionResult.Result.IsValid())
+		{
+			return false;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+		if (!ActionResult.Result->TryGetArrayField(ArrayField, Rows) || !Rows)
+		{
+			return false;
+		}
+		for (const TSharedPtr<FJsonValue>& RowValue : *Rows)
+		{
+			const TSharedPtr<FJsonObject>* Row = nullptr;
+			FString PackagePath;
+			if (!RowValue.IsValid()
+				|| !RowValue->TryGetObject(Row)
+				|| !Row
+				|| !Row->IsValid()
+				|| !(*Row)->TryGetStringField(TEXT("package_path"), PackagePath)
+				|| (PackagePath != TEXT("/Game") && !PackagePath.StartsWith(TEXT("/Game/"))))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	static bool ResultRowsContainPackage(
+		const FMonolithActionResult& ActionResult,
+		const TCHAR* ArrayField,
+		const FString& ExpectedPackagePath)
+	{
+		if (!ActionResult.bSuccess || !ActionResult.Result.IsValid())
+		{
+			return false;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+		if (!ActionResult.Result->TryGetArrayField(ArrayField, Rows) || !Rows)
+		{
+			return false;
+		}
+		for (const TSharedPtr<FJsonValue>& RowValue : *Rows)
+		{
+			const TSharedPtr<FJsonObject>* Row = nullptr;
+			FString PackagePath;
+			if (RowValue.IsValid()
+				&& RowValue->TryGetObject(Row)
+				&& Row
+				&& Row->IsValid()
+				&& (*Row)->TryGetStringField(TEXT("package_path"), PackagePath)
+				&& PackagePath == ExpectedPackagePath)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	static int32 CountLiveObjectsOfClass(const UClass* Class)
 	{
 		TArray<UObject*> Objects;
@@ -188,6 +309,52 @@ namespace MonolithGASInputAssetActionsTestDetail
 			Package->MarkAsGarbage();
 		}
 	}
+
+	struct FScopedSaveBlocker
+	{
+		explicit FScopedSaveBlocker(const FString& PackagePath)
+			: Filename(FPackageName::LongPackageNameToFilename(
+				PackagePath,
+				FPackageName::GetAssetPackageExtension()))
+		{
+			IFileManager& FileManager = IFileManager::Get();
+			if (!FileManager.FileExists(*Filename)
+				&& !FileManager.DirectoryExists(*Filename)
+				&& FileManager.MakeDirectory(*FPaths::GetPath(Filename), true))
+			{
+				LockedFile.Reset(FileManager.CreateFileWriter(*Filename));
+				if (LockedFile)
+				{
+					uint8 Marker = 0;
+					LockedFile->Serialize(&Marker, sizeof(Marker));
+					LockedFile->Flush();
+					bReady = !LockedFile->IsError();
+				}
+			}
+		}
+
+		~FScopedSaveBlocker()
+		{
+			if (bReady)
+			{
+				LockedFile.Reset();
+				IFileManager& FileManager = IFileManager::Get();
+				if (FileManager.FileExists(*Filename))
+				{
+					FileManager.Delete(*Filename, false, true);
+				}
+			}
+		}
+
+		bool IsReady() const
+		{
+			return bReady && LockedFile.IsValid() && IFileManager::Get().FileExists(*Filename);
+		}
+
+		FString Filename;
+		TUniquePtr<FArchive> LockedFile;
+		bool bReady = false;
+	};
 
 	struct FScopedInputAssets
 	{
@@ -580,6 +747,7 @@ bool FMonolithGASInputAssetCreationUndoTest::RunTest(const FString& /*Parameters
 	bPassed &= TestNotNull(TEXT("created InputAction is present before undo"), FindTestAsset(ActionPath));
 	bPassed &= TestTrue(TEXT("InputAction creation transaction can be undone"), GEditor->UndoTransaction());
 	bPassed &= TestNull(TEXT("undo removes InputAction from its asset path"), FindTestAsset(ActionPath));
+	CollectGarbage(RF_NoFlags);
 	bPassed &= TestTrue(TEXT("InputAction creation transaction can be redone"), GEditor->RedoTransaction());
 	UInputAction* RedoneAction = Cast<UInputAction>(FindTestAsset(ActionPath));
 	if (TestNotNull(TEXT("redo restores InputAction at its asset path"), RedoneAction))
@@ -598,6 +766,7 @@ bool FMonolithGASInputAssetCreationUndoTest::RunTest(const FString& /*Parameters
 	bPassed &= TestNotNull(TEXT("created InputMappingContext is present before undo"), FindTestAsset(ContextPath));
 	bPassed &= TestTrue(TEXT("InputMappingContext creation transaction can be undone"), GEditor->UndoTransaction());
 	bPassed &= TestNull(TEXT("undo removes InputMappingContext from its asset path"), FindTestAsset(ContextPath));
+	CollectGarbage(RF_NoFlags);
 	bPassed &= TestTrue(TEXT("InputMappingContext creation transaction can be redone"), GEditor->RedoTransaction());
 	UInputMappingContext* RedoneContext = Cast<UInputMappingContext>(FindTestAsset(ContextPath));
 	if (TestNotNull(TEXT("redo restores InputMappingContext at its asset path"), RedoneContext))
@@ -631,6 +800,22 @@ bool FMonolithGASInputAssetLifecycleAndCloneTest::RunTest(const FString& /*Param
 	bool bPassed = true;
 	UInputAction* PrimaryAction = Cast<UInputAction>(FindTestAsset(Assets.ActionA));
 	UInputMappingContext* Context = Assets.GetContext();
+	const FMonolithActionResult DefaultActionList =
+		Execute(TEXT("list_input_actions"), MakeShared<FJsonObject>());
+	const FMonolithActionResult DefaultContextList =
+		Execute(TEXT("list_input_mapping_contexts"), MakeShared<FJsonObject>());
+	bPassed &= TestTrue(
+		TEXT("default InputAction listing is scoped to /Game"),
+		ResultRowsAreScopedToGame(DefaultActionList, TEXT("actions")));
+	bPassed &= TestTrue(
+		TEXT("default InputAction listing includes the project fixture"),
+		ResultRowsContainPackage(DefaultActionList, TEXT("actions"), Assets.ActionA));
+	bPassed &= TestTrue(
+		TEXT("default InputMappingContext listing is scoped to /Game"),
+		ResultRowsAreScopedToGame(DefaultContextList, TEXT("contexts")));
+	bPassed &= TestTrue(
+		TEXT("default InputMappingContext listing includes the project fixture"),
+		ResultRowsContainPackage(DefaultContextList, TEXT("contexts"), Assets.Context));
 	if (TestNotNull(TEXT("created InputAction is loadable"), PrimaryAction))
 	{
 		bPassed &= TestTrue(
@@ -733,6 +918,14 @@ bool FMonolithGASInputAssetLifecycleAndCloneTest::RunTest(const FString& /*Param
 	const FMonolithActionResult DryRunCloneResult =
 		Execute(TEXT("add_input_mapping"), DryRunClone);
 	bPassed &= TestTrue(TEXT("mapping clone dry-run succeeds"), DryRunCloneResult.bSuccess);
+	bPassed &= TestEqual(
+		TEXT("mapping clone dry-run identifies proposed state"),
+		GetString(DryRunCloneResult, TEXT("preview_state")),
+		TEXT("proposed"));
+	bPassed &= TestEqual(
+		TEXT("mapping class loading is deferred until confirmation"),
+		GetString(DryRunCloneResult, TEXT("class_resolution")),
+		TEXT("deferred_until_confirm"));
 	bPassed &= TestTrue(TEXT("mapping clone dry-run predicts creation"), GetBool(DryRunCloneResult, TEXT("would_create")));
 	bPassed &= TestEqual(TEXT("mapping clone dry-run reports modifier count"), GetInt(DryRunCloneResult, TEXT("modifier_count")), 1);
 	bPassed &= TestEqual(TEXT("mapping clone dry-run reports trigger count"), GetInt(DryRunCloneResult, TEXT("trigger_count")), 1);
@@ -746,6 +939,39 @@ bool FMonolithGASInputAssetLifecycleAndCloneTest::RunTest(const FString& /*Param
 		TriggerObjectsBeforeDryRun);
 	bPassed &= TestEqual(
 		TEXT("mapping clone dry-run preserves mapping count"),
+		Context ? Context->GetMappings().Num() : -1,
+		MappingsBeforeDryRun);
+
+	const FString UnloadedModifierPackage =
+		FPackageName::GetLongPackagePath(Assets.Context) + TEXT("/BP_UnloadedModifier");
+	const FString UnloadedModifierClass =
+		MakeObjectPath(UnloadedModifierPackage) + TEXT("_C");
+	bPassed &= TestNull(
+		TEXT("unloaded modifier fixture package starts absent"),
+		FindPackage(nullptr, *UnloadedModifierPackage));
+	TSharedPtr<FJsonObject> UnloadedClassPreview = MakeMappingParams(
+		Assets.Context,
+		Assets.ActionB,
+		TEXT("Tab"),
+		true,
+		false);
+	UnloadedClassPreview->SetArrayField(
+		TEXT("modifier_classes"),
+		MakeStringArray({ UnloadedModifierClass }));
+	const FMonolithActionResult UnloadedClassPreviewResult =
+		Execute(TEXT("add_input_mapping"), UnloadedClassPreview);
+	bPassed &= TestTrue(
+		TEXT("unloaded valid class path is accepted for dry-run"),
+		UnloadedClassPreviewResult.bSuccess);
+	bPassed &= TestEqual(
+		TEXT("unloaded class dry-run defers resolution"),
+		GetString(UnloadedClassPreviewResult, TEXT("class_resolution")),
+		TEXT("deferred_until_confirm"));
+	bPassed &= TestNull(
+		TEXT("unloaded class dry-run does not load its package"),
+		FindPackage(nullptr, *UnloadedModifierPackage));
+	bPassed &= TestEqual(
+		TEXT("unloaded class dry-run preserves mapping count"),
 		Context ? Context->GetMappings().Num() : -1,
 		MappingsBeforeDryRun);
 
@@ -797,6 +1023,27 @@ bool FMonolithGASInputAssetLifecycleAndCloneTest::RunTest(const FString& /*Param
 	bPassed &= TestTrue(TEXT("different keys validate cleanly"), GetBool(ValidateResult, TEXT("valid")));
 	bPassed &= TestEqual(TEXT("one context is validated"), GetInt(ValidateResult, TEXT("contexts_checked")), 1);
 
+	const FMonolithActionResult RemovePreviewResult = Execute(
+		TEXT("remove_input_mapping"),
+		MakeMappingParams(Assets.Context, Assets.ActionB, TEXT("Enter"), true, false));
+	bPassed &= TestTrue(TEXT("mapping removal dry-run succeeds"), RemovePreviewResult.bSuccess);
+	bPassed &= TestEqual(
+		TEXT("mapping removal dry-run identifies proposed state"),
+		GetString(RemovePreviewResult, TEXT("preview_state")),
+		TEXT("proposed"));
+	bPassed &= TestEqual(
+		TEXT("mapping removal dry-run predicts one removal"),
+		GetInt(RemovePreviewResult, TEXT("would_remove_count")),
+		1);
+	bPassed &= TestEqual(
+		TEXT("mapping removal dry-run reports no committed removals"),
+		GetInt(RemovePreviewResult, TEXT("removed_count")),
+		0);
+	bPassed &= TestEqual(
+		TEXT("mapping removal dry-run preserves both mappings"),
+		Context ? Context->GetMappings().Num() : -1,
+		2);
+
 	const FMonolithActionResult RemoveResult = Execute(
 		TEXT("remove_input_mapping"),
 		MakeMappingParams(Assets.Context, Assets.ActionB, TEXT("Enter")));
@@ -808,6 +1055,164 @@ bool FMonolithGASInputAssetLifecycleAndCloneTest::RunTest(const FString& /*Param
 		Context ? Context->GetMappings().Num() : -1,
 		1);
 	bPassed &= TestFalse(TEXT("save=false creates no uasset files"), Assets.HasSavedFiles());
+	return bPassed;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithGASInputAssetSaveFailureReportingTest,
+	"Monolith.ParamGuard.GAS.InputAssets.SaveFailureReporting",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithGASInputAssetSaveFailureReportingTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MonolithGASInputAssetActionsTestDetail;
+
+	FScopedInputAssets Assets;
+	if (!TestTrue(TEXT("save-failure input fixture is created"), Assets.Create()))
+	{
+		return false;
+	}
+
+	const FString Suffix = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+	const FString Root = FString::Printf(TEXT("/Game/Tests/Monolith/Input/SaveFailure/%s"), *Suffix);
+	const FString CreateActionPath = Root + TEXT("/IA_CreateFail");
+	const FString CreateContextPath = Root + TEXT("/IMC_CreateFail");
+	FScopedSaveBlocker CreateActionBlocker(CreateActionPath);
+	FScopedSaveBlocker CreateContextBlocker(CreateContextPath);
+	FScopedSaveBlocker SetActionBlocker(Assets.ActionA);
+	FScopedSaveBlocker MappingContextBlocker(Assets.Context);
+	bool bPassed = true;
+	bPassed &= TestTrue(TEXT("create InputAction save target is blocked"), CreateActionBlocker.IsReady());
+	bPassed &= TestTrue(TEXT("create InputMappingContext save target is blocked"), CreateContextBlocker.IsReady());
+	bPassed &= TestTrue(TEXT("set InputAction save target is blocked"), SetActionBlocker.IsReady());
+	bPassed &= TestTrue(TEXT("mapping context save target is blocked"), MappingContextBlocker.IsReady());
+	if (!bPassed)
+	{
+		CleanupTestAsset(CreateContextPath);
+		CleanupTestAsset(CreateActionPath);
+		return false;
+	}
+	AddExpectedError(
+		TEXT("Error moving file"),
+		EAutomationExpectedErrorFlags::Contains,
+		3);
+	AddExpectedError(
+		TEXT("MoveFile was unable to move"),
+		EAutomationExpectedErrorFlags::Contains,
+		30);
+	AddExpectedError(
+		TEXT("Error saving"),
+		EAutomationExpectedErrorFlags::Contains,
+		3);
+	AddExpectedError(
+		TEXT("Failed to move"),
+		EAutomationExpectedErrorFlags::Contains,
+		3);
+	AddExpectedError(
+		TEXT("Error opening file"),
+		EAutomationExpectedErrorFlags::Contains,
+		4);
+	AddExpectedError(
+		TEXT("package was marked as deleted in editor"),
+		EAutomationExpectedErrorFlags::Contains,
+		4);
+
+	auto VerifyCommittedSaveFailure =
+		[this, &bPassed](const TCHAR* Label, const FMonolithActionResult& Result)
+		{
+			bPassed &= TestFalse(
+				*FString::Printf(TEXT("%s returns an error"), Label),
+				Result.bSuccess);
+			bPassed &= TestNotNull(
+				*FString::Printf(TEXT("%s returns structured error.data"), Label),
+				GetErrorDataObject(Result).Get());
+			bPassed &= TestTrue(
+				*FString::Printf(TEXT("%s reports the committed mutation"), Label),
+				GetErrorBool(Result, TEXT("mutation_committed")));
+			bPassed &= TestTrue(
+				*FString::Printf(TEXT("%s reports partial mutation"), Label),
+				GetErrorBool(Result, TEXT("partial_mutation")));
+			bPassed &= TestTrue(
+				*FString::Printf(TEXT("%s reports save failure"), Label),
+				GetErrorBool(Result, TEXT("save_failed")));
+			bPassed &= TestFalse(
+				*FString::Printf(TEXT("%s is not retry-safe"), Label),
+				GetErrorBool(Result, TEXT("retry_safe"), true));
+			bPassed &= TestTrue(
+				*FString::Printf(TEXT("%s preserves the save error"), Label),
+				GetErrorString(Result, TEXT("save_error")).Contains(TEXT("SavePackage failed")));
+		};
+
+	TSharedPtr<FJsonObject> CreateActionParams =
+		MakeCreateParams(CreateActionPath, false, true);
+	CreateActionParams->SetStringField(TEXT("description"), TEXT("Created before save failure"));
+	CreateActionParams->SetBoolField(TEXT("save"), true);
+	const FMonolithActionResult CreateActionResult =
+		Execute(TEXT("create_input_action"), CreateActionParams);
+	VerifyCommittedSaveFailure(TEXT("create_input_action"), CreateActionResult);
+	bPassed &= TestTrue(
+		TEXT("create_input_action error.data reports creation"),
+		GetErrorBool(CreateActionResult, TEXT("created")));
+	bPassed &= TestNotNull(
+		TEXT("create_input_action mutation remains in memory"),
+		FindTestAsset(CreateActionPath));
+
+	TSharedPtr<FJsonObject> CreateContextParams =
+		MakeCreateParams(CreateContextPath, false, true);
+	CreateContextParams->SetStringField(TEXT("description"), TEXT("Created before save failure"));
+	CreateContextParams->SetBoolField(TEXT("save"), true);
+	const FMonolithActionResult CreateContextResult =
+		Execute(TEXT("create_input_mapping_context"), CreateContextParams);
+	VerifyCommittedSaveFailure(TEXT("create_input_mapping_context"), CreateContextResult);
+	bPassed &= TestTrue(
+		TEXT("create_input_mapping_context error.data reports creation"),
+		GetErrorBool(CreateContextResult, TEXT("created")));
+	bPassed &= TestNotNull(
+		TEXT("create_input_mapping_context mutation remains in memory"),
+		FindTestAsset(CreateContextPath));
+
+	TSharedPtr<FJsonObject> SetActionParams =
+		MakeCreateParams(Assets.ActionA, false, true);
+	SetActionParams->SetStringField(TEXT("description"), TEXT("Set before save failure"));
+	SetActionParams->SetBoolField(TEXT("save"), true);
+	const FMonolithActionResult SetActionResult =
+		Execute(TEXT("set_input_action_properties"), SetActionParams);
+	VerifyCommittedSaveFailure(TEXT("set_input_action_properties"), SetActionResult);
+	bPassed &= TestTrue(
+		TEXT("set_input_action_properties error.data reports change"),
+		GetErrorBool(SetActionResult, TEXT("changed")));
+
+	TSharedPtr<FJsonObject> AddMappingParams =
+		MakeMappingParams(Assets.Context, Assets.ActionA, TEXT("SpaceBar"));
+	AddMappingParams->SetBoolField(TEXT("save"), true);
+	const FMonolithActionResult AddMappingResult =
+		Execute(TEXT("add_input_mapping"), AddMappingParams);
+	VerifyCommittedSaveFailure(TEXT("add_input_mapping"), AddMappingResult);
+	bPassed &= TestTrue(
+		TEXT("add_input_mapping error.data reports creation"),
+		GetErrorBool(AddMappingResult, TEXT("created")));
+	bPassed &= TestEqual(
+		TEXT("add_input_mapping mutation remains in memory"),
+		Assets.GetContext() ? Assets.GetContext()->GetMappings().Num() : -1,
+		1);
+
+	TSharedPtr<FJsonObject> RemoveMappingParams =
+		MakeMappingParams(Assets.Context, Assets.ActionA, TEXT("SpaceBar"));
+	RemoveMappingParams->SetBoolField(TEXT("save"), true);
+	const FMonolithActionResult RemoveMappingResult =
+		Execute(TEXT("remove_input_mapping"), RemoveMappingParams);
+	VerifyCommittedSaveFailure(TEXT("remove_input_mapping"), RemoveMappingResult);
+	bPassed &= TestEqual(
+		TEXT("remove_input_mapping error.data reports one removal"),
+		GetErrorInt(RemoveMappingResult, TEXT("removed_count")),
+		1);
+	bPassed &= TestEqual(
+		TEXT("remove_input_mapping mutation remains in memory"),
+		Assets.GetContext() ? Assets.GetContext()->GetMappings().Num() : -1,
+		0);
+
+	CleanupTestAsset(CreateContextPath);
+	CleanupTestAsset(CreateActionPath);
 	return bPassed;
 }
 

@@ -965,11 +965,11 @@ Enhanced Input asset integration. **10 actions** inspect and author `UInputActio
 
 | Action | Required params | Purpose |
 |--------|-----------------|---------|
-| `list_input_actions` | — | List actions under optional `/Game` `path`; `include_details=true` loads value type, triggers, and modifiers. |
+| `list_input_actions` | — | List actions under optional `/Game` `path` (omission defaults to `/Game`); `include_details=true` loads value type, triggers, and modifiers. |
 | `get_input_action` | `asset_path` | Inspect one `UInputAction`. |
 | `create_input_action` | `asset_path` | Create an action or, with `overwrite=true`, update an existing action. |
 | `set_input_action_properties` | `asset_path` | Update value type, description, consumption, pause, reservation, or accumulation properties. |
-| `list_input_mapping_contexts` | — | List contexts under optional `/Game` `path`; `include_details=true` includes mappings. |
+| `list_input_mapping_contexts` | — | List contexts under optional `/Game` `path` (omission defaults to `/Game`); `include_details=true` includes mappings. |
 | `get_input_mapping_context` | `asset_path` | Inspect one `UInputMappingContext`. |
 | `create_input_mapping_context` | `asset_path` | Create a context or, with `overwrite=true`, update its description. |
 | `add_input_mapping` | `context_path`, `action_path`, `key` | Add or update a mapping; optionally clone another mapping or instantiate explicit modifier/trigger classes. |
@@ -982,8 +982,9 @@ All five writers (`create_input_action`, `set_input_action_properties`, `create_
 - A committed write requires `confirm=true`; `save` defaults to `false`.
 - Package and asset inputs must resolve within `/Game`; malformed package roots and object paths whose explicit object name differs from the package asset name are rejected. Required and optional booleans, strings, and arrays are type-checked rather than coerced.
 - A semantic no-op does not call `Modify()`, dirty a package, or save it.
-- Unsaved confirmed creation is fully transactional. Undo removes the new asset from its package path and the Asset Registry; Redo restores the same object and proposed state. `save=true` is an explicit disk-persistence boundary, as with other editor asset writes.
-- `add_input_mapping` reuses the existing action+key mapping unless `allow_duplicate=true`. Source cloning requires `source_context_path`, `source_action_path`, and `source_key` together. Explicit `modifier_classes` / `trigger_classes` replace cloned or existing arrays; an explicit empty array clears them.
+- Unsaved confirmed creation is fully transactional. Undo removes the new asset from its package path and the Asset Registry; the transaction retains the transient object through GC so Redo restores the same object and proposed state.
+- `save=true` is an explicit disk-persistence boundary. If disk save fails after a mutation, the action returns an error with `error.data` containing the normal action result plus `save_failed=true`, `mutation_committed=true`, `partial_mutation=true`, `retry_safe=false`, `save_error`, and retry guidance.
+- `add_input_mapping` reuses the existing action+key mapping unless `allow_duplicate=true`. Source cloning requires `source_context_path`, `source_action_path`, and `source_key` together. Explicit `modifier_classes` / `trigger_classes` replace cloned or existing arrays; an explicit empty array clears them. Dry-run validates soft class-path syntax and any already-loaded class, returns `class_resolution="deferred_until_confirm"`, and defers package/class/CDO loading until a confirmed call.
 - `validate_input_mappings` distinguishes omission from selection: omitted `context_paths` scans the optional `path`, while an explicit empty array checks zero contexts and does not fall back to a project-wide scan.
 - Removing an absent mapping is a successful no-op with `would_remove_count=0`.
 

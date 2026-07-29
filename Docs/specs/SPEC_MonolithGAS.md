@@ -48,13 +48,14 @@ The 10 `input` actions are distinct from the five `gas` ability-input bindings a
 Mutation and validation invariants:
 
 1. Every writer requires either `dry_run=true` or `confirm=true`; `save` defaults to `false`.
-2. Dry-run reports the proposed state and returns before object/package creation, modifier/trigger UObject construction, mutation, dirtying, or save.
-3. Asset paths and list roots must be valid `/Game` package paths. Explicit object names must match the package asset name. Required/optional booleans, strings, class arrays, and `context_paths` retain strict JSON types.
+2. Every dry-run reports `preview_state="proposed"` and returns before object/package creation, modifier/trigger package/class/CDO loading or UObject construction, mutation, dirtying, or save. Soft class-path syntax and already-loaded class compatibility are still validated; full class resolution is deferred until confirmation.
+3. Asset paths and list roots must be valid `/Game` package paths. Omitted list roots default to `/Game`; no unscoped Engine/plugin scan is permitted. Explicit object names must match the package asset name. Required/optional booleans, strings, class arrays, and `context_paths` retain strict JSON types.
 4. Semantic no-ops do not call `Modify()`, dirty a package, or save it.
 5. `add_input_mapping` reuses an existing action+key mapping unless `allow_duplicate=true`. Cloning requires the complete `source_context_path` + `source_action_path` + `source_key` selector. Explicit `modifier_classes` or `trigger_classes` replace the cloned/existing arrays; an explicit empty array clears one.
 6. `remove_input_mapping` reports `would_remove_count`; an absent mapping is a clean successful no-op.
 7. Omitted `context_paths` selects contexts from optional `path`; explicit `context_paths: []` selects none and never falls back to a global scan.
-8. Unsaved confirmed asset creation uses a package-stable custom transaction change. Undo removes the asset from its package path and the Asset Registry; Redo restores the same object and authored values. `save=true` is the explicit disk-persistence boundary.
+8. Unsaved confirmed asset creation uses a package-stable custom transaction change. Undo removes the asset from its package path and the Asset Registry while the change retains it through GC; Redo restores the same object and authored values.
+9. `save=true` is the explicit disk-persistence boundary. A post-mutation save failure returns structured `error.data` with the action result and explicit `mutation_committed`, `partial_mutation`, `save_failed`, and `retry_safe=false` state.
 
 ### Phase J fixes touching this module
 

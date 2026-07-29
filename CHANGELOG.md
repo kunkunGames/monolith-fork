@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- **The new Enhanced Input surface now honors its strict preview and editor-transaction contracts.** Required strings reject non-string JSON, explicit object names must match the package asset name, malformed list roots fail loudly, and `context_paths: []` validates zero contexts instead of scanning the project. Dry-runs return the proposed state and compare modifier/trigger classes without constructing UObjects. Unsaved `UInputAction` and `UInputMappingContext` creation is now a complete Undo/Redo operation: Undo removes the asset from its package path and the Asset Registry, while Redo restores the same object and authored state.
+- **The new Enhanced Input surface now honors its strict preview, persistence, and editor-transaction contracts.** Required strings reject non-string JSON, explicit object names must match the package asset name, malformed list roots fail loudly, omitted list roots stay under `/Game`, and `context_paths: []` validates zero contexts instead of scanning the project. Every dry-run returns `preview_state="proposed"`; modifier/trigger class paths are syntax-checked without loading their packages or CDOs until confirmation. Unsaved `UInputAction` and `UInputMappingContext` creation is now a complete GC-safe Undo/Redo operation, and a failed `save=true` reports the already-committed in-memory state through structured `error.data` instead of inviting an unsafe blind retry.
 
 ## [0.21.3] - 2026-07-26
 

@@ -58,7 +58,6 @@ namespace
 				*OriginalPackage->GetName(),
 				*OriginalName.ToString()))
 			{
-				Asset->MarkAsGarbage();
 				return;
 			}
 
@@ -94,7 +93,9 @@ namespace
 			}
 
 			Asset->ClearFlags(RF_Public | RF_Standalone);
-			Asset->MarkAsGarbage();
+			// FCommandChange::AddReferencedObjects keeps the transient object alive
+			// for Redo. Marking it as garbage here bypasses that reference and lets
+			// an intervening GC destroy the object before Apply can restore it.
 			OriginalPackage->MarkPackageDirty();
 		}
 
@@ -451,6 +452,31 @@ namespace
 		return true;
 	}
 
+	FMonolithActionResult CompleteInputMutation(
+		const TSharedPtr<FJsonObject>& Result,
+		bool bSaveSucceeded,
+		const FString& SaveError)
+	{
+		if (bSaveSucceeded)
+		{
+			return FMonolithActionResult::Success(Result);
+		}
+
+		Result->SetBoolField(TEXT("saved"), false);
+		Result->SetBoolField(TEXT("save_failed"), true);
+		Result->SetBoolField(TEXT("mutation_committed"), true);
+		Result->SetBoolField(TEXT("partial_mutation"), true);
+		Result->SetBoolField(TEXT("retry_safe"), false);
+		Result->SetStringField(TEXT("save_error"), SaveError);
+		Result->SetStringField(
+			TEXT("retry_guidance"),
+			TEXT("The in-memory mutation is already committed; inspect error.data before retrying."));
+
+		FMonolithActionResult Failure = FMonolithActionResult::Error(SaveError);
+		Failure.WithErrorData(Result);
+		return Failure;
+	}
+
 	UInputAction* LoadInputAction(const FString& Path, FString& OutError)
 	{
 		FString PackagePath;
@@ -583,14 +609,14 @@ namespace
 		return true;
 	}
 
-	bool ReadInputObjectClassArray(
+	bool ReadInputObjectClassPathArray(
 		const TSharedPtr<FJsonObject>& Params,
 		const TCHAR* FieldName,
 		UClass* RequiredBaseClass,
-		TArray<UClass*>& OutClasses,
+		TArray<FSoftClassPath>& OutClassPaths,
 		FString& OutError)
 	{
-		OutClasses.Reset();
+		OutClassPaths.Reset();
 		if (!HasParam(Params, FieldName))
 		{
 			return true;
@@ -611,15 +637,64 @@ namespace
 				return false;
 			}
 			ClassPath.TrimStartAndEndInline();
-			UClass* Class = StaticLoadClass(RequiredBaseClass, nullptr, *ClassPath);
+			const FSoftClassPath SoftClassPath(ClassPath);
+			const FString AssetPath = SoftClassPath.GetAssetPathString();
+			FText InvalidPathReason;
+			if (!SoftClassPath.IsValid()
+				|| !SoftClassPath.GetSubPathUtf8String().IsEmpty()
+				|| !FPackageName::IsValidObjectPath(AssetPath, &InvalidPathReason))
+			{
+				OutError = FString::Printf(
+					TEXT("Invalid class path '%s' for param '%s': %s"),
+					*ClassPath,
+					FieldName,
+					*InvalidPathReason.ToString());
+				return false;
+			}
+
+			// ResolveClass only consults currently loaded objects. Dry-run callers
+			// can therefore validate known classes without loading a package or CDO.
+			if (UClass* LoadedClass = SoftClassPath.ResolveClass();
+				LoadedClass
+					&& (!LoadedClass->IsChildOf(RequiredBaseClass)
+						|| LoadedClass->HasAnyClassFlags(CLASS_Abstract)))
+			{
+				OutError = FString::Printf(
+					TEXT("Class '%s' must be a non-abstract child of '%s'"),
+					*LoadedClass->GetPathName(),
+					*RequiredBaseClass->GetPathName());
+				return false;
+			}
+			OutClassPaths.Add(SoftClassPath);
+		}
+		return true;
+	}
+
+	bool ResolveInputObjectClassArray(
+		const TArray<FSoftClassPath>& ClassPaths,
+		const TCHAR* FieldName,
+		UClass* RequiredBaseClass,
+		TArray<UClass*>& OutClasses,
+		FString& OutError)
+	{
+		OutClasses.Reset();
+		for (const FSoftClassPath& ClassPath : ClassPaths)
+		{
+			UClass* Class = StaticLoadClass(RequiredBaseClass, nullptr, *ClassPath.ToString());
 			if (!Class)
 			{
-				OutError = FString::Printf(TEXT("Could not load class '%s' for param '%s'"), *ClassPath, FieldName);
+				OutError = FString::Printf(
+					TEXT("Could not load class '%s' for param '%s'"),
+					*ClassPath.ToString(),
+					FieldName);
 				return false;
 			}
 			if (!Class->IsChildOf(RequiredBaseClass) || Class->HasAnyClassFlags(CLASS_Abstract))
 			{
-				OutError = FString::Printf(TEXT("Class '%s' must be a non-abstract child of '%s'"), *Class->GetPathName(), *RequiredBaseClass->GetPathName());
+				OutError = FString::Printf(
+					TEXT("Class '%s' must be a non-abstract child of '%s'"),
+					*Class->GetPathName(),
+					*RequiredBaseClass->GetPathName());
 				return false;
 			}
 			OutClasses.Add(Class);
@@ -912,17 +987,18 @@ namespace
 		{
 			return false;
 		}
-		if (!Path.IsEmpty())
+		if (Path.IsEmpty())
 		{
-			FString NormalizedPath;
-			if (!NormalizeAndValidateContentPath(Path, NormalizedPath, OutError))
-			{
-				return false;
-			}
-			Path = MoveTemp(NormalizedPath);
-			Filter.PackagePaths.Add(FName(*Path));
-			Filter.bRecursivePaths = true;
+			Path = TEXT("/Game");
 		}
+		FString NormalizedPath;
+		if (!NormalizeAndValidateContentPath(Path, NormalizedPath, OutError))
+		{
+			return false;
+		}
+		Path = MoveTemp(NormalizedPath);
+		Filter.PackagePaths.Add(FName(*Path));
+		Filter.bRecursivePaths = true;
 
 		FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
 		AssetRegistryModule.Get().GetAssets(Filter, OutAssets);
@@ -949,6 +1025,39 @@ namespace
 			const TObjectType* DefaultObject = DesiredClass
 				? Cast<TObjectType>(DesiredClass->GetDefaultObject())
 				: nullptr;
+			if (!AreInstancedObjectsEquivalent(ExistingObject, DefaultObject))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	template <typename TObjectType>
+	bool AreInstancedObjectArraysEquivalentToClassPaths(
+		const TArray<TObjectPtr<TObjectType>>& Existing,
+		const TArray<FSoftClassPath>& DesiredClassPaths)
+	{
+		if (Existing.Num() != DesiredClassPaths.Num())
+		{
+			return false;
+		}
+		for (int32 Index = 0; Index < Existing.Num(); ++Index)
+		{
+			const TObjectType* ExistingObject = Existing[Index].Get();
+			if (!ExistingObject)
+			{
+				return false;
+			}
+
+			const UClass* ExistingClass = ExistingObject->GetClass();
+			if (FSoftClassPath(ExistingClass).GetAssetPath() != DesiredClassPaths[Index].GetAssetPath())
+			{
+				return false;
+			}
+
+			const TObjectType* DefaultObject =
+				Cast<TObjectType>(ExistingClass->GetDefaultObject());
 			if (!AreInstancedObjectsEquivalent(ExistingObject, DefaultObject))
 			{
 				return false;
@@ -1344,9 +1453,10 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputAction(con
 	}
 
 	bool bSaved = false;
-	if (bWouldChange && !SaveAssetIfRequested(Action, Options.bSave, bSaved, Error))
+	bool bSaveSucceeded = true;
+	if (bWouldChange)
 	{
-		return FMonolithActionResult::Error(Error);
+		bSaveSucceeded = SaveAssetIfRequested(Action, Options.bSave, bSaved, Error);
 	}
 
 	TSharedPtr<FJsonObject> Result = InputActionToJson(Action);
@@ -1354,7 +1464,7 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputAction(con
 	Result->SetBoolField(TEXT("changed"), bWouldChange);
 	Result->SetBoolField(TEXT("dry_run"), false);
 	Result->SetBoolField(TEXT("saved"), bSaved);
-	return FMonolithActionResult::Success(Result);
+	return CompleteInputMutation(Result, bSaveSucceeded, Error);
 }
 
 FMonolithActionResult FMonolithGASInputAssetActions::HandleSetInputActionProperties(const TSharedPtr<FJsonObject>& Params)
@@ -1461,9 +1571,10 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleSetInputActionPropert
 	}
 
 	bool bSaved = false;
-	if (!Options.bDryRun && bWouldChange && !SaveAssetIfRequested(Action, Options.bSave, bSaved, Error))
+	bool bSaveSucceeded = true;
+	if (!Options.bDryRun && bWouldChange)
 	{
-		return FMonolithActionResult::Error(Error);
+		bSaveSucceeded = SaveAssetIfRequested(Action, Options.bSave, bSaved, Error);
 	}
 
 	TSharedPtr<FJsonObject> Result = Options.bDryRun
@@ -1477,7 +1588,7 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleSetInputActionPropert
 	Result->SetBoolField(TEXT("changed"), !Options.bDryRun && bWouldChange);
 	Result->SetBoolField(TEXT("dry_run"), Options.bDryRun);
 	Result->SetBoolField(TEXT("saved"), bSaved);
-	return FMonolithActionResult::Success(Result);
+	return CompleteInputMutation(Result, bSaveSucceeded, Error);
 }
 
 FMonolithActionResult FMonolithGASInputAssetActions::HandleListInputMappingContexts(const TSharedPtr<FJsonObject>& Params)
@@ -1666,9 +1777,10 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputMappingCon
 	}
 
 	bool bSaved = false;
-	if (bWouldChange && !SaveAssetIfRequested(Context, Options.bSave, bSaved, Error))
+	bool bSaveSucceeded = true;
+	if (bWouldChange)
 	{
-		return FMonolithActionResult::Error(Error);
+		bSaveSucceeded = SaveAssetIfRequested(Context, Options.bSave, bSaved, Error);
 	}
 
 	TSharedPtr<FJsonObject> Result = MappingContextToJson(Context);
@@ -1676,7 +1788,7 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputMappingCon
 	Result->SetBoolField(TEXT("changed"), bWouldChange);
 	Result->SetBoolField(TEXT("dry_run"), false);
 	Result->SetBoolField(TEXT("saved"), bSaved);
-	return FMonolithActionResult::Success(Result);
+	return CompleteInputMutation(Result, bSaveSucceeded, Error);
 }
 
 FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const TSharedPtr<FJsonObject>& Params)
@@ -1702,15 +1814,43 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 		return InvalidParams(Error);
 	}
 
-	TArray<UClass*> ModifierClasses;
-	TArray<UClass*> TriggerClasses;
-	if (!ReadInputObjectClassArray(Params, TEXT("modifier_classes"), UInputModifier::StaticClass(), ModifierClasses, Error)
-		|| !ReadInputObjectClassArray(Params, TEXT("trigger_classes"), UInputTrigger::StaticClass(), TriggerClasses, Error))
+	TArray<FSoftClassPath> ModifierClassPaths;
+	TArray<FSoftClassPath> TriggerClassPaths;
+	if (!ReadInputObjectClassPathArray(
+			Params,
+			TEXT("modifier_classes"),
+			UInputModifier::StaticClass(),
+			ModifierClassPaths,
+			Error)
+		|| !ReadInputObjectClassPathArray(
+			Params,
+			TEXT("trigger_classes"),
+			UInputTrigger::StaticClass(),
+			TriggerClassPaths,
+			Error))
 	{
 		return InvalidParams(Error);
 	}
 	const bool bHasModifierClasses = HasParam(Params, TEXT("modifier_classes"));
 	const bool bHasTriggerClasses = HasParam(Params, TEXT("trigger_classes"));
+	TArray<UClass*> ModifierClasses;
+	TArray<UClass*> TriggerClasses;
+	if (!Options.bDryRun
+		&& (!ResolveInputObjectClassArray(
+				ModifierClassPaths,
+				TEXT("modifier_classes"),
+				UInputModifier::StaticClass(),
+				ModifierClasses,
+				Error)
+			|| !ResolveInputObjectClassArray(
+				TriggerClassPaths,
+				TEXT("trigger_classes"),
+				UInputTrigger::StaticClass(),
+				TriggerClasses,
+				Error)))
+	{
+		return InvalidParams(Error);
+	}
 
 	const bool bHasSourceContextPath = HasParam(Params, TEXT("source_context_path"));
 	const bool bHasSourceActionPath = HasParam(Params, TEXT("source_action_path"));
@@ -1792,14 +1932,14 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 	const bool bReplaceModifiers = bHasModifierClasses || SourceMapping != nullptr;
 	const bool bReplaceTriggers = bHasTriggerClasses || SourceMapping != nullptr;
 	const int32 DesiredModifierCount = bHasModifierClasses
-		? ModifierClasses.Num()
+		? ModifierClassPaths.Num()
 		: SourceMapping
 			? SourceMapping->Modifiers.Num()
 			: ExistingMapping
 				? ExistingMapping->Modifiers.Num()
 				: 0;
 	const int32 DesiredTriggerCount = bHasTriggerClasses
-		? TriggerClasses.Num()
+		? TriggerClassPaths.Num()
 		: SourceMapping
 			? SourceMapping->Triggers.Num()
 			: ExistingMapping
@@ -1808,12 +1948,24 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 	if (ExistingIndex != INDEX_NONE)
 	{
 		const bool bModifiersEquivalent = bHasModifierClasses
-			? AreInstancedObjectArraysEquivalentToClasses(ExistingMapping->Modifiers, ModifierClasses)
+			? Options.bDryRun
+				? AreInstancedObjectArraysEquivalentToClassPaths(
+					ExistingMapping->Modifiers,
+					ModifierClassPaths)
+				: AreInstancedObjectArraysEquivalentToClasses(
+					ExistingMapping->Modifiers,
+					ModifierClasses)
 			: SourceMapping
 				? AreInstancedObjectArraysEquivalent(ExistingMapping->Modifiers, SourceMapping->Modifiers)
 				: true;
 		const bool bTriggersEquivalent = bHasTriggerClasses
-			? AreInstancedObjectArraysEquivalentToClasses(ExistingMapping->Triggers, TriggerClasses)
+			? Options.bDryRun
+				? AreInstancedObjectArraysEquivalentToClassPaths(
+					ExistingMapping->Triggers,
+					TriggerClassPaths)
+				: AreInstancedObjectArraysEquivalentToClasses(
+					ExistingMapping->Triggers,
+					TriggerClasses)
 			: SourceMapping
 				? AreInstancedObjectArraysEquivalent(ExistingMapping->Triggers, SourceMapping->Triggers)
 				: true;
@@ -1879,9 +2031,10 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 	}
 
 	bool bSaved = false;
-	if (bWouldChange && !Options.bDryRun && !SaveAssetIfRequested(Context, Options.bSave, bSaved, Error))
+	bool bSaveSucceeded = true;
+	if (bWouldChange && !Options.bDryRun)
 	{
-		return FMonolithActionResult::Error(Error);
+		bSaveSucceeded = SaveAssetIfRequested(Context, Options.bSave, bSaved, Error);
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -1905,7 +2058,15 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 	Result->SetNumberField(TEXT("modifier_count"), DesiredModifierCount);
 	Result->SetNumberField(TEXT("trigger_count"), DesiredTriggerCount);
 	Result->SetBoolField(TEXT("saved"), bSaved);
-	return FMonolithActionResult::Success(Result);
+	if (Options.bDryRun)
+	{
+		Result->SetStringField(TEXT("preview_state"), TEXT("proposed"));
+		if (bHasModifierClasses || bHasTriggerClasses)
+		{
+			Result->SetStringField(TEXT("class_resolution"), TEXT("deferred_until_confirm"));
+		}
+	}
+	return CompleteInputMutation(Result, bSaveSucceeded, Error);
 }
 
 FMonolithActionResult FMonolithGASInputAssetActions::HandleRemoveInputMapping(const TSharedPtr<FJsonObject>& Params)
@@ -1966,9 +2127,10 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleRemoveInputMapping(co
 	const int32 After = Options.bDryRun ? Before - WouldRemoveCount : Context->GetMappings().Num();
 
 	bool bSaved = false;
-	if (bWouldChange && !Options.bDryRun && !SaveAssetIfRequested(Context, Options.bSave, bSaved, Error))
+	bool bSaveSucceeded = true;
+	if (bWouldChange && !Options.bDryRun)
 	{
-		return FMonolithActionResult::Error(Error);
+		bSaveSucceeded = SaveAssetIfRequested(Context, Options.bSave, bSaved, Error);
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -1983,7 +2145,11 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleRemoveInputMapping(co
 	Result->SetBoolField(TEXT("changed"), !Options.bDryRun && RemovedCount > 0);
 	Result->SetBoolField(TEXT("dry_run"), Options.bDryRun);
 	Result->SetBoolField(TEXT("saved"), bSaved);
-	return FMonolithActionResult::Success(Result);
+	if (Options.bDryRun)
+	{
+		Result->SetStringField(TEXT("preview_state"), TEXT("proposed"));
+	}
+	return CompleteInputMutation(Result, bSaveSucceeded, Error);
 }
 
 FMonolithActionResult FMonolithGASInputAssetActions::HandleValidateInputMappings(const TSharedPtr<FJsonObject>& Params)
