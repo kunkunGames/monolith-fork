@@ -56,6 +56,25 @@ namespace MonolithDataflow
 			{
 				ErrorData->SetStringField(TEXT("asset_path"), Load.RequestedPath);
 			}
+			ErrorData->SetBoolField(
+				TEXT("package_captured_after_load"),
+				Load.Package != nullptr);
+			if (Load.Package)
+			{
+				const bool bPackageDirtyAfter = Load.Package->IsDirty();
+				ErrorData->SetBoolField(
+					TEXT("package_loaded_before"),
+					Load.bPackageLoadedBefore);
+				ErrorData->SetBoolField(
+					TEXT("package_dirty_before"),
+					Load.bPackageDirtyBefore);
+				ErrorData->SetBoolField(
+					TEXT("package_dirty_after"),
+					bPackageDirtyAfter);
+				ErrorData->SetBoolField(
+					TEXT("package_dirty_state_preserved"),
+					bPackageDirtyAfter == Load.bPackageDirtyBefore);
+			}
 
 			return FMonolithActionResult::Error(
 				Detail,
@@ -115,7 +134,7 @@ namespace MonolithDataflow
 		FBoundedPropertyValue ReadBoundedPropertyValue(
 			const FProperty* Property,
 			const void* ValuePtr,
-			FTextBudget& TextBudget)
+			FOutputBudget& TextBudget)
 		{
 			FBoundedPropertyValue Result;
 			if (!Property)
@@ -187,8 +206,8 @@ namespace MonolithDataflow
 			{
 				const FString& StringValue =
 					StringProperty->GetPropertyValue(ValuePtr);
-				Result.bTruncated = StringValue.Len() > MaxTextChars;
 				Result.Value = TextBudget.Bound(StringValue, MaxTextChars);
+				Result.bTruncated = Result.Value.Len() != StringValue.Len();
 				Result.Status = TEXT("ok");
 				Result.bAvailable = true;
 				return Result;
@@ -199,8 +218,8 @@ namespace MonolithDataflow
 				const FText& TextValue = TextProperty->GetPropertyValue(ValuePtr);
 				const FString& DisplayString =
 					FTextInspector::GetDisplayString(TextValue);
-				Result.bTruncated = DisplayString.Len() > MaxTextChars;
 				Result.Value = TextBudget.Bound(DisplayString, MaxTextChars);
+				Result.bTruncated = Result.Value.Len() != DisplayString.Len();
 				Result.Status = TEXT("ok");
 				Result.bAvailable = true;
 				return Result;
@@ -238,8 +257,8 @@ namespace MonolithDataflow
 				return Result;
 			}
 
-			Result.bTruncated = RawValue.Len() > MaxTextChars;
 			Result.Value = TextBudget.Bound(RawValue, MaxTextChars);
+			Result.bTruncated = Result.Value.Len() != RawValue.Len();
 			Result.Status = TEXT("ok");
 			Result.bAvailable = true;
 			return Result;
@@ -247,7 +266,7 @@ namespace MonolithDataflow
 
 		TSharedPtr<FJsonObject> MakeRegisteredPinJson(
 			const FDataflowConnection* Pin,
-			FTextBudget& TextBudget)
+			FOutputBudget& TextBudget)
 		{
 			TSharedPtr<FJsonObject> PinJson = MakeShared<FJsonObject>();
 			PinJson->SetStringField(TEXT("source"), TEXT("registered"));
@@ -277,7 +296,7 @@ namespace MonolithDataflow
 
 		TSharedPtr<FJsonObject> MakeDeclaredPinJson(
 			const UE::Dataflow::FPin& Pin,
-			FTextBudget& TextBudget)
+			FOutputBudget& TextBudget)
 		{
 			TSharedPtr<FJsonObject> PinJson = MakeShared<FJsonObject>();
 			PinJson->SetStringField(TEXT("source"), TEXT("declared"));
@@ -298,7 +317,7 @@ namespace MonolithDataflow
 			const FDataflowNode* Node,
 			int32 Limit,
 			FString& OutSource,
-			FTextBudget& TextBudget)
+			FOutputBudget& TextBudget)
 		{
 			FBoundedRows Result;
 			OutSource = TEXT("unavailable");
@@ -315,8 +334,11 @@ namespace MonolithDataflow
 				Result.Rows.Reserve(FMath::Min(Result.TotalCount, Limit));
 				for (int32 Index = 0; Index < Inputs.Num() && Index < Limit; ++Index)
 				{
-					Result.Rows.Add(MakeShared<FJsonValueObject>(
-						MakeRegisteredPinJson(Inputs[Index], TextBudget)));
+					if (TextBudget.TryReserveRow())
+					{
+						Result.Rows.Add(MakeShared<FJsonValueObject>(
+							MakeRegisteredPinJson(Inputs[Index], TextBudget)));
+					}
 				}
 				return Result;
 			}
@@ -330,7 +352,8 @@ namespace MonolithDataflow
 				}
 
 				++Result.TotalCount;
-				if (Result.Rows.Num() < Limit)
+				if (Result.Rows.Num() < Limit
+					&& TextBudget.TryReserveRow())
 				{
 					Result.Rows.Add(MakeShared<FJsonValueObject>(
 						MakeDeclaredPinJson(Pin, TextBudget)));
@@ -343,7 +366,7 @@ namespace MonolithDataflow
 			const FDataflowNode* Node,
 			int32 Limit,
 			FString& OutSource,
-			FTextBudget& TextBudget)
+			FOutputBudget& TextBudget)
 		{
 			FBoundedRows Result;
 			OutSource = TEXT("unavailable");
@@ -360,8 +383,11 @@ namespace MonolithDataflow
 				Result.Rows.Reserve(FMath::Min(Result.TotalCount, Limit));
 				for (int32 Index = 0; Index < Outputs.Num() && Index < Limit; ++Index)
 				{
-					Result.Rows.Add(MakeShared<FJsonValueObject>(
-						MakeRegisteredPinJson(Outputs[Index], TextBudget)));
+					if (TextBudget.TryReserveRow())
+					{
+						Result.Rows.Add(MakeShared<FJsonValueObject>(
+							MakeRegisteredPinJson(Outputs[Index], TextBudget)));
+					}
 				}
 				return Result;
 			}
@@ -375,7 +401,8 @@ namespace MonolithDataflow
 				}
 
 				++Result.TotalCount;
-				if (Result.Rows.Num() < Limit)
+				if (Result.Rows.Num() < Limit
+					&& TextBudget.TryReserveRow())
 				{
 					Result.Rows.Add(MakeShared<FJsonValueObject>(
 						MakeDeclaredPinJson(Pin, TextBudget)));
@@ -387,7 +414,7 @@ namespace MonolithDataflow
 		FBoundedRows MakeEditableProperties(
 			const FDataflowNode* Node,
 			int32 Limit,
-			FTextBudget& TextBudget)
+			FOutputBudget& TextBudget)
 		{
 			FBoundedRows Result;
 			if (!Node)
@@ -417,7 +444,8 @@ namespace MonolithDataflow
 				}
 
 				++Result.TotalCount;
-				if (Result.Rows.Num() >= Limit)
+				if (Result.Rows.Num() >= Limit
+					|| !TextBudget.TryReserveRow())
 				{
 					continue;
 				}
@@ -481,7 +509,7 @@ namespace MonolithDataflow
 			int32 PinLimit,
 			bool bIncludeProperties,
 			int32 PropertyLimit,
-			FTextBudget& TextBudget)
+			FOutputBudget& TextBudget)
 		{
 			TSharedPtr<FJsonObject> NodeJson = MakeShared<FJsonObject>();
 			if (!Node)
@@ -557,7 +585,7 @@ namespace MonolithDataflow
 		TSharedPtr<FJsonObject> MakeConnectionJson(
 			const UE::Dataflow::FGraph& Graph,
 			const UE::Dataflow::FLink& Link,
-			FTextBudget& TextBudget)
+			FOutputBudget& TextBudget)
 		{
 			TSharedPtr<FJsonObject> LinkJson = MakeShared<FJsonObject>();
 			LinkJson->SetStringField(TEXT("from_node_guid"), Link.OutputNode.ToString());
@@ -623,7 +651,7 @@ namespace MonolithDataflow
 			int32 PinLimit,
 			bool bIncludeProperties,
 			int32 PropertyLimit,
-			FTextBudget& TextBudget)
+			FOutputBudget& TextBudget)
 		{
 			TSharedPtr<FJsonObject> NodeType = MakeShared<FJsonObject>();
 			NodeType->SetStringField(
@@ -695,7 +723,7 @@ namespace MonolithDataflow
 
 		struct FIssueAccumulator
 		{
-			explicit FIssueAccumulator(int32 InLimit, FTextBudget& InTextBudget)
+			explicit FIssueAccumulator(int32 InLimit, FOutputBudget& InTextBudget)
 				: Limit(InLimit)
 				, TextBudget(InTextBudget)
 			{
@@ -708,7 +736,8 @@ namespace MonolithDataflow
 				const FString& Guid = FString())
 			{
 				++TotalCount;
-				if (Rows.Num() >= Limit)
+				if (Rows.Num() >= Limit
+					|| !TextBudget.TryReserveRow())
 				{
 					return;
 				}
@@ -730,12 +759,12 @@ namespace MonolithDataflow
 			TArray<TSharedPtr<FJsonValue>> Rows;
 			int32 TotalCount = 0;
 			int32 Limit = 0;
-			FTextBudget& TextBudget;
+			FOutputBudget& TextBudget;
 		};
 
 		TArray<TSharedPtr<FJsonValue>> MakeContainerTypeList(
 			const FPropertyBagContainerTypes& ContainerTypes,
-			FTextBudget& TextBudget,
+			FOutputBudget& TextBudget,
 			bool& bOutTruncated)
 		{
 			TArray<TSharedPtr<FJsonValue>> Rows;
@@ -749,6 +778,10 @@ namespace MonolithDataflow
 				{
 					break;
 				}
+				if (!TextBudget.TryReserveRow())
+				{
+					continue;
+				}
 				Rows.Add(MakeShared<FJsonValueString>(
 					TextBudget.Bound(EnumToString(ContainerType), MaxNameChars)));
 			}
@@ -759,7 +792,7 @@ namespace MonolithDataflow
 		TSharedPtr<FJsonObject> MakeDataflowVariableJson(
 			const UDataflow* Dataflow,
 			const FPropertyBagPropertyDesc& Desc,
-			FTextBudget& TextBudget)
+			FOutputBudget& TextBudget)
 		{
 			TSharedPtr<FJsonObject> Variable = MakeShared<FJsonObject>();
 			Variable->SetStringField(
@@ -877,7 +910,7 @@ namespace MonolithDataflow
 
 		TSharedPtr<FJsonObject> MakeContainedEdNodeJson(
 			const UEdGraphNode* Node,
-			FTextBudget& TextBudget)
+			FOutputBudget& TextBudget)
 		{
 			TSharedPtr<FJsonObject> NodeJson = MakeShared<FJsonObject>();
 			if (!Node)
@@ -931,7 +964,7 @@ namespace MonolithDataflow
 			const TArray<const UEdGraphNode*>& ConsideredGraphNodes,
 			int32 NodeLimit,
 			bool bGraphScanComplete,
-			FTextBudget& TextBudget)
+			FOutputBudget& TextBudget)
 		{
 			TSharedPtr<FJsonObject> CommentJson = MakeShared<FJsonObject>();
 			if (!Comment)
@@ -953,7 +986,8 @@ namespace MonolithDataflow
 				}
 
 				++ObservedContainedCount;
-				if (ContainedNodes.Num() < NodeLimit)
+				if (ContainedNodes.Num() < NodeLimit
+					&& TextBudget.TryReserveRow())
 				{
 					ContainedNodes.Add(MakeShared<FJsonValueObject>(
 						MakeContainedEdNodeJson(Node, TextBudget)));
@@ -1087,12 +1121,16 @@ FMonolithActionResult FMonolithDataflowActions::GetDataflowGraph(
 			AssetPath);
 	}
 
-	FTextBudget TextBudget;
+	FOutputBudget TextBudget;
 	const TArray<TSharedPtr<FDataflowNode>>& Nodes = Graph->GetNodes();
 	TArray<TSharedPtr<FJsonValue>> NodeRows;
 	NodeRows.Reserve(FMath::Min(Nodes.Num(), NodeLimit));
 	for (int32 Index = 0; Index < Nodes.Num() && Index < NodeLimit; ++Index)
 	{
+		if (!TextBudget.TryReserveRow())
+		{
+			break;
+		}
 		NodeRows.Add(MakeShared<FJsonValueObject>(MakeNodeJson(
 			Load.Asset,
 			Nodes[Index].Get(),
@@ -1109,6 +1147,10 @@ FMonolithActionResult FMonolithDataflowActions::GetDataflowGraph(
 		Index < Connections.Num() && Index < ConnectionLimit;
 		++Index)
 	{
+		if (!TextBudget.TryReserveRow())
+		{
+			break;
+		}
 		ConnectionRows.Add(MakeShared<FJsonValueObject>(
 			MakeConnectionJson(*Graph, Connections[Index], TextBudget)));
 	}
@@ -1137,16 +1179,15 @@ FMonolithActionResult FMonolithDataflowActions::GetDataflowGraph(
 	Result->SetBoolField(
 		TEXT("truncated"),
 		Nodes.Num() > NodeRows.Num()
-			|| Connections.Num() > ConnectionRows.Num());
+			|| Connections.Num() > ConnectionRows.Num()
+			|| TextBudget.IsExhausted());
 	Result->SetBoolField(
 		TEXT("connection_slice_independent_of_node_slice"),
 		true);
 	Result->SetNumberField(TEXT("pin_limit_per_direction"), PinLimit);
 	Result->SetBoolField(TEXT("properties_included"), bIncludeProperties);
 	Result->SetNumberField(TEXT("property_limit_per_node"), PropertyLimit);
-	Result->SetNumberField(
-		TEXT("truncated_text_field_count"),
-		TextBudget.GetTruncatedFieldCount());
+	AddOutputBudgetFields(Result, TextBudget);
 	Result->SetArrayField(TEXT("nodes"), NodeRows);
 	Result->SetArrayField(TEXT("connections"), ConnectionRows);
 	return FinalizeReadOnlyResult(Load, Result);
@@ -1216,7 +1257,7 @@ FMonolithActionResult FMonolithDataflowActions::ListDataflowNodeTypes(
 				: CategoryCompare < 0;
 		});
 
-	FTextBudget TextBudget;
+	FOutputBudget TextBudget;
 	TArray<TSharedPtr<FJsonValue>> Rows;
 	Rows.Reserve(FMath::Min(RegisteredParams.Num(), Limit));
 	int32 ValidRegisteredCount = 0;
@@ -1249,7 +1290,8 @@ FMonolithActionResult FMonolithDataflowActions::ListDataflowNodeTypes(
 		}
 
 		++MatchedCount;
-		if (Rows.Num() < Limit)
+		if (Rows.Num() < Limit
+			&& TextBudget.TryReserveRow())
 		{
 			Rows.Add(MakeShared<FJsonValueObject>(MakeFactoryParamsJson(
 				FactoryParams,
@@ -1281,10 +1323,10 @@ FMonolithActionResult FMonolithDataflowActions::ListDataflowNodeTypes(
 	Result->SetNumberField(TEXT("matched_count"), MatchedCount);
 	Result->SetNumberField(TEXT("returned_count"), Rows.Num());
 	Result->SetNumberField(TEXT("limit"), Limit);
-	Result->SetBoolField(TEXT("truncated"), MatchedCount > Rows.Num());
-	Result->SetNumberField(
-		TEXT("truncated_text_field_count"),
-		TextBudget.GetTruncatedFieldCount());
+	Result->SetBoolField(
+		TEXT("truncated"),
+		MatchedCount > Rows.Num() || TextBudget.IsExhausted());
+	AddOutputBudgetFields(Result, TextBudget);
 	Result->SetArrayField(TEXT("node_types"), Rows);
 	return FMonolithActionResult::Success(Result);
 }
@@ -1381,7 +1423,7 @@ FMonolithActionResult FMonolithDataflowActions::GetDataflowNodeSchema(
 				*TypeName));
 	}
 
-	FTextBudget TextBudget;
+	FOutputBudget TextBudget;
 	TSharedPtr<FJsonObject> Result = MakeFactoryParamsJson(
 		*ExactMatch,
 		true,
@@ -1393,9 +1435,7 @@ FMonolithActionResult FMonolithDataflowActions::GetDataflowNodeSchema(
 	Result->SetStringField(TEXT("domain"), TEXT("dataflow_node_schema"));
 	Result->SetStringField(TEXT("requested_type_name"), TypeName);
 	Result->SetBoolField(TEXT("type_name_case_exact"), true);
-	Result->SetNumberField(
-		TEXT("truncated_text_field_count"),
-		TextBudget.GetTruncatedFieldCount());
+	AddOutputBudgetFields(Result, TextBudget);
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -1467,7 +1507,7 @@ FMonolithActionResult FMonolithDataflowActions::ValidateDataflowGraph(
 	const bool bValidationComplete =
 		bNodeScanComplete && bConnectionScanComplete;
 
-	FTextBudget TextBudget;
+	FOutputBudget TextBudget;
 	FIssueAccumulator Issues(IssueLimit, TextBudget);
 	TSet<FName> NodeNames;
 	TSet<FGuid> NodeGuids;
@@ -1653,9 +1693,7 @@ FMonolithActionResult FMonolithDataflowActions::ValidateDataflowGraph(
 	Result->SetBoolField(
 		TEXT("issues_truncated"),
 		Issues.TotalCount > Issues.Rows.Num());
-	Result->SetNumberField(
-		TEXT("truncated_text_field_count"),
-		TextBudget.GetTruncatedFieldCount());
+	AddOutputBudgetFields(Result, TextBudget);
 	Result->SetArrayField(TEXT("issues"), Issues.Rows);
 	return FinalizeReadOnlyResult(Load, Result);
 }
@@ -1686,7 +1724,7 @@ FMonolithActionResult FMonolithDataflowActions::ListDataflowVariables(
 		return ExactLoadError(Load);
 	}
 
-	FTextBudget TextBudget;
+	FOutputBudget TextBudget;
 	TArray<TSharedPtr<FJsonValue>> VariableRows;
 	int32 VariableCount = 0;
 	bool bPropertyBagAvailable = false;
@@ -1702,6 +1740,10 @@ FMonolithActionResult FMonolithDataflowActions::ListDataflowVariables(
 			Index < PropertyDescs.Num() && Index < Limit;
 			++Index)
 		{
+			if (!TextBudget.TryReserveRow())
+			{
+				break;
+			}
 			VariableRows.Add(MakeShared<FJsonValueObject>(
 				MakeDataflowVariableJson(
 					Load.Asset,
@@ -1727,9 +1769,7 @@ FMonolithActionResult FMonolithDataflowActions::ListDataflowVariables(
 	Result->SetBoolField(
 		TEXT("variables_truncated"),
 		VariableCount > VariableRows.Num());
-	Result->SetNumberField(
-		TEXT("truncated_text_field_count"),
-		TextBudget.GetTruncatedFieldCount());
+	AddOutputBudgetFields(Result, TextBudget);
 	Result->SetArrayField(TEXT("variables"), VariableRows);
 	return FinalizeReadOnlyResult(Load, Result);
 }
@@ -1824,11 +1864,15 @@ FMonolithActionResult FMonolithDataflowActions::ListDataflowComments(
 		ConsideredGraphNodes.Add(Node);
 	}
 
-	FTextBudget TextBudget;
+	FOutputBudget TextBudget;
 	TArray<TSharedPtr<FJsonValue>> CommentRows;
 	CommentRows.Reserve(ConsideredComments.Num());
 	for (const UEdGraphNode_Comment* Comment : ConsideredComments)
 	{
+		if (!TextBudget.TryReserveRow())
+		{
+			break;
+		}
 		CommentRows.Add(MakeShared<FJsonValueObject>(MakeCommentJson(
 			Comment,
 			ConsideredGraphNodes,
@@ -1882,7 +1926,13 @@ FMonolithActionResult FMonolithDataflowActions::ListDataflowComments(
 	Result->SetBoolField(
 		TEXT("comments_complete"),
 		bGraphScanComplete
-			&& ObservedCommentCount == CommentRows.Num());
+			&& ObservedCommentCount == CommentRows.Num()
+			&& !TextBudget.IsExhausted());
+	Result->SetBoolField(
+		TEXT("truncated"),
+		!bGraphScanComplete
+			|| ObservedCommentCount > CommentRows.Num()
+			|| TextBudget.IsExhausted());
 	Result->SetNumberField(
 		TEXT("requested_membership_comparison_budget"),
 		static_cast<double>(RequestedComparisonBudget));
@@ -1894,9 +1944,7 @@ FMonolithActionResult FMonolithDataflowActions::ListDataflowComments(
 		static_cast<double>(
 			static_cast<int64>(ConsideredComments.Num())
 			* static_cast<int64>(ConsideredGraphNodes.Num())));
-	Result->SetNumberField(
-		TEXT("truncated_text_field_count"),
-		TextBudget.GetTruncatedFieldCount());
+	AddOutputBudgetFields(Result, TextBudget);
 	Result->SetArrayField(TEXT("comments"), CommentRows);
 	return FinalizeReadOnlyResult(Load, Result);
 }

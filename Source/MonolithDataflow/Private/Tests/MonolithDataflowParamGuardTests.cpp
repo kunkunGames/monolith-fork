@@ -1,6 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "MonolithDataflowActions.h"
+#include "MonolithDataflowCommon.h"
 
 #include "Dom/JsonObject.h"
 #include "Misc/AutomationTest.h"
@@ -146,6 +147,71 @@ bool FMonolithDataflowParamGuardTest::RunTest(const FString& Parameters)
 		TEXT("list_dataflow_comments"),
 		ExcessiveCommentWork,
 		TEXT("excessive comment membership work"));
+
+	MonolithDataflow::FOutputBudget RowBudget;
+	for (int32 Index = 0;
+		Index < MonolithDataflow::MaxOutputRows;
+		++Index)
+	{
+		TestTrue(
+			TEXT("aggregate output row budget accepts rows through its limit"),
+			RowBudget.TryReserveRow());
+	}
+	TestFalse(
+		TEXT("aggregate output row budget rejects the first excess row"),
+		RowBudget.TryReserveRow());
+	TestEqual(
+		TEXT("aggregate output row count is capped"),
+		RowBudget.GetReturnedRowCount(),
+		MonolithDataflow::MaxOutputRows);
+	TestTrue(
+		TEXT("aggregate output row exhaustion is explicit"),
+		RowBudget.AreRowsTruncated());
+
+	MonolithDataflow::FOutputBudget TextBudget;
+	const FString FullTextChunk =
+		FString::ChrN(MonolithDataflow::MaxTextChars, TEXT('x'));
+	const int32 FullChunkCount = static_cast<int32>(
+		MonolithDataflow::MaxOutputTextCharacters
+		/ MonolithDataflow::MaxTextChars);
+	for (int32 Index = 0; Index < FullChunkCount; ++Index)
+	{
+		TestEqual(
+			TEXT("aggregate text budget returns each in-budget chunk"),
+			TextBudget.Bound(
+				FullTextChunk,
+				MonolithDataflow::MaxTextChars).Len(),
+			MonolithDataflow::MaxTextChars);
+	}
+	TestTrue(
+		TEXT("aggregate text budget omits the first excess chunk"),
+		TextBudget.Bound(
+			FullTextChunk,
+			MonolithDataflow::MaxTextChars).IsEmpty());
+	TestEqual(
+		TEXT("aggregate returned text count is capped"),
+		TextBudget.GetReturnedTextCharacterCount(),
+		MonolithDataflow::MaxOutputTextCharacters);
+	TestTrue(
+		TEXT("aggregate text exhaustion is explicit"),
+		TextBudget.IsTextTruncatedByAggregateBudget());
+	TSharedPtr<FJsonObject> BudgetMetadata = MakeShared<FJsonObject>();
+	MonolithDataflow::AddOutputBudgetFields(
+		BudgetMetadata,
+		TextBudget);
+	TestEqual(
+		TEXT("bounded-text character limit is published"),
+		static_cast<int64>(
+			BudgetMetadata->GetNumberField(
+				TEXT("output_bounded_text_character_limit"))),
+		MonolithDataflow::MaxOutputTextCharacters);
+	TestTrue(
+		TEXT("bounded-text aggregate truncation is published"),
+		BudgetMetadata->GetBoolField(
+			TEXT("output_bounded_text_truncated")));
+	TestFalse(
+		TEXT("ambiguous all-text budget field is not published"),
+		BudgetMetadata->HasField(TEXT("output_text_character_limit")));
 
 	return true;
 }

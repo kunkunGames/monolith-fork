@@ -66,9 +66,10 @@ namespace. It has no Speed-, Lyra-, or other game-project dependency.
 | Graph slices | PASS — node and connection bounds are independent; endpoint resolution therefore does not depend on the returned node slice. |
 | Validation completeness | PASS — incomplete node or connection scans return `validity_status=incomplete`, `validation_complete=false`, and no `valid` field. |
 | Property values | PASS — bool, enum, numeric, name, string, text, soft-object, and object scalar values use direct bounded readers. Dynamic containers, structs, fixed arrays, and unsupported types report an omission status and no `value`. |
-| Free-form text | PASS — returned text is capped at 4,096 characters and contributes to `truncated_text_field_count`. |
+| Aggregate output | PASS — all dynamic top-level and nested arrays share a 4,096-row budget, and reflected/free-form strings passed through the bounded reader share a 1,048,576-character budget after per-field caps. Fixed-size metadata is bounded by the row ceiling; exhaustion is explicit and never allocates omitted rows/text. |
+| Free-form text | PASS — each returned text field is capped at 4,096 characters and contributes to `truncated_text_field_count`; aggregate text exhaustion is separately reported. |
 | Comment work | PASS — `comment_limit * graph_node_scan_limit` above 1,000,000 is rejected and never clamped. |
-| Read-only state | PASS — asset-backed reads report loaded/dirty before/after state. A clean package becoming dirty is a hard failure. |
+| Read-only state | PASS — asset-backed reads report loaded/dirty before/after state. The loaded package is captured before case/redirect/type rejection, and every dirty-state transition is a hard failure. |
 | Mutation | PASS — the eight production module files contain no authoring, transaction, package creation/save, dirty-mark, graph mutation, evaluation, or regeneration call. |
 
 ### 3.1 Root fix: bounded value inspection
@@ -86,6 +87,17 @@ containers, structs, fixed arrays, or unsupported types. Automation creates a
 5,000-character variable and a container variable and verifies the 4,096
 character cap, omission status, absent container value, and preserved package
 dirty state.
+
+### 3.2 AI review remediation
+
+Both actionable Codex findings on the initial head
+`a73f9bbfa69983d7a44f4fa5348a7cea6f080531` were reproduced as contract gaps
+and closed in shared production paths.
+
+| Review finding | Root fix | Regression evidence |
+| --- | --- | --- |
+| Individually valid graph limits could multiply into hundreds of thousands of nested rows and more than a gigabyte of serialized text | `FOutputBudget` enforces one shared 4,096-row budget across graph nodes, pins, properties, connections, factory types, schema rows, issues, variables, container descriptors, comments, and contained nodes, plus a 1,048,576-character budget for reflected/free-form strings. Builders stop allocating omitted rows/text and every result publishes aggregate budget counters and truncation flags. | `ParamGuards` proves the exact row/text ceilings directly. `ReadOnlyContracts` creates ten overlapping comments and 500 contained nodes, requests a valid 5,000-row shape, and verifies exactly 4,096 rows, `output_budget_exhausted=true`, incomplete comments, and a clean package. |
+| Rejected post-load identities returned before enforcing dirty-state preservation | `LoadExactDataflowAsset` captures the loaded object's outer package before exact-path, redirector, or `UDataflow` type decisions. All post-load branches share one dirty-state postcondition; failed object lookup also rechecks a package loaded as a side effect. Error data reports package capture and before/after preservation. | Wrong-type and case-mismatched fixture reads must expose `package_captured_after_load=true`, `package_dirty_state_preserved=true`, retain their distinct identity errors, and leave the package clean. |
 
 ---
 
@@ -116,16 +128,19 @@ MonolithDataflow.Build.cs
 53F105BCB2498628C7E165C77F617C762817AD558D8258D8CF1107E95E4A45C2
 
 MonolithDataflowActions.cpp
-6E403B2DFB20E44EC605FB7D1115EE3BCFDAF9DC843C6E1C4FF37E2E533D37D8
+4B99E700F3296CB2EEE8C88A33BC0AD0BFB21C58B3F241B39275766E6717F10F
 
 MonolithDataflowCommon.cpp
-69219E3D00092CA4E0F43A47E062D45A7FC1892A47D400C607D3387302C07DAA
+CC0296085B1CD5C35ADCB158DE68D9298580AAFB548DDAF69C3D59B8BC4E962B
 
 MonolithDataflowInspection.cpp
-F394CD28B6FEE88757CCDFC62908FAFC7D3F3B4E66F3C6A539C4AB32C2785233
+71F1235DC089764528D33F5BD5F458594CE44BA992F861ED8784E06FF9B1C3A2
+
+MonolithDataflowParamGuardTests.cpp
+77680A2310459C9E94E60B55ED90FCA268938C6A76A12EC32E52CA49F1B2FD10
 
 MonolithDataflowReadOnlyTests.cpp
-0FCBF90FDC3EEEABC04CE2FD98F44976833839942A36DD2516B5FD55612E1676
+8C23D4071127C5B0E7D34A9697838A7A66E0C6777AC6DEE4E16AE620242F932C
 ```
 
 ---
@@ -135,16 +150,19 @@ MonolithDataflowReadOnlyTests.cpp
 | Engine | Gate | Result | Evidence |
 | --- | --- | --- | --- |
 | UE 5.7 | Physically isolated full editor-target build | PASS — 202/202 actions explicitly compiled every Dataflow implementation and test file and linked `UnrealEditor-MonolithDataflow.dll`. | `D:\P4\MonolithDataflowUE57Host\UBT-UE57-Dataflow-Final-20260730.log` |
-| UE 5.7 | Final bounded-value/schema rebuild | PASS — 199/199 actions rebuilt the affected shared-header consumers; four Dataflow translation units compiled and the Dataflow DLL linked with `Result: Succeeded`. | `D:\P4\MonolithDataflowUE57Host\UBT-UE57-Dataflow-BoundedValues-20260730.log` |
-| UE 5.7 | Final affected DLL | PASS — 366,080 bytes, SHA-256 `2416665BB044D5D12766BB182607B32BAD8281DCED3C37BB100338EB370D71DE`. | `D:\P4\MonolithDataflowUE57Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithDataflow.dll` |
+| UE 5.7 | Final AI-review rebuild | PASS — 8/8 actions recompiled the common/output-budget path, handlers, inspection implementation, and both affected test files, then freshly linked the Dataflow DLL with `Result: Succeeded`. | `D:\P4\MonolithDataflowUE57Host\UBT-UE57-Dataflow-ReviewAccepted-20260730.log` |
+| UE 5.7 | Final response-contract/test rebuild | PASS — 4/4 actions compiled the final bounded-text metadata assertion and freshly relinked the Dataflow DLL. | `D:\P4\MonolithDataflowUE57Host\UBT-UE57-Dataflow-ReviewFinal2-20260730.log` |
+| UE 5.7 | Final affected DLL | PASS — 376,320 bytes, SHA-256 `AD8BE0FEA7A07B2C70F1FABD38C35F907525971E613A96ACD4D6A906698F4F84`. | `D:\P4\MonolithDataflowUE57Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithDataflow.dll` |
 | UE 5.8 | Physically isolated full editor-target build | PASS — 202/202 actions explicitly compiled every Dataflow implementation and test file and linked `UnrealEditor-MonolithDataflow.dll`. | `D:\P4\MonolithDataflowUE58Host\UBT-UE58-Dataflow-Final-20260730.log` |
-| UE 5.8 | Final bounded-value/schema rebuild | PASS — 199/199 actions rebuilt the affected shared-header consumers; four Dataflow translation units compiled and the Dataflow DLL linked with `Result: Succeeded`. | `D:\P4\MonolithDataflowUE58Host\UBT-UE58-Dataflow-BoundedValues-20260730.log` |
-| UE 5.8 | Final affected DLL | PASS — 330,752 bytes, SHA-256 `A271483622ED31C5E6439FF0CEEA18C58CE05759535AF6EF0E35C7DCA12D67B3`. | `D:\P4\MonolithDataflowUE58Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithDataflow.dll` |
+| UE 5.8 | Final AI-review rebuild | PASS — 8/8 actions recompiled the common/output-budget path, handlers, inspection implementation, and both affected test files, then freshly linked the Dataflow DLL with `Result: Succeeded`. | `D:\P4\MonolithDataflowUE58Host\UBT-UE58-Dataflow-ReviewAccepted-20260730.log` |
+| UE 5.8 | Final response-contract/test rebuild | PASS — 4/4 actions compiled the final bounded-text metadata assertion and freshly relinked the Dataflow DLL. | `D:\P4\MonolithDataflowUE58Host\UBT-UE58-Dataflow-ReviewFinal2-20260730.log` |
+| UE 5.8 | Final affected DLL | PASS — 339,968 bytes, SHA-256 `341C4C91753A2E72AC10E9A2B83BA75C7DAE1378D2C69A3B2AAC26F64A13F881`. | `D:\P4\MonolithDataflowUE58Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithDataflow.dll` |
 
-The final UE 5.7 build emitted no compiler warning. The final UE 5.8 build
-emitted ten pre-existing C4996 warnings in Index, Blueprint, Animation,
-Material, and UI sources. No Dataflow source emitted a compiler warning or
-error.
+The isolated full UE 5.7 build emitted no compiler warning. The isolated full
+UE 5.8 build emitted ten pre-existing C4996 warnings in Index, Blueprint,
+Animation, Material, and UI sources. The final affected-file rebuilds emitted
+no compiler warning or error on either engine, and no Dataflow source emitted a
+compiler warning or error in any accepted build.
 
 ---
 
@@ -160,8 +178,8 @@ operator with:
 
 | Engine | Discovered | Succeeded | Failed | Queue-empty marker | TestExit marker | Bad runtime/assertion markers | Accepted log |
 | --- | ---: | ---: | ---: | --- | --- | ---: | --- |
-| UE 5.7 | 3 | 3 | 0 | present | present | 0 | `D:\P4\MonolithDataflowUE57Host\Dataflow-UE57-BoundedValues-20260730.log` |
-| UE 5.8 | 3 | 3 | 0 | present | present | 0 | `D:\P4\MonolithDataflowUE58Host\Dataflow-UE58-BoundedValues-20260730.log` |
+| UE 5.7 | 3 | 3 | 0 | present | present | 0 | `D:\P4\MonolithDataflowUE57Host\Dataflow-UE57-ReviewFinal2-Console-20260730.log` |
+| UE 5.8 | 3 | 3 | 0 | present | present | 0 | `D:\P4\MonolithDataflowUE58Host\Dataflow-UE58-ReviewFinal2-Console-20260730.log` |
 
 The three suites are:
 
@@ -177,8 +195,13 @@ Together they verify:
 - exact eight-action registration;
 - node factory discovery, case-exact schema selection, and case-only rejection;
 - exact `UDataflow` identity and distinct wrong-type rejection;
+- package capture and dirty-state preservation on wrong-type and case-mismatch
+  post-load rejection paths;
 - empty graph reads, complete valid validation, and dirty-state preservation;
 - incomplete node-scan behavior with `valid` omitted;
+- exact aggregate 4,096-row and 1,048,576-character budget behavior;
+- a valid 5,000-row nested comment request stopping at 4,096 rows with
+  `output_budget_exhausted=true` and incomplete output;
 - a 5,000-character variable capped to 4,096 characters;
 - explicit container-value omission without generic serialization; and
 - editor comment membership with preserved package state.
@@ -206,7 +229,7 @@ against the exact clean fork base and the Dataflow worktree.
 | Exact catalog delta | PASS — eight additions, all under the new `dataflow` namespace; zero removals. |
 | Duplicate full names | PASS — zero. |
 | Latest checker self-test | PASS. |
-| Base-vs-target static parity | PASS — base 8 blockers/11 advisories; target 8/11; logs are byte-identical with SHA-256 `0260D19B22263DF119075866D813C6295DD7AAA5E21632241D6073CAFE7815CC`. |
+| Base-vs-target static parity | PASS — base 8 blockers/11 advisories; the post-review target rerun remains 8/11; `D:\P4\MonolithDataflowVerification\TargetStaticReviewFinal.log` is byte-identical to the base log with SHA-256 `0260D19B22263DF119075866D813C6295DD7AAA5E21632241D6073CAFE7815CC`. |
 | Production mutation scan | PASS — zero mutation-call matches across the eight production Dataflow files. |
 | Generic export scan | PASS — zero `ExportTextItem_Direct` or `GetValueSerializedString` calls across production Dataflow files. |
 | Production log/metadata scan | PASS — zero `UE_LOG`, `LogMonolith`, or invocation-log matches. |
@@ -253,5 +276,7 @@ inspection, and validation actions through an isolated module. The same final
 source compiles and links on UE 5.7 and UE 5.8, passes 3/3 focused tests on each
 engine with complete queue/termination proof, changes the generated catalog
 only by the intended namespace, introduces no new static finding, avoids
-unbounded generic property export, preserves package dirty state, and adds none
-of the excluded feature classes.
+unbounded generic property export, caps aggregate nested output before
+allocation growth, enforces dirty-state preservation on successful and
+rejected loads, closes both AI-review findings with executable regressions,
+and adds none of the excluded feature classes.

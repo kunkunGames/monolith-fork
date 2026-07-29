@@ -62,7 +62,7 @@ namespace MonolithDataflow
 
 		TSharedPtr<FJsonObject> MakeAssetRow(
 			const FAssetData& AssetData,
-			FTextBudget& TextBudget)
+			FOutputBudget& TextBudget)
 		{
 			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
 			Row->SetStringField(
@@ -392,7 +392,7 @@ FMonolithActionResult FMonolithDataflowActions::ListAssets(
 	IAssetRegistry& AssetRegistry =
 		FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
-	FTextBudget TextBudget;
+	FOutputBudget TextBudget;
 	TArray<TSharedPtr<FJsonValue>> Rows;
 	Rows.Reserve(Limit);
 	bool bSawExtra = false;
@@ -403,6 +403,11 @@ FMonolithActionResult FMonolithDataflowActions::ListAssets(
 		{
 			++ObservedMatchCount;
 			if (Rows.Num() >= Limit)
+			{
+				bSawExtra = true;
+				return false;
+			}
+			if (!TextBudget.TryReserveRow())
 			{
 				bSawExtra = true;
 				return false;
@@ -434,9 +439,7 @@ FMonolithActionResult FMonolithDataflowActions::ListAssets(
 	{
 		Result->SetNumberField(TEXT("total_count"), ObservedMatchCount);
 	}
-	Result->SetNumberField(
-		TEXT("truncated_text_field_count"),
-		TextBudget.GetTruncatedFieldCount());
+	AddOutputBudgetFields(Result, TextBudget);
 	Result->SetBoolField(TEXT("assets_loaded_by_action"), false);
 	Result->SetArrayField(TEXT("assets"), Rows);
 	return FMonolithActionResult::Success(Result);

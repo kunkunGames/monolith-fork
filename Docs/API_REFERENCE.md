@@ -1150,6 +1150,17 @@ extensions, backslashes, subobjects, redirects, and alternate resolved
 objects. All numeric limits publish inclusive `minimum` and `maximum` fields in
 their discoverable action schemas.
 
+Every dynamic response also shares a fixed aggregate budget of 4,096 returned
+rows across top-level and nested collections. Reflected/free-form strings
+passed through the bounded reader additionally share 1,048,576 characters.
+`output_returned_row_count`, `output_rows_truncated`,
+`output_returned_bounded_text_character_count`,
+`output_bounded_text_truncated`, and `output_budget_exhausted` distinguish
+aggregate truncation from the individual action limits; fixed-size GUID and
+contract metadata remain bounded by the row ceiling. Asset-backed reads
+capture and verify package dirty state even when the loaded object is rejected
+for case, redirect, or type mismatch.
+
 Editable node/default properties and property-bag variables expose bounded
 scalar values only. Dynamic containers, structs, and fixed arrays report an
 explicit `value_read_status` such as `omitted_container` or `omitted_struct`

@@ -94,7 +94,8 @@ without authoring, evaluating, regenerating, dirtying, or saving a graph.
 | Node/default properties | Reports bounded scalar values with `value_read_status`, `value_available`, and `value_truncated`; dynamic containers, structs, fixed arrays, and unsupported types are explicitly omitted instead of entering an unbounded generic export path. |
 | Variables | Reports property-bag availability, total/returned counts, and the same bounded scalar value/read/omission/truncation contract. |
 | Comments | Reports graph-scan, comment-count, returned-comment, per-comment membership, and comparison-budget completeness independently. |
-| Text | Free-form text is capped at 4,096 characters and each result reports `truncated_text_field_count`. |
+| Aggregate output | Every dynamic response shares a hard 4,096-row budget across top-level and nested arrays. Reflected/free-form strings passed through the bounded reader additionally share 1,048,576 characters. `output_returned_row_count`, `output_rows_truncated`, `output_returned_bounded_text_character_count`, `output_bounded_text_truncated`, and `output_budget_exhausted` make aggregate truncation explicit; fixed-size GUID and contract metadata remain bounded by the row ceiling. |
+| Text | Each free-form field is capped at 4,096 characters; the aggregate character budget applies after that per-field cap and each result reports `truncated_text_field_count`. |
 
 ---
 
@@ -108,8 +109,11 @@ They return:
 - `package_dirty_after`;
 - `package_dirty_state_preserved`.
 
-If a previously clean package becomes dirty during load or inspection, the
-action fails with `read_only_load_dirtied_package` or
+Every object returned by `StaticLoadObject`, including a case-mismatched,
+redirector, or wrong-type object that will be rejected, has its package
+captured before the identity/type decision returns. Any dirty-state transition
+during load or inspection fails with `read_only_load_dirtied_package`,
+`read_only_load_changed_package_dirty_state`, or
 `read_only_postcondition_failed`. Pre-existing dirty state is reported, never
 masked or reset.
 
@@ -129,9 +133,9 @@ reports `authoring=false`, `evaluation=false`, and `regeneration=false`.
 | Gate | Required result |
 | --- | --- |
 | Registry | Exactly eight `dataflow` actions with required/default schemas and discoverable numeric bounds. |
-| Param guards | Wrong scalar types, fractional/out-of-range integers, unknown keys, `/GameX`, shorthand/file asset paths, and excessive comment work fail with `-32602`. |
+| Param guards | Wrong scalar types, fractional/out-of-range integers, unknown keys, `/GameX`, shorthand/file asset paths, excessive comment work, and direct aggregate row/text budget overflow checks fail closed. |
 | Identity | Case-exact registered node schema succeeds; a case-only type substitution returns `node_type_case_mismatch`. |
-| Read-only behavior | AssetRegistry discovery does not load assets; graph/variable/comment reads preserve package dirty state; long strings are capped at 4,096 characters and container values are explicitly omitted without generic serialization. |
+| Read-only behavior | AssetRegistry discovery does not load assets; successful and rejected graph loads preserve package dirty state; long strings are capped at 4,096 characters; aggregate output stops at 4,096 rows/1,048,576 characters with explicit metadata; container values are explicitly omitted without generic serialization. |
 | Validation | Complete empty-graph validation reports `validity_status=valid`; incomplete validation cannot emit `valid`. |
 | UE 5.7 build/test | `UnrealEditor-MonolithDataflow.dll` links and `Monolith.Dataflow` passes 3/3. |
 | UE 5.8 build/test | `UnrealEditor-MonolithDataflow.dll` links and `Monolith.Dataflow` passes 3/3. |

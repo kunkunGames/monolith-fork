@@ -119,6 +119,11 @@ dataflow_query("get_dataflow_node_schema", {
 
 - Every bounded result reports returned counts, limits, and explicit
   truncation or completeness fields. Never infer absence from a partial slice.
+- Dynamic responses share a hard 4,096-row aggregate budget across top-level
+  and nested rows; bounded reflected/free-form text additionally shares
+  1,048,576 characters. Check `output_budget_exhausted`,
+  `output_rows_truncated`, and `output_bounded_text_truncated`; valid
+  per-parameter limits can still produce an aggregate-truncated response.
 - `validate_dataflow_graph` reports `validity_status="incomplete"` and omits
   `valid` when either scan is incomplete. Only a complete scan can report
   `valid=true` or `valid=false`.
@@ -132,8 +137,9 @@ dataflow_query("get_dataflow_node_schema", {
   unsupported types report an explicit `value_read_status` and omit `value`;
   they never enter a generic unbounded export path.
 - Asset-backed reads report `package_dirty_before`, `package_dirty_after`, and
-  `package_dirty_state_preserved`. A clean package becoming dirty is a hard
-  read-only postcondition failure.
+  `package_dirty_state_preserved`. The package is captured even when exact
+  identity/type validation rejects the loaded object, and any dirty-state
+  transition is a hard read-only postcondition failure.
 - Free-form text is bounded, and each response reports
   `truncated_text_field_count`.
 
@@ -154,6 +160,8 @@ dataflow_query("get_dataflow_node_schema", {
 | `list_dataflow_comments.comment_limit` | 1..1,000 |
 | `list_dataflow_comments.node_limit` | 1..500 |
 | `list_dataflow_comments.graph_node_scan_limit` | 1..50,000 |
+| Aggregate returned rows | 4,096 across top-level and nested arrays |
+| Aggregate returned text | 1,048,576 characters after per-field caps |
 
 ## Non-capabilities
 

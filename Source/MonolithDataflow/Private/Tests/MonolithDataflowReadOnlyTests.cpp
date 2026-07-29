@@ -1,6 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "MonolithDataflowActions.h"
+#include "MonolithDataflowCommon.h"
 
 #include "Dataflow/DataflowGraph.h"
 #include "Dataflow/DataflowObject.h"
@@ -261,6 +262,14 @@ bool FMonolithDataflowReadOnlyTest::RunTest(const FString& Parameters)
 			TEXT("wrong-type object has a distinct error"),
 			(*WrongTypeErrorData)->GetStringField(TEXT("error")),
 			FString(TEXT("wrong_asset_type")));
+		TestTrue(
+			TEXT("wrong-type rejection captures the loaded package"),
+			(*WrongTypeErrorData)->GetBoolField(
+				TEXT("package_captured_after_load")));
+		TestTrue(
+			TEXT("wrong-type rejection enforces package dirty-state preservation"),
+			(*WrongTypeErrorData)->GetBoolField(
+				TEXT("package_dirty_state_preserved")));
 	}
 
 	const FString AlteredObjectName = AlterTypeNameCase(ObjectName);
@@ -296,6 +305,14 @@ bool FMonolithDataflowReadOnlyTest::RunTest(const FString& Parameters)
 				TEXT("case-substituted object reports exact-path mismatch"),
 				(*CaseMismatchErrorData)->GetStringField(TEXT("error")),
 				FString(TEXT("object_path_mismatch")));
+			TestTrue(
+				TEXT("case mismatch captures the loaded package"),
+				(*CaseMismatchErrorData)->GetBoolField(
+					TEXT("package_captured_after_load")));
+			TestTrue(
+				TEXT("case mismatch enforces package dirty-state preservation"),
+				(*CaseMismatchErrorData)->GetBoolField(
+					TEXT("package_dirty_state_preserved")));
 		}
 	}
 	TestFalse(
@@ -643,6 +660,104 @@ bool FMonolithDataflowReadOnlyTest::RunTest(const FString& Parameters)
 		TestTrue(
 			TEXT("comment inspection preserves package dirty state"),
 			Comments.Result->GetBoolField(TEXT("package_dirty_state_preserved")));
+	}
+
+	for (int32 Index = 1; Index < 10; ++Index)
+	{
+		UEdGraphNode_Comment* AdditionalComment =
+			NewObject<UEdGraphNode_Comment>(
+				Dataflow,
+				NAME_None,
+				RF_Transient);
+		TestNotNull(
+			TEXT("aggregate-budget comment fixture is created"),
+			AdditionalComment);
+		if (!AdditionalComment)
+		{
+			return false;
+		}
+		AdditionalComment->NodeGuid = FGuid::NewGuid();
+		AdditionalComment->NodePosX = 0;
+		AdditionalComment->NodePosY = 0;
+		AdditionalComment->NodeWidth = 1000;
+		AdditionalComment->NodeHeight = 1000;
+		AdditionalComment->NodeComment = TEXT("Aggregate output budget fixture");
+		Dataflow->Nodes.Add(AdditionalComment);
+	}
+	Comment->NodeWidth = 1000;
+	Comment->NodeHeight = 1000;
+	for (int32 Index = 1; Index < 500; ++Index)
+	{
+		UEdGraphNode* AdditionalNode = NewObject<UEdGraphNode>(
+			Dataflow,
+			NAME_None,
+			RF_Transient);
+		TestNotNull(
+			TEXT("aggregate-budget contained-node fixture is created"),
+			AdditionalNode);
+		if (!AdditionalNode)
+		{
+			return false;
+		}
+		AdditionalNode->NodeGuid = FGuid::NewGuid();
+		AdditionalNode->NodePosX = 100;
+		AdditionalNode->NodePosY = 100;
+		Dataflow->Nodes.Add(AdditionalNode);
+	}
+	Package->SetDirtyFlag(false);
+
+	TSharedPtr<FJsonObject> AggregateBudgetParams =
+		MakeShared<FJsonObject>();
+	AggregateBudgetParams->SetStringField(TEXT("asset_path"), ObjectPath);
+	AggregateBudgetParams->SetNumberField(TEXT("comment_limit"), 10);
+	AggregateBudgetParams->SetNumberField(TEXT("node_limit"), 500);
+	AggregateBudgetParams->SetNumberField(
+		TEXT("graph_node_scan_limit"),
+		510);
+	const FMonolithActionResult AggregateBudgetResult =
+		ExecuteDataflow(
+			Registry,
+			TEXT("list_dataflow_comments"),
+			AggregateBudgetParams);
+	TestTrue(
+		TEXT("aggregate-budget comment inspection succeeds"),
+		AggregateBudgetResult.bSuccess);
+	TestTrue(
+		TEXT("aggregate-budget comment inspection returns JSON"),
+		AggregateBudgetResult.Result.IsValid());
+	if (AggregateBudgetResult.Result.IsValid())
+	{
+		TestEqual(
+			TEXT("aggregate row limit is reported"),
+			static_cast<int32>(
+				AggregateBudgetResult.Result->GetNumberField(
+					TEXT("output_row_limit"))),
+			MonolithDataflow::MaxOutputRows);
+		TestEqual(
+			TEXT("aggregate returned rows stop at the global limit"),
+			static_cast<int32>(
+				AggregateBudgetResult.Result->GetNumberField(
+					TEXT("output_returned_row_count"))),
+			MonolithDataflow::MaxOutputRows);
+		TestTrue(
+			TEXT("aggregate row exhaustion is reported"),
+			AggregateBudgetResult.Result->GetBoolField(
+				TEXT("output_rows_truncated")));
+		TestTrue(
+			TEXT("aggregate output exhaustion is reported"),
+			AggregateBudgetResult.Result->GetBoolField(
+				TEXT("output_budget_exhausted")));
+		TestTrue(
+			TEXT("aggregate truncation propagates to the action summary"),
+			AggregateBudgetResult.Result->GetBoolField(TEXT("truncated")));
+		TestFalse(
+			TEXT("aggregate-truncated comments are not reported complete"),
+			AggregateBudgetResult.Result->GetBoolField(
+				TEXT("comments_complete")));
+		TestTrue(
+			TEXT("aggregate-budget inspection preserves package dirty state"),
+			AggregateBudgetResult.Result->GetBoolField(
+				TEXT("package_dirty_state_preserved")));
 	}
 
 	TestFalse(

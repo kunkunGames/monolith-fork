@@ -31,6 +31,8 @@ namespace MonolithDataflow
 	inline constexpr int32 MaxCommentNodes = 500;
 	inline constexpr int32 MaxCommentGraphNodeScan = 50000;
 	inline constexpr int64 MaxCommentMembershipChecks = 1000000;
+	inline constexpr int32 MaxOutputRows = 4096;
+	inline constexpr int64 MaxOutputTextCharacters = 1024 * 1024;
 
 	class FStrictParamReader
 	{
@@ -70,14 +72,33 @@ namespace MonolithDataflow
 		FString Error;
 	};
 
-	class FTextBudget
+	class FOutputBudget
 	{
 	public:
 		FString Bound(const FString& Value, int32 MaxChars = MaxTextChars);
+		bool TryReserveRow();
 		int32 GetTruncatedFieldCount() const { return TruncatedFieldCount; }
+		int32 GetReturnedRowCount() const { return ReturnedRowCount; }
+		int64 GetReturnedTextCharacterCount() const
+		{
+			return ReturnedTextCharacterCount;
+		}
+		bool AreRowsTruncated() const { return bRowsTruncated; }
+		bool IsTextTruncatedByAggregateBudget() const
+		{
+			return bTextTruncatedByAggregateBudget;
+		}
+		bool IsExhausted() const
+		{
+			return bRowsTruncated || bTextTruncatedByAggregateBudget;
+		}
 
 	private:
 		int32 TruncatedFieldCount = 0;
+		int32 ReturnedRowCount = 0;
+		int64 ReturnedTextCharacterCount = 0;
+		bool bRowsTruncated = false;
+		bool bTextTruncatedByAggregateBudget = false;
 	};
 
 	struct FExactDataflowLoad
@@ -96,6 +117,9 @@ namespace MonolithDataflow
 
 	bool ValidateGamePackagePath(const FString& PackagePath, FString& OutError);
 	FExactDataflowLoad LoadExactDataflowAsset(const FString& ObjectPath);
+	void AddOutputBudgetFields(
+		const TSharedPtr<FJsonObject>& Result,
+		const FOutputBudget& OutputBudget);
 	FMonolithActionResult FinalizeReadOnlyResult(
 		const FExactDataflowLoad& Load,
 		const TSharedPtr<FJsonObject>& Result);

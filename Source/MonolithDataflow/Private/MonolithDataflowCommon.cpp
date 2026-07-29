@@ -180,19 +180,53 @@ namespace MonolithDataflow
 		return true;
 	}
 
-	FString FTextBudget::Bound(const FString& Value, int32 MaxChars)
+	FString FOutputBudget::Bound(const FString& Value, int32 MaxChars)
 	{
-		if (Value.Len() <= MaxChars)
+		const int32 PerFieldCharacterCount =
+			FMath::Min(Value.Len(), FMath::Max(0, MaxChars));
+		const int64 RemainingAggregateCharacters =
+			FMath::Max<int64>(
+				0,
+				MaxOutputTextCharacters - ReturnedTextCharacterCount);
+		const int32 ReturnedCharacterCount = static_cast<int32>(
+			FMath::Min<int64>(
+				PerFieldCharacterCount,
+				RemainingAggregateCharacters));
+		const bool bPerFieldTruncated = Value.Len() > PerFieldCharacterCount;
+		const bool bAggregateTruncated =
+			PerFieldCharacterCount > ReturnedCharacterCount;
+		if (!bPerFieldTruncated && !bAggregateTruncated)
 		{
+			ReturnedTextCharacterCount += Value.Len();
 			return Value;
 		}
 
 		++TruncatedFieldCount;
-		if (MaxChars <= 3)
+		bTextTruncatedByAggregateBudget |= bAggregateTruncated;
+		FString Bounded;
+		if (ReturnedCharacterCount <= 3)
 		{
-			return Value.Left(FMath::Max(0, MaxChars));
+			Bounded = Value.Left(ReturnedCharacterCount);
 		}
-		return Value.Left(MaxChars - 3) + TEXT("...");
+		else
+		{
+			Bounded =
+				Value.Left(ReturnedCharacterCount - 3)
+				+ TEXT("...");
+		}
+		ReturnedTextCharacterCount += Bounded.Len();
+		return Bounded;
+	}
+
+	bool FOutputBudget::TryReserveRow()
+	{
+		if (ReturnedRowCount >= MaxOutputRows)
+		{
+			bRowsTruncated = true;
+			return false;
+		}
+		++ReturnedRowCount;
+		return true;
 	}
 
 	bool ValidateGamePackagePath(const FString& PackagePath, FString& OutError)
@@ -295,9 +329,33 @@ namespace MonolithDataflow
 
 		if (UPackage* ExistingPackage = FindPackage(nullptr, *PackageName))
 		{
+			Result.Package = ExistingPackage;
 			Result.bPackageLoadedBefore = true;
 			Result.bPackageDirtyBefore = ExistingPackage->IsDirty();
 		}
+
+		const auto ApplyLoadDirtyStatePostcondition =
+			[&Result, &ObjectPath]()
+			{
+				const bool bPackageDirtyAfter =
+					Result.Package && Result.Package->IsDirty();
+				if (!Result.Package
+					|| bPackageDirtyAfter == Result.bPackageDirtyBefore)
+				{
+					return;
+				}
+
+				Result.ErrorCode =
+					!Result.bPackageDirtyBefore && bPackageDirtyAfter
+						? TEXT("read_only_load_dirtied_package")
+						: TEXT("read_only_load_changed_package_dirty_state");
+				Result.ErrorDetail = FString::Printf(
+					TEXT("Loading object '%s' changed package dirty state from %s to %s"),
+					*ObjectPath,
+					Result.bPackageDirtyBefore ? TEXT("dirty") : TEXT("clean"),
+					bPackageDirtyAfter ? TEXT("dirty") : TEXT("clean"));
+				Result.Asset = nullptr;
+			};
 
 		UObject* Object = StaticLoadObject(
 			UObject::StaticClass(),
@@ -311,9 +369,16 @@ namespace MonolithDataflow
 			Result.ErrorDetail = FString::Printf(
 				TEXT("No object exists at exact path '%s'"),
 				*ObjectPath);
+			Result.Package = FindPackage(nullptr, *PackageName);
+			ApplyLoadDirtyStatePostcondition();
 			return Result;
 		}
 
+		Result.Package = Object->GetOutermost();
+		if (!Result.bPackageLoadedBefore && Result.Package)
+		{
+			Result.bPackageDirtyBefore = false;
+		}
 		Result.ResolvedPath = Object->GetPathName();
 		if (!Result.ResolvedPath.Equals(ObjectPath, ESearchCase::CaseSensitive))
 		{
@@ -322,44 +387,59 @@ namespace MonolithDataflow
 				TEXT("Loaded object path '%s' does not exactly match requested path '%s'"),
 				*Result.ResolvedPath,
 				*ObjectPath);
-			return Result;
 		}
-		if (Object->IsA<UObjectRedirector>())
+		else if (Object->IsA<UObjectRedirector>())
 		{
 			Result.ErrorCode = TEXT("redirector_rejected");
 			Result.ErrorDetail = FString::Printf(
 				TEXT("asset_path resolves to a redirector: %s"),
 				*ObjectPath);
-			return Result;
+		}
+		else
+		{
+			Result.Asset = Cast<UDataflow>(Object);
+			if (!Result.Asset)
+			{
+				Result.ErrorCode = TEXT("wrong_asset_type");
+				Result.ErrorDetail = FString::Printf(
+					TEXT("Object '%s' is %s, not UDataflow"),
+					*ObjectPath,
+					*Object->GetClass()->GetPathName());
+			}
 		}
 
-		Result.Asset = Cast<UDataflow>(Object);
-		if (!Result.Asset)
-		{
-			Result.ErrorCode = TEXT("wrong_asset_type");
-			Result.ErrorDetail = FString::Printf(
-				TEXT("Object '%s' is %s, not UDataflow"),
-				*ObjectPath,
-				*Object->GetClass()->GetPathName());
-			return Result;
-		}
-
-		Result.Package = Result.Asset->GetOutermost();
-		if (!Result.bPackageLoadedBefore && Result.Package)
-		{
-			Result.bPackageDirtyBefore = false;
-		}
-		if (!Result.bPackageDirtyBefore && Result.Package && Result.Package->IsDirty())
-		{
-			Result.ErrorCode = TEXT("read_only_load_dirtied_package");
-			Result.ErrorDetail = FString::Printf(
-				TEXT("Loading Dataflow asset '%s' dirtied its package"),
-				*ObjectPath);
-			Result.Asset = nullptr;
-			return Result;
-		}
+		ApplyLoadDirtyStatePostcondition();
 
 		return Result;
+	}
+
+	void AddOutputBudgetFields(
+		const TSharedPtr<FJsonObject>& Result,
+		const FOutputBudget& OutputBudget)
+	{
+		Result->SetNumberField(TEXT("output_row_limit"), MaxOutputRows);
+		Result->SetNumberField(
+			TEXT("output_returned_row_count"),
+			OutputBudget.GetReturnedRowCount());
+		Result->SetBoolField(
+			TEXT("output_rows_truncated"),
+			OutputBudget.AreRowsTruncated());
+		Result->SetNumberField(
+			TEXT("output_bounded_text_character_limit"),
+			static_cast<double>(MaxOutputTextCharacters));
+		Result->SetNumberField(
+			TEXT("output_returned_bounded_text_character_count"),
+			static_cast<double>(
+				OutputBudget.GetReturnedTextCharacterCount()));
+		Result->SetBoolField(
+			TEXT("output_bounded_text_truncated"),
+			OutputBudget.IsTextTruncatedByAggregateBudget());
+		Result->SetBoolField(
+			TEXT("output_budget_exhausted"),
+			OutputBudget.IsExhausted());
+		Result->SetNumberField(
+			TEXT("truncated_text_field_count"),
+			OutputBudget.GetTruncatedFieldCount());
 	}
 
 	FMonolithActionResult FinalizeReadOnlyResult(
@@ -367,13 +447,15 @@ namespace MonolithDataflow
 		const TSharedPtr<FJsonObject>& Result)
 	{
 		const bool bDirtyAfter = Load.Package && Load.Package->IsDirty();
-		if (!Load.bPackageDirtyBefore && bDirtyAfter)
+		if (Load.Package && bDirtyAfter != Load.bPackageDirtyBefore)
 		{
 			return ErrorWithCode(
 				TEXT("read_only_postcondition_failed"),
 				FString::Printf(
-					TEXT("Reading Dataflow asset '%s' dirtied its package"),
-					*Load.RequestedPath),
+					TEXT("Reading Dataflow asset '%s' changed package dirty state from %s to %s"),
+					*Load.RequestedPath,
+					Load.bPackageDirtyBefore ? TEXT("dirty") : TEXT("clean"),
+					bDirtyAfter ? TEXT("dirty") : TEXT("clean")),
 				Load.RequestedPath);
 		}
 
