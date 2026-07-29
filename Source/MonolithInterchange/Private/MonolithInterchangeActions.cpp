@@ -639,6 +639,45 @@ namespace
 		return true;
 	}
 
+	bool TryReadOptionalSourceFileIndex(
+		const TSharedPtr<FJsonObject>& Params,
+		int32& OutValue,
+		TArray<TSharedPtr<FJsonValue>>& Messages)
+	{
+		static const FString Field = TEXT("source_file_index");
+		OutValue = INDEX_NONE;
+		if (!Params.IsValid() || !Params->HasField(Field))
+		{
+			return true;
+		}
+
+		const TSharedPtr<FJsonValue>* Value = Params->Values.Find(Field);
+		if (!Value || !Value->IsValid() || (*Value)->Type != EJson::Number)
+		{
+			AddMessage(
+				Messages,
+				TEXT("invalid_source_file_index"),
+				FString::Printf(TEXT("%s must be an integer."), *Field));
+			return false;
+		}
+
+		const double Number = (*Value)->AsNumber();
+		if (!FMath::IsFinite(Number) ||
+			Number != FMath::TruncToDouble(Number) ||
+			Number < static_cast<double>(MIN_int32) ||
+			Number > static_cast<double>(MAX_int32))
+		{
+			AddMessage(
+				Messages,
+				TEXT("invalid_source_file_index"),
+				FString::Printf(TEXT("%s must be a 32-bit integer."), *Field));
+			return false;
+		}
+
+		OutValue = static_cast<int32>(Number);
+		return true;
+	}
+
 	bool TryReadStringArray(const TSharedPtr<FJsonObject>& Params, const FString& Field, TArray<FString>& OutValues, FString& OutError)
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
@@ -699,7 +738,8 @@ namespace
 	TSharedPtr<FJsonObject> ImportOneSource(
 		const FString& SourceFile,
 		const TSharedPtr<FJsonObject>& Params,
-		ERequestedImportKind RequestedKind = ERequestedImportKind::Any)
+		ERequestedImportKind RequestedKind = ERequestedImportKind::Any,
+		TSet<FName>* ProspectivePackages = nullptr)
 	{
 		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
 		TArray<TSharedPtr<FJsonValue>> Messages;
@@ -753,14 +793,28 @@ namespace
 				: FImportBackendAvailability();
 		const FString ExpectedAssetName = SanitizeAssetName(NormalizedSource);
 		const FString ExpectedPackage = !DestinationPath.IsEmpty() ? JoinPackagePath(DestinationPath, ExpectedAssetName) : FString();
+		const bool bReservedConflict =
+			ProspectivePackages && ProspectivePackages->Contains(FName(*ExpectedPackage));
 		const bool bLikelyConflict = !ExpectedPackage.IsEmpty() &&
-			(FPackageName::DoesPackageExist(ExpectedPackage) || FindPackage(nullptr, *ExpectedPackage) != nullptr);
+			(FPackageName::DoesPackageExist(ExpectedPackage) ||
+				FindPackage(nullptr, *ExpectedPackage) != nullptr ||
+				bReservedConflict);
 		FString ResolvedPackage = ExpectedPackage;
 		FString ResolvedAssetName = ExpectedAssetName;
 		if (ConflictPolicy == TEXT("rename") && bLikelyConflict)
 		{
 			IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
 			AssetTools.CreateUniqueAssetName(ExpectedPackage, FString(), ResolvedPackage, ResolvedAssetName);
+			for (int32 Suffix = 1;
+				ProspectivePackages && ProspectivePackages->Contains(FName(*ResolvedPackage));
+				++Suffix)
+			{
+				AssetTools.CreateUniqueAssetName(
+					ExpectedPackage,
+					FString::FromInt(Suffix),
+					ResolvedPackage,
+					ResolvedAssetName);
+			}
 		}
 
 		Row->SetBoolField(TEXT("interchange_available"), IsInterchangeAvailable());
@@ -837,6 +891,10 @@ namespace
 
 		if (bDryRun)
 		{
+			if (ProspectivePackages)
+			{
+				ProspectivePackages->Add(FName(*ResolvedPackage));
+			}
 			Row->SetStringField(TEXT("status"), TEXT("would_import"));
 			Row->SetArrayField(TEXT("messages"), Messages);
 			return Row;
@@ -982,10 +1040,7 @@ namespace
 		Row->SetBoolField(TEXT("allow_external"), bAllowExternal);
 
 		int32 SourceFileIndex = INDEX_NONE;
-		if (Params.IsValid() && Params->HasTypedField<EJson::Number>(TEXT("source_file_index")))
-		{
-			SourceFileIndex = Params->GetIntegerField(TEXT("source_file_index"));
-		}
+		TryReadOptionalSourceFileIndex(Params, SourceFileIndex, Messages);
 		Row->SetNumberField(TEXT("source_file_index"), SourceFileIndex);
 		if (SourceFileIndex != INDEX_NONE && !SourceFilenames.IsValidIndex(SourceFileIndex))
 		{
@@ -1271,6 +1326,7 @@ FMonolithActionResult FMonolithInterchangeActions::CanImport(const TSharedPtr<FJ
 
 	FString DestinationPath;
 	Params->TryGetStringField(TEXT("destination_path"), DestinationPath);
+	DestinationPath = NormalizePackageFolder(DestinationPath);
 
 	const FString NormalizedSource = NormalizeSourceFile(SourceFile);
 	const FString Extension = FPaths::GetExtension(NormalizedSource, false).ToLower();
@@ -1431,15 +1487,25 @@ FMonolithActionResult FMonolithInterchangeActions::ImportAssets(const TSharedPtr
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
 	Rows.Reserve(SourceFiles.Num());
+	TSet<FName> ProspectivePackages;
+	const bool bDryRun =
+		Params.IsValid() &&
+		Params->HasTypedField<EJson::Boolean>(TEXT("dry_run")) &&
+		Params->GetBoolField(TEXT("dry_run"));
 	for (const FString& SourceFile : SourceFiles)
 	{
-		Rows.Add(MakeShared<FJsonValueObject>(ImportOneSource(SourceFile, Params)));
+		Rows.Add(MakeShared<FJsonValueObject>(
+			ImportOneSource(
+				SourceFile,
+				Params,
+				ERequestedImportKind::Any,
+				bDryRun ? &ProspectivePackages : nullptr)));
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetArrayField(TEXT("rows"), Rows);
 	Result->SetNumberField(TEXT("row_count"), Rows.Num());
-	Result->SetBoolField(TEXT("dry_run"), Params->HasTypedField<EJson::Boolean>(TEXT("dry_run")) && Params->GetBoolField(TEXT("dry_run")));
+	Result->SetBoolField(TEXT("dry_run"), bDryRun);
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -1508,10 +1574,7 @@ FMonolithActionResult FMonolithInterchangeActions::UpdateReimportPath(const TSha
 	}
 
 	int32 SourceFileIndex = INDEX_NONE;
-	if (Params.IsValid() && Params->HasTypedField<EJson::Number>(TEXT("source_file_index")))
-	{
-		SourceFileIndex = Params->GetIntegerField(TEXT("source_file_index"));
-	}
+	TryReadOptionalSourceFileIndex(Params, SourceFileIndex, Messages);
 	if (SourceFileIndex < INDEX_NONE)
 	{
 		AddMessage(Messages, TEXT("invalid_source_file_index"), TEXT("source_file_index must be -1 or a zero-based source index."));

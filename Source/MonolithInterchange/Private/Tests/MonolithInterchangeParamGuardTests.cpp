@@ -3,6 +3,7 @@
 #include "HAL/FileManager.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
+#include "Misc/Guid.h"
 #include "Misc/Paths.h"
 #include "MonolithInterchangeActions.h"
 
@@ -133,6 +134,181 @@ bool FMonolithParamGuardInterchangeImportMalformedParamsTest::RunTest(const FStr
 		TestTrue(
 			TEXT("typed import fixture was removed"),
 			IFileManager::Get().Delete(*SourceFile, false, true, true));
+	}
+
+	{
+		const FString FixtureId = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+		const FString FixtureRoot =
+			FPaths::ProjectSavedDir() / TEXT("Automation/MonolithInterchange") / FixtureId;
+		const FString SourceA = FixtureRoot / TEXT("A/duplicate.png");
+		const FString SourceB = FixtureRoot / TEXT("B/duplicate.png");
+		IFileManager::Get().MakeDirectory(*FPaths::GetPath(SourceA), true);
+		IFileManager::Get().MakeDirectory(*FPaths::GetPath(SourceB), true);
+		TestTrue(
+			TEXT("first batch-preview fixture was written"),
+			FFileHelper::SaveStringToFile(TEXT("preview fixture A"), *SourceA));
+		TestTrue(
+			TEXT("second batch-preview fixture was written"),
+			FFileHelper::SaveStringToFile(TEXT("preview fixture B"), *SourceB));
+
+		const FString DestinationPath =
+			TEXT("/Game/Tests/Monolith/Interchange/Batch_") + FixtureId;
+		{
+			TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+			Params->SetStringField(TEXT("source_file"), SourceA);
+			Params->SetStringField(
+				TEXT("destination_path"),
+				TEXT("  ") + DestinationPath + TEXT("/  "));
+
+			const FMonolithActionResult Result =
+				Registry.ExecuteAction(TEXT("interchange"), TEXT("can_import"), Params);
+			TestTrue(TEXT("can_import normalization returns a payload"), Result.bSuccess && Result.Result.IsValid());
+			if (Result.bSuccess && Result.Result.IsValid())
+			{
+				const TSharedPtr<FJsonObject>* Destination = nullptr;
+				if (TestTrue(
+					TEXT("can_import returns destination validation"),
+					Result.Result->TryGetObjectField(TEXT("destination"), Destination) &&
+						Destination &&
+						Destination->IsValid()))
+				{
+					TestEqual(
+						TEXT("can_import normalizes harmless destination formatting"),
+						(*Destination)->GetStringField(TEXT("destination_path")),
+						DestinationPath);
+					TestTrue(
+						TEXT("normalized destination is valid"),
+						(*Destination)->GetBoolField(TEXT("valid")));
+				}
+			}
+		}
+
+		auto MakeBatchParams = [&SourceA, &SourceB, &DestinationPath](const FString& ConflictPolicy)
+		{
+			TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+			TArray<TSharedPtr<FJsonValue>> Sources;
+			Sources.Add(MakeShared<FJsonValueString>(SourceA));
+			Sources.Add(MakeShared<FJsonValueString>(SourceB));
+			Params->SetArrayField(TEXT("source_files"), Sources);
+			Params->SetStringField(TEXT("destination_path"), DestinationPath);
+			Params->SetStringField(TEXT("conflict_policy"), ConflictPolicy);
+			Params->SetBoolField(TEXT("dry_run"), true);
+			return Params;
+		};
+
+		{
+			const FMonolithActionResult Result =
+				Registry.ExecuteAction(
+					TEXT("interchange"),
+					TEXT("import_assets"),
+					MakeBatchParams(TEXT("fail")));
+			TestTrue(TEXT("fail-policy batch preview returns a payload"), Result.bSuccess && Result.Result.IsValid());
+			if (Result.bSuccess && Result.Result.IsValid())
+			{
+				const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+				if (TestTrue(
+					TEXT("fail-policy batch preview returns two rows"),
+					Result.Result->TryGetArrayField(TEXT("rows"), Rows) &&
+						Rows &&
+						Rows->Num() == 2))
+				{
+					TestEqual(
+						TEXT("first same-name source can be imported"),
+						(*Rows)[0]->AsObject()->GetStringField(TEXT("status")),
+						FString(TEXT("would_import")));
+					TestEqual(
+						TEXT("second same-name source sees the prospective conflict"),
+						(*Rows)[1]->AsObject()->GetStringField(TEXT("status")),
+						FString(TEXT("error")));
+					TestTrue(
+						TEXT("second same-name source reports a package conflict"),
+						(*Rows)[1]->AsObject()->GetBoolField(TEXT("likely_package_conflict")));
+				}
+			}
+		}
+
+		{
+			const FMonolithActionResult Result =
+				Registry.ExecuteAction(
+					TEXT("interchange"),
+					TEXT("import_assets"),
+					MakeBatchParams(TEXT("rename")));
+			TestTrue(TEXT("rename-policy batch preview returns a payload"), Result.bSuccess && Result.Result.IsValid());
+			if (Result.bSuccess && Result.Result.IsValid())
+			{
+				const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+				if (TestTrue(
+					TEXT("rename-policy batch preview returns two rows"),
+					Result.Result->TryGetArrayField(TEXT("rows"), Rows) &&
+						Rows &&
+						Rows->Num() == 2))
+				{
+					const TSharedPtr<FJsonObject> FirstRow = (*Rows)[0]->AsObject();
+					const TSharedPtr<FJsonObject> SecondRow = (*Rows)[1]->AsObject();
+					TestEqual(
+						TEXT("first rename preview is importable"),
+						FirstRow->GetStringField(TEXT("status")),
+						FString(TEXT("would_import")));
+					TestEqual(
+						TEXT("second rename preview is importable"),
+						SecondRow->GetStringField(TEXT("status")),
+						FString(TEXT("would_import")));
+					TestNotEqual(
+						TEXT("same-name rename previews reserve distinct package names"),
+						FirstRow->GetStringField(TEXT("resolved_package")),
+						SecondRow->GetStringField(TEXT("resolved_package")));
+				}
+			}
+		}
+
+		TestTrue(
+			TEXT("batch-preview fixture directory was removed"),
+			IFileManager::Get().DeleteDirectory(*FixtureRoot, false, true));
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(
+			TEXT("asset_path"),
+			TEXT("/Engine/EngineResources/DefaultTexture.DefaultTexture"));
+		Params->SetStringField(TEXT("source_file_index"), TEXT("1"));
+		Params->SetBoolField(TEXT("dry_run"), true);
+
+		const FMonolithActionResult Result =
+			Registry.ExecuteAction(TEXT("interchange"), TEXT("reimport_asset"), Params);
+		TestTrue(TEXT("reimport_asset returns structured index validation"), Result.bSuccess && Result.Result.IsValid());
+		if (Result.bSuccess && Result.Result.IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+			if (TestTrue(
+				TEXT("reimport_asset index validation returns one row"),
+				Result.Result->TryGetArrayField(TEXT("rows"), Rows) &&
+					Rows &&
+					Rows->Num() == 1))
+			{
+				const TSharedPtr<FJsonObject> Row = (*Rows)[0]->AsObject();
+				const TArray<TSharedPtr<FJsonValue>>* Messages = nullptr;
+				bool bFoundInvalidIndex = false;
+				if (Row.IsValid() &&
+					Row->TryGetArrayField(TEXT("messages"), Messages) &&
+					Messages)
+				{
+					for (const TSharedPtr<FJsonValue>& MessageValue : *Messages)
+					{
+						const TSharedPtr<FJsonObject> Message = MessageValue->AsObject();
+						if (Message.IsValid() &&
+							Message->GetStringField(TEXT("code")) == TEXT("invalid_source_file_index"))
+						{
+							bFoundInvalidIndex = true;
+							break;
+						}
+					}
+				}
+				TestTrue(
+					TEXT("nonnumeric source_file_index is rejected explicitly"),
+					bFoundInvalidIndex);
+			}
+		}
 	}
 
 	{

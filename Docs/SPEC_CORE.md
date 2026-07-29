@@ -115,6 +115,7 @@ All three sources emit free-text strings into the same array. No schema or envel
 - Niagara
 - SQLiteCore
 - EnhancedInput
+- Interchange
 - EditorScriptingUtilities
 - PoseSearch
 - IKRig

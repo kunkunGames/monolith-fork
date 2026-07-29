@@ -28,6 +28,10 @@
 			"Enabled": true
 		},
 		{
+			"Name": "Interchange",
+			"Enabled": true
+		},
+		{
 			"Name": "EditorScriptingUtilities",
 			"Enabled": true
 		},

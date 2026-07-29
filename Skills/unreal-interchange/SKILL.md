@@ -10,8 +10,11 @@ description: Use for the Unreal Interchange import/export framework via Monolith
 ## Discovery
 
 ```
-monolith_discover({ namespace: "interchange" })                      # all actions in this namespace
-monolith_discover({ namespace: "interchange", action: "<action>", mode: "schema" })  # exact params
+monolith_discover({ namespace: "interchange" })  # terse action list
+describe_query("action_schema", {
+  "target_namespace": "interchange",
+  "target_action": "<action>"
+})  # exact params for one action
 ```
 
 When the right action is unclear, `monolith_find("<task>")` suggests candidates across namespaces.
@@ -31,7 +34,7 @@ Use this skill to drive the import pipeline: validate a source file, run a typed
 
 ## Action Reference
 
-Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed values, `[w]` mutates (transaction-wrapped). Signatures are a snapshot of the live catalog — for the exact full schema call `monolith_discover` with `mode: "schema"` (the Discovery block above stays the authority).
+Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed values, and `[w]` means the action has external side effects. `[w]` does not promise editor Undo: imports and reimports use Unreal's handler-specific behavior, reimport-path updates dirty import metadata, and filesystem exports are not undoable. Signatures are a snapshot of the live catalog — use `describe_query("action_schema", ...)` for the exact schema.
 
 The typed import entrypoints (`import_mesh`/`import_skeletal_mesh`/`import_texture`/`import_audio`/`import_scene`) share the same signature as `import_asset` below; `conflict_policy` is REQUIRED on every import. They enforce the requested source kind and, except for scene imports, verify the returned object class.
 
@@ -92,6 +95,7 @@ interchange_query("export_asset", { "asset_path": "/Game/Meshes/Hero", "file_pat
 - Relative import paths resolve under the project directory; relative export paths resolve under `Saved`. Absolute external paths require `allow_external: true`.
 - Default-root checks reject any source/output path that traverses a symlink or junction below an allowed root. Use a direct path; only use `allow_external: true` after caller-side policy explicitly permits it.
 - Import and reimport are high-impact mutations (`[w]`): `conflict_policy` is required, and writes need `confirm: true` unless `dry_run: true`. Use `dry_run` plus `can_import` / `can_reimport` first.
+- Do not assume `[w]` actions can be reverted with editor Undo. Verify the resulting asset/import metadata after a confirmed write, and treat exported files as normal filesystem side effects.
 - A successful dry run means the concrete importer, reimport handler, or exporter exists; it is not inferred from module presence alone.
 - After importing a mesh, hand off mesh inspection/edit (LOD, collision, texel density, GeometryScript) to `unreal-mesh`; this skill owns the import pipeline, not post-import editing.
 - For direct Texture2D or TTF/OTF font ingest that does not need the Interchange stack, use `unreal-asset`; for AI-generated source textures use `unreal-imagegen`.
@@ -100,4 +104,4 @@ interchange_query("export_asset", { "asset_path": "/Game/Meshes/Hero", "file_pat
 ## Notes
 
 - This reference is generated from the live `RegisterAction` surface. If an action is missing or renamed, re-run `monolith_discover({ namespace: "interchange" })` — the catalog is the source of truth.
-- Pass `mode: "schema"` to `monolith_discover` for required/optional params and types before calling an action.
+- Call `describe_query("action_schema", target_namespace="interchange", target_action="<action>")` for required/optional params and types before calling an action; `monolith_discover({ namespace: "interchange", detail: true })` is the larger all-action alternative.

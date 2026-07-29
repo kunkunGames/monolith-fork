@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The new Interchange surface now keeps preflight, batch, and dependency contracts aligned with confirmed execution.** `can_import` normalizes harmless destination-folder formatting, batch dry-runs reserve prospective package names so same-name sources predict `fail`/`rename` results in sequence, and reimport source indexes reject non-integer JSON instead of falling back to `-1`. The plugin now declares its hard dependency on Unreal's Interchange plugin. The workflow skill uses supported on-demand schema discovery and describes the real handler/filesystem Undo limits instead of promising every external write is transaction-wrapped.
 - **The native MCP proxy build now discovers the installed Visual Studio C++ toolchain.** `Tools\MonolithProxy\build_proxy.bat` uses an existing `cl.exe` environment or `vswhere.exe` instead of assuming Visual Studio Community is installed on the `C:` drive.
 
 ## [0.21.3] - 2026-07-26

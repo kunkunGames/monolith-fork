@@ -1132,18 +1132,18 @@ Guarded asset import/export pipeline. Read-only actions validate sources and ins
 | Action | Key params | Notes |
 |--------|------------|-------|
 | `get_supported_formats` | none | Lists known source formats, runtime module availability, allowed roots, and mutation policy. |
-| `can_import` | `source_file`; optional `destination_path`, `allow_external` | Validates source existence, extension support, a registered Interchange translator or legacy factory, link-safe root policy, and destination package syntax without mutation. |
+| `can_import` | `source_file`; optional `destination_path`, `allow_external` | Normalizes harmless folder whitespace/trailing separators, then validates source existence, extension support, a registered Interchange translator or legacy factory, link-safe root policy, and destination package syntax without mutation. |
 | `can_reimport` | `asset_path` | Reports the result and source paths from `FReimportManager::CanReimport`. |
 | `get_import_data` | `asset_path` | Returns the reflected source-file rows for an existing asset. |
 | `import_asset` | `source_file`, `destination_path`, `conflict_policy`; optional `allow_external`, `confirm`, `dry_run` | Imports one source with an explicit `fail`, `overwrite`, or uniquely resolved `rename` policy. |
-| `import_assets` | `source_files`, `destination_path`, `conflict_policy`; optional `allow_external`, `confirm`, `dry_run` | Imports sources sequentially and returns one structured row per source. |
+| `import_assets` | `source_files`, `destination_path`, `conflict_policy`; optional `allow_external`, `confirm`, `dry_run` | Imports sources sequentially and returns one structured row per source. Dry-run reserves each successful row's prospective package so later same-name rows predict the same `fail` or unique `rename` result as confirmation. |
 | `import_scene` | same as `import_asset` | Requires a scene-capable source and registered scene factory. |
 | `import_mesh` | same as `import_asset` | Configures and verifies a static-mesh import. |
 | `import_skeletal_mesh` | same as `import_asset` | Configures FBX skeletal import explicitly and verifies a skeletal-mesh result. |
 | `import_texture` | same as `import_asset` | Requires a texture source and verifies a texture result. |
 | `import_audio` | same as `import_asset` | Requires a wave-audio source and verifies a sound-wave result. |
-| `update_reimport_path` | `asset_path`, `source_file`; optional `source_file_index`, `allow_external`, `confirm`, `dry_run` | Requires a registered handler, validates the source index, updates the path, and verifies handler readback. |
-| `reimport_asset` | `asset_path`; optional `source_file`, `source_file_index`, `allow_external`, `confirm`, `dry_run` | Optionally repoints, then reimports one existing asset through Unreal's reimport manager. |
+| `update_reimport_path` | `asset_path`, `source_file`; optional `source_file_index`, `allow_external`, `confirm`, `dry_run` | Requires a registered handler, requires an exact integer source index when present, updates the path, and verifies handler readback. |
+| `reimport_asset` | `asset_path`; optional `source_file`, `source_file_index`, `allow_external`, `confirm`, `dry_run` | Validates every retained handler source and an exact integer replacement index, then optionally repoints and reimports one existing asset through Unreal's reimport manager. |
 | `reimport_assets` | `asset_paths`; optional `allow_external`, `confirm`, `dry_run` | Reimports assets sequentially after validating each handler-reported source path. |
 | `export_asset` | `asset_path`, `file_path`; optional `replace_existing`, `allow_external`, `confirm`, `dry_run` | Requires a matching exporter before either dry-run success or export. |
 
