@@ -22,11 +22,17 @@
 #include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
 #include "Serialization/Csv/CsvParser.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 
 namespace
 {
+	constexpr int32 MaxValidationIssueRows = 200;
+	const TCHAR* MetadataPresenceCsvHeader = TEXT("__monolith_metadata_presence_v1");
+
 	struct FLocalizationMutationOptions
 	{
 		bool bDryRun = false;
@@ -228,6 +234,17 @@ namespace
 			return false;
 		}
 
+		const FString PackageLeafName = FPackageName::GetLongPackageAssetName(OutPackagePath);
+		if (!OutAssetName.Equals(PackageLeafName, ESearchCase::CaseSensitive))
+		{
+			OutError = FString::Printf(
+				TEXT("StringTable object name '%s' must match package leaf '%s' in asset path '%s'"),
+				*OutAssetName,
+				*PackageLeafName,
+				*RawPath);
+			return false;
+		}
+
 		FText Reason;
 		if (!FPackageName::IsValidLongPackageName(OutPackagePath, false, &Reason))
 		{
@@ -409,6 +426,109 @@ namespace
 		return FString(Row[Index]);
 	}
 
+	bool ValidateMetadataKeyText(const FString& MetadataKey, FString& OutError)
+	{
+		const FString TrimmedKey = MetadataKey.TrimStartAndEnd();
+		if (TrimmedKey.IsEmpty())
+		{
+			OutError = TEXT("Metadata keys must not be empty");
+			return false;
+		}
+		if (TrimmedKey != MetadataKey)
+		{
+			OutError = FString::Printf(
+				TEXT("Metadata key '%s' must not contain leading or trailing whitespace"),
+				*MetadataKey);
+			return false;
+		}
+		if (MetadataKey.Equals(MetadataPresenceCsvHeader, ESearchCase::IgnoreCase))
+		{
+			OutError = FString::Printf(
+				TEXT("Metadata key '%s' is reserved for lossless CSV metadata presence"),
+				*MetadataKey);
+			return false;
+		}
+		return true;
+	}
+
+	FString SerializeMetadataPresence(const TMap<FString, FString>& Metadata)
+	{
+		TArray<FString> MetadataKeys;
+		Metadata.GenerateKeyArray(MetadataKeys);
+		MetadataKeys.Sort();
+
+		TArray<TSharedPtr<FJsonValue>> JsonKeys;
+		JsonKeys.Reserve(MetadataKeys.Num());
+		for (const FString& MetadataKey : MetadataKeys)
+		{
+			JsonKeys.Add(MakeShared<FJsonValueString>(MetadataKey));
+		}
+
+		FString Serialized;
+		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Serialized);
+		FJsonSerializer::Serialize(JsonKeys, Writer);
+		return Serialized;
+	}
+
+	bool ParseMetadataPresence(
+		const FString& Serialized,
+		const TSet<FName>& MetadataColumnIds,
+		int32 CsvRowNumber,
+		TSet<FName>& OutPresentMetadataIds,
+		FString& OutError)
+	{
+		OutPresentMetadataIds.Reset();
+		if (Serialized.IsEmpty())
+		{
+			return true;
+		}
+
+		TArray<TSharedPtr<FJsonValue>> JsonKeys;
+		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Serialized);
+		if (!FJsonSerializer::Deserialize(Reader, JsonKeys))
+		{
+			OutError = FString::Printf(
+				TEXT("CSV row %d has malformed %s JSON"),
+				CsvRowNumber,
+				MetadataPresenceCsvHeader);
+			return false;
+		}
+
+		for (const TSharedPtr<FJsonValue>& JsonKey : JsonKeys)
+		{
+			FString MetadataKey;
+			if (!JsonKey.IsValid() || JsonKey->Type != EJson::String || !JsonKey->TryGetString(MetadataKey))
+			{
+				OutError = FString::Printf(
+					TEXT("CSV row %d %s must be an array of metadata-key strings"),
+					CsvRowNumber,
+					MetadataPresenceCsvHeader);
+				return false;
+			}
+
+			const FName MetadataId(*MetadataKey);
+			if (!MetadataColumnIds.Contains(MetadataId))
+			{
+				OutError = FString::Printf(
+					TEXT("CSV row %d marks unknown metadata column '%s' as present"),
+					CsvRowNumber,
+					*MetadataKey);
+				return false;
+			}
+			if (OutPresentMetadataIds.Contains(MetadataId))
+			{
+				OutError = FString::Printf(
+					TEXT("CSV row %d repeats metadata key '%s' in %s"),
+					CsvRowNumber,
+					*MetadataKey,
+					MetadataPresenceCsvHeader);
+				return false;
+			}
+			OutPresentMetadataIds.Add(MetadataId);
+		}
+		return true;
+	}
+
 	TArray<FStringTableCsvRow> ParseStringTableCsv(const FString& CsvText, TArray<TSharedPtr<FJsonValue>>& OutRowResults, int32& OutSkippedCount, FString& OutError)
 	{
 		TArray<FStringTableCsvRow> ParsedRows;
@@ -425,20 +545,31 @@ namespace
 		const TArray<const TCHAR*>& Header = Rows[0];
 		int32 KeyIndex = INDEX_NONE;
 		int32 SourceIndex = INDEX_NONE;
+		int32 MetadataPresenceIndex = INDEX_NONE;
 		TArray<TPair<FString, int32>> MetadataColumns;
-		TSet<FString> NormalizedHeaderNames;
+		TSet<FName> HeaderIds;
+		TSet<FName> MetadataColumnIds;
 		for (int32 ColumnIndex = 0; ColumnIndex < Header.Num(); ++ColumnIndex)
 		{
-			const FString HeaderName = FString(Header[ColumnIndex]).TrimStartAndEnd();
-			const FString NormalizedHeaderName = HeaderName.ToLower();
-			if (!HeaderName.IsEmpty() && NormalizedHeaderNames.Contains(NormalizedHeaderName))
+			const FString RawHeaderName = FString(Header[ColumnIndex]);
+			const FString HeaderName = RawHeaderName.TrimStartAndEnd();
+			if (!RawHeaderName.IsEmpty() && RawHeaderName != HeaderName)
+			{
+				OutError = FString::Printf(
+					TEXT("CSV header '%s' must not contain leading or trailing whitespace"),
+					*RawHeaderName);
+				return ParsedRows;
+			}
+
+			const FName HeaderId(*HeaderName);
+			if (!HeaderName.IsEmpty() && HeaderIds.Contains(HeaderId))
 			{
 				OutError = FString::Printf(TEXT("CSV header '%s' is duplicated"), *HeaderName);
 				return ParsedRows;
 			}
 			if (!HeaderName.IsEmpty())
 			{
-				NormalizedHeaderNames.Add(NormalizedHeaderName);
+				HeaderIds.Add(HeaderId);
 			}
 			if (HeaderName.Equals(TEXT("key"), ESearchCase::IgnoreCase))
 			{
@@ -448,9 +579,18 @@ namespace
 			{
 				SourceIndex = ColumnIndex;
 			}
+			else if (HeaderName.Equals(MetadataPresenceCsvHeader, ESearchCase::IgnoreCase))
+			{
+				MetadataPresenceIndex = ColumnIndex;
+			}
 			else if (!HeaderName.IsEmpty())
 			{
+				if (!ValidateMetadataKeyText(HeaderName, OutError))
+				{
+					return ParsedRows;
+				}
 				MetadataColumns.Add(TPair<FString, int32>(HeaderName, ColumnIndex));
+				MetadataColumnIds.Add(HeaderId);
 			}
 		}
 
@@ -483,10 +623,34 @@ namespace
 				continue;
 			}
 
+			TSet<FName> PresentMetadataIds;
+			if (MetadataPresenceIndex != INDEX_NONE &&
+				!ParseMetadataPresence(
+					CsvCellAt(Row, MetadataPresenceIndex),
+					MetadataColumnIds,
+					RowIndex + 1,
+					PresentMetadataIds,
+					OutError))
+			{
+				return TArray<FStringTableCsvRow>();
+			}
+
 			for (const TPair<FString, int32>& MetadataColumn : MetadataColumns)
 			{
 				const FString Value = CsvCellAt(Row, MetadataColumn.Value);
-				if (!Value.IsEmpty())
+				const bool bMetadataIsPresent = MetadataPresenceIndex != INDEX_NONE
+					? PresentMetadataIds.Contains(FName(*MetadataColumn.Key))
+					: !Value.IsEmpty();
+				if (MetadataPresenceIndex != INDEX_NONE && !bMetadataIsPresent && !Value.IsEmpty())
+				{
+					OutError = FString::Printf(
+						TEXT("CSV row %d has a value for metadata column '%s' but does not mark it present in %s"),
+						RowIndex + 1,
+						*MetadataColumn.Key,
+						MetadataPresenceCsvHeader);
+					return TArray<FStringTableCsvRow>();
+				}
+				if (bMetadataIsPresent)
 				{
 					ParsedRow.Metadata.Add(MetadataColumn.Key, Value);
 				}
@@ -576,6 +740,10 @@ namespace
 		OutRowCount = Rows.Num();
 		for (const FString& MetadataKey : MetadataKeys)
 		{
+			if (!ValidateMetadataKeyText(MetadataKey, OutError))
+			{
+				return false;
+			}
 			if (MetadataKey.Equals(TEXT("key"), ESearchCase::IgnoreCase) ||
 				MetadataKey.Equals(TEXT("source_string"), ESearchCase::IgnoreCase))
 			{
@@ -590,6 +758,10 @@ namespace
 		TArray<FString> Header;
 		Header.Add(TEXT("key"));
 		Header.Add(TEXT("source_string"));
+		if (MetadataKeys.Num() > 0)
+		{
+			Header.Add(MetadataPresenceCsvHeader);
+		}
 		for (const FString& MetadataKey : MetadataKeys)
 		{
 			Header.Add(MetadataKey);
@@ -601,6 +773,10 @@ namespace
 			TArray<FString> Cells;
 			Cells.Add(Row.Key);
 			Cells.Add(Row.SourceString);
+			if (MetadataKeys.Num() > 0)
+			{
+				Cells.Add(SerializeMetadataPresence(Row.Metadata));
+			}
 			for (const FString& MetadataKey : MetadataKeys)
 			{
 				if (const FString* MetadataValue = Row.Metadata.Find(MetadataKey))
@@ -784,7 +960,7 @@ void FMonolithLocalizationActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Optional(TEXT("path"), TEXT("string"), TEXT("Content path to scan"), TEXT("/Game"))
 			.Optional(TEXT("include_entries"), TEXT("boolean"), TEXT("Include capped entry rows"), TEXT("false"))
 			.Optional(TEXT("include_metadata"), TEXT("boolean"), TEXT("Include per-entry metadata when entries are included"), TEXT("false"))
-			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum tables or entries to return"), TEXT("100"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum table summaries and aggregate entry rows to return"), TEXT("100"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("localization"), TEXT("get_string_table"),
@@ -961,13 +1137,30 @@ FMonolithActionResult FMonolithLocalizationActions::ListStringTables(const TShar
 
 	TArray<UStringTable*> Tables = LoadStringTablesUnderPath(Path);
 	TArray<TSharedPtr<FJsonValue>> Rows;
+	int32 RemainingEntryBudget = bIncludeEntries ? Limit : 0;
+	int64 AvailableEntryCount = 0;
+	int32 ReturnedEntryCount = 0;
 	for (UStringTable* Table : Tables)
 	{
 		if (Rows.Num() >= Limit)
 		{
 			break;
 		}
-		Rows.Add(MakeShared<FJsonValueObject>(StringTableSummaryToJson(Table, bIncludeEntries, Limit, bIncludeMetadata)));
+
+		TSharedPtr<FJsonObject> Summary = StringTableSummaryToJson(
+			Table,
+			bIncludeEntries,
+			bIncludeEntries ? RemainingEntryBudget : 0,
+			bIncludeMetadata);
+		if (bIncludeEntries)
+		{
+			const int32 TableEntryCount = static_cast<int32>(Summary->GetIntegerField(TEXT("entry_count")));
+			const int32 TableReturnedCount = static_cast<int32>(Summary->GetIntegerField(TEXT("returned_count")));
+			AvailableEntryCount += TableEntryCount;
+			ReturnedEntryCount += TableReturnedCount;
+			RemainingEntryBudget = FMath::Max(0, RemainingEntryBudget - TableReturnedCount);
+		}
+		Rows.Add(MakeShared<FJsonValueObject>(Summary));
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -978,6 +1171,13 @@ FMonolithActionResult FMonolithLocalizationActions::ListStringTables(const TShar
 	if (Tables.Num() > Rows.Num())
 	{
 		Result->SetNumberField(TEXT("truncated_remaining"), Tables.Num() - Rows.Num());
+	}
+	if (bIncludeEntries)
+	{
+		Result->SetNumberField(TEXT("entry_budget"), Limit);
+		Result->SetNumberField(TEXT("available_entry_count"), AvailableEntryCount);
+		Result->SetNumberField(TEXT("returned_entry_count"), ReturnedEntryCount);
+		Result->SetNumberField(TEXT("truncated_entry_count"), AvailableEntryCount - ReturnedEntryCount);
 	}
 	Result->SetBoolField(TEXT("read_only"), true);
 	return FMonolithActionResult::Success(Result);
@@ -1020,8 +1220,15 @@ FMonolithActionResult FMonolithLocalizationActions::ValidateStringTable(const TS
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Issues;
-	auto AddIssue = [&Issues](const FString& Code, const FString& Message, const FString& Key = FString())
+	int32 IssueCount = 0;
+	auto AddIssue = [&Issues, &IssueCount](const FString& Code, const FString& Message, const FString& Key = FString())
 	{
+		++IssueCount;
+		if (Issues.Num() >= MaxValidationIssueRows)
+		{
+			return;
+		}
+
 		TSharedPtr<FJsonObject> Issue = MakeShared<FJsonObject>();
 		Issue->SetStringField(TEXT("code"), Code);
 		Issue->SetStringField(TEXT("message"), Message);
@@ -1072,8 +1279,10 @@ FMonolithActionResult FMonolithLocalizationActions::ValidateStringTable(const TS
 	Result->SetStringField(TEXT("namespace"), Table->GetStringTable()->GetNamespace());
 	Result->SetNumberField(TEXT("entry_count"), EntryCount);
 	Result->SetArrayField(TEXT("issues"), Issues);
-	Result->SetNumberField(TEXT("issue_count"), Issues.Num());
-	Result->SetBoolField(TEXT("valid"), Issues.Num() == 0);
+	Result->SetNumberField(TEXT("issue_count"), IssueCount);
+	Result->SetNumberField(TEXT("returned_issue_count"), Issues.Num());
+	Result->SetNumberField(TEXT("truncated_issue_count"), IssueCount - Issues.Num());
+	Result->SetBoolField(TEXT("valid"), IssueCount == 0);
 	Result->SetBoolField(TEXT("read_only"), true);
 	return FMonolithActionResult::Success(Result);
 }
@@ -1208,11 +1417,26 @@ FMonolithActionResult FMonolithLocalizationActions::SetStringEntry(const TShared
 	}
 
 	TMap<FString, FString> MetadataToSet;
+	TSet<FString> NormalizedMetadataKeys;
 	if (MetadataObject && MetadataObject->IsValid())
 	{
 		for (const auto& Pair : (*MetadataObject)->Values)
 		{
 			const FString MetadataKey = MonolithKeyToString(Pair.Key);
+			if (!ValidateMetadataKeyText(MetadataKey, Error))
+			{
+				return InvalidParams(Error);
+			}
+
+			const FString NormalizedMetadataKey = MetadataKey.ToLower();
+			if (NormalizedMetadataKeys.Contains(NormalizedMetadataKey))
+			{
+				return InvalidParams(FString::Printf(
+					TEXT("Metadata keys collide case-insensitively as FName: '%s'"),
+					*MetadataKey));
+			}
+			NormalizedMetadataKeys.Add(NormalizedMetadataKey);
+
 			FString MetadataValue;
 			if (!Pair.Value.IsValid() || Pair.Value->Type != EJson::String || !Pair.Value->TryGetString(MetadataValue))
 			{
@@ -1367,6 +1591,10 @@ FMonolithActionResult FMonolithLocalizationActions::SetStringMetadata(const TSha
 
 	FString MetadataKey;
 	if (!ReadRequiredStringParam(Params, TEXT("metadata_key"), MetadataKey, Error))
+	{
+		return InvalidParams(Error);
+	}
+	if (!ValidateMetadataKeyText(MetadataKey, Error))
 	{
 		return InvalidParams(Error);
 	}

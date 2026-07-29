@@ -16,6 +16,8 @@
 
 namespace
 {
+	constexpr int32 MaxExpectedValidationIssueRows = 200;
+
 	void EnsureLocalizationActionsRegistered()
 	{
 		FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
@@ -161,6 +163,29 @@ bool FMonolithParamGuardLocalizationStringTableMalformedParamsTest::RunTest(cons
 		TestEqual(TEXT("duplicate-header import is an invalid-params error"), Result.ErrorCode, -32602);
 	}
 
+	{
+		const FString CsvRelativePath = TEXT("Saved/MonolithTests/whitespace_string_table_header.csv");
+		const FString CsvPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), CsvRelativePath));
+		IFileManager::Get().MakeDirectory(*FPaths::GetPath(CsvPath), true);
+		TestTrue(
+			TEXT("whitespace-header CSV fixture is written"),
+			FFileHelper::SaveStringToFile(TEXT("key,source_string, Owner \nOne,Hello,UI\n"), *CsvPath));
+		ON_SCOPE_EXIT
+		{
+			IFileManager::Get().Delete(*CsvPath, false, true);
+		};
+
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Tests/Monolith/Localization/MissingTable"));
+		Params->SetStringField(TEXT("file_path"), CsvRelativePath);
+		Params->SetBoolField(TEXT("dry_run"), true);
+
+		const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("localization"), TEXT("import_string_table_csv"), Params);
+		TestFalse(TEXT("import_string_table_csv rejects metadata headers with edge whitespace"), Result.bSuccess);
+		TestTrue(TEXT("whitespace-header import reports the ambiguity"), Result.ErrorMessage.Contains(TEXT("whitespace")));
+		TestEqual(TEXT("whitespace-header import is an invalid-params error"), Result.ErrorCode, -32602);
+	}
+
 	return true;
 }
 
@@ -240,6 +265,13 @@ bool FMonolithParamGuardLocalizationStrictJsonTypesTest::RunTest(const FString& 
 
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Tests/Monolith/Localization/ST_Package.ObjectMismatch"));
+		Params->SetBoolField(TEXT("dry_run"), true);
+		ExpectInvalidParams(TEXT("mismatched package and object names"), TEXT("create_string_table"), Params);
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Tests/Monolith/Localization/MissingTable"));
 		Params->SetStringField(TEXT("key"), TEXT("Strict.Metadata"));
 		Params->SetStringField(TEXT("source_string"), TEXT("Must not load"));
@@ -250,6 +282,20 @@ bool FMonolithParamGuardLocalizationStrictJsonTypesTest::RunTest(const FString& 
 		TestFalse(TEXT("JSON-encoded string metadata is rejected"), Result.bSuccess);
 		TestEqual(TEXT("JSON-encoded string metadata returns -32602"), Result.ErrorCode, -32602);
 		TestTrue(TEXT("JSON-encoded string metadata fails before asset lookup"), Result.ErrorMessage.Contains(TEXT("metadata")));
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Tests/Monolith/Localization/MissingTable"));
+		Params->SetStringField(TEXT("key"), TEXT("Strict.MetadataWhitespace"));
+		Params->SetStringField(TEXT("metadata_key"), TEXT(" Owner "));
+		Params->SetStringField(TEXT("metadata_value"), TEXT("Must not load"));
+		Params->SetBoolField(TEXT("dry_run"), true);
+
+		const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("localization"), TEXT("set_string_metadata"), Params);
+		TestFalse(TEXT("metadata keys with edge whitespace are rejected"), Result.bSuccess);
+		TestEqual(TEXT("metadata whitespace returns -32602"), Result.ErrorCode, -32602);
+		TestTrue(TEXT("metadata whitespace error is explicit"), Result.ErrorMessage.Contains(TEXT("whitespace")));
 	}
 
 	{
@@ -269,12 +315,16 @@ bool FMonolithParamGuardLocalizationStringTableLifecycleTest::RunTest(const FStr
 	EnsureLocalizationActionsRegistered();
 
 	const FString Suffix = FGuid::NewGuid().ToString(EGuidFormats::Digits);
-	const FString AssetName = FString::Printf(TEXT("ST_ActionLifecycle_%s"), *Suffix);
-	const FString AssetPath = FString::Printf(TEXT("/Game/Tests/Monolith/Localization/%s"), *AssetName);
+	const FString AssetFolder = FString::Printf(TEXT("/Game/Tests/Monolith/Localization/Lifecycle_%s"), *Suffix);
+	const FString AssetName = TEXT("ST_Primary");
+	const FString AssetPath = FString::Printf(TEXT("%s/%s"), *AssetFolder, *AssetName);
+	const FString ValidationAssetName = TEXT("ST_ValidationBudget");
+	const FString ValidationAssetPath = FString::Printf(TEXT("%s/%s"), *AssetFolder, *ValidationAssetName);
 	const FString CsvRelativePath = FString::Printf(TEXT("Saved/MonolithTests/Localization/%s.csv"), *AssetName);
 	const FString CsvPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), CsvRelativePath));
 
 	UStringTable* CreatedTable = nullptr;
+	UStringTable* ValidationTable = nullptr;
 	ON_SCOPE_EXIT
 	{
 		IFileManager::Get().Delete(*CsvPath, false, true);
@@ -287,6 +337,16 @@ bool FMonolithParamGuardLocalizationStringTableLifecycleTest::RunTest(const FStr
 			}
 			CreatedTable->ClearFlags(RF_Public | RF_Standalone);
 			CreatedTable->MarkAsGarbage();
+		}
+		if (ValidationTable)
+		{
+			FStringTableRegistry::Get().UnregisterStringTable(ValidationTable->GetStringTableId());
+			if (UPackage* Package = ValidationTable->GetOutermost())
+			{
+				Package->SetDirtyFlag(false);
+			}
+			ValidationTable->ClearFlags(RF_Public | RF_Standalone);
+			ValidationTable->MarkAsGarbage();
 		}
 	};
 
@@ -408,6 +468,83 @@ bool FMonolithParamGuardLocalizationStringTableLifecycleTest::RunTest(const FStr
 
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), ValidationAssetPath);
+		Params->SetStringField(TEXT("namespace"), TEXT("Monolith.Automation.Validation"));
+		Params->SetBoolField(TEXT("confirm"), true);
+
+		const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("localization"), TEXT("create_string_table"), Params);
+		if (!TestTrue(TEXT("validation-budget StringTable fixture is created"), Result.bSuccess))
+		{
+			AddError(Result.ErrorMessage);
+			return false;
+		}
+	}
+
+	ValidationTable = Cast<UStringTable>(FMonolithAssetUtils::LoadAssetByPath(ValidationAssetPath));
+	if (!TestNotNull(TEXT("validation-budget StringTable resolves by asset path"), ValidationTable))
+	{
+		return false;
+	}
+	for (int32 Index = 0; Index < MaxExpectedValidationIssueRows + 5; ++Index)
+	{
+		const FTextKey ValidationKey(FString::Printf(TEXT("Empty.%03d"), Index));
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8 && WITH_EDITORONLY_DATA
+		ValidationTable->GetMutableStringTable()->SetSourceString(ValidationKey, FString(), FString());
+#else
+		ValidationTable->GetMutableStringTable()->SetSourceString(
+			ValidationKey,
+			FString());
+#endif
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("path"), AssetFolder);
+		Params->SetBoolField(TEXT("include_entries"), true);
+		Params->SetBoolField(TEXT("include_metadata"), true);
+		Params->SetNumberField(TEXT("limit"), 2);
+
+		const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("localization"), TEXT("list_string_tables"), Params);
+		if (TestTrue(TEXT("list_string_tables aggregate entry budget executes"), Result.bSuccess) && Result.Result.IsValid())
+		{
+			TestEqual(
+				TEXT("two table summaries are returned"),
+				static_cast<int32>(Result.Result->GetIntegerField(TEXT("returned_count"))),
+				2);
+			TestEqual(
+				TEXT("aggregate serialized entries do not exceed limit"),
+				static_cast<int32>(Result.Result->GetIntegerField(TEXT("returned_entry_count"))),
+				2);
+			TestTrue(
+				TEXT("aggregate result reports entries omitted by the shared budget"),
+				Result.Result->GetIntegerField(TEXT("truncated_entry_count")) > 0);
+		}
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), ValidationAssetPath);
+
+		const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("localization"), TEXT("validate_string_table"), Params);
+		if (TestTrue(TEXT("validation issue cap executes"), Result.bSuccess) && Result.Result.IsValid())
+		{
+			TestEqual(
+				TEXT("validation reports the full issue total"),
+				static_cast<int32>(Result.Result->GetIntegerField(TEXT("issue_count"))),
+				MaxExpectedValidationIssueRows + 5);
+			TestEqual(
+				TEXT("validation returns at most the bounded issue rows"),
+				static_cast<int32>(Result.Result->GetIntegerField(TEXT("returned_issue_count"))),
+				MaxExpectedValidationIssueRows);
+			TestEqual(
+				TEXT("validation reports the truncated issue count"),
+				static_cast<int32>(Result.Result->GetIntegerField(TEXT("truncated_issue_count"))),
+				5);
+		}
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("asset_path"), AssetPath);
 		Params->SetStringField(TEXT("key"), EntryKey);
 		Params->SetStringField(TEXT("metadata_key"), TEXT("Owner"));
@@ -465,17 +602,6 @@ bool FMonolithParamGuardLocalizationStringTableLifecycleTest::RunTest(const FStr
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("asset_path"), AssetPath);
 		Params->SetStringField(TEXT("key"), EntryKey);
-		Params->SetStringField(TEXT("metadata_key"), TEXT("EmptyAllowed"));
-		Params->SetBoolField(TEXT("remove"), true);
-		Params->SetBoolField(TEXT("confirm"), true);
-		const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("localization"), TEXT("set_string_metadata"), Params);
-		TestTrue(TEXT("empty metadata regression fixture is removed before CSV round trip"), Result.bSuccess);
-	}
-
-	{
-		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
-		Params->SetStringField(TEXT("asset_path"), AssetPath);
-		Params->SetStringField(TEXT("key"), EntryKey);
 		Params->SetStringField(TEXT("metadata_key"), TEXT("key"));
 		Params->SetStringField(TEXT("metadata_value"), TEXT("Reserved collision"));
 		Params->SetBoolField(TEXT("confirm"), true);
@@ -497,6 +623,22 @@ bool FMonolithParamGuardLocalizationStringTableLifecycleTest::RunTest(const FStr
 		Params->RemoveField(TEXT("metadata_value"));
 		const FMonolithActionResult RemoveResult = FMonolithToolRegistry::Get().ExecuteAction(TEXT("localization"), TEXT("set_string_metadata"), Params);
 		TestTrue(TEXT("reserved-header metadata fixture is removed"), RemoveResult.bSuccess);
+	}
+
+	{
+		CreatedTable->GetMutableStringTable()->SetMetaData(FTextKey(EntryKey), FName(TEXT(" Owner ")), TEXT("Ambiguous"));
+
+		TSharedPtr<FJsonObject> ExportParams = MakeShared<FJsonObject>();
+		ExportParams->SetStringField(TEXT("asset_path"), AssetPath);
+		ExportParams->SetStringField(TEXT("file_path"), CsvRelativePath);
+		ExportParams->SetBoolField(TEXT("include_metadata"), true);
+		ExportParams->SetBoolField(TEXT("dry_run"), true);
+		const FMonolithActionResult ExportResult = FMonolithToolRegistry::Get().ExecuteAction(TEXT("localization"), TEXT("export_string_table_csv"), ExportParams);
+		TestFalse(TEXT("CSV export rejects existing metadata keys with edge whitespace"), ExportResult.bSuccess);
+		TestEqual(TEXT("metadata-whitespace export returns -32602"), ExportResult.ErrorCode, -32602);
+		TestTrue(TEXT("metadata-whitespace export explains the ambiguity"), ExportResult.ErrorMessage.Contains(TEXT("whitespace")));
+
+		CreatedTable->GetMutableStringTable()->RemoveMetaData(FTextKey(EntryKey), FName(TEXT(" Owner ")));
 	}
 
 	{
@@ -553,6 +695,36 @@ bool FMonolithParamGuardLocalizationStringTableLifecycleTest::RunTest(const FStr
 		}
 	}
 #endif
+
+	{
+		bool bFoundEmptyMetadata = false;
+		CreatedTable->GetStringTable()->EnumerateMetaData(
+			FTextKey(EntryKey),
+			[&bFoundEmptyMetadata](FName MetadataId, const FString& MetadataValue)
+			{
+				if (MetadataId == FName(TEXT("EmptyAllowed")))
+				{
+					bFoundEmptyMetadata = MetadataValue.IsEmpty();
+					return false;
+				}
+				return true;
+			});
+		TestTrue(TEXT("replace CSV import preserves a present empty metadata value"), bFoundEmptyMetadata);
+
+		bool bUnexpectedEmptyMetadata = false;
+		CreatedTable->GetStringTable()->EnumerateMetaData(
+			FTextKey(TEXT("Aardvark.First")),
+			[&bUnexpectedEmptyMetadata](FName MetadataId, const FString&)
+			{
+				if (MetadataId == FName(TEXT("EmptyAllowed")))
+				{
+					bUnexpectedEmptyMetadata = true;
+					return false;
+				}
+				return true;
+			});
+		TestFalse(TEXT("replace CSV import does not create absent empty metadata on another row"), bUnexpectedEmptyMetadata);
+	}
 
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
