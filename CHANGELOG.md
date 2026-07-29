@@ -8,7 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **New `interchange` namespace with 16 guarded import-pipeline actions.** Inspect supported formats and import metadata; validate sources; import one or many assets through generic or typed entry points; update reimport paths; reimport assets; and export assets. Mutations require `confirm=true` or an explicit dry run, validate disk/package roots before writes, and return per-item rows for batch operations.
+- **New `interchange` namespace with 15 guarded import-pipeline actions.** Inspect supported formats and registered importer/reimport-handler availability; import one or many assets through generic or type-enforcing entry points; update reimport paths with handler readback; reimport assets; and export only when an exporter exists. Mutations require `confirm=true` or an explicit dry run, reject linked-path escapes and invalid disk/package roots before writes, implement real `fail`/`overwrite`/`rename` collision behavior, and return per-item rows for batch operations.
+
+### Fixed
+
+- **The native MCP proxy build now discovers the installed Visual Studio C++ toolchain.** `Tools\MonolithProxy\build_proxy.bat` uses an existing `cl.exe` environment or `vswhere.exe` instead of assuming Visual Studio Community is installed on the `C:` drive.
 
 ## [0.21.3] - 2026-07-26
 

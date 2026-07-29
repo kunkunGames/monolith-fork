@@ -127,6 +127,7 @@ static const std::vector<std::string> CORE_QUERY_TOOLS = {
     "logicdriver_query",
     "audio_query",
     "level_sequence_query",
+    "interchange_query",
 };
 
 // ============================================================================

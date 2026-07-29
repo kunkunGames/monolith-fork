@@ -1,6 +1,6 @@
 # Monolith API Reference
 
-**Version:** v0.21.3 · **Last updated:** 2026-07-26
+**Version:** v0.21.3 · **Last updated:** 2026-07-29
 
 **In-tree action total is approximate: ~1,400+ actions across 25+ in-tree namespaces** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
@@ -35,7 +35,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
 | [audio](#audio) | 98 | Sound Cue + MetaSound graph CRUD + document introspection, attenuation/class/mix/submix/concurrency, batch ops, Sound Cue templates, perception bindings |
 | [level_sequence](#level_sequence) | 8 | Level Sequence inspection: binding inventory (legacy + UE 5.7 custom bindings), Director Blueprint functions/variables, event-track bindings, cross-sequence reverse lookup |
-| [interchange](#interchange) | 16 | Guarded import, batch import, reimport-source management, reimport, export, and source/format inspection |
+| [interchange](#interchange) | 15 | Guarded import, batch import, reimport-source management, reimport, export, and source/format inspection |
 | [bulk_fill](#bulk_fill) | 2 | Reflection-walker bulk property fill across 12 per-namespace adapters (`apply`, `list_namespaces`) |
 | [describe](#describe) | 3 | Read-only schema introspection for the same 12 adapters (`schema`, `list_targets`, `action_schema`) |
 | [decision](#decision) | 5 | **New v0.17.0.** Reflection Intelligence — architectural decision records mined from markdown corpora |
@@ -44,7 +44,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [network](#network) | 4 | **New v0.17.0.** Reflection Intelligence — UE 5.7 replication inspection (replicated classes, RPCs, OnRep handlers, unbalanced-OnRep audit) |
 | [pipeline](#pipeline) | 2 | **New v0.17.0.** Reflection Intelligence — read-only composer actions (`pr_review`, `release_readiness`) |
 | [reflect](#reflect) | 1 | **New v0.19.0.** Reflection Intelligence — index maintenance (`rebuild_reflection_index`, project-only force-rebuild of the RI reflection tables; WRITE/maintenance) |
-| **In-tree subtotal** | **1406** | (all default-active; +45 experimental town gen → 1451 when registered) |
+| **In-tree subtotal** | **1405** | (all default-active; +45 experimental town gen → 1450 when registered) |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -1132,21 +1132,20 @@ Guarded asset import/export pipeline. Read-only actions validate sources and ins
 | Action | Key params | Notes |
 |--------|------------|-------|
 | `get_supported_formats` | none | Lists known source formats, runtime module availability, allowed roots, and mutation policy. |
-| `can_import` | `source_file`; optional `destination_path`, `allow_external` | Validates source existence, extension support, root policy, and destination package syntax without mutation. |
-| `can_reimport` | `asset_path` | Reports whether an existing asset carries usable source-import metadata. |
+| `can_import` | `source_file`; optional `destination_path`, `allow_external` | Validates source existence, extension support, a registered Interchange translator or legacy factory, link-safe root policy, and destination package syntax without mutation. |
+| `can_reimport` | `asset_path` | Reports the result and source paths from `FReimportManager::CanReimport`. |
 | `get_import_data` | `asset_path` | Returns the reflected source-file rows for an existing asset. |
-| `import_asset` | `source_file`, `destination_path`, `conflict_policy`; optional `allow_external`, `confirm`, `dry_run`, `options` | Imports one source with an explicit `fail`, `overwrite`, `rename`, or `reimport_only` conflict policy. |
-| `import_assets` | `source_files`, `destination_path`, `conflict_policy`; optional `allow_external`, `confirm`, `dry_run`, `options` | Imports sources sequentially and returns one structured row per source. |
-| `import_scene` | same as `import_asset` | Typed scene import entry point over the guarded implementation. |
-| `import_mesh` | same as `import_asset` | Typed static-mesh import entry point over the guarded implementation. |
-| `import_skeletal_mesh` | same as `import_asset` | Typed skeletal-mesh import entry point over the guarded implementation. |
-| `import_texture` | same as `import_asset` | Typed texture import entry point over the guarded implementation. |
-| `import_audio` | same as `import_asset` | Typed audio import entry point over the guarded implementation. |
-| `import_with_options` | same as `import_asset` | Generic guarded import with a forward-compatible `options` object. |
-| `update_reimport_path` | `asset_path`, `source_file`; optional `source_file_index`, `allow_external`, `confirm`, `dry_run` | Repoints an existing asset's source metadata after root validation. |
+| `import_asset` | `source_file`, `destination_path`, `conflict_policy`; optional `allow_external`, `confirm`, `dry_run` | Imports one source with an explicit `fail`, `overwrite`, or uniquely resolved `rename` policy. |
+| `import_assets` | `source_files`, `destination_path`, `conflict_policy`; optional `allow_external`, `confirm`, `dry_run` | Imports sources sequentially and returns one structured row per source. |
+| `import_scene` | same as `import_asset` | Requires a scene-capable source and registered scene factory. |
+| `import_mesh` | same as `import_asset` | Configures and verifies a static-mesh import. |
+| `import_skeletal_mesh` | same as `import_asset` | Configures FBX skeletal import explicitly and verifies a skeletal-mesh result. |
+| `import_texture` | same as `import_asset` | Requires a texture source and verifies a texture result. |
+| `import_audio` | same as `import_asset` | Requires a wave-audio source and verifies a sound-wave result. |
+| `update_reimport_path` | `asset_path`, `source_file`; optional `source_file_index`, `allow_external`, `confirm`, `dry_run` | Requires a registered handler, validates the source index, updates the path, and verifies handler readback. |
 | `reimport_asset` | `asset_path`; optional `source_file`, `source_file_index`, `allow_external`, `confirm`, `dry_run` | Optionally repoints, then reimports one existing asset through Unreal's reimport manager. |
-| `reimport_assets` | `asset_paths`; optional `confirm`, `dry_run` | Reimports assets sequentially and returns one row per asset. |
-| `export_asset` | `asset_path`, `file_path`; optional `replace_existing`, `allow_external`, `confirm`, `dry_run` | Exports one asset after validating the output path and replacement policy. |
+| `reimport_assets` | `asset_paths`; optional `allow_external`, `confirm`, `dry_run` | Reimports assets sequentially after validating each handler-reported source path. |
+| `export_asset` | `asset_path`, `file_path`; optional `replace_existing`, `allow_external`, `confirm`, `dry_run` | Requires a matching exporter before either dry-run success or export. |
 
 ---
 
