@@ -1124,6 +1124,51 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithLevelSequence.md`.
 
 ---
 
+## dataflow
+
+Bounded, read-only `UDataflow` asset discovery, graph/node-schema inspection,
+integrity validation, variable inspection, and editor-comment membership.
+**8 actions.** Implemented by `MonolithDataflow` with explicit
+`DataflowCore`/`DataflowEngine` dependencies.
+
+| Action | Key params | Notes |
+|--------|-----------|-------|
+| `get_status` | — | Exact eight-action roster, Dataflow plugin/module state, and explicit authoring/evaluation/regeneration=false flags |
+| `list_assets` | `package_path?`, `limit?` | AssetRegistry-only bounded discovery; reports count completeness and never loads assets |
+| `get_dataflow_graph` | `asset_path`, `node_limit?`, `connection_limit?`, `pin_limit?`, `property_limit?`, `include_properties?` | Independent node/connection slices, explicit nested truncation, registered/declared pin provenance, and package-dirty postconditions |
+| `list_dataflow_node_types` | `filter?`, `common_only?`, `limit?`, `include_pins?`, `pin_limit?` | Deterministic category/type ordering with exact counts and bounded optional pin schemas |
+| `get_dataflow_node_schema` | `type_name`, `include_properties?`, `pin_limit?`, `property_limit?` | One case-exact registered factory type; case-only substitution returns `node_type_case_mismatch` |
+| `validate_dataflow_graph` | `asset_path`, `node_scan_limit?`, `connection_scan_limit?`, `issue_limit?` | Bounded structural validation; incomplete scans emit `validity_status=incomplete` and omit `valid` |
+| `list_dataflow_variables` | `asset_path`, `limit?` | Bounded property-bag descriptors and scalar values with explicit value-read, omission, and truncation status |
+| `list_dataflow_comments` | `asset_path`, `comment_limit?`, `node_limit?`, `graph_node_scan_limit?` | Bounded comment/membership rows; rejects comparison budgets above 1,000,000 |
+
+Scalar params require exact JSON types; unknown keys, fractional integers, and
+out-of-range limits fail with `-32602`. `package_path` is `/Game` or a
+canonical directory below it. `asset_path` is an exact, case-sensitive
+`/Game/.../Asset.Asset` object path and rejects shorthand names, file
+extensions, backslashes, subobjects, redirects, and alternate resolved
+objects. All numeric limits publish inclusive `minimum` and `maximum` fields in
+their discoverable action schemas.
+
+Editable node/default properties and property-bag variables expose bounded
+scalar values only. Dynamic containers, structs, and fixed arrays report an
+explicit `value_read_status` such as `omitted_container` or `omitted_struct`
+and omit `value`; the module never calls an unbounded generic export path for
+those values.
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithDataflow.md`.
+
+---
+
+## Core action-schema helper
+
+`FParamSchemaBuilder::Range(name, min, max)` adds inclusive machine-readable
+`minimum` and `maximum` fields to an already-declared registered-action
+parameter. It is a discovery contract only: action handlers must still perform
+strict runtime type and range validation.
+
+---
+
 ## bulk_fill
 
 Reflection-walker bulk property fill across 12 per-namespace adapters. **2 actions.** Framework dispatcher in `MonolithCore` (0.15.0); each adapter self-registers from its owning module — zero compile-time linkage from core into adapter modules.

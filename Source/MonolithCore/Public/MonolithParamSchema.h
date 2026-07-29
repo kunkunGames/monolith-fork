@@ -1,6 +1,8 @@
 #pragma once
+#include "Containers/Map.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Math/UnrealMathUtility.h"
 #include <initializer_list>
 
 /**
@@ -180,6 +182,25 @@ public:
 		return *this;
 	}
 
+	// Adds machine-readable inclusive numeric bounds to an existing parameter.
+	// Runtime handlers must still reject invalid values; this is the discovery contract.
+	FParamSchemaBuilder& Range(const FString& Name, double MinValue, double MaxValue)
+	{
+		checkf(
+			FMath::IsFinite(MinValue)
+				&& FMath::IsFinite(MaxValue)
+				&& MinValue <= MaxValue,
+			TEXT("Invalid schema range for '%s': %g..%g"),
+			*Name,
+			MinValue,
+			MaxValue);
+		TSharedPtr<FJsonObject>& Param = ParamsByName.FindChecked(Name);
+		checkf(Param.IsValid(), TEXT("Schema param '%s' is invalid"), *Name);
+		Param->SetNumberField(TEXT("minimum"), MinValue);
+		Param->SetNumberField(TEXT("maximum"), MaxValue);
+		return *this;
+	}
+
 	TSharedPtr<FJsonObject> Build()
 	{
 		return Schema;
@@ -187,6 +208,7 @@ public:
 
 private:
 	TSharedPtr<FJsonObject> Schema = MakeShared<FJsonObject>();
+	TMap<FString, TSharedPtr<FJsonObject>> ParamsByName;
 
 	void AddParam(const FString& Name, const FString& Type, const FString& Desc, bool bRequired,
 		const FString& Default, bool bHasDefault, std::initializer_list<const TCHAR*> Aliases,
@@ -215,6 +237,7 @@ private:
 		{
 			Param->SetStringField(TEXT("kind"), MonolithParamKind::ToString(Kind));
 		}
+		ParamsByName.Add(Name, Param);
 		Schema->SetObjectField(Name, Param);
 	}
 };
