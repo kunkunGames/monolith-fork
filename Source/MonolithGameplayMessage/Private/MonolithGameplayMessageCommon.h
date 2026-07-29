@@ -56,6 +56,7 @@ namespace MonolithGameplayMessage
 	bool IsCanonicalGameplayTagString(const FString& TagString, FString& OutError);
 	bool ResolveProjectSourceRoot(const FString& Input, FString& OutResolvedRoot, FString& OutError);
 	bool ResolveEngineGameplayMessageSourceRoot(FString& OutResolvedRoot, FString& OutError);
+	bool IsPathWithinDirectory(const FString& Path, const FString& Directory);
 	bool IsMonolithSourcePath(const FString& Path);
 	bool HasSupportedSourceExtension(const FString& File);
 	FString MakeProjectRelativePath(const FString& File);

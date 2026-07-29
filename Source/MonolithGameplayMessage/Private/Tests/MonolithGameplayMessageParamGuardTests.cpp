@@ -115,6 +115,28 @@ bool FMonolithGameplayMessageParamGuardTest::RunTest(const FString& Parameters)
 		EmptyTagSegment,
 		TEXT("empty gameplay tag segment"));
 
+	TSharedPtr<FJsonObject> LeadingEmptyTagSegment = MakeShared<FJsonObject>();
+	LeadingEmptyTagSegment->SetStringField(
+		TEXT("channel_tag"),
+		TEXT(".Monolith.GameplayMessage"));
+	ExpectInvalidParams(
+		*this,
+		Registry,
+		TEXT("validate_channel_contract"),
+		LeadingEmptyTagSegment,
+		TEXT("leading empty gameplay tag segment"));
+
+	TSharedPtr<FJsonObject> TrailingEmptyTagSegment = MakeShared<FJsonObject>();
+	TrailingEmptyTagSegment->SetStringField(
+		TEXT("channel_tag"),
+		TEXT("Monolith.GameplayMessage."));
+	ExpectInvalidParams(
+		*this,
+		Registry,
+		TEXT("validate_channel_contract"),
+		TrailingEmptyTagSegment,
+		TEXT("trailing empty gameplay tag segment"));
+
 	TSharedPtr<FJsonObject> StringEncodedLimit = MakeShared<FJsonObject>();
 	StringEncodedLimit->SetStringField(TEXT("max_results"), TEXT("10"));
 	ExpectInvalidParams(
@@ -183,6 +205,29 @@ bool FMonolithGameplayMessageParamGuardTest::RunTest(const FString& Parameters)
 		TEXT("trace_channel_usage"),
 		MissingRoot,
 		TEXT("missing project source root"));
+
+	FString PhysicalEscapeFixture = FPaths::Combine(
+		FPaths::ProjectPluginsDir(),
+		TEXT("MonolithGameplayMessageEscapeFixture"));
+	FPaths::NormalizeDirectoryName(PhysicalEscapeFixture);
+	if (FPaths::DirectoryExists(PhysicalEscapeFixture))
+	{
+		TSharedPtr<FJsonObject> EscapedRoot = MakeShared<FJsonObject>();
+		EscapedRoot->SetStringField(
+			TEXT("source_root"),
+			PhysicalEscapeFixture);
+		ExpectInvalidParams(
+			*this,
+			Registry,
+			TEXT("trace_channel_usage"),
+			EscapedRoot,
+			TEXT("physical source root escape through a directory junction"));
+	}
+	else
+	{
+		AddInfo(
+			TEXT("Physical source-root escape fixture is not installed; optional junction guard assertion skipped."));
+	}
 
 	return true;
 }

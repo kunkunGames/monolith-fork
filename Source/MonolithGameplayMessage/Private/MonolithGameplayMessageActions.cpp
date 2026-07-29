@@ -80,6 +80,32 @@ namespace MonolithGameplayMessage
 			return Row;
 		}
 
+		int32 CountObjectReferenceProperties(const UScriptStruct* Struct)
+		{
+			int32 Count = 0;
+			if (!Struct)
+			{
+				return Count;
+			}
+
+			const EPropertyObjectReferenceType AnyObjectReference =
+				EPropertyObjectReferenceType::Strong
+				| EPropertyObjectReferenceType::Weak
+				| EPropertyObjectReferenceType::Soft
+				| EPropertyObjectReferenceType::Conservative;
+			for (TFieldIterator<FProperty> It(Struct); It; ++It)
+			{
+				TArray<const FStructProperty*> EncounteredStructProperties;
+				if ((*It)->ContainsObjectReference(
+					EncounteredStructProperties,
+					AnyObjectReference))
+				{
+					++Count;
+				}
+			}
+			return Count;
+		}
+
 		TSharedPtr<FJsonObject> StructSummary(const FExactObjectLoad& Load)
 		{
 			UScriptStruct* Struct = Cast<UScriptStruct>(Load.Object);
@@ -91,22 +117,23 @@ namespace MonolithGameplayMessage
 				Load.Object && Load.Object->GetClass() ? Load.Object->GetClass()->GetPathName() : FString());
 			Row->SetBoolField(TEXT("blueprint_type"), Struct && Struct->HasMetaData(TEXT("BlueprintType")));
 			Row->SetBoolField(TEXT("deprecated"), Struct && Struct->HasMetaData(TEXT("Deprecated")));
+			Row->SetNumberField(
+				TEXT("structure_size"),
+				Struct ? Struct->GetStructureSize() : 0);
 
 			int32 PropertyCount = 0;
-			int32 ObjectPropertyCount = 0;
 			if (Struct)
 			{
 				for (TFieldIterator<FProperty> It(Struct); It; ++It)
 				{
 					++PropertyCount;
-					if (CastField<FObjectPropertyBase>(*It))
-					{
-						++ObjectPropertyCount;
-					}
 				}
 			}
 			Row->SetNumberField(TEXT("property_count"), PropertyCount);
-			Row->SetNumberField(TEXT("object_property_count"), ObjectPropertyCount);
+			Row->SetNumberField(
+				TEXT("object_property_count"),
+				CountObjectReferenceProperties(Struct));
+			Row->SetBoolField(TEXT("object_reference_scan_recursive"), true);
 			return Row;
 		}
 
@@ -163,7 +190,7 @@ namespace MonolithGameplayMessage
 			const TCHAR* ContractRows[] =
 			{
 				TEXT("UGameplayMessageSubsystem is a UGameInstanceSubsystem; route access through a world or game instance."),
-				TEXT("BroadcastMessage and RegisterListener must agree on the exact same UScriptStruct payload type for a channel."),
+				TEXT("A broadcast payload UScriptStruct must equal or derive from the listener's expected UScriptStruct; the listener type is the accepted parent type."),
 				TEXT("ExactMatch receives only the exact channel; PartialMatch receives the root channel and child channels."),
 				TEXT("Listener handles should be unregistered when the receiver lifetime ends."),
 				TEXT("Blueprint async listeners use UAsyncAction_ListenForGameplayMessage plus GetPayload custom thunk.")
@@ -198,17 +225,8 @@ namespace MonolithGameplayMessage
 			UScriptStruct* Struct = Cast<UScriptStruct>(Load.Object);
 			TSharedPtr<FJsonObject> Summary = StructSummary(Load);
 
-			int32 ObjectPropertyCount = 0;
-			if (Struct)
-			{
-				for (TFieldIterator<FProperty> It(Struct); It; ++It)
-				{
-					if (CastField<FObjectPropertyBase>(*It))
-					{
-						++ObjectPropertyCount;
-					}
-				}
-			}
+			const int32 ObjectPropertyCount =
+				CountObjectReferenceProperties(Struct);
 
 			AddCheck(
 				Checks,
@@ -246,7 +264,9 @@ namespace MonolithGameplayMessage
 				TEXT("message_struct_object_reference_policy"),
 				!bRequireNoObjectReferences || ObjectPropertyCount == 0,
 				bRequireNoObjectReferences ? TEXT("error") : TEXT("info"),
-				FString::Printf(TEXT("object_property_count=%d"), ObjectPropertyCount));
+				FString::Printf(
+					TEXT("recursive_object_reference_property_count=%d"),
+					ObjectPropertyCount));
 
 			if (!Load.IsExact())
 			{
@@ -294,7 +314,7 @@ namespace MonolithGameplayMessage
 						TEXT("error"),
 						TEXT("message_struct_has_object_references"),
 						FString::Printf(
-							TEXT("Struct '%s' has %d object reference properties."),
+							TEXT("Struct '%s' has %d properties that directly or recursively contain UObject references."),
 							*Struct->GetPathName(),
 							ObjectPropertyCount));
 				}

@@ -56,15 +56,35 @@ from exact reflected paths.
 | JSON scalar types | PASS — declared string, boolean, integer, and array values require the corresponding raw JSON type. String-encoded booleans/integers and fractional integers fail with `-32602`. |
 | Integer limits | PASS — `max_files` is `1..5000`; `max_results` is `1..1000`; invalid values are rejected and never clamped. |
 | Object identity | PASS — only canonical object paths are accepted. Whitespace, backslashes, extensions, subobjects, redirects, case changes, and resolved-path substitutions fail. |
-| Channel syntax | PASS — tags must pass the engine validator, contain no whitespace, and contain no empty dot-delimited segment. |
+| Channel syntax | PASS — valid single-segment or hierarchical tags pass; whitespace and leading, trailing, or internal empty dot-delimited segments fail. |
 | Channel registration | PASS — registered tags require exact spelling/case by default; unregistered preflight is explicit through `require_registered_tag=false`. |
 | Match type | PASS — only case-sensitive `ExactMatch` and `PartialMatch` values are accepted. |
-| Default source roots | PASS — current-project `Source` and eligible project-plugin source directories only. |
-| Explicit source roots | PASS — roots must exist under the current project's `Source` or `Plugins` directory. |
+| Default source roots | PASS — current-project `Source` and every discovered `EPluginType::Project` source directory, including nested `Plugins/GameFeatures/...` plugins. |
+| Explicit source roots | PASS — roots must exist lexically and physically under the current project's `Source` or `Plugins` directory; junction/symlink escapes fail. |
 | Engine source | PASS — opt-in is limited to the installed `GameplayMessageRouter/Source` directory. |
-| Source bounds | PASS — 256 roots, 5,000 files, 2 MiB per file, 1,000 results, 32 candidates per line, and 1,000 issues are hard limits with explicit truncation metadata. |
+| Source bounds | PASS — 256 roots, 5,000 files, 2 MiB per file, 1,000 results, 32 candidates per call, and 1,000 issues are hard limits with explicit truncation metadata. Incomplete scans suppress orphan claims and report indeterminate absence analysis. |
 | Runtime claim | PASS — output declares `analysis_mode="bounded_static_source"` and `runtime_execution="not_performed"` and lists reachability/lifetime/delivery limitations. |
 | Mutation | PASS — handlers do not call listener registration, broadcast, compile, save, modify, dirty, or package-creation APIs. The `RegisterListener(` occurrence in the trace implementation is a bounded lexical search token, not a function call. |
+
+---
+
+## 3.1. AI Review Remediation
+
+All ten actionable Codex review findings were reproduced as contract gaps and
+closed in production code plus focused regression assertions.
+
+| Review finding | Root fix | Regression evidence |
+|---|---|---|
+| Container/nested object references were missed | Each top-level `FProperty` now calls recursive `ContainsObjectReference` with the complete strong/weak/soft/conservative flag set shared by UE 5.7 and UE 5.8. | `/Script/Engine.PooledCameraShakes` fails `require_no_object_references=true` because its `TArray<TObjectPtr<UCameraShakeBase>>` is detected. |
+| Nested project plugins were omitted | Default roots come from sorted `IPluginManager::GetDiscoveredPlugins()` project plugins rather than one-level directory enumeration; relative plugin bases are canonicalized before validation. | Both hosts mount and discover `Plugins/GameFeatures/MonolithNestedTraceFixture`, and its unique channel is found without an explicit root. |
+| Listener payload compatibility was overstated | The contract now matches `UGameplayMessageSubsystem`: the broadcast struct may equal or derive from the listener's accepted parent struct. | `ValidationContracts` asserts the equal-or-derived/accepted-parent wording. |
+| Truncation produced false orphan findings | Orphan flags and issues require complete absence analysis; limits/skips/truncation set `orphan_analysis_complete=false`, zero orphan counts, and emit `absence_analysis_indeterminate`. | `max_results=1` proves no orphan flag/issue is emitted and every channel reports `indeterminate`. |
+| `function_context` leaked when excerpts were disabled | Both `function_context` and `line_text` are serialized only for `include_line_text=true`; function context is not inferred otherwise. | Default and opt-in trace calls assert absence/presence of both fields. |
+| Multiple calls on one line cross-bound channels and payloads | The scanner iterates balanced call expressions, extracts only that call's first argument, and binds template/static payload plus match type per call. | Two broadcasts on one line independently report `MultiA`/payload A and `MultiB`/payload B. |
+| Leading/trailing empty tag segments passed | Canonical validation now rejects `StartsWith(".")`, `EndsWith(".")`, and `Contains("..")`. | Param guards cover `.Monolith.GameplayMessage`, `Monolith.GameplayMessage.`, and `Monolith..GameplayMessage`. |
+| Lexical path checks allowed junction escapes | Root and allowed-directory identities are resolved through `IFileManager::GetFilenameOnDisk`; recursive enumeration rechecks each physical path against its root. | Each host exposes a project-local junction to an external fixture, and the root is rejected with invalid params. |
+| Single-segment literal tags were ignored | Quoted first-argument candidates use the canonical tag validator instead of requiring a dot. | Literal `"Message"` is found with its exact payload. |
+| Promised struct size was absent | `message_struct.structure_size` now reports `UScriptStruct::GetStructureSize()`. | `GameplayTagContainer` asserts a positive structure size on both engines. |
 
 ---
 
@@ -89,16 +109,22 @@ Monolith.uplugin
 690DC76F7C77BEAA9011CD6A25985A77CFE1E3F30D482BAD50171C473C1A9807
 
 MonolithGameplayMessageActions.cpp
-32817AB9E83807410D629F4D8AE85C5D2455807FFA4DFB0F9F87F60A88DB1B7C
+FDD5A7059D901CE65DD5FA22A0701D3ADD619737921C5A168D10B7AB576AB9A8
 
 MonolithGameplayMessageCommon.cpp
-B500503BCF58168DBF1D367240676DF6D8B29E681DF55FBDB1E8F5933CAAFB6D
+D57719FF6B7A16A8049CAD38216BDFFC3326DDCECF114FB2FF9B4E994E977AC3
 
 MonolithGameplayMessageTrace.cpp
-AC37823E91C8C919A573254B8AAB99BA65A50C7C77EE2E1B7EF0E6D4B987F581
+195A824F8630789C3B801228684E11912480F67CF50643CDD8C2D4DE9BB8B6A5
 
 MonolithGameplayMessageParamGuardTests.cpp
-364E8D5282EE3723DF1EA43DABDF18DA4ABE6C778EA5803AF914FC4B282B70FF
+408EA679C511A58E1B552505E72BE1EFCA08E96DA7523FA802F38773D8E39B39
+
+MonolithGameplayMessageTraceTests.cpp
+C8DA563D47A00945A8C9012879E954466BB6894E8BFC10DC38EBC2839B46FF9C
+
+MonolithGameplayMessageValidationTests.cpp
+2039A3A5847BA6E85AB901E1839F6F1F2852A10BA5C3CA004E1C317A95CD3759
 ```
 
 ---
@@ -108,12 +134,11 @@ MonolithGameplayMessageParamGuardTests.cpp
 | Engine | Gate | Result | Evidence |
 |---|---|---|---|
 | UE 5.7 | Physically isolated full editor-target build | PASS — 452/452 actions explicitly compiled all four implementation files and four test files, then linked `UnrealEditor-MonolithGameplayMessage.dll`. | `D:\P4\MonolithGameplayMessageUE57Host\Build-UE57-Initial-20260730.log` |
-| UE 5.7 | Final root-fix relink | PASS — 6/6 actions recompiled the common/handler/param-guard files and freshly linked the affected DLL with `Result: Succeeded`. | `D:\P4\MonolithGameplayMessageUE57Host\Build-UE57-GameplayMessage-20260730-050748.log` |
-| UE 5.7 | Final canonical-trace relink | PASS — 7/7 actions recompiled the shared validator, handler, trace, and param-guard test, then freshly linked the affected DLL with `Result: Succeeded`. | `D:\P4\MonolithGameplayMessageUE57Host\Build-UE57-GameplayMessage-CanonicalTrace-20260730.log` |
-| UE 5.7 | Final affected DLL | PASS — 280,576 bytes, SHA-256 `7FCAAFF1DA571B253025227709A4465DC5753375269A9BC302D8D8DD30169E6A`. | `D:\P4\MonolithGameplayMessageUE57Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithGameplayMessage.dll` |
+| UE 5.7 | Final AI-review rebuild | PASS — 9/9 actions recompiled every changed implementation/test translation unit and freshly linked the affected DLL with `Result: Succeeded`. | `D:\P4\MonolithGameplayMessageUE57Host\Build-UE57-GameplayMessage-ReviewAccepted-AllInputs-20260730.log` |
+| UE 5.7 | Final affected DLL | PASS — 318,464 bytes, SHA-256 `7632FEE066792335C62525836C797033BB4DCF7179AEAC4E6647EB65EFE3E7ED`. | `D:\P4\MonolithGameplayMessageUE57Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithGameplayMessage.dll` |
 | UE 5.8 | Physically isolated full editor-target build | PASS — 452/452 actions explicitly compiled all four implementation files and four test files, then linked the affected DLL with `Result: Succeeded`. | `D:\P4\MonolithGameplayMessageUE58Host\Build-UE58-GameplayMessage-20260730-050838.log` |
-| UE 5.8 | Final canonical-trace relink | PASS — 7/7 actions recompiled the shared validator, handler, trace, and param-guard test, then freshly linked the affected DLL with `Result: Succeeded`. | `D:\P4\MonolithGameplayMessageUE58Host\Build-UE58-GameplayMessage-CanonicalTrace-20260730.log` |
-| UE 5.8 | Final affected DLL | PASS — 261,632 bytes, SHA-256 `6D6B0C92E068B0FD6FE6851E8BE970D2708CE419A51FAA9D4ACBFDF41CC1D0A3`. | `D:\P4\MonolithGameplayMessageUE58Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithGameplayMessage.dll` |
+| UE 5.8 | Final AI-review rebuild | PASS — 9/9 actions recompiled every changed implementation/test translation unit and freshly linked the affected DLL with `Result: Succeeded`. | `D:\P4\MonolithGameplayMessageUE58Host\Build-UE58-GameplayMessage-ReviewAccepted-AllInputs-20260730.log` |
+| UE 5.8 | Final affected DLL | PASS — 296,960 bytes, SHA-256 `F249545FB33407CBB24DEC957477B3C824FEA47F6B44888C7BE6888C7DCF4D7E`. | `D:\P4\MonolithGameplayMessageUE58Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithGameplayMessage.dll` |
 
 The UE 5.8 full build emitted deprecation warnings from pre-existing modules.
 The new GameplayMessage module emitted no compiler warning or error.
@@ -131,8 +156,8 @@ Both engines ran one fresh process with:
 
 | Engine | Started | Succeeded | Failed | Queue-empty marker | TestExit marker | Accepted log |
 |---|---:|---:|---:|---:|---:|---|
-| UE 5.7 | 4 | 4 | 0 | present | present | `D:\P4\MonolithGameplayMessageUE57Host\GameplayMessage-UE57-CanonicalTrace-Direct-20260730.log` |
-| UE 5.8 | 4 | 4 | 0 | present | present | `D:\P4\MonolithGameplayMessageUE58Host\GameplayMessage-UE58-CanonicalTrace-20260730.log` |
+| UE 5.7 | 4 | 4 | 0 | present | present | `D:\P4\MonolithGameplayMessageUE57Host\GameplayMessage-UE57-ReviewAccepted-Console-20260730.log` |
+| UE 5.8 | 4 | 4 | 0 | present | present | `D:\P4\MonolithGameplayMessageUE58Host\GameplayMessage-UE58-ReviewAccepted-Console-20260730.log` |
 
 The four tests are:
 
@@ -150,34 +175,20 @@ The first UE 5.7 automation run correctly exposed three contract defects:
 
 The root fix checks exact `EJson` types, uses explicit case-sensitive string
 comparison, and adds canonical no-whitespace/no-empty-segment tag validation.
-The final param-guard suite also covers string-encoded integers, empty tag
-segments, and canonical `trace_channel_usage.channel_tag` filters. The original
-failing log is retained at
-`D:\P4\MonolithGameplayMessageUE57Host\GameplayMessage-UE57-20260730-050030.log`;
-the final 4/4 runs supersede it.
+The final suites additionally cover every review remediation listed in
+Section 3.1. Both accepted commands omit a queued `Quit` command and let
+`-TestExit="Automation Test Queue Empty"` own termination. Acceptance requires
+all four named success markers, zero failure markers, the `4 tests performed`
+queue-empty marker, and the final `TestExit` marker; process exit code alone is
+not treated as proof.
 
-An attempted final rerun appended `; Quit` to `-ExecCmds`. UE 5.8 returned
-process exit code 0 but stopped immediately after opening the automation test
-session, so that log was rejected rather than counted as proof. `Quit` races
-the asynchronous automation queue; removing it and letting `-TestExit` own
-termination produced complete 4/4 evidence on both engines. The rejected logs
-are `GameplayMessage-UE57-FinalDescriptor-20260730.log` and
-`GameplayMessage-UE58-FinalDescriptor-20260730.log`.
-
-Two later UE 5.7 full-suite attempts used `Start-Process -Wait` after the
-canonical trace-filter fix. Each process returned exit code 0 before the
-accepted evidence contract was complete: one log stopped after the first test
-and the other stopped while starting the second, with neither a queue-empty
-termination nor a `TestExit` request. Those rejected logs are
-`GameplayMessage-UE57-CanonicalTrace-20260730.log` and
-`GameplayMessage-UE57-CanonicalTrace-Retry-20260730.log`.
-
-The accepted UE 5.7 rerun invoked `UnrealEditor-Cmd.exe` directly through
-PowerShell's native `&` operator, which retained ownership through all four
-tests and the final log flush. Four individual one-test UE 5.7 runs also
-completed independently, but the direct full-suite log above is the primary
-acceptance evidence. Process exit code alone is not treated as automation
-proof.
+The UE 5.7 accepted evidence is the direct stdout capture because that engine's
+separate `-abslog` file can stop flushing before the final automation messages
+even though the owned process and stdout stream complete. The console capture
+contains all four success rows plus both final markers. Both hosts also log a
+pre-existing `127.0.0.1:9316` bind error because another local Monolith endpoint
+owns the configured port; the focused tests execute the registry directly and
+do not depend on that HTTP listener.
 
 ---
 
@@ -227,6 +238,7 @@ absent, ten Niagara raw-parameter/direct-load advisories remain, and
 PASS. The fork gains exactly five bounded, read-only GameplayMessageRouter
 contract diagnostics through an isolated module. The same source compiles and
 links on UE 5.7 and UE 5.8, passes 4/4 focused tests on each engine under the
-non-racy `TestExit` termination contract with complete log markers, changes the
-generated catalog only by the intended five actions, introduces no new static
-finding, and adds none of the excluded feature classes.
+non-racy `TestExit` termination contract with complete log markers, and closes
+all ten AI-review findings with executable regressions. The generated catalog
+changes only by the intended five actions, introduces no new static finding,
+and adds none of the excluded feature classes.

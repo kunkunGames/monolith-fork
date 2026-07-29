@@ -1,6 +1,7 @@
 #include "MonolithGameplayMessageCommon.h"
 
 #include "GameplayTagContainer.h"
+#include "HAL/FileManager.h"
 #include "Interfaces/IPluginManager.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
@@ -24,6 +25,46 @@ namespace MonolithGameplayMessage
 				Prefix += TEXT("/");
 			}
 			return Path.StartsWith(Prefix, ESearchCase::IgnoreCase);
+		}
+
+		FString NormalizeAbsolutePath(const FString& Input)
+		{
+			FString Result = FPaths::ConvertRelativePathToFull(Input);
+			FPaths::CollapseRelativeDirectories(Result);
+			FPaths::NormalizeFilename(Result);
+			while (Result.EndsWith(TEXT("/"))
+				&& !FPaths::IsDrive(Result))
+			{
+				Result.LeftChopInline(1);
+			}
+			return Result;
+		}
+
+		bool ResolvePhysicalExistingPath(
+			const FString& Input,
+			FString& OutPhysical,
+			FString& OutError)
+		{
+			OutPhysical.Reset();
+			const FString Absolute = NormalizeAbsolutePath(Input);
+			if (!FPaths::FileExists(Absolute)
+				&& !FPaths::DirectoryExists(Absolute))
+			{
+				OutError = FString::Printf(TEXT("Path does not exist: %s"), *Absolute);
+				return false;
+			}
+
+			FString Physical = IFileManager::Get().GetFilenameOnDisk(*Absolute);
+			if (Physical.IsEmpty())
+			{
+				OutError = FString::Printf(
+					TEXT("Could not resolve the physical path for '%s'"),
+					*Absolute);
+				return false;
+			}
+
+			OutPhysical = NormalizeAbsolutePath(Physical);
+			return true;
 		}
 
 		bool ResolveCanonicalDirectory(
@@ -51,34 +92,46 @@ namespace MonolithGameplayMessage
 				return false;
 			}
 
-			FString Resolved = Input;
-			if (FPaths::IsRelative(Resolved))
+			FString Lexical = Input;
+			if (FPaths::IsRelative(Lexical))
 			{
-				Resolved = FPaths::Combine(FPaths::ProjectDir(), Resolved);
+				Lexical = FPaths::Combine(FPaths::ProjectDir(), Lexical);
 			}
-			Resolved = FPaths::ConvertRelativePathToFull(Resolved);
-			FPaths::CollapseRelativeDirectories(Resolved);
-			FPaths::NormalizeDirectoryName(Resolved);
+			Lexical = NormalizeAbsolutePath(Lexical);
+			const FString LexicalAllowed = NormalizeAbsolutePath(AllowedDirectory);
 
-			FString Allowed = FPaths::ConvertRelativePathToFull(AllowedDirectory);
-			FPaths::CollapseRelativeDirectories(Allowed);
-			FPaths::NormalizeDirectoryName(Allowed);
-
-			if (!HasBoundaryPrefix(Resolved, Allowed))
+			if (!HasBoundaryPrefix(Lexical, LexicalAllowed))
 			{
 				OutError = FString::Printf(
 					TEXT("Source root '%s' resolves outside the allowed directory '%s'"),
 					*Input,
-					*Allowed);
+					*LexicalAllowed);
 				return false;
 			}
-			if (!FPaths::DirectoryExists(Resolved))
+			if (!FPaths::DirectoryExists(Lexical))
 			{
-				OutError = FString::Printf(TEXT("Source root does not exist: %s"), *Resolved);
+				OutError = FString::Printf(TEXT("Source root does not exist: %s"), *Lexical);
 				return false;
 			}
 
-			OutResolvedRoot = MoveTemp(Resolved);
+			FString PhysicalRoot;
+			FString PhysicalAllowed;
+			if (!ResolvePhysicalExistingPath(Lexical, PhysicalRoot, OutError)
+				|| !ResolvePhysicalExistingPath(LexicalAllowed, PhysicalAllowed, OutError))
+			{
+				return false;
+			}
+			if (!HasBoundaryPrefix(PhysicalRoot, PhysicalAllowed))
+			{
+				OutError = FString::Printf(
+					TEXT("Source root '%s' resolves physically outside the allowed directory '%s' (target '%s')"),
+					*Input,
+					*PhysicalAllowed,
+					*PhysicalRoot);
+				return false;
+			}
+
+			OutResolvedRoot = MoveTemp(PhysicalRoot);
 			return true;
 		}
 	}
@@ -339,7 +392,9 @@ namespace MonolithGameplayMessage
 			}
 		}
 
-		if (TagString.Contains(TEXT(".."), ESearchCase::CaseSensitive))
+		if (TagString.StartsWith(TEXT("."), ESearchCase::CaseSensitive)
+			|| TagString.EndsWith(TEXT("."), ESearchCase::CaseSensitive)
+			|| TagString.Contains(TEXT(".."), ESearchCase::CaseSensitive))
 		{
 			OutError = TEXT("Gameplay tags must not contain empty dot-delimited segments");
 			return false;
@@ -356,19 +411,40 @@ namespace MonolithGameplayMessage
 			return false;
 		}
 
-		FString ProjectSource = FPaths::ConvertRelativePathToFull(
-			FPaths::Combine(FPaths::ProjectDir(), TEXT("Source")));
-		FString ProjectPlugins = FPaths::ConvertRelativePathToFull(FPaths::ProjectPluginsDir());
-		FPaths::CollapseRelativeDirectories(ProjectSource);
-		FPaths::CollapseRelativeDirectories(ProjectPlugins);
-		FPaths::NormalizeDirectoryName(ProjectSource);
-		FPaths::NormalizeDirectoryName(ProjectPlugins);
+		bool bUnderApprovedSourceRoot = false;
+		const FString ApprovedDirectories[] =
+		{
+			FPaths::Combine(FPaths::ProjectDir(), TEXT("Source")),
+			FPaths::ProjectPluginsDir()
+		};
+		for (const FString& ApprovedDirectory : ApprovedDirectories)
+		{
+			if (!FPaths::DirectoryExists(ApprovedDirectory))
+			{
+				continue;
+			}
 
-		if (!HasBoundaryPrefix(Resolved, ProjectSource)
-			&& !HasBoundaryPrefix(Resolved, ProjectPlugins))
+			FString PhysicalApprovedDirectory;
+			FString PhysicalError;
+			if (!ResolvePhysicalExistingPath(
+					ApprovedDirectory,
+					PhysicalApprovedDirectory,
+					PhysicalError))
+			{
+				OutError = MoveTemp(PhysicalError);
+				return false;
+			}
+			if (HasBoundaryPrefix(Resolved, PhysicalApprovedDirectory))
+			{
+				bUnderApprovedSourceRoot = true;
+				break;
+			}
+		}
+
+		if (!bUnderApprovedSourceRoot)
 		{
 			OutError = FString::Printf(
-				TEXT("Source root '%s' must resolve under the project's Source or Plugins directory"),
+				TEXT("Source root '%s' must resolve physically under the project's Source or Plugins directory"),
 				*Input);
 			return false;
 		}
@@ -386,15 +462,46 @@ namespace MonolithGameplayMessage
 			return false;
 		}
 
-		const FString SourceDirectory = FPaths::Combine(Plugin->GetBaseDir(), TEXT("Source"));
-		return ResolveCanonicalDirectory(SourceDirectory, Plugin->GetBaseDir(), OutResolvedRoot, OutError);
+		const FString PluginBaseDirectory =
+			FPaths::ConvertRelativePathToFull(Plugin->GetBaseDir());
+		const FString SourceDirectory =
+			FPaths::Combine(PluginBaseDirectory, TEXT("Source"));
+		return ResolveCanonicalDirectory(
+			SourceDirectory,
+			PluginBaseDirectory,
+			OutResolvedRoot,
+			OutError);
+	}
+
+	bool IsPathWithinDirectory(const FString& Path, const FString& Directory)
+	{
+		return HasBoundaryPrefix(
+			NormalizeAbsolutePath(Path),
+			NormalizeAbsolutePath(Directory));
 	}
 
 	bool IsMonolithSourcePath(const FString& Path)
 	{
-		FString Normalized = Path;
-		FPaths::NormalizeFilename(Normalized);
-		return Normalized.Contains(TEXT("/Plugins/Monolith/Source/"), ESearchCase::IgnoreCase);
+		const FString MonolithSource = FPaths::Combine(
+			FPaths::ProjectPluginsDir(),
+			TEXT("Monolith/Source"));
+		if (!FPaths::DirectoryExists(MonolithSource))
+		{
+			return false;
+		}
+
+		FString PhysicalPath;
+		FString PhysicalMonolithSource;
+		FString Error;
+		if (!ResolvePhysicalExistingPath(Path, PhysicalPath, Error)
+			|| !ResolvePhysicalExistingPath(
+				MonolithSource,
+				PhysicalMonolithSource,
+				Error))
+		{
+			return IsPathWithinDirectory(Path, MonolithSource);
+		}
+		return HasBoundaryPrefix(PhysicalPath, PhysicalMonolithSource);
 	}
 
 	bool HasSupportedSourceExtension(const FString& File)

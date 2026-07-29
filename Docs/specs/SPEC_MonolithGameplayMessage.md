@@ -35,10 +35,10 @@
 | Action | Params | Behavior |
 | --- | --- | --- |
 | `gameplay_message.get_status` | none | Reports exact `GameplayMessageRouter` plugin, `GameplayMessageRuntime`/`GameplayMessageNodes` module, subsystem/async-listener class, listener-handle struct, and match-enum availability. |
-| `gameplay_message.describe_listener_contract` | none | Reports reflected listener/broadcast functions, supported match types, and the shared channel/payload/lifetime contract. |
-| `gameplay_message.validate_message_struct` | `message_struct`; optional `require_blueprint_type=false`, `require_no_object_references=false` | Loads one exact object path without redirects, verifies `UScriptStruct` identity, and reports metadata, size, property counts, object-reference counts, checks, and issues. |
+| `gameplay_message.describe_listener_contract` | none | Reports reflected listener/broadcast functions, supported match types, lifetime rules, and the runtime-compatible payload rule: a broadcast struct must equal or derive from the listener's accepted parent struct. |
+| `gameplay_message.validate_message_struct` | `message_struct`; optional `require_blueprint_type=false`, `require_no_object_references=false` | Loads one exact object path without redirects, verifies `UScriptStruct` identity, and reports metadata, `structure_size`, property counts, recursive object-reference-bearing property counts, checks, and issues. |
 | `gameplay_message.validate_channel_contract` | `channel_tag`; optional `message_struct`, `match_type=ExactMatch`, `require_registered_tag=true`, `require_blueprint_type=false` | Validates canonical tag syntax, exact registration spelling/case, exact match-type spelling, and an optional exact payload struct. |
-| `gameplay_message.trace_channel_usage` | optional `channel_tag`, `source_root`, `source_roots`, `include_monolith_source=false`, `include_engine_gameplay_message_sources=false`, `max_files=2000`, `max_results=500`, `include_line_text=false` | Scans bounded project/plugin source text for broadcaster/listener call-site candidates, groups inferred channel/payload/match relationships, and reports mismatch/orphan/ambiguity candidates plus explicit truncation metadata. |
+| `gameplay_message.trace_channel_usage` | optional `channel_tag`, `source_root`, `source_roots`, `include_monolith_source=false`, `include_engine_gameplay_message_sources=false`, `max_files=2000`, `max_results=500`, `include_line_text=false` | Scans bounded project/plugin source text call by call, groups inferred channel/payload/match relationships, and reports mismatch/orphan/ambiguity candidates plus explicit truncation and absence-analysis metadata. |
 
 ---
 
@@ -49,7 +49,7 @@
 | JSON scalar types | Strings, booleans, and integers must arrive as their declared JSON type. String-encoded booleans/integers are rejected with `-32602`. |
 | Integer ranges | `max_files` accepts only integral values in `1..5000`; `max_results` accepts only integral values in `1..1000`. Values are never clamped. |
 | Object identity | Paths must pass `FPackageName::IsValidObjectPath`, use exact case and spelling, and resolve without redirects, extensions, backslashes, subobjects, whitespace, or alternate-object substitution. |
-| Channel syntax | Tags must pass the engine validator, contain no whitespace, and contain no empty dot-delimited segment. |
+| Channel syntax | Single-segment and hierarchical tags are accepted when they pass the engine validator. Tags must contain no whitespace and no leading, trailing, or internal empty dot-delimited segment. |
 | Registration | `require_registered_tag=true` requires an exact registered tag and exact returned spelling/case. `false` permits unregistered preflight while preserving syntax validation. |
 | Match type | Only case-sensitive `ExactMatch` and `PartialMatch` values are accepted. |
 
@@ -61,19 +61,20 @@ Validation findings are returned as structured `checks` and `issues`. A syntacti
 
 | Boundary | Limit or rule |
 | --- | --- |
-| Default roots | Current project `Source` plus eligible project plugin source directories. |
-| Explicit roots | Must exist under the current project's `Source` or `Plugins` directory. |
+| Default roots | Current project `Source` plus every discovered `EPluginType::Project` source directory, including plugins nested below containers such as `Plugins/GameFeatures`. |
+| Explicit roots | Must exist lexically and physically under the current project's `Source` or `Plugins` directory. Junction/symlink targets outside the project boundary are rejected, and recursive traversal rechecks each physical path. |
 | Monolith source | Excluded unless `include_monolith_source=true`. |
 | Engine source | Limited to the installed `GameplayMessageRouter/Source` directory and opt-in only. |
 | Roots | Maximum 256. Duplicate canonical roots are removed. |
 | Files | Default 2,000; hard maximum 5,000; supported extensions are `.cpp`, `.h`, `.hpp`, `.inl`. |
 | File size | Files larger than 2 MiB are skipped and counted. |
 | Results | Default 500; hard maximum 1,000. |
-| Per-line candidates | Maximum 32; truncation is counted. |
+| Per-call candidates | Maximum 32 from the first call argument; truncation is counted. Multiple supported calls on one source line are parsed independently so channels do not inherit another call's payload or match type. |
 | Issues | Maximum 1,000; truncation is reported. |
-| Text output | Source-line text is omitted by default and bounded when explicitly requested. |
+| Text output | Both `line_text` and `function_context` are omitted by default and bounded when explicitly requested with `include_line_text=true`. |
+| Absence claims | Orphan broadcaster/listener candidates are emitted only after a complete scan. File/result limits, skipped files, unreadable files, or candidate truncation set `orphan_analysis_complete=false`, mark channel rows `indeterminate`, zero orphan counts, and emit `absence_analysis_indeterminate`. |
 
-The response declares `analysis_mode="bounded_static_source"` and `runtime_execution="not_performed"`. `channel_graph`, `broadcasters`, `listeners`, and `issues` are lexical candidates only; they do not prove branch reachability, listener lifetime, live registration, message delivery, or runtime payload compatibility.
+The response declares `analysis_mode="bounded_static_source"` and `runtime_execution="not_performed"`. Literal channel extraction validates the complete first argument and accepts a valid root tag such as `"Message"`; prefixed constants such as `TAG_...` remain lexical candidates. `channel_graph`, `broadcasters`, `listeners`, and `issues` are lexical candidates only; they do not prove branch reachability, listener lifetime, live registration, message delivery, or runtime payload compatibility.
 
 ---
 
@@ -82,8 +83,8 @@ The response declares `analysis_mode="bounded_static_source"` and `runtime_execu
 | Action family | Key output |
 | --- | --- |
 | Status/contract | Exact plugin/module/reflection rows, reflected functions, match types, and listener-contract rows. |
-| Validation | `ok`, target summary, `checks[]`, `issues[]`, and exact requested/resolved identity fields. |
-| Trace | `analysis_mode`, `runtime_execution`, `limits`, `summary`, `source_roots`, `patterns`, `counts_by_code`, `counts_by_role`, `channel_graph`, `broadcasters`, `listeners`, `matches`, `checks`, `issues`, `limitations`. |
+| Validation | `ok`, target summary including `structure_size`, `object_property_count`, and `object_reference_scan_recursive`, `checks[]`, `issues[]`, and exact requested/resolved identity fields. |
+| Trace | `analysis_mode`, `runtime_execution`, `limits`, `summary.orphan_analysis_complete`, `source_roots`, `patterns`, `counts_by_code`, `counts_by_role`, per-channel `orphan_analysis_status`, `channel_graph`, `broadcasters`, `listeners`, `matches`, `checks`, `issues`, `limitations`. |
 
 All free-form output text and source excerpts are bounded before serialization.
 
@@ -94,9 +95,9 @@ All free-form output text and source excerpts are bounded before serialization.
 | Gate | Required result |
 | --- | --- |
 | Registry | Exactly five `gameplay_message` actions with required/default schema fields. |
-| Param guards | Wrong JSON scalar types, non-canonical object paths/tags, case-mismatched match types, fractional/out-of-range limits, missing roots, and out-of-project roots fail explicitly. |
-| Validation | Exact native `UScriptStruct` readback and missing/wrong-type object diagnostics execute without substitution. |
-| Trace | Fixture finds one broadcaster and one listener, respects result truncation, and omits line text by default. |
+| Param guards | Wrong JSON scalar types, non-canonical object paths/tags (including leading/trailing empty segments), case-mismatched match types, fractional/out-of-range limits, missing roots, and lexical or physical out-of-project roots fail explicitly. |
+| Validation | Exact native `UScriptStruct` readback includes positive structure size; nested container object references are found recursively; missing/wrong-type object diagnostics execute without substitution. |
+| Trace | Fixture proves paired broadcaster/listener discovery, nested project-plugin roots, independent same-line calls, single-segment literal tags, opt-in-only source excerpts, and truncation-safe indeterminate orphan analysis. |
 | UE 5.7 build/test | `UnrealEditor-MonolithGameplayMessage.dll` links and `Monolith.GameplayMessage` passes 4/4. |
 | UE 5.8 build/test | `UnrealEditor-MonolithGameplayMessage.dll` links and `Monolith.GameplayMessage` passes 4/4. |
 | Catalog | Generated catalog adds exactly the five actions and removes none. |
