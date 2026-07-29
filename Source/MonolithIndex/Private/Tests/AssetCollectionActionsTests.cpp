@@ -159,11 +159,21 @@ bool FMonolithCollectionRegistrationAndValidationTest::RunTest(const FString& /*
 	const FString MissingName = FString::Printf(
 		TEXT("MonolithMissing_%s"),
 		*FGuid::NewGuid().ToString(EGuidFormats::Digits));
-	bPassed &= ExpectInvalidParams(
-		TEXT("list_assets rejects a missing collection"),
+	const TArray<FString> MissingCollectionActions = {
+		TEXT("get_collection"),
+		TEXT("delete_collection"),
 		TEXT("list_assets"),
-		MakeNamedParams(MissingName),
-		TEXT("does not exist"));
+		TEXT("get_dynamic_query"),
+		TEXT("set_collection_color")
+	};
+	for (const FString& Action : MissingCollectionActions)
+	{
+		bPassed &= ExpectInvalidParams(
+			FString::Printf(TEXT("%s rejects a missing collection"), *Action),
+			Action,
+			MakeNamedParams(MissingName),
+			TEXT("does not exist"));
+	}
 
 	TSharedPtr<FJsonObject> MissingContains = MakeNamedParams(MissingName);
 	MissingContains->SetStringField(
@@ -174,6 +184,40 @@ bool FMonolithCollectionRegistrationAndValidationTest::RunTest(const FString& /*
 		TEXT("contains_asset"),
 		MissingContains,
 		TEXT("does not exist"));
+
+	const TArray<FString> MissingMembershipActions = {
+		TEXT("add_assets"),
+		TEXT("remove_assets")
+	};
+	for (const FString& Action : MissingMembershipActions)
+	{
+		TSharedPtr<FJsonObject> MissingMembership = MakeNamedParams(MissingName);
+		MissingMembership->SetStringField(
+			TEXT("asset_path"),
+			TEXT("/Engine/EngineResources/DefaultTexture.DefaultTexture"));
+		bPassed &= ExpectInvalidParams(
+			FString::Printf(TEXT("%s rejects a missing collection"), *Action),
+			Action,
+			MissingMembership,
+			TEXT("does not exist"));
+	}
+
+	TSharedPtr<FJsonObject> MissingDynamicQuery = MakeNamedParams(MissingName);
+	MissingDynamicQuery->SetStringField(TEXT("query_text"), TEXT("Type=Texture2D"));
+	bPassed &= ExpectInvalidParams(
+		TEXT("set_dynamic_query rejects a missing collection"),
+		TEXT("set_dynamic_query"),
+		MissingDynamicQuery,
+		TEXT("does not exist"));
+
+	TSharedPtr<FJsonObject> InvalidUniqueBase = MakeShared<FJsonObject>();
+	InvalidUniqueBase->SetStringField(TEXT("base_name"), TEXT("Invalid/Collection"));
+	InvalidUniqueBase->SetStringField(TEXT("share_type"), TEXT("local"));
+	bPassed &= ExpectInvalidParams(
+		TEXT("create_unique_collection_name rejects an invalid candidate"),
+		TEXT("create_unique_collection_name"),
+		InvalidUniqueBase,
+		TEXT("base_name"));
 
 	const FString UniqueBase = FString::Printf(
 		TEXT("MonolithUnique_%s"),

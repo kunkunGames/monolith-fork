@@ -760,9 +760,9 @@ Content Browser collection management backed by Unreal's `CollectionManager`. **
 | `collection.get_dynamic_query` | `name` (**required**), `share_type` | Return a dynamic collection's query text. |
 | `collection.set_collection_color` | `name` (**required**), `share_type`, `color` (`{r,g,b,a}` in `0..1`; omit to clear) | Set or clear the collection color. Alpha defaults to `1`. |
 | `collection.validate_collection_name` | `name` (**required**), `share_type` (`local`; also accepts `all`) | Ask `CollectionManager` whether a name is valid and return its validation error when invalid. |
-| `collection.create_unique_collection_name` | `base_name` (**required**), `share_type` | Generate a non-conflicting name without creating the collection. |
+| `collection.create_unique_collection_name` | `base_name` (**required**), `share_type` | Generate a valid, non-conflicting name without creating the collection. |
 
-All scalar and array element types are validated exactly, and required strings such as `query_text` must be non-empty. A string supplied where a bool, number, object, or array is required is not coerced. Missing collection lookups return JSON-RPC `-32602`: `list_assets` does not masquerade as a successful empty collection, and `contains_asset` does not convert lookup failure to `contains=false`. An Unreal collection operation that fails after validation returns `-32603` and preserves the engine-provided error text when available. Mutating calls reject read-only share types rather than falling back to another scope.
+All scalar and array element types are validated exactly, and required strings such as `query_text` must be non-empty. A string supplied where a bool, number, object, or array is required is not coerced. Every target-specific action returns JSON-RPC `-32602` when the selected collection does not exist: `list_assets` does not masquerade as a successful empty collection, and `contains_asset` does not convert lookup failure to `contains=false`. Unique-name candidates are checked through `ICollectionContainer::IsValidCollectionName` before success. An Unreal collection operation that fails after validation returns `-32603` and preserves the engine-provided error text when available. Mutating calls reject read-only share types rather than falling back to another scope.
 
 ---
 

@@ -42,7 +42,7 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `[w] remove_assets` | Remove one or more assets from a static Content Browser collection. | `name*`, `share_type=local` (local/private/shared/system), `asset_path?` (single path), `asset_paths?` (array) |
 | `[w] set_dynamic_query` | Set query text for a dynamic collection. | `name*`, `query_text*`, `share_type=local` (local/private/shared/system) |
 | `[w] set_collection_color` | Set or clear a collection color. Omit color to clear. | `name*`, `share_type=local` (local/private/shared/system), `color?` (object `{r,g,b,a}` in 0..1; omit to clear) |
-| `create_unique_collection_name` | Generate a unique collection name from a base name without creating a collection. | `base_name*`, `share_type=local` (local/private/shared/system) |
+| `create_unique_collection_name` | Generate a valid unique collection name from a base name without creating a collection. | `base_name*`, `share_type=local` (local/private/shared/system) |
 
 ## Common Workflows
 

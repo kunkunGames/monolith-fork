@@ -875,6 +875,8 @@ Both proxies now emit a one-line-per-call JSONL log to `Saved/Logs/MonolithCalls
 
 **Parity.** Native proxy (`Tools/MonolithProxy/monolith_proxy.cpp`) and Python fallback (`Scripts/monolith_proxy.py`) implement the same schema. Native requires `build_proxy.bat` rebuild + Claude Code MCP reconnect to engage; Python picks up on next Claude Code start.
 
+**Editor-down seed parity.** When no cached tool list exists and the editor is unreachable, both proxies expose the same stable namespace/meta seed. A new public namespace must be added to both seed lists in the same change; `collection_query` is included. Cold-cache verification isolates `LOCALAPPDATA` and points `MONOLITH_URL` at an unreachable endpoint so a prior live catalog cannot mask a missing seed.
+
 **Opt-out.** Set `MONOLITH_CALL_LOG=0` in the environment. Default is on.
 
 **Rotation.** User-managed — delete `Saved/Logs/MonolithCalls.jsonl` to reset. The proxy appends; it does not truncate, rotate, or cap file size.

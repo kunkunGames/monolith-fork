@@ -74,18 +74,18 @@
 | `get_dynamic_query` | `name` (required), `share_type` (`local`) | Return a dynamic collection's query text |
 | `set_collection_color` | `name` (required), `share_type` (`local`), `color` (optional `{r,g,b,a}`) | Set an RGBA color with finite `0..1` channels, or omit `color` to clear it |
 | `validate_collection_name` | `name` (required), `share_type` (`local`, also `all`) | Validate a name through `ICollectionManager` without creating it |
-| `create_unique_collection_name` | `base_name` (required), `share_type` (`local`) | Generate a unique name without creating a collection |
+| `create_unique_collection_name` | `base_name` (required), `share_type` (`local`) | Generate a valid unique name without creating a collection |
 
 **Ownership and data flow:** Every handler resolves `ICollectionManager::GetProjectCollectionContainer()` and operates on the requested `local`, `private`, `shared`, or `system` share type. No alternate collection container, substituted share type, or legacy path is used. The module adds `CollectionManager` as a private dependency because the implementation is editor-only and does not widen MonolithIndex's public C++ surface.
 
-**Failure contract:** Required strings, including `query_text`, must be present, string-valued, and non-empty. `force` must be a JSON bool; color channels must be JSON numbers; `color` must be an object; and every `asset_paths` element must be a string. Invalid enum text, invalid recursion, missing paths, missing collection lookups, non-finite/out-of-range colors, non-empty deletion without `force`, and writes to read-only share types fail with `-32602`. `list_assets` never turns a missing collection into a successful empty list, and `contains_asset` never turns a failed lookup into `contains=false`. A validated `ICollectionManager` operation failure returns `-32603`, including the engine error when supplied. The implementation never coerces scalar types or silently retries in another scope.
+**Failure contract:** Required strings, including `query_text`, must be present, string-valued, and non-empty. `force` must be a JSON bool; color channels must be JSON numbers; `color` must be an object; and every `asset_paths` element must be a string. Invalid enum text, invalid recursion, missing paths, a target-specific call naming a missing collection, an invalid unique-name candidate, non-finite/out-of-range colors, non-empty deletion without `force`, and writes to read-only share types fail with `-32602`. `list_assets` never turns a missing collection into a successful empty list, and `contains_asset` never turns a failed lookup into `contains=false`. A validated `ICollectionManager` operation failure returns `-32603`, including the engine error when supplied. The implementation never coerces scalar types or silently retries in another scope.
 
 ### Collection Verification Gates
 
 | Gate | UE 5.7 | UE 5.8 | Acceptance |
 |------|--------|--------|------------|
 | Editor module build | Pass | Pass | Fresh `UnrealEditor-MonolithIndex.dll` linked from the exact tested source |
-| `Monolith.Collection.RegistrationAndValidation` | Pass | Pass | All 13 actions registered; malformed scalar/array/object values, empty query text, and missing collection lookups rejected |
+| `Monolith.Collection.RegistrationAndValidation` | Pass | Pass | All 13 actions registered; malformed scalar/array/object values, empty query text, invalid unique candidates, and missing collection targets rejected |
 | `Monolith.Collection.LocalLifecycle` | Pass | Pass | Static membership/color and dynamic-query round trips complete; created collections are deleted |
 
 The focused evidence, commands, report paths, binary hashes, and rejected stale-build path are recorded in [`Docs/testing/2026-07-28-collection-action-port.md`](../testing/2026-07-28-collection-action-port.md).
