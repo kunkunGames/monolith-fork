@@ -4,7 +4,7 @@
 |-------|-------|
 | Verification date | 2026-07-29; AI review follow-up 2026-07-30 |
 | Status | Passed |
-| Engine-tested implementation | `7d4e2eb2be96736d4c8381ae8275eadf563fc57a` |
+| Engine-tested implementation | `c8e056eb20e23818e2e4485b1fb5c14493958e40` |
 | Scope | `MonolithIndex` `collection` namespace; 13 actions; static/dynamic membership; native/Python proxy cold-start parity |
 
 ---
@@ -34,6 +34,11 @@ Verify that the Content Browser collection action pack:
 | Editor-down proxies omitted the new namespace | `collection_query` was added to the native and Python cold-start seed lists | Fresh isolated caches returned 21 tools with exactly one `collection_query` in each proxy |
 | Unique-name helper looked mutating and could return an unusable candidate | The action validates its generated candidate and the skill identifies it as non-mutating | Invalid base is rejected; valid candidate lookup returns “does not exist” |
 | Dynamic collections always reported `asset_count:0`, `assets:[]`, and `contains:false` | A shared resolver now evaluates saved queries over the active Content Browser `AssetData` source and unions static/dynamic results over the requested hierarchy scope | UE 5.7/5.8 automation plus live UE 5.8 direct, nested, and self-cycle queries |
+| Non-forced deletion inspected only stored members, so a populated dynamic collection could be deleted | `delete_collection` now uses the shared resolved-membership path for its safety gate; only `force=true` skips evaluation | UE 5.7/5.8 lifecycle automation and live UE 5.8 non-empty rejection |
+| `list_collections` rescanned `/All` once per dynamic collection | One resolution session compiles all requested filters, enumerates assets once, and caches a sorted result per collection | Automation creates two matching dynamic collections and resolves both in one list call; live counts are 3,689 each |
+| Nested query failures and reference cycles were swallowed as false membership | The expression context preserves the nested error and aborts the owning read with a specific cycle/source-data error | UE 5.7/5.8 cycle automation and live cyclic `get_collection` error |
+| Dynamic `Path` compared a Content Browser virtual path plus the asset leaf | `Path` now compares `FAssetData::PackagePath`, with the internal package path only as a non-asset fallback | Package-folder query matches the default texture; `/All/.../DefaultTexture` does not |
+| `set_collection_color` could commit the color and then report failure while rereading invalid dynamic membership | The handler returns a mutation-specific payload directly after the successful color write | A cyclic collection returns the applied RGBA payload successfully |
 
 ---
 
@@ -44,7 +49,7 @@ Each engine used a separate minimal host project whose `Plugins\Monolith` juncti
 | Host | Engine association | Resolved engine root | Monolith source |
 |------|--------------------|----------------------|-----------------|
 | `D:\P4\MonolithCollectionUE57Host` | `5.7` | `D:\Engine\UE_5.7` | `D:\P4\speed\Saved\GitWorktrees\Monolith-fork-collection` |
-| `D:\P4\MonolithCollectionUE58Host` | `5.8` | `D:\Engine\UE_5.8` | detached validation worktree at `7d4e2eb2be96736d4c8381ae8275eadf563fc57a` |
+| `D:\P4\MonolithCollectionUE58Host` | `5.8` | `D:\Engine\UE_5.8` | detached validation worktree at `c8e056eb20e23818e2e4485b1fb5c14493958e40` |
 
 An earlier direct `UnrealEditor -Plugin=<worktree>` path remains rejected as evidence because UBT can reuse another worktree's plugin action graph. The accepted gates use unique host targets and isolated host `Intermediate` / plugin `Binaries` directories.
 
@@ -54,8 +59,8 @@ An earlier direct `UnrealEditor -Plugin=<worktree>` path remains rejected as evi
 
 | Engine | Target command | Accepted log | Result | Linked DLL size | SHA-256 |
 |--------|----------------|--------------|--------|-----------------|---------|
-| UE 5.7 | `Build.bat MonolithCollectionUE57HostEditor Win64 Development -Project=D:\P4\MonolithCollectionUE57Host\MonolithCollectionUE57Host.uproject -WaitMutex -NoHotReloadFromIDE -Log=<unique>` | `D:\P4\MonolithCollectionUE57Host\Saved\Logs\CollectionActionPort-Review2-Build-UE57-20260730-020829.out.log` | Pass | 978,432 bytes | `E869DB651AE06C01F05DBEB1023AB6CE6F183E6E5798BA87584272441B35D5D9` |
-| UE 5.8 | `Build.bat MonolithCollectionUE58HostEditor Win64 Development -Project=D:\P4\MonolithCollectionUE58Host\MonolithCollectionUE58Host.uproject -WaitMutex -NoHotReloadFromIDE -Log=<unique>` | `D:\P4\MonolithCollectionUE58Host\Saved\Logs\CollectionActionPort-Review2-Build-UE58-20260730-021009.out.log` | Pass | 939,520 bytes | `A9AAEBB77FB07C56CCA61F82AE9860A934288A56E245FB6054BE01CD3D651161` |
+| UE 5.7 | `UnrealBuildTool.exe MonolithCollectionUE57HostEditor Win64 Development -Project=D:\P4\MonolithCollectionUE57Host\MonolithCollectionUE57Host.uproject -WaitMutex -NoHotReloadFromIDE -Log=<unique>` | `D:\P4\MonolithCollectionUE57Host\Saved\Logs\Collection-Review3-SharedSession-Build-UE57-20260730-032319.log` | Pass | 1,007,616 bytes | `D73340DE2ABA14A12DF890BB0B4BCD88678C96D0F3E4FB8BDFD817038BDA121B` |
+| UE 5.8 | `UnrealBuildTool.exe MonolithCollectionUE58HostEditor Win64 Development -Project=D:\P4\MonolithCollectionUE58Host\MonolithCollectionUE58Host.uproject -WaitMutex -NoHotReloadFromIDE -Log=<unique>` | `D:\P4\MonolithCollectionUE58Host\Saved\Logs\Collection-Review3-Build-UE58-20260730-032623.log` | Pass | 968,704 bytes | `DD01C699997E2D8F3520B920B6731842DCCE1C85BD6C35B81E1898F1CF131B6B` |
 
 The follow-up builds compile the final public `ICollectionContainer::TestDynamicQuery` / `ITextFilterExpressionContext` implementation. A preceding UE 5.7 attempt that called `FAssetTextFilter::Compile` and `FCompiledAssetTextFilter::PassesFilter` is rejected evidence: those methods are declared in a public header but are not exported from the UE 5.7/5.8 `ContentBrowser` module, producing `LNK2019`. The final implementation does not use the deprecated `FFrontendFilter_Text` compatibility class.
 
@@ -67,20 +72,20 @@ The first UE 5.8 launch was not accepted: it overlapped the UE 5.7 UBT process a
 
 | Engine | Report | Passed | Warnings | Errors |
 |--------|--------|--------|----------|--------|
-| UE 5.7 | `D:\P4\MonolithCollectionUE57Host\Saved\Automation\CollectionActionPort-Review2-UE57-20260730-020855\index.json` | 2/2 | 0 | 0 |
-| UE 5.8 | `D:\P4\MonolithCollectionUE58Host\Saved\Automation\CollectionActionPort-Review2-UE58-20260730-021034\index.json` | 2/2 | 0 | 0 |
+| UE 5.7 | `D:\P4\MonolithCollectionUE57Host\Saved\Automation\Collection-Review3-Accepted-UE57-20260730-033140\index.json` | 2/2 | 0 | 0 |
+| UE 5.8 | `D:\P4\MonolithCollectionUE58Host\Saved\Automation\Collection-Review3-Accepted-UE58-20260730-033211\index.json` | 2/2 | 0 | 0 |
 
 | Test | Contract |
 |------|----------|
 | `Monolith.Collection.RegistrationAndValidation` | Exactly 13 actions are registered. Wrong scalar/array/object types retain precedence, empty query text and invalid unique-name candidates fail, and every action targeting a missing collection returns invalid params. Valid unique-name generation returns a non-empty candidate without creating it. |
-| `Monolith.Collection.LocalLifecycle` | An existing empty static collection returns an empty success; static membership/color completes; `Type=Texture2D` dynamic details/list/contains resolve the engine default texture and a non-zero count; every created collection is deleted. |
+| `Monolith.Collection.LocalLifecycle` | An existing empty static collection returns an empty success; static membership/color completes; two `Type=Texture2D` collections resolve through one list call; package-folder `Path` matches while `/All` plus asset leaf does not; populated dynamic delete requires force; cyclic nesting is an explicit error; color mutation remains independent; every created collection is deleted. |
 
 Final editor logs:
 
-- UE 5.7: `D:\P4\MonolithCollectionUE57Host\Saved\Logs\CollectionActionPort-Review2-Automation-UE57-20260730-020855.log`
-- UE 5.8: `D:\P4\MonolithCollectionUE58Host\Saved\Logs\CollectionActionPort-Review2-Automation-UE58-20260730-021034.log`
+- UE 5.7: `D:\P4\MonolithCollectionUE57Host\Saved\Logs\Collection-Review3-Accepted-Automation-UE57-20260730-033140.log`
+- UE 5.8: `D:\P4\MonolithCollectionUE58Host\Saved\Logs\Collection-Review3-Accepted-Automation-UE58-20260730-033211.log`
 
-No `MonolithStatic_*`, `MonolithDynamic_*`, or `MonolithUnique_*` fixture remained in either host's `Saved\Collections`.
+No `MonolithStatic_*`, `MonolithDynamic_*`, `MonolithCycle*`, or `MonolithUnique_*` fixture remained in either host's `Saved\Collections`.
 
 The first automation run against `b8c94e9d` was rejected: early existence checks masked malformed `force`, `asset_paths`, and `color` values. Commit `efb46eee` moved target lookup after action-specific input parsing. The accepted reports above prove both the original type errors and the new missing-target cases.
 
@@ -105,10 +110,13 @@ The UE 5.8 host was launched with an isolated `Config\DefaultMonolith.ini` liste
 | `create_unique_collection_name`, then `get_collection` for its candidate | Candidate generation succeeds; lookup fails because no collection was created |
 | Dynamic create before query | `query_text:""` and `asset_count:0`; an unconfigured query does not match every asset |
 | Dynamic set `Type=Texture2D` / details / list / contains | `asset_count:3689`, `count:3689`, default texture listed, and `contains:true` |
-| Nested dynamic `Collection=<base>` | Same 3,689 resolved assets and default texture membership as the base query |
-| Self-referential dynamic `Collection=<self>` | `count:0`; cycle fails closed without recursion or crash |
+| Two dynamic `Type=Texture2D` collections in one `list_collections` call | Both rows report `asset_count:3689`, exercising the shared resolution session |
+| Non-forced delete of either populated dynamic collection | MCP error: `Collection is non-empty; pass force=true to delete` |
+| Dynamic `Path=/Engine/EngineResources` / contains default texture | `contains:true`; package folder is the `Path` comparison surface |
+| Mutually nested dynamic `Collection=<other>` references | `get_collection` returns `Cyclic dynamic collection reference detected ...` instead of an incomplete result |
+| `set_collection_color` on the cyclic collection | Success with `updated:true`, `color_cleared:false`, and the applied RGBA object |
 
-The accepted live editor log is `D:\P4\MonolithCollectionUE58Host\Saved\Logs\CollectionActionPort-Review2-LiveMCP-UE58-20260730-021109.log`. All three follow-up fixtures were explicitly deleted. The editor then accepted `editor.run_console_command` with `QUIT_EDITOR`, exited cleanly, and released port `9432`; no `MonolithLiveDynamicReview2_*`, `MonolithLiveNestedReview2_*`, or `MonolithLiveCycleReview2_*` collection remained.
+The accepted live editor log is `D:\P4\MonolithCollectionUE58Host\Saved\Logs\Collection-Review3-Accepted-LiveMCP-UE58-20260730-033242.log`. Both follow-up fixtures were explicitly force-deleted after the safety assertions. The editor then accepted the schema-described `editor.run_console_command` with `QUIT_EDITOR`, exited cleanly, and released port `9432`; no `MonolithLiveA_*` or `MonolithLiveB_*` collection file remained.
 
 ---
 
@@ -137,8 +145,10 @@ These checks prove the namespace comes from the shipped seed lists rather than a
 |------|---------|-----------------|
 | Wrong collection scope mutated | Every operation carries the requested share type; read-only containers reject writes | No fallback or share-type substitution path exists |
 | Missing collection mistaken for a valid empty result | Missing lookup and existing-empty cases are tested separately | Missing calls fail; existing-empty calls succeed |
-| Dynamic collection silently treated as an empty static list | One resolver evaluates saved queries for details/list/contains and unions hierarchy members | Direct and nested dynamic calls return the same 3,689 matching assets; self-cycle returns zero |
-| Non-empty collection deleted accidentally | `force` defaults to `false` | Deletion rejects a non-empty collection unless explicitly forced |
+| Dynamic collection silently treated as an empty static list or rescanned once per list row | One shared session evaluates all requested queries and unions hierarchy members | Two live dynamic rows each return 3,689 members from one list call |
+| Invalid nested query silently reduced a membership result | Nested evaluation errors and active cycles abort the owning read | Cyclic `get_collection` returns a specific error |
+| Non-empty dynamic collection deleted accidentally | `force` defaults to `false`; the guard resolves live query membership | Populated dynamic deletion is rejected unless explicitly forced |
+| Successful color mutation reported as failure due to an unrelated member read | The action returns mutation data directly and does not call `get_collection` | Cyclic collection color succeeds and reports the applied RGBA value |
 | MCP JSON values silently coerced | Exact `EJson` checks precede typed reads | Wrong types and empty required strings return invalid params |
 | Automation or live probes leave editor collections behind | Scope-exit cleanup plus explicit live deletion | No named fixture remained |
 | New namespace disappears when the editor is down | Native/Python seed lists are changed and checked together | Both fresh cold-start manifests contain one `collection_query` |

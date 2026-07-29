@@ -30,18 +30,18 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 
 | Action | Purpose | Params (req* opt? =default) |
 |--------|---------|------------------------------|
-| `list_collections` | List Content Browser collections, optionally filtered by share_type. | `share_type=all` (local/private/shared/system/all) |
+| `list_collections` | List Content Browser collections and resolve all returned dynamic counts in one shared asset scan. | `share_type=all` (local/private/shared/system/all) |
 | `get_collection` | Get Content Browser collection details. | `name*`, `share_type=local` (local/private/shared/system) |
 | `list_assets` | List asset paths in a collection. | `name*`, `share_type=local` (local/private/shared/system), `recursive=self` (self/children/parents/all) |
 | `contains_asset` | Check whether a collection contains an asset. | `name*`, `asset_path*`, `share_type=local` (local/private/shared/system), `recursive=self` (self/children/parents/all) |
 | `get_dynamic_query` | Get query text from a dynamic collection. | `name*`, `share_type=local` (local/private/shared/system) |
 | `validate_collection_name` | Validate a collection name for a share type. | `name*`, `share_type=local` (local/private/shared/system/all) |
 | `[w] create_collection` | Create a static or dynamic Content Browser collection. | `name*`, `share_type=local` (local/private/shared/system), `storage_mode=static` (static/dynamic) |
-| `[w] delete_collection` | Delete a Content Browser collection. Non-empty collections require force=true. | `name*`, `share_type=local` (local/private/shared/system), `force=false` (bool) |
+| `[w] delete_collection` | Delete a Content Browser collection. Resolved static or dynamic membership requires force=true. | `name*`, `share_type=local` (local/private/shared/system), `force=false` (bool) |
 | `[w] add_assets` | Add one or more assets to a static Content Browser collection. | `name*`, `share_type=local` (local/private/shared/system), `asset_path?` (single path), `asset_paths?` (array) |
 | `[w] remove_assets` | Remove one or more assets from a static Content Browser collection. | `name*`, `share_type=local` (local/private/shared/system), `asset_path?` (single path), `asset_paths?` (array) |
 | `[w] set_dynamic_query` | Set query text for a dynamic collection. | `name*`, `query_text*`, `share_type=local` (local/private/shared/system) |
-| `[w] set_collection_color` | Set or clear a collection color. Omit color to clear. | `name*`, `share_type=local` (local/private/shared/system), `color?` (object `{r,g,b,a}` in 0..1; omit to clear) |
+| `[w] set_collection_color` | Set or clear a collection color and return the applied mutation without resolving membership. Omit color to clear. | `name*`, `share_type=local` (local/private/shared/system), `color?` (object `{r,g,b,a}` in 0..1; omit to clear) |
 | `create_unique_collection_name` | Generate a valid unique collection name from a base name without creating a collection. | `base_name*`, `share_type=local` (local/private/shared/system) |
 
 ## Common Workflows
@@ -56,7 +56,7 @@ Numbered recipes use only the actions in the table above. Run `describe_query("a
 4. `collection_query("contains_asset", { name, asset_path, share_type: "local" })` — spot-check a known member resolved.
 5. `collection_query("list_assets", { name, share_type: "local", recursive: "self" })` — list the full membership to confirm the count and contents; widen `recursive` to `children`/`parents`/`all` only when checking a collection hierarchy.
 
-Pitfall — deletion: `collection_query("delete_collection", { name, share_type: "local" })` `[w]` refuses a non-empty collection unless you pass `force: true`. Run `list_assets` first and only set `force: true` when you intend to drop a populated collection.
+Pitfall — deletion: `collection_query("delete_collection", { name, share_type: "local" })` `[w]` resolves both stored static members and live dynamic-query members, then refuses a non-empty collection unless you pass `force: true`. Run `list_assets` first and only set `force: true` when you intend to drop a populated collection.
 
 ### Recipe 2 — Build and verify a dynamic (query) collection
 
@@ -65,7 +65,7 @@ Pitfall — deletion: `collection_query("delete_collection", { name, share_type:
 3. `collection_query("get_dynamic_query", { name, share_type: "local" })` — read the stored query text back to confirm it persisted exactly as written.
 4. `collection_query("list_assets", { name, share_type: "local", recursive: "self" })` — list the assets the query currently resolves to and confirm the count and contents match the intent.
 
-Pitfall — dynamic vs static membership: a dynamic collection has no fixed member list, so `add_assets`/`remove_assets` do not apply; change membership only by editing the query with `set_dynamic_query`. Conversely, a static collection has no query, so `set_dynamic_query`/`get_dynamic_query` are not valid for it. Pick `storage_mode` at `create_collection` time — it cannot be flipped later by these actions. `get_collection`, `list_collections`, `list_assets`, and `contains_asset` resolve dynamic membership against the active Content Browser asset set, so their counts and membership change as matching assets are added or removed elsewhere. A newly created dynamic collection resolves to zero assets until a non-empty query is saved. Nested dynamic `Collection=<name>` references are supported; a reference cycle fails closed for the affected asset rather than recursing.
+Pitfall — dynamic vs static membership: a dynamic collection has no fixed member list, so `add_assets`/`remove_assets` do not apply; change membership only by editing the query with `set_dynamic_query`. Conversely, a static collection has no query, so `set_dynamic_query`/`get_dynamic_query` are not valid for it. Pick `storage_mode` at `create_collection` time — it cannot be flipped later by these actions. `get_collection`, `list_collections`, `list_assets`, and `contains_asset` resolve dynamic membership against the active Content Browser asset set, so their counts and membership change as matching assets are added or removed elsewhere. `list_collections` shares one enumeration across all of its returned dynamic rows. A newly created dynamic collection resolves to zero assets until a non-empty query is saved. `Path=/Game/Foo` matches the package folder; do not include the Content Browser's `/All` virtual prefix or an asset leaf. Nested dynamic `Collection=<name>` references are supported; an invalid nested query or reference cycle fails the owning read with an explicit error rather than returning an incomplete result. `set_collection_color` is intentionally membership-independent, so it can repair presentation metadata even when a saved dynamic query is invalid.
 
 Pitfall — share_type scope: `share_type` selects which collection store the name lives in (`local`/`private`/`shared`/`system`), and a name is unique only within one store. Keep the same `share_type` on every step of one collection; the default `local` is per-user and not committed to source control, so use `shared` when other team members must see the collection. Coordinate versioned collection files through the host project's normal Perforce/Git workflow; source control is outside this skill.
 
