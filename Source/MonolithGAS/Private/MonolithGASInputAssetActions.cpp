@@ -12,15 +12,133 @@
 #include "InputMappingContext.h"
 #include "InputModifiers.h"
 #include "InputTriggers.h"
+#include "Misc/Change.h"
+#include "Misc/ITransaction.h"
 #include "Misc/PackageName.h"
 #include "ScopedTransaction.h"
+#include "Templates/UnrealTemplate.h"
+#include "UObject/GCObject.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "UObject/SoftObjectPath.h"
+#include "UObject/UObjectGlobals.h"
 #include "UObject/UnrealType.h"
 
 namespace
 {
+	class FInputAssetCreationChange final : public FCommandChange
+	{
+	public:
+		FInputAssetCreationChange(UPackage* InOriginalPackage, FName InOriginalName)
+			: OriginalPackage(InOriginalPackage)
+			, OriginalName(InOriginalName)
+		{
+		}
+
+		void SetAsset(UObject* InAsset)
+		{
+			Asset = InAsset;
+		}
+
+		virtual void Apply(UObject* /*Object*/) override
+		{
+			if (!Asset || !OriginalPackage)
+			{
+				return;
+			}
+
+			Asset->ClearGarbage();
+			const bool bRenamed = Asset->Rename(
+				*OriginalName.ToString(),
+				OriginalPackage,
+				REN_DontCreateRedirectors | REN_NonTransactional);
+			if (!ensureMsgf(
+				bRenamed,
+				TEXT("Failed to restore transacted input asset '%s.%s'"),
+				*OriginalPackage->GetName(),
+				*OriginalName.ToString()))
+			{
+				Asset->MarkAsGarbage();
+				return;
+			}
+
+			Asset->SetFlags(RF_Public | RF_Standalone | RF_Transactional);
+			FAssetRegistryModule::AssetCreated(Asset);
+			OriginalPackage->MarkPackageDirty();
+		}
+
+		virtual void Revert(UObject* /*Object*/) override
+		{
+			if (!Asset || !OriginalPackage || Asset->GetOutermost() != OriginalPackage)
+			{
+				return;
+			}
+
+			FAssetRegistryModule::AssetDeleted(Asset);
+			const FName UndoName = MakeUniqueObjectName(
+				GetTransientPackage(),
+				Asset->GetClass(),
+				*FString::Printf(TEXT("MONOLITH_UNDO_%s"), *OriginalName.ToString()));
+			const bool bRenamed = Asset->Rename(
+				*UndoName.ToString(),
+				GetTransientPackage(),
+				REN_DontCreateRedirectors | REN_NonTransactional);
+			if (!ensureMsgf(
+				bRenamed,
+				TEXT("Failed to remove transacted input asset '%s.%s'"),
+				*OriginalPackage->GetName(),
+				*OriginalName.ToString()))
+			{
+				FAssetRegistryModule::AssetCreated(Asset);
+				return;
+			}
+
+			Asset->ClearFlags(RF_Public | RF_Standalone);
+			Asset->MarkAsGarbage();
+			OriginalPackage->MarkPackageDirty();
+		}
+
+		virtual bool HasExpired(UObject* /*Object*/) const override
+		{
+			return Asset == nullptr || OriginalPackage == nullptr;
+		}
+
+		virtual void AddReferencedObjects(FReferenceCollector& Collector) override
+		{
+			Collector.AddReferencedObject(Asset);
+			Collector.AddReferencedObject(OriginalPackage);
+		}
+
+		virtual FString ToString() const override
+		{
+			return FString::Printf(
+				TEXT("Input asset creation: %s.%s"),
+				OriginalPackage ? *OriginalPackage->GetName() : TEXT("<invalid>"),
+				*OriginalName.ToString());
+		}
+
+	private:
+		TObjectPtr<UObject> Asset = nullptr;
+		TObjectPtr<UPackage> OriginalPackage = nullptr;
+		FName OriginalName;
+	};
+
+	FInputAssetCreationChange* BeginInputAssetCreationChange(
+		UPackage* Package,
+		FName AssetName)
+	{
+		if (!GUndo || !Package)
+		{
+			return nullptr;
+		}
+
+		TUniquePtr<FInputAssetCreationChange> Change =
+			MakeUnique<FInputAssetCreationChange>(Package, AssetName);
+		FInputAssetCreationChange* ChangePtr = Change.Get();
+		GUndo->StoreUndo(Package, MoveTemp(Change));
+		return ChangePtr;
+	}
+
 	struct FInputMutationOptions
 	{
 		bool bDryRun = false;
@@ -1179,29 +1297,50 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputAction(con
 	bool bCreated = false;
 	if (bWouldChange)
 	{
-		const FScopedTransaction Transaction(NSLOCTEXT("Monolith", "CreateInputAction", "Create Input Action"));
+		FScopedTransaction Transaction(NSLOCTEXT("Monolith", "CreateInputAction", "Create Input Action"));
 		if (!Action)
 		{
 			UPackage* Package = MonolithGAS::GetOrCreatePackage(PackagePath, Error);
 			if (!Package)
 			{
+				Transaction.Cancel();
 				return FMonolithActionResult::Error(Error);
 			}
 
-			Action = NewObject<UInputAction>(
-				Package,
-				*AssetName,
-				RF_Public | RF_Standalone | RF_Transactional);
+			FInputAssetCreationChange* CreationChange =
+				BeginInputAssetCreationChange(Package, *AssetName);
+			{
+				// The custom creation change owns the complete create/remove lifecycle.
+				// Suppress incidental constructor/registry serialization so it cannot
+				// restore the original package path after the custom undo relocates it.
+				TGuardValue<ITransaction*> SuppressTransaction(GUndo, nullptr);
+				Action = NewObject<UInputAction>(
+					Package,
+					*AssetName,
+					RF_Public | RF_Standalone | RF_Transactional);
+				if (Action)
+				{
+					if (CreationChange)
+					{
+						CreationChange->SetAsset(Action);
+					}
+					ApplyInputActionPatch(Action, Patch);
+					FAssetRegistryModule::AssetCreated(Action);
+				}
+			}
 			if (!Action)
 			{
+				Transaction.Cancel();
 				return FMonolithActionResult::Error(TEXT("Failed to create InputAction"));
 			}
-			FAssetRegistryModule::AssetCreated(Action);
 			bCreated = true;
 		}
-		Action->SetFlags(RF_Transactional);
-		Action->Modify();
-		ApplyInputActionPatch(Action, Patch);
+		else
+		{
+			Action->SetFlags(RF_Transactional);
+			Action->Modify();
+			ApplyInputActionPatch(Action, Patch);
+		}
 	}
 
 	bool bSaved = false;
@@ -1477,31 +1616,52 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputMappingCon
 	bool bCreated = false;
 	if (bWouldChange)
 	{
-		const FScopedTransaction Transaction(NSLOCTEXT("Monolith", "CreateInputMappingContext", "Create Input Mapping Context"));
+		FScopedTransaction Transaction(NSLOCTEXT("Monolith", "CreateInputMappingContext", "Create Input Mapping Context"));
 		if (!Context)
 		{
 			UPackage* Package = MonolithGAS::GetOrCreatePackage(PackagePath, Error);
 			if (!Package)
 			{
+				Transaction.Cancel();
 				return FMonolithActionResult::Error(Error);
 			}
 
-			Context = NewObject<UInputMappingContext>(
-				Package,
-				*AssetName,
-				RF_Public | RF_Standalone | RF_Transactional);
+			FInputAssetCreationChange* CreationChange =
+				BeginInputAssetCreationChange(Package, *AssetName);
+			{
+				TGuardValue<ITransaction*> SuppressTransaction(GUndo, nullptr);
+				Context = NewObject<UInputMappingContext>(
+					Package,
+					*AssetName,
+					RF_Public | RF_Standalone | RF_Transactional);
+				if (Context)
+				{
+					if (CreationChange)
+					{
+						CreationChange->SetAsset(Context);
+					}
+					if (bHasDescription)
+					{
+						Context->ContextDescription = FText::FromString(Description);
+					}
+					FAssetRegistryModule::AssetCreated(Context);
+				}
+			}
 			if (!Context)
 			{
+				Transaction.Cancel();
 				return FMonolithActionResult::Error(TEXT("Failed to create InputMappingContext"));
 			}
-			FAssetRegistryModule::AssetCreated(Context);
 			bCreated = true;
 		}
-		Context->SetFlags(RF_Transactional);
-		Context->Modify();
-		if (bHasDescription)
+		else
 		{
-			Context->ContextDescription = FText::FromString(Description);
+			Context->SetFlags(RF_Transactional);
+			Context->Modify();
+			if (bHasDescription)
+			{
+				Context->ContextDescription = FText::FromString(Description);
+			}
 		}
 	}
 

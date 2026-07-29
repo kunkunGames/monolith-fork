@@ -7,6 +7,7 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Editor.h"
 #include "HAL/FileManager.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
@@ -549,6 +550,66 @@ bool FMonolithGASInputAssetStrictParamsTest::RunTest(const FString& /*Parameters
 		TEXT("explicit empty context selection checks zero contexts"),
 		GetInt(EmptySelectionResult, TEXT("contexts_checked"), -1),
 		0);
+	return bPassed;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithGASInputAssetCreationUndoTest,
+	"Monolith.ParamGuard.GAS.InputAssets.CreationUndo",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithGASInputAssetCreationUndoTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MonolithGASInputAssetActionsTestDetail;
+
+	const FString Suffix = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+	const FString Root = FString::Printf(TEXT("/Game/Tests/Monolith/Input/%s"), *Suffix);
+	const FString ActionPath = Root + TEXT("/IA_Undo");
+	const FString ContextPath = Root + TEXT("/IMC_Undo");
+	bool bPassed = TestNotNull(TEXT("editor transaction system is available"), GEditor);
+	if (!GEditor)
+	{
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> ActionParams = MakeCreateParams(ActionPath, false, true);
+	ActionParams->SetStringField(TEXT("description"), TEXT("Action creation undo proof"));
+	const FMonolithActionResult ActionCreate =
+		Execute(TEXT("create_input_action"), ActionParams);
+	bPassed &= TestTrue(TEXT("undo fixture InputAction is created"), ActionCreate.bSuccess);
+	bPassed &= TestNotNull(TEXT("created InputAction is present before undo"), FindTestAsset(ActionPath));
+	bPassed &= TestTrue(TEXT("InputAction creation transaction can be undone"), GEditor->UndoTransaction());
+	bPassed &= TestNull(TEXT("undo removes InputAction from its asset path"), FindTestAsset(ActionPath));
+	bPassed &= TestTrue(TEXT("InputAction creation transaction can be redone"), GEditor->RedoTransaction());
+	UInputAction* RedoneAction = Cast<UInputAction>(FindTestAsset(ActionPath));
+	if (TestNotNull(TEXT("redo restores InputAction at its asset path"), RedoneAction))
+	{
+		bPassed &= TestEqual(
+			TEXT("redo preserves InputAction creation state"),
+			RedoneAction->ActionDescription.ToString(),
+			TEXT("Action creation undo proof"));
+	}
+
+	TSharedPtr<FJsonObject> ContextParams = MakeCreateParams(ContextPath, false, true);
+	ContextParams->SetStringField(TEXT("description"), TEXT("Context creation undo proof"));
+	const FMonolithActionResult ContextCreate =
+		Execute(TEXT("create_input_mapping_context"), ContextParams);
+	bPassed &= TestTrue(TEXT("undo fixture InputMappingContext is created"), ContextCreate.bSuccess);
+	bPassed &= TestNotNull(TEXT("created InputMappingContext is present before undo"), FindTestAsset(ContextPath));
+	bPassed &= TestTrue(TEXT("InputMappingContext creation transaction can be undone"), GEditor->UndoTransaction());
+	bPassed &= TestNull(TEXT("undo removes InputMappingContext from its asset path"), FindTestAsset(ContextPath));
+	bPassed &= TestTrue(TEXT("InputMappingContext creation transaction can be redone"), GEditor->RedoTransaction());
+	UInputMappingContext* RedoneContext = Cast<UInputMappingContext>(FindTestAsset(ContextPath));
+	if (TestNotNull(TEXT("redo restores InputMappingContext at its asset path"), RedoneContext))
+	{
+		bPassed &= TestEqual(
+			TEXT("redo preserves InputMappingContext creation state"),
+			RedoneContext->ContextDescription.ToString(),
+			TEXT("Context creation undo proof"));
+	}
+
+	CleanupTestAsset(ContextPath);
+	CleanupTestAsset(ActionPath);
 	return bPassed;
 }
 
