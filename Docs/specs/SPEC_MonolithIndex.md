@@ -8,7 +8,7 @@
 
 ## MonolithIndex
 
-**Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, AssetRegistry, Json, JsonUtilities, SQLiteCore, Slate, SlateCore, BlueprintGraph, KismetCompiler, EditorSubsystem, CollectionManager
+**Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, AssetRegistry, Json, JsonUtilities, SQLiteCore, Slate, SlateCore, BlueprintGraph, KismetCompiler, EditorSubsystem, CollectionManager, ContentBrowserData
 
 ### Classes
 
@@ -62,21 +62,21 @@
 
 | Action | Params | Description |
 |--------|--------|-------------|
-| `list_collections` | `share_type` (`all`) | List collections with share type, storage mode, object count, and optional color |
-| `get_collection` | `name` (required), `share_type` (`local`) | Return one collection's details |
+| `list_collections` | `share_type` (`all`) | List collections with share type, storage mode, resolved asset count, dynamic query text, and optional color |
+| `get_collection` | `name` (required), `share_type` (`local`) | Return one collection's details with current resolved asset count |
 | `create_collection` | `name` (required), `share_type` (`local`), `storage_mode` (`static`) | Create a static or dynamic collection |
 | `delete_collection` | `name` (required), `share_type` (`local`), `force` (`false`) | Delete a collection; non-empty collections require `force=true` |
 | `add_assets` | `name` (required), `share_type` (`local`), `asset_path` or `asset_paths[]` | Add at least one soft object path to a static collection |
 | `remove_assets` | `name` (required), `share_type` (`local`), `asset_path` or `asset_paths[]` | Remove at least one soft object path from a static collection |
-| `list_assets` | `name` (required), `share_type` (`local`), `recursive` (`self`) | List paths using `self`, `children`, `parents`, or `all` recursion |
-| `contains_asset` | `name` (required), `asset_path` (required), `share_type` (`local`), `recursive` (`self`) | Test membership using the selected recursion scope |
+| `list_assets` | `name` (required), `share_type` (`local`), `recursive` (`self`) | Resolve static and dynamic paths using `self`, `children`, `parents`, or `all` recursion |
+| `contains_asset` | `name` (required), `asset_path` (required), `share_type` (`local`), `recursive` (`self`) | Resolve static and dynamic membership using the selected recursion scope |
 | `set_dynamic_query` | `name` (required), `query_text` (required), `share_type` (`local`) | Set and read back a dynamic query |
 | `get_dynamic_query` | `name` (required), `share_type` (`local`) | Return a dynamic collection's query text |
 | `set_collection_color` | `name` (required), `share_type` (`local`), `color` (optional `{r,g,b,a}`) | Set an RGBA color with finite `0..1` channels, or omit `color` to clear it |
 | `validate_collection_name` | `name` (required), `share_type` (`local`, also `all`) | Validate a name through `ICollectionManager` without creating it |
 | `create_unique_collection_name` | `base_name` (required), `share_type` (`local`) | Generate a valid unique name without creating a collection |
 
-**Ownership and data flow:** Every handler resolves `ICollectionManager::GetProjectCollectionContainer()` and operates on the requested `local`, `private`, `shared`, or `system` share type. No alternate collection container, substituted share type, or legacy path is used. The module adds `CollectionManager` as a private dependency because the implementation is editor-only and does not widen MonolithIndex's public C++ surface.
+**Ownership and data flow:** Every handler resolves `ICollectionManager::GetProjectCollectionContainer()` and operates on the requested `local`, `private`, `shared`, or `system` share type. No alternate collection container, substituted share type, or legacy path is used. Static members come from the collection container. Dynamic members enumerate the active Content Browser `AssetData` source once per request, evaluate the collection's cached query through `ICollectionContainer::TestDynamicQuery`, and union the results across the exact engine `self`/parent/child scope. The expression context exposes asset name, display/path/reference, class/type, collection/tag, and data-source attributes; nested dynamic membership is cached per asset and an active-query cycle returns false instead of recursing. An empty, newly created dynamic query is an explicit unconfigured state with zero resolved members. `CollectionManager` and `ContentBrowserData` are private dependencies, so this editor-only implementation does not widen MonolithIndex's public C++ surface.
 
 **Failure contract:** Required strings, including `query_text`, must be present, string-valued, and non-empty. `force` must be a JSON bool; color channels must be JSON numbers; `color` must be an object; and every `asset_paths` element must be a string. Invalid enum text, invalid recursion, missing paths, a target-specific call naming a missing collection, an invalid unique-name candidate, non-finite/out-of-range colors, non-empty deletion without `force`, and writes to read-only share types fail with `-32602`. `list_assets` never turns a missing collection into a successful empty list, and `contains_asset` never turns a failed lookup into `contains=false`. A validated `ICollectionManager` operation failure returns `-32603`, including the engine error when supplied. The implementation never coerces scalar types or silently retries in another scope.
 
@@ -86,7 +86,7 @@
 |------|--------|--------|------------|
 | Editor module build | Pass | Pass | Fresh `UnrealEditor-MonolithIndex.dll` linked from the exact tested source |
 | `Monolith.Collection.RegistrationAndValidation` | Pass | Pass | All 13 actions registered; malformed scalar/array/object values, empty query text, invalid unique candidates, and missing collection targets rejected |
-| `Monolith.Collection.LocalLifecycle` | Pass | Pass | Static membership/color and dynamic-query round trips complete; created collections are deleted |
+| `Monolith.Collection.LocalLifecycle` | Pass | Pass | Static membership/color plus direct dynamic resolution/count/contains complete; created collections are deleted |
 
 The focused evidence, commands, report paths, binary hashes, and rejected stale-build path are recorded in [`Docs/testing/2026-07-28-collection-action-port.md`](../testing/2026-07-28-collection-action-port.md).
 

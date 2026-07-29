@@ -748,21 +748,21 @@ Content Browser collection management backed by Unreal's `CollectionManager`. **
 
 | Action | Parameters | Behavior |
 |--------|------------|----------|
-| `collection.list_collections` | `share_type` (`all`) | List collection names, share types, storage modes, object counts, and optional colors. |
-| `collection.get_collection` | `name` (**required**), `share_type` | Return one collection's details. |
+| `collection.list_collections` | `share_type` (`all`) | List collection names, share types, storage modes, resolved asset counts, saved dynamic query text, and optional colors. |
+| `collection.get_collection` | `name` (**required**), `share_type` | Return one collection's details, including current resolved `asset_count` and `query_text` for a dynamic collection. |
 | `collection.create_collection` | `name` (**required**), `share_type`, `storage_mode` (`static`; `static` or `dynamic`) | Create a collection and return its details. |
 | `collection.delete_collection` | `name` (**required**), `share_type`, `force` (`false`) | Delete a collection. A non-empty collection is rejected unless `force=true`. |
 | `collection.add_assets` | `name` (**required**), `share_type`, `asset_path` or `asset_paths[]` | Add one or more soft object paths to a static collection. At least one path is required. |
 | `collection.remove_assets` | `name` (**required**), `share_type`, `asset_path` or `asset_paths[]` | Remove one or more soft object paths from a static collection. At least one path is required. |
-| `collection.list_assets` | `name` (**required**), `share_type`, `recursive` (`self`; `self`, `children`, `parents`, or `all`) | List matching soft object paths with the selected collection-recursion scope. |
-| `collection.contains_asset` | `name` (**required**), `asset_path` (**required**), `share_type`, `recursive` (`self`) | Report whether the selected collection scope contains the path. |
+| `collection.list_assets` | `name` (**required**), `share_type`, `recursive` (`self`; `self`, `children`, `parents`, or `all`) | Resolve and list matching soft object paths across static and dynamic collections in the selected recursion scope. |
+| `collection.contains_asset` | `name` (**required**), `asset_path` (**required**), `share_type`, `recursive` (`self`) | Resolve static and dynamic membership and report whether the selected collection scope contains the normalized path. |
 | `collection.set_dynamic_query` | `name` (**required**), `query_text` (**required**), `share_type` | Set a dynamic collection's query text and return the stored query. |
 | `collection.get_dynamic_query` | `name` (**required**), `share_type` | Return a dynamic collection's query text. |
 | `collection.set_collection_color` | `name` (**required**), `share_type`, `color` (`{r,g,b,a}` in `0..1`; omit to clear) | Set or clear the collection color. Alpha defaults to `1`. |
 | `collection.validate_collection_name` | `name` (**required**), `share_type` (`local`; also accepts `all`) | Ask `CollectionManager` whether a name is valid and return its validation error when invalid. |
 | `collection.create_unique_collection_name` | `base_name` (**required**), `share_type` | Generate a valid, non-conflicting name without creating the collection. |
 
-All scalar and array element types are validated exactly, and required strings such as `query_text` must be non-empty. A string supplied where a bool, number, object, or array is required is not coerced. Every target-specific action returns JSON-RPC `-32602` when the selected collection does not exist: `list_assets` does not masquerade as a successful empty collection, and `contains_asset` does not convert lookup failure to `contains=false`. Unique-name candidates are checked through `ICollectionContainer::IsValidCollectionName` before success. An Unreal collection operation that fails after validation returns `-32603` and preserves the engine-provided error text when available. Mutating calls reject read-only share types rather than falling back to another scope.
+All scalar and array element types are validated exactly, and required strings such as `query_text` must be non-empty. A string supplied where a bool, number, object, or array is required is not coerced. Every target-specific action returns JSON-RPC `-32602` when the selected collection does not exist: `list_assets` does not masquerade as a successful empty collection, and `contains_asset` does not convert lookup failure to `contains=false`. Dynamic membership is evaluated against the live Content Browser asset set through `ICollectionContainer::TestDynamicQuery`; core `Name`, `Path`, `Class`/`Type`, `Collection`/`Tag`, and registered item-attribute expressions are supported, nested dynamic collections are evaluated with per-asset caching, and a dynamic-reference cycle fails closed for that asset. A newly created dynamic collection with no saved query resolves to zero assets instead of treating an empty text filter as “match all.” Unique-name candidates are checked through `ICollectionContainer::IsValidCollectionName` before success. An Unreal collection operation that fails after validation returns `-32603` and preserves the engine-provided error text when available. Mutating calls reject read-only share types rather than falling back to another scope.
 
 ---
 

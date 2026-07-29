@@ -2,10 +2,10 @@
 
 | Field | Value |
 |-------|-------|
-| Verification date | 2026-07-29 |
+| Verification date | 2026-07-29; AI review follow-up 2026-07-30 |
 | Status | Passed |
-| Engine-tested implementation | `efb46eee24ed67980b8e6b61dad66d9259c5bc4a` |
-| Scope | `MonolithIndex` `collection` namespace; 13 actions; native/Python proxy cold-start parity |
+| Engine-tested implementation | `7d4e2eb2be96736d4c8381ae8275eadf563fc57a` |
+| Scope | `MonolithIndex` `collection` namespace; 13 actions; static/dynamic membership; native/Python proxy cold-start parity |
 
 ---
 
@@ -33,6 +33,7 @@ Verify that the Content Browser collection action pack:
 | Skill routed to skills not shipped by this repository | The skill uses shipped `unreal-project-search` / `unreal-gas` guidance and delegates source control to the host workflow | Skill link audit plus repository path check |
 | Editor-down proxies omitted the new namespace | `collection_query` was added to the native and Python cold-start seed lists | Fresh isolated caches returned 21 tools with exactly one `collection_query` in each proxy |
 | Unique-name helper looked mutating and could return an unusable candidate | The action validates its generated candidate and the skill identifies it as non-mutating | Invalid base is rejected; valid candidate lookup returns “does not exist” |
+| Dynamic collections always reported `asset_count:0`, `assets:[]`, and `contains:false` | A shared resolver now evaluates saved queries over the active Content Browser `AssetData` source and unions static/dynamic results over the requested hierarchy scope | UE 5.7/5.8 automation plus live UE 5.8 direct, nested, and self-cycle queries |
 
 ---
 
@@ -43,7 +44,7 @@ Each engine used a separate minimal host project whose `Plugins\Monolith` juncti
 | Host | Engine association | Resolved engine root | Monolith source |
 |------|--------------------|----------------------|-----------------|
 | `D:\P4\MonolithCollectionUE57Host` | `5.7` | `D:\Engine\UE_5.7` | `D:\P4\speed\Saved\GitWorktrees\Monolith-fork-collection` |
-| `D:\P4\MonolithCollectionUE58Host` | `5.8` | `D:\Engine\UE_5.8` | detached validation worktree at `efb46eee24ed67980b8e6b61dad66d9259c5bc4a` |
+| `D:\P4\MonolithCollectionUE58Host` | `5.8` | `D:\Engine\UE_5.8` | detached validation worktree at `7d4e2eb2be96736d4c8381ae8275eadf563fc57a` |
 
 An earlier direct `UnrealEditor -Plugin=<worktree>` path remains rejected as evidence because UBT can reuse another worktree's plugin action graph. The accepted gates use unique host targets and isolated host `Intermediate` / plugin `Binaries` directories.
 
@@ -51,14 +52,12 @@ An earlier direct `UnrealEditor -Plugin=<worktree>` path remains rejected as evi
 
 ## 4. Build Verification
 
-`MONOLITH_RELEASE_BUILD=1` was set for both accepted builds.
-
 | Engine | Target command | Accepted log | Result | Linked DLL size | SHA-256 |
 |--------|----------------|--------------|--------|-----------------|---------|
-| UE 5.7 | `Build.bat MonolithCollectionUE57HostEditor Win64 Development -Project=D:\P4\MonolithCollectionUE57Host\MonolithCollectionUE57Host.uproject -WaitMutex -NoHotReloadFromIDE` | `D:\P4\MonolithCollectionUE57Host\Saved\Logs\CollectionActionPort-Build-UE57-Accepted-20260729-235044.out.log` | Pass | 941,568 bytes | `265A11E1E16097B60E942A7D35B8A7373D9DE147F81680B4B76ADC365D40BC84` |
-| UE 5.8 | `Build.bat MonolithCollectionUE58HostEditor Win64 Development -Project=D:\P4\MonolithCollectionUE58Host\MonolithCollectionUE58Host.uproject -WaitMutex -NoHotReloadFromIDE` | `D:\P4\MonolithCollectionUE58Host\Saved\Logs\CollectionActionPort-Build-UE58-Accepted-20260729-235100.out.log` | Pass | 903,680 bytes | `DFEC0658DA2BB206B252647D122199C58B39C586BC220B8E7ADFD8CB1DFAEA92` |
+| UE 5.7 | `Build.bat MonolithCollectionUE57HostEditor Win64 Development -Project=D:\P4\MonolithCollectionUE57Host\MonolithCollectionUE57Host.uproject -WaitMutex -NoHotReloadFromIDE -Log=<unique>` | `D:\P4\MonolithCollectionUE57Host\Saved\Logs\CollectionActionPort-Review2-Build-UE57-20260730-020829.out.log` | Pass | 978,432 bytes | `E869DB651AE06C01F05DBEB1023AB6CE6F183E6E5798BA87584272441B35D5D9` |
+| UE 5.8 | `Build.bat MonolithCollectionUE58HostEditor Win64 Development -Project=D:\P4\MonolithCollectionUE58Host\MonolithCollectionUE58Host.uproject -WaitMutex -NoHotReloadFromIDE -Log=<unique>` | `D:\P4\MonolithCollectionUE58Host\Saved\Logs\CollectionActionPort-Review2-Build-UE58-20260730-021009.out.log` | Pass | 939,520 bytes | `A9AAEBB77FB07C56CCA61F82AE9860A934288A56E245FB6054BE01CD3D651161` |
 
-The preceding `b8c94e9d` build compiled both `AssetCollectionActions.cpp` and `AssetCollectionActionsTests.cpp`. The final `efb46eee` correction changed only handler validation order, so both accepted incremental logs recompiled `AssetCollectionActions.cpp` and relinked `UnrealEditor-MonolithIndex.dll`; the already-compiled test source was unchanged.
+The follow-up builds compile the final public `ICollectionContainer::TestDynamicQuery` / `ITextFilterExpressionContext` implementation. A preceding UE 5.7 attempt that called `FAssetTextFilter::Compile` and `FCompiledAssetTextFilter::PassesFilter` is rejected evidence: those methods are declared in a public header but are not exported from the UE 5.7/5.8 `ContentBrowser` module, producing `LNK2019`. The final implementation does not use the deprecated `FFrontendFilter_Text` compatibility class.
 
 The first UE 5.8 launch was not accepted: it overlapped the UE 5.7 UBT process and failed before compilation while both processes contended for the user-global `UnrealBuildTool\Log.txt` backup. The serial retry above compiled and linked cleanly; no source workaround or alternate engine path was introduced.
 
@@ -68,18 +67,18 @@ The first UE 5.8 launch was not accepted: it overlapped the UE 5.7 UBT process a
 
 | Engine | Report | Passed | Warnings | Errors |
 |--------|--------|--------|----------|--------|
-| UE 5.7 | `D:\P4\MonolithCollectionUE57Host\Saved\Automation\CollectionActionPort-UE57-Accepted-20260729-235131\index.json` | 2/2 | 0 | 0 |
-| UE 5.8 | `D:\P4\MonolithCollectionUE58Host\Saved\Automation\CollectionActionPort-UE58-Accepted-20260729-235131\index.json` | 2/2 | 0 | 0 |
+| UE 5.7 | `D:\P4\MonolithCollectionUE57Host\Saved\Automation\CollectionActionPort-Review2-UE57-20260730-020855\index.json` | 2/2 | 0 | 0 |
+| UE 5.8 | `D:\P4\MonolithCollectionUE58Host\Saved\Automation\CollectionActionPort-Review2-UE58-20260730-021034\index.json` | 2/2 | 0 | 0 |
 
 | Test | Contract |
 |------|----------|
 | `Monolith.Collection.RegistrationAndValidation` | Exactly 13 actions are registered. Wrong scalar/array/object types retain precedence, empty query text and invalid unique-name candidates fail, and every action targeting a missing collection returns invalid params. Valid unique-name generation returns a non-empty candidate without creating it. |
-| `Monolith.Collection.LocalLifecycle` | An existing empty static collection returns an empty success; static membership/color and dynamic-query round trips complete; every created collection is deleted. |
+| `Monolith.Collection.LocalLifecycle` | An existing empty static collection returns an empty success; static membership/color completes; `Type=Texture2D` dynamic details/list/contains resolve the engine default texture and a non-zero count; every created collection is deleted. |
 
 Final editor logs:
 
-- UE 5.7: `D:\P4\MonolithCollectionUE57Host\Saved\Logs\CollectionActionPort-Automation-UE57-Accepted-20260729-235131.log`
-- UE 5.8: `D:\P4\MonolithCollectionUE58Host\Saved\Logs\CollectionActionPort-Automation-UE58-Accepted-20260729-235131.log`
+- UE 5.7: `D:\P4\MonolithCollectionUE57Host\Saved\Logs\CollectionActionPort-Review2-Automation-UE57-20260730-020855.log`
+- UE 5.8: `D:\P4\MonolithCollectionUE58Host\Saved\Logs\CollectionActionPort-Review2-Automation-UE58-20260730-021034.log`
 
 No `MonolithStatic_*`, `MonolithDynamic_*`, or `MonolithUnique_*` fixture remained in either host's `Saved\Collections`.
 
@@ -89,7 +88,7 @@ The first automation run against `b8c94e9d` was rejected: early existence checks
 
 ## 6. Live MCP Verification
 
-The UE 5.8 host was launched with an isolated `Config\DefaultMonolith.ini` listener on port `9432`. `GET /health` returned HTTP 200, plugin `0.21.3`, and `tools_registered:1278`.
+The UE 5.8 host was launched with an isolated `Config\DefaultMonolith.ini` listener on port `9432`. `GET /health` returned HTTP 200, plugin `0.21.3`, and `tools_registered:1340`.
 
 | Call | Observed result |
 |------|-----------------|
@@ -104,9 +103,12 @@ The UE 5.8 host was launched with an isolated `Config\DefaultMonolith.ini` liste
 | `contains_asset` on that empty collection | Success with `contains:false` |
 | `create_unique_collection_name` with `Invalid/Collection` | MCP error identifies `base_name` as unable to produce a valid candidate |
 | `create_unique_collection_name`, then `get_collection` for its candidate | Candidate generation succeeds; lookup fails because no collection was created |
-| Dynamic create / set `Type=Texture2D` / get / delete | Exact query text round-tripped and cleanup succeeded |
+| Dynamic create before query | `query_text:""` and `asset_count:0`; an unconfigured query does not match every asset |
+| Dynamic set `Type=Texture2D` / details / list / contains | `asset_count:3689`, `count:3689`, default texture listed, and `contains:true` |
+| Nested dynamic `Collection=<base>` | Same 3,689 resolved assets and default texture membership as the base query |
+| Self-referential dynamic `Collection=<self>` | `count:0`; cycle fails closed without recursion or crash |
 
-The accepted live editor log is `D:\P4\MonolithCollectionUE58Host\Saved\Logs\CollectionActionPort-LiveMCP-UE58-Accepted-20260729-2352.log`. The editor then accepted `QUIT_EDITOR`, exited cleanly, and released port `9432`. No `MonolithLiveStatic_*` or `MonolithLiveDynamic_*` collection remained.
+The accepted live editor log is `D:\P4\MonolithCollectionUE58Host\Saved\Logs\CollectionActionPort-Review2-LiveMCP-UE58-20260730-021109.log`. All three follow-up fixtures were explicitly deleted. The editor then accepted `editor.run_console_command` with `QUIT_EDITOR`, exited cleanly, and released port `9432`; no `MonolithLiveDynamicReview2_*`, `MonolithLiveNestedReview2_*`, or `MonolithLiveCycleReview2_*` collection remained.
 
 ---
 
@@ -135,6 +137,7 @@ These checks prove the namespace comes from the shipped seed lists rather than a
 |------|---------|-----------------|
 | Wrong collection scope mutated | Every operation carries the requested share type; read-only containers reject writes | No fallback or share-type substitution path exists |
 | Missing collection mistaken for a valid empty result | Missing lookup and existing-empty cases are tested separately | Missing calls fail; existing-empty calls succeed |
+| Dynamic collection silently treated as an empty static list | One resolver evaluates saved queries for details/list/contains and unions hierarchy members | Direct and nested dynamic calls return the same 3,689 matching assets; self-cycle returns zero |
 | Non-empty collection deleted accidentally | `force` defaults to `false` | Deletion rejects a non-empty collection unless explicitly forced |
 | MCP JSON values silently coerced | Exact `EJson` checks precede typed reads | Wrong types and empty required strings return invalid params |
 | Automation or live probes leave editor collections behind | Scope-exit cleanup plus explicit live deletion | No named fixture remained |
