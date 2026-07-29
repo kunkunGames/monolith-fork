@@ -1,32 +1,34 @@
 ---
 name: unreal-localization
-description: Use when localizing Unreal text via Monolith MCP (localization namespace) - StringTable assets, set/remove string entries and metadata, CSV import/export, validation, gather/import/export text, localization targets, and culture management. For setting FText display strings on UMG widgets use unreal-ui; to find which assets reference a string-table key or FText use unreal-project-search; for culture/internationalization settings in project .ini use unreal-config. Triggers on localization, loc, l10n, i18n, string table, StringTable, string entry, namespace key, FText, gather text, import text, export text, CSV import, culture, locale, language, translate, translation, localization target.
+description: Use when managing Unreal StringTable assets and culture discovery via Monolith MCP (localization namespace) - list/validate/create StringTables, set/remove entries and metadata, and import/export project-scoped CSV. For gather-text targets or PO archives use Unreal's supported localization dashboard or commandlet workflow; those operations are not exposed by this namespace. For UMG display text use unreal-ui, reference search use unreal-project-search, and startup culture .ini settings use unreal-config. Triggers on localization, loc, l10n, i18n, string table, StringTable, string entry, namespace key, FText, CSV import, CSV export, culture, locale, language, translate, translation.
 ---
 
 # unreal-localization
 
-**10 actions** via `localization_query(action, params)`. Action names below are the live registry surface; call `monolith_discover` for exact parameter schemas.
+**10 actions** via `localization_query(action, params)`. Action names below are the live registry surface; use `describe_query` for one exact schema.
 
 ## Discovery
 
 ```
-monolith_discover({ namespace: "localization" })                      # all actions in this namespace
-monolith_discover({ namespace: "localization", action: "<action>", mode: "schema" })  # exact params
+monolith_discover({ namespace: "localization" })  # action names + descriptions
+describe_query("action_schema", target_namespace="localization", target_action="<action>")  # one exact schema
+monolith_discover({ namespace: "localization", detail: true })  # all schemas, when the full namespace is needed
 ```
 
 ## When to use
 
-Use this skill for the localization data layer — StringTable assets, string entries and per-entry metadata, CSV import/export, gather/import/export text, validation, localization targets, and culture/locale management.
+Use this skill for the implemented localization data layer — culture discovery plus StringTable assets, entries, per-entry metadata, validation, and project-scoped CSV import/export.
 
 Use a different skill for:
 
 - **unreal-ui** — when setting an `FText` display string directly on a UMG widget (`set_widget_property` text). This skill owns the string-table source the widget binds to, not the widget itself.
 - **unreal-project-search** — when finding which assets reference a given StringTable key or `FText`, versus managing the localization targets/cultures and string-table contents here.
 - **unreal-config** — when the change is a culture/internationalization setting in project `.ini` (default/startup culture), versus string-table and gather/export operations here.
+- **Unreal Localization Dashboard/commandlets** — when gathering source text, managing localization targets, or importing/exporting PO archives. This namespace does not expose those workflows.
 
 ## Action Reference
 
-Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed, `[w]` mutates. Signatures are a snapshot of the live catalog — for the exact full schema call `monolith_discover` with `mode: "schema"`. The Discovery block above stays the authority.
+Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed, `[w]` mutates. Signatures are a snapshot of the live catalog — for one exact current schema call `describe_query("action_schema", target_namespace="localization", target_action="<action>")`.
 
 ### Core (10)
 
@@ -75,4 +77,4 @@ localization_query({ action: "list_cultures", params: {} })
 - `get_string_table` caps returned entries; for a full audit pair it with `validate_string_table` rather than relying on the capped list.
 - CSV headers must contain `key` and `source_string`; every additional header is treated as a per-entry metadata key. Keep StringTable keys and metadata-column names stable across export/import so rows round-trip to the intended entries.
 - This reference is generated from the live `RegisterAction` surface. If an action is missing or renamed, re-run `monolith_discover({ namespace: "localization" })` — the catalog is the source of truth.
-- Pass `mode: "schema"` to `monolith_discover` for required/optional params and types before calling an action.
+- Call `describe_query("action_schema", target_namespace="localization", target_action="<action>")` for required/optional params and types; use `monolith_discover({ namespace: "localization", detail: true })` only when every schema is needed.

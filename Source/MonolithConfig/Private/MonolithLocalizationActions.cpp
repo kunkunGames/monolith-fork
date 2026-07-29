@@ -10,6 +10,7 @@
 #include "Engine/ObjectLibrary.h"
 #include "Factories/StringTableFactory.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformFileManager.h"
 #include "IAssetTools.h"
 #include "Internationalization/Culture.h"
 #include "Internationalization/Internationalization.h"
@@ -40,16 +41,24 @@ namespace
 		TMap<FString, FString> Metadata;
 	};
 
-	void SetSourceStringCompat(const FStringTableRef& Table, const FTextKey& Key, const FString& SourceString)
+	void SetSourceStringCompat(
+		const FStringTableRef& Table,
+		const FTextKey& Key,
+		const FString& SourceString,
+		const FString* PreservedDevNotes = nullptr)
 	{
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8 && WITH_EDITORONLY_DATA
-		FString DevNotes;
-		if (const FStringTableEntryConstPtr ExistingEntry = Table->FindEntry(Key))
+		FString DevNotes = PreservedDevNotes ? *PreservedDevNotes : FString();
+		if (!PreservedDevNotes)
 		{
-			DevNotes = ExistingEntry->GetDevNotes();
+			if (const FStringTableEntryConstPtr ExistingEntry = Table->FindEntry(Key))
+			{
+				DevNotes = ExistingEntry->GetDevNotes();
+			}
 		}
 		Table->SetSourceString(Key, SourceString, DevNotes);
 #else
+		(void)PreservedDevNotes;
 		Table->SetSourceString(Key, SourceString);
 #endif
 	}
@@ -75,7 +84,8 @@ namespace
 				return false;
 			}
 		}
-		OutLimit = FMath::Clamp(static_cast<int32>(LimitNumber), 1, 1000);
+		const double ClampedLimit = FMath::Clamp(LimitNumber, 1.0, 1000.0);
+		OutLimit = static_cast<int32>(ClampedLimit);
 		return true;
 	}
 
@@ -246,6 +256,66 @@ namespace
 		return FName(*FString::Printf(TEXT("%s.%s"), *PackagePath, *AssetName));
 	}
 
+	bool IsLexicallyUnderRoot(FString Path, FString Root)
+	{
+		Path = FPaths::ConvertRelativePathToFull(Path);
+		Root = FPaths::ConvertRelativePathToFull(Root);
+		FPaths::NormalizeDirectoryName(Path);
+		FPaths::NormalizeDirectoryName(Root);
+#if PLATFORM_WINDOWS
+		constexpr ESearchCase::Type PathCase = ESearchCase::IgnoreCase;
+#else
+		constexpr ESearchCase::Type PathCase = ESearchCase::CaseSensitive;
+#endif
+		return Path.Equals(Root, PathCase) || FPaths::IsUnderDirectory(Path, Root);
+	}
+
+	bool PathTraversesLinkBelowRoot(FString Path, FString Root)
+	{
+		Path = FPaths::ConvertRelativePathToFull(Path);
+		Root = FPaths::ConvertRelativePathToFull(Root);
+		FPaths::NormalizeFilename(Path);
+		FPaths::NormalizeDirectoryName(Root);
+		if (!IsLexicallyUnderRoot(Path, Root))
+		{
+			return false;
+		}
+
+		FString RelativePath = Path;
+		FString RelativeBase = Root;
+		if (!RelativeBase.EndsWith(TEXT("/")))
+		{
+			RelativeBase += TEXT("/");
+		}
+		if (!FPaths::MakePathRelativeTo(RelativePath, *RelativeBase))
+		{
+			return true;
+		}
+
+		FPaths::NormalizeFilename(RelativePath);
+		TArray<FString> Components;
+		RelativePath.ParseIntoArray(Components, TEXT("/"), true);
+		FString CurrentPath = Root;
+		for (const FString& Component : Components)
+		{
+			if (Component.IsEmpty() || Component == TEXT("."))
+			{
+				continue;
+			}
+			if (Component == TEXT(".."))
+			{
+				return true;
+			}
+
+			CurrentPath /= Component;
+			if (FPlatformFileManager::Get().GetPlatformPhysical().IsSymlink(*CurrentPath) == ESymlinkResult::Symlink)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	bool ResolveProjectFilePath(const FString& RawPath, FString& OutFilePath, FString& OutError)
 	{
 		if (RawPath.TrimStartAndEnd().IsEmpty())
@@ -256,20 +326,23 @@ namespace
 
 		FString ProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 		FPaths::NormalizeDirectoryName(ProjectDir);
-		FString ProjectPrefix = ProjectDir;
-		if (!ProjectPrefix.EndsWith(TEXT("/")))
-		{
-			ProjectPrefix += TEXT("/");
-		}
 
 		OutFilePath = FPaths::IsRelative(RawPath)
 			? FPaths::ConvertRelativePathToFull(ProjectDir, RawPath)
 			: FPaths::ConvertRelativePathToFull(RawPath);
 		FPaths::NormalizeFilename(OutFilePath);
 
-		if (!(OutFilePath.Equals(ProjectDir, ESearchCase::IgnoreCase) || OutFilePath.StartsWith(ProjectPrefix, ESearchCase::IgnoreCase)))
+		if (!IsLexicallyUnderRoot(OutFilePath, ProjectDir))
 		{
 			OutError = FString::Printf(TEXT("CSV file path '%s' must stay under project directory '%s'"), *OutFilePath, *ProjectDir);
+			return false;
+		}
+		if (PathTraversesLinkBelowRoot(OutFilePath, ProjectDir))
+		{
+			OutError = FString::Printf(
+				TEXT("CSV file path '%s' traverses a symlink or junction below project directory '%s'"),
+				*OutFilePath,
+				*ProjectDir);
 			return false;
 		}
 		return true;
@@ -353,9 +426,20 @@ namespace
 		int32 KeyIndex = INDEX_NONE;
 		int32 SourceIndex = INDEX_NONE;
 		TArray<TPair<FString, int32>> MetadataColumns;
+		TSet<FString> NormalizedHeaderNames;
 		for (int32 ColumnIndex = 0; ColumnIndex < Header.Num(); ++ColumnIndex)
 		{
 			const FString HeaderName = FString(Header[ColumnIndex]).TrimStartAndEnd();
+			const FString NormalizedHeaderName = HeaderName.ToLower();
+			if (!HeaderName.IsEmpty() && NormalizedHeaderNames.Contains(NormalizedHeaderName))
+			{
+				OutError = FString::Printf(TEXT("CSV header '%s' is duplicated"), *HeaderName);
+				return ParsedRows;
+			}
+			if (!HeaderName.IsEmpty())
+			{
+				NormalizedHeaderNames.Add(NormalizedHeaderName);
+			}
 			if (HeaderName.Equals(TEXT("key"), ESearchCase::IgnoreCase))
 			{
 				KeyIndex = ColumnIndex;
@@ -479,12 +563,28 @@ namespace
 		return bFound;
 	}
 
-	FString BuildStringTableCsv(UStringTable* Table, bool bIncludeMetadata, int32& OutRowCount)
+	bool BuildStringTableCsv(
+		UStringTable* Table,
+		bool bIncludeMetadata,
+		FString& OutCsvText,
+		int32& OutRowCount,
+		FString& OutError)
 	{
 		TArray<FStringTableCsvRow> Rows;
 		TArray<FString> MetadataKeys;
 		CollectStringTableRows(Table, bIncludeMetadata, Rows, MetadataKeys);
 		OutRowCount = Rows.Num();
+		for (const FString& MetadataKey : MetadataKeys)
+		{
+			if (MetadataKey.Equals(TEXT("key"), ESearchCase::IgnoreCase) ||
+				MetadataKey.Equals(TEXT("source_string"), ESearchCase::IgnoreCase))
+			{
+				OutError = FString::Printf(
+					TEXT("Cannot export metadata key '%s' because it conflicts with a reserved CSV header"),
+					*MetadataKey);
+				return false;
+			}
+		}
 
 		TArray<FString> Lines;
 		TArray<FString> Header;
@@ -515,7 +615,8 @@ namespace
 			Lines.Add(FString::JoinBy(Cells, TEXT(","), [](const FString& Cell) { return EscapeCsvCell(Cell); }));
 		}
 
-		return FString::Join(Lines, TEXT("\n"));
+		OutCsvText = FString::Join(Lines, TEXT("\n"));
+		return true;
 	}
 
 	TSharedPtr<FJsonObject> CultureToJson(const FCultureRef& Culture)
@@ -541,36 +642,46 @@ namespace
 		}
 
 		const FStringTableConstRef StringTable = Table->GetStringTable();
+		TArray<FStringTableCsvRow> EntrySnapshots;
 		StringTable->EnumerateKeysAndSourceStrings(
-			[&Rows, &OutTotalCount, Limit, bIncludeMetadata, StringTable](const FTextKey& Key, const FString& SourceString)
+			[&EntrySnapshots](const FTextKey& Key, const FString& SourceString)
 			{
-				++OutTotalCount;
-				if (Rows.Num() >= Limit)
-				{
-					return true;
-				}
-
-				TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
-				Row->SetStringField(TEXT("key"), Key.ToString());
-				Row->SetStringField(TEXT("source_string"), SourceString);
-				Row->SetNumberField(TEXT("source_length"), SourceString.Len());
-
-				if (bIncludeMetadata)
-				{
-					TSharedPtr<FJsonObject> Metadata = MakeShared<FJsonObject>();
-					StringTable->EnumerateMetaData(Key,
-						[&Metadata](FName MetadataId, const FString& MetadataValue)
-						{
-							Metadata->SetStringField(MetadataId.ToString(), MetadataValue);
-							return true;
-						});
-					Row->SetObjectField(TEXT("metadata"), Metadata);
-				}
-
-				Rows.Add(MakeShared<FJsonValueObject>(Row));
+				FStringTableCsvRow Entry;
+				Entry.Key = Key.ToString();
+				Entry.SourceString = SourceString;
+				EntrySnapshots.Add(MoveTemp(Entry));
 				return true;
 			});
+		EntrySnapshots.Sort([](const FStringTableCsvRow& A, const FStringTableCsvRow& B)
+		{
+			return A.Key < B.Key;
+		});
+		OutTotalCount = EntrySnapshots.Num();
 
+		const int32 ReturnCount = FMath::Min(Limit, EntrySnapshots.Num());
+		Rows.Reserve(ReturnCount);
+		for (int32 Index = 0; Index < ReturnCount; ++Index)
+		{
+			const FStringTableCsvRow& Entry = EntrySnapshots[Index];
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("key"), Entry.Key);
+			Row->SetStringField(TEXT("source_string"), Entry.SourceString);
+			Row->SetNumberField(TEXT("source_length"), Entry.SourceString.Len());
+
+			if (bIncludeMetadata)
+			{
+				TSharedPtr<FJsonObject> Metadata = MakeShared<FJsonObject>();
+				StringTable->EnumerateMetaData(FTextKey(Entry.Key),
+					[&Metadata](FName MetadataId, const FString& MetadataValue)
+					{
+						Metadata->SetStringField(MetadataId.ToString(), MetadataValue);
+						return true;
+					});
+				Row->SetObjectField(TEXT("metadata"), Metadata);
+			}
+
+			Rows.Add(MakeShared<FJsonValueObject>(Row));
+		}
 		return Rows;
 	}
 
@@ -662,7 +773,7 @@ void FMonolithLocalizationActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("List available cultures known to Unreal internationalization."),
 		FMonolithActionHandler::CreateStatic(&FMonolithLocalizationActions::ListCultures),
 		FParamSchemaBuilder()
-			.Optional(TEXT("culture_names"), TEXT("array"), TEXT("Optional culture names to resolve; omitted returns configured/default culture context"))
+			.OptionalExactType(TEXT("culture_names"), TEXT("array"), TEXT("Optional culture names to resolve; omitted returns configured/default culture context"))
 			.Optional(TEXT("include_derived"), TEXT("boolean"), TEXT("Include derived cultures when resolving culture_names"), TEXT("true"))
 			.Build());
 
@@ -710,7 +821,7 @@ void FMonolithLocalizationActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StringTable asset path"))
 			.Required(TEXT("key"), TEXT("string"), TEXT("Entry key"))
 			.Required(TEXT("source_string"), TEXT("string"), TEXT("Source string"))
-			.Optional(TEXT("metadata"), TEXT("object"), TEXT("String metadata fields"))
+			.OptionalExactType(TEXT("metadata"), TEXT("object"), TEXT("String metadata fields"))
 			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Preview without writing"), TEXT("false"))
 			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true for non-dry-run writes"), TEXT("false"))
 			.Optional(TEXT("save"), TEXT("boolean"), TEXT("Save the package after mutation"), TEXT("false"))
@@ -1083,13 +1194,6 @@ FMonolithActionResult FMonolithLocalizationActions::SetStringEntry(const TShared
 		return InvalidParams(Error);
 	}
 
-	FString AssetPath;
-	UStringTable* Table = LoadStringTableFromParams(Params, AssetPath, Error);
-	if (!Table)
-	{
-		return InvalidParams(Error);
-	}
-
 	const TSharedPtr<FJsonObject>* MetadataObject = nullptr;
 	if (Params.IsValid())
 	{
@@ -1102,10 +1206,6 @@ FMonolithActionResult FMonolithLocalizationActions::SetStringEntry(const TShared
 			return InvalidParams(TEXT("Malformed parameter: metadata must be an object"));
 		}
 	}
-
-	FString ExistingSource;
-	const FTextKey TextKey(Key);
-	const bool bHadEntry = Table->GetStringTable()->GetSourceString(TextKey, ExistingSource);
 
 	TMap<FString, FString> MetadataToSet;
 	if (MetadataObject && MetadataObject->IsValid())
@@ -1121,6 +1221,17 @@ FMonolithActionResult FMonolithLocalizationActions::SetStringEntry(const TShared
 			MetadataToSet.Add(MetadataKey, MetadataValue);
 		}
 	}
+
+	FString AssetPath;
+	UStringTable* Table = LoadStringTableFromParams(Params, AssetPath, Error);
+	if (!Table)
+	{
+		return InvalidParams(Error);
+	}
+
+	FString ExistingSource;
+	const FTextKey TextKey(Key);
+	const bool bHadEntry = Table->GetStringTable()->GetSourceString(TextKey, ExistingSource);
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	AddMutationBaseFields(Result, AssetPath, Options, false, false);
@@ -1310,11 +1421,11 @@ FMonolithActionResult FMonolithLocalizationActions::SetStringMetadata(const TSha
 	}
 	if (Options.bDryRun)
 	{
-		Result->SetBoolField(TEXT("would_change"), bRemove ? bHadMetadata : PreviousValue != MetadataValue);
+		Result->SetBoolField(TEXT("would_change"), bRemove ? bHadMetadata : !bHadMetadata || PreviousValue != MetadataValue);
 		return FMonolithActionResult::Success(Result);
 	}
 
-	const bool bChanged = bRemove ? bHadMetadata : PreviousValue != MetadataValue;
+	const bool bChanged = bRemove ? bHadMetadata : !bHadMetadata || PreviousValue != MetadataValue;
 	bool bSaved = false;
 	FString SavedPath;
 	if (bChanged)
@@ -1421,6 +1532,19 @@ FMonolithActionResult FMonolithLocalizationActions::ImportStringTableCsv(const T
 	{
 		Table->Modify();
 		FStringTableRef MutableTable = Table->GetMutableStringTable();
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8 && WITH_EDITORONLY_DATA
+		TMap<FString, FString> PreservedDevNotes;
+		if (bReplaceExisting)
+		{
+			for (const FStringTableCsvRow& Row : Rows)
+			{
+				if (const FStringTableEntryConstPtr ExistingEntry = MutableTable->FindEntry(FTextKey(Row.Key)))
+				{
+					PreservedDevNotes.Add(Row.Key, ExistingEntry->GetDevNotes());
+				}
+			}
+		}
+#endif
 		if (bReplaceExisting)
 		{
 			MutableTable->ClearSourceStrings();
@@ -1428,7 +1552,11 @@ FMonolithActionResult FMonolithLocalizationActions::ImportStringTableCsv(const T
 		for (const FStringTableCsvRow& Row : Rows)
 		{
 			const FTextKey TextKey(Row.Key);
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8 && WITH_EDITORONLY_DATA
+			SetSourceStringCompat(MutableTable, TextKey, Row.SourceString, PreservedDevNotes.Find(Row.Key));
+#else
 			SetSourceStringCompat(MutableTable, TextKey, Row.SourceString);
+#endif
 			for (const TPair<FString, FString>& MetadataPair : Row.Metadata)
 			{
 				MutableTable->SetMetaData(TextKey, FName(*MetadataPair.Key), MetadataPair.Value);
@@ -1486,7 +1614,11 @@ FMonolithActionResult FMonolithLocalizationActions::ExportStringTableCsv(const T
 	}
 
 	int32 RowCount = 0;
-	const FString CsvText = BuildStringTableCsv(Table, bIncludeMetadata, RowCount);
+	FString CsvText;
+	if (!BuildStringTableCsv(Table, bIncludeMetadata, CsvText, RowCount, Error))
+	{
+		return InvalidParams(Error);
+	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	AddMutationBaseFields(Result, AssetPath, Options, false, false);

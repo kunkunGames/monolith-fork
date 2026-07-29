@@ -91,6 +91,26 @@ public:
 		return *this;
 	}
 
+	// --- Exact JSON type variants.
+	// The registry normally recovers JSON-encoded strings for array/object
+	// parameters because some MCP clients serialize complex values as text.
+	// Security- or mutation-sensitive actions can opt one parameter out of
+	// that compatibility transform and receive its original EJson type.
+	FParamSchemaBuilder& RequiredExactType(const FString& Name, const FString& Type, const FString& Desc)
+	{
+		AddParam(Name, Type, Desc, /*bRequired=*/true, /*Default=*/TEXT(""), /*bHasDefault=*/false, {}, EMonolithParamKind::Other);
+		DisableStringEncodedComplexRecovery(Name);
+		return *this;
+	}
+
+	FParamSchemaBuilder& OptionalExactType(const FString& Name, const FString& Type, const FString& Desc,
+		const FString& Default = TEXT(""))
+	{
+		AddParam(Name, Type, Desc, /*bRequired=*/false, Default, /*bHasDefault=*/!Default.IsEmpty(), {}, EMonolithParamKind::Other);
+		DisableStringEncodedComplexRecovery(Name);
+		return *this;
+	}
+
 	// --- Survivor D sugar overloads — opt-in to path-kind tagging.
 	// These wrap Required/Optional + set Kind on the resulting entry.
 	// Type is always "string"; default is always empty. Use the non-sugar
@@ -187,6 +207,15 @@ public:
 
 private:
 	TSharedPtr<FJsonObject> Schema = MakeShared<FJsonObject>();
+
+	void DisableStringEncodedComplexRecovery(const FString& Name)
+	{
+		const TSharedPtr<FJsonObject>* Param = nullptr;
+		if (Schema->TryGetObjectField(Name, Param) && Param && Param->IsValid())
+		{
+			(*Param)->SetBoolField(TEXT("allow_string_encoded_complex"), false);
+		}
+	}
 
 	void AddParam(const FString& Name, const FString& Type, const FString& Desc, bool bRequired,
 		const FString& Default, bool bHasDefault, std::initializer_list<const TCHAR*> Aliases,

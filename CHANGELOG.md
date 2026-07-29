@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **New guarded `localization` namespace for StringTable workflows.** Ten actions cover culture discovery, StringTable inspection and validation, asset creation, entry/metadata mutation, and CSV import/export. All writes require `dry_run=true` or `confirm=true`, package saves remain opt-in, asset paths are restricted to `/Game`, external CSV paths are restricted to the project directory, and supplied JSON values are validated without scalar coercion.
 
+### Fixed
+
+- **Localization review hardening.** Capped StringTable entries are sorted before truncation; oversized integral limits clamp before integer conversion; empty metadata values can be added; replace-imports retain UE 5.8 developer notes; CSV import rejects duplicate headers and export rejects metadata names that collide with `key` or `source_string`; project-scoped CSV paths cannot escape through a symlink or junction.
+- **Exact complex-type contracts can opt out of MCP compatibility coercion.** `FParamSchemaBuilder::RequiredExactType` and `OptionalExactType` annotate array/object parameters that must retain their original `EJson` type. `localization.list_cultures.culture_names` and `localization.set_string_entry.metadata` now reject JSON-encoded strings instead of being rewritten before their strict guards run.
+
 ## [0.21.3] - 2026-07-26
 
 This release closes out the open pull-request queue. Every fix below was reported or prototyped by a contributor — thanks to **@Thomasbehan**, **@whalemenace**, and **@kunkunGames** for the write-ups, which were detailed enough to reproduce from directly.

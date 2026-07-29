@@ -331,13 +331,20 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 	// centrally: when the schema declares array/object and the incoming value
 	// is a string that parses as that JSON kind, replace it with the parsed
 	// value. Strings that don't parse pass through untouched, so a legitimate
-	// string value can never be corrupted.
+	// string value can never be corrupted. A schema entry can set
+	// allow_string_encoded_complex=false (via RequiredExactType /
+	// OptionalExactType) when the action contract must observe the original
+	// EJson type instead of accepting this client-compatibility transform.
 	if (ActionInfo.ParamSchema.IsValid())
 	{
 		for (const auto& SchemaPair : ActionInfo.ParamSchema->Values)
 		{
 			const TSharedPtr<FJsonObject>* ParamDefPtr = nullptr;
 			if (!SchemaPair.Value->TryGetObject(ParamDefPtr) || !ParamDefPtr) continue;
+
+			bool bAllowStringEncodedComplex = true;
+			(*ParamDefPtr)->TryGetBoolField(TEXT("allow_string_encoded_complex"), bAllowStringEncodedComplex);
+			if (!bAllowStringEncodedComplex) continue;
 
 			FString DeclaredType;
 			(*ParamDefPtr)->TryGetStringField(TEXT("type"), DeclaredType);

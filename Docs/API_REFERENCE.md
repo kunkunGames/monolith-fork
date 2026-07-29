@@ -688,7 +688,7 @@ List all config files with their hierarchy level.
 
 ## localization
 
-Localization culture discovery and StringTable asset management. **10 actions.** The four read actions never mutate packages. Every write requires either `dry_run=true` or `confirm=true`; `save` is opt-in where applicable. StringTable assets must resolve under `/Game`, CSV paths must resolve under the project directory, and supplied JSON values are checked against their declared types without string/number/boolean coercion.
+Localization culture discovery and StringTable asset management. **10 actions.** The four read actions never mutate packages. Every write requires either `dry_run=true` or `confirm=true`; `save` is opt-in where applicable. StringTable assets must resolve under `/Game`; CSV paths must remain beneath the project directory without traversing symlinks or junctions. Supplied JSON values are checked against their declared types without scalar coercion, and the `culture_names` and `metadata` complex parameters explicitly reject JSON-encoded strings.
 
 ### `localization.list_cultures`
 
@@ -701,7 +701,7 @@ List available cultures known to Unreal internationalization.
 
 ### `localization.list_string_tables`
 
-List StringTable assets under a project content path.
+List StringTable assets under a project content path. Included entries are sorted by key before the per-table limit is applied.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -712,7 +712,7 @@ List StringTable assets under a project content path.
 
 ### `localization.get_string_table`
 
-Inspect a StringTable asset and return capped entries.
+Inspect a StringTable asset and return entries sorted by key before the cap is applied.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -768,7 +768,7 @@ Remove one StringTable entry by key.
 
 ### `localization.set_string_metadata`
 
-Add, replace, or remove one metadata field on a StringTable entry.
+Add, replace, or remove one metadata field on a StringTable entry. An empty string is a valid stored value and adding an absent field with that value counts as a change.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -783,7 +783,7 @@ Add, replace, or remove one metadata field on a StringTable entry.
 
 ### `localization.import_string_table_csv`
 
-Import `key`, `source_string`, and optional metadata columns from a CSV into an existing StringTable.
+Import `key`, `source_string`, and optional metadata columns from a CSV into an existing StringTable. Header names must be unique case-insensitively. On UE 5.8, `replace_existing=true` preserves developer notes for keys that are re-imported.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -796,7 +796,7 @@ Import `key`, `source_string`, and optional metadata columns from a CSV into an 
 
 ### `localization.export_string_table_csv`
 
-Export a StringTable to a CSV under the project directory.
+Export a StringTable to a CSV under the project directory. Export fails if a metadata key case-insensitively collides with the reserved `key` or `source_string` structural headers, preventing an ambiguous or destructive re-import.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|

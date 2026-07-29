@@ -52,20 +52,21 @@
 | Concern | Required behavior |
 |---------|-------------------|
 | Asset boundary | Every StringTable path resolves under `/Game`; invalid, missing, or non-StringTable assets fail explicitly |
-| External-file boundary | CSV paths resolve beneath the current project directory; traversal and outside-project absolute paths are rejected |
+| External-file boundary | CSV paths resolve beneath the current project directory; traversal, outside-project absolute paths, and symlink/junction components below the project root are rejected |
 | Write authorization | Every mutating call must set `dry_run=true` or `confirm=true`; dry-run reports intent without changing assets or files |
 | Persistence | Package mutation and package saving are separate. `save` defaults to `false`; callers opt in explicitly |
-| JSON typing | Supplied booleans, numbers, arrays, objects, and strings must have the declared `EJson` type. Numeric strings, fractional integers, null optionals, and malformed array/object members are rejected instead of coerced |
+| JSON typing | Supplied booleans, numbers, arrays, objects, and strings must have the declared `EJson` type. `culture_names` and `metadata` opt out of registry complex-string recovery, so JSON-encoded strings, numeric strings, fractional integers, null optionals, and malformed members are rejected instead of coerced |
 | Error timing | Handler-level malformed parameters return JSON-RPC `-32602` before asset load, package mutation, or file writes |
-| Output bounds | Table/entry limits are integral and clamped to `1..1000`; list results are sorted before truncation where deterministic ordering matters |
-| Engine compatibility | UE 5.7 uses the two-argument `FStringTable::SetSourceString`; UE 5.8 Editor uses the three-argument overload while preserving existing developer notes through `FStringTableEntry::GetDevNotes()` |
+| Output bounds | Table/entry limits are integral, clamped as doubles to `1..1000` before integer conversion, and entry rows are sorted by key before truncation |
+| CSV integrity | Import rejects duplicate headers case-insensitively; export rejects metadata keys that collide with reserved `key` or `source_string` headers |
+| Engine compatibility | UE 5.7 uses the two-argument `FStringTable::SetSourceString`; UE 5.8 Editor uses the three-argument overload while preserving developer notes through ordinary updates and replace imports |
 
 ### Data flow
 
 | Stage | Owner | Result |
 |-------|-------|--------|
 | Registration | `FMonolithConfigModule` | Registers `config` and `localization` handlers in the central registry and reports live namespace counts |
-| Parse and validate | `FMonolithLocalizationActions` | Verifies exact JSON types, project/content boundaries, limits, and write authorization |
+| Parse and validate | `FMonolithLocalizationActions` | Verifies exact JSON types, link-safe project/content boundaries, CSV headers, limits, and write authorization |
 | Resolve | `FMonolithAssetUtils`, Asset Registry, `UStringTable` | Normalizes `/Game` paths and rejects missing or wrong-class assets |
 | Mutate | `FStringTable`, `UStringTable` package | Applies entry/metadata changes only after every guard has passed |
 | Persist/export | `UPackage::SavePackage`, `FFileHelper` | Saves only when requested and writes CSV only beneath the project directory |
@@ -77,8 +78,8 @@
 |------|-------------|
 | Catalog | Generated catalog contains exactly 10 `localization` actions |
 | Compile | `MonolithConfig` links in both UE 5.7 and UE 5.8 |
-| Focused automation | `Monolith.ParamGuard.MonolithConfig.Localization` passes all 6 tests with zero test warnings/errors on both engines |
-| Lifecycle | Create, set, metadata, validate, export, remove, import, inspect, and cleanup execute in one deterministic in-memory test |
+| Focused automation | `Monolith.ParamGuard.MonolithConfig.Localization` passes all focused tests with zero test warnings/errors on both engines |
+| Lifecycle | Create, deterministic capped read, empty metadata, reserved-header rejection, validate, export, replace import with note preservation, remove, import, inspect, and cleanup execute in one deterministic in-memory test |
 | Side effects | Focused tests leave no `.uasset` and no CSV under their test paths |
 | Visual/Discord | N/A: the action surface has no visual or presentation behavior |
 
