@@ -327,17 +327,22 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 	// strings. batch_execute has long carried a local string-parse fallback for
 	// its `operations` param ("Claude Code quirk"); every other array/object
 	// param silently arrived as a string and failed its handler's typed field
-	// lookup ("<param> array is required" with the value right there). Recover
-	// centrally: when the schema declares array/object and the incoming value
-	// is a string that parses as that JSON kind, replace it with the parsed
-	// value. Strings that don't parse pass through untouched, so a legitimate
-	// string value can never be corrupted.
+	// lookup ("<param> array is required" with the value right there).
+	//
+	// Exact-contract actions mark complex schema entries
+	// allow_string_encoded_complex=false. Those entries bypass legacy recovery
+	// so the handler sees and rejects the caller's actual JSON type instead of
+	// accepting an implicit conversion.
 	if (ActionInfo.ParamSchema.IsValid())
 	{
 		for (const auto& SchemaPair : ActionInfo.ParamSchema->Values)
 		{
 			const TSharedPtr<FJsonObject>* ParamDefPtr = nullptr;
 			if (!SchemaPair.Value->TryGetObject(ParamDefPtr) || !ParamDefPtr) continue;
+
+			bool bAllowStringEncodedComplex = true;
+			(*ParamDefPtr)->TryGetBoolField(TEXT("allow_string_encoded_complex"), bAllowStringEncodedComplex);
+			if (!bAllowStringEncodedComplex) continue;
 
 			FString DeclaredType;
 			(*ParamDefPtr)->TryGetStringField(TEXT("type"), DeclaredType);
@@ -403,7 +408,8 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 			return FMonolithActionResult::Error(
 				FString::Printf(TEXT("Missing required param(s): [%s]. Provided keys: [%s] — inspect the action's parameter schema via monolith_discover(\"<namespace>\") and supply all required fields."),
 					*FString::Join(Missing, TEXT(", ")),
-					*FString::Join(Provided, TEXT(", "))));
+					*FString::Join(Provided, TEXT(", "))),
+				FMonolithJsonUtils::ErrInvalidParams);
 		}
 	}
 

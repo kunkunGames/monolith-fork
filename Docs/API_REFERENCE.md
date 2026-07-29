@@ -1,6 +1,6 @@
 # Monolith API Reference
 
-**Version:** v0.21.3 · **Last updated:** 2026-07-26
+**Version:** v0.21.3 · **Last updated:** 2026-07-29
 
 **In-tree action total is approximate: ~1,400+ actions across 25+ in-tree namespaces** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
@@ -24,6 +24,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [animation](#animation) | 145 | Curves, bone tracks, sync markers, root motion, compression, blend spaces (incl. baking + interpolation control), ABPs (incl. an AnimGraph-authoring pack — additive/slot/cached-pose/blend (by int + by enum)/sync/layered-blend/Control Rig/linked-layer/conduit nodes + output wiring — custom anim-graph nodes + state-machine teardown + compound expression transition rules), montages, skeletons, PoseSearch, IKRig, Control Rig |
 | [niagara](#niagara) | 119 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, effect types, event-aware summaries + validate_system event-chain reasoning, temporal-control composite writers + read aggregators, stateless-emitter factory) |
 | [editor](#editor) | 29 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, Python escape-hatch, persistent-level swap |
+| [asset](#asset) | 20 | Exact-path texture/font ingest, lifecycle, inspection/search, guarded move/rename, and package-graph copy/fixup/closure workflows |
 | [config](#config) | 6 | INI config inspection and search |
 | [project](#project) | 7 | Project-wide asset index (SQLite + FTS5) |
 | [source](#source) | 11 | Unreal Engine C++ source code navigation |
@@ -43,7 +44,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [network](#network) | 4 | **New v0.17.0.** Reflection Intelligence — UE 5.7 replication inspection (replicated classes, RPCs, OnRep handlers, unbalanced-OnRep audit) |
 | [pipeline](#pipeline) | 2 | **New v0.17.0.** Reflection Intelligence — read-only composer actions (`pr_review`, `release_readiness`) |
 | [reflect](#reflect) | 1 | **New v0.19.0.** Reflection Intelligence — index maintenance (`rebuild_reflection_index`, project-only force-rebuild of the RI reflection tables; WRITE/maintenance) |
-| **In-tree subtotal** | **1406** | (all default-active; +45 experimental town gen → 1451 when registered) |
+| **In-tree subtotal** | **1426** | (all default-active; +45 experimental town gen → 1471 when registered) |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -620,6 +621,39 @@ Close the current persistent level (without saving) and load the specified level
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `path` | string | **required** | Asset path of the level to load (e.g. `/Game/Maps/L_Backyard`). Must exist. |
+
+---
+
+## asset
+
+Generic asset lifecycle and package-graph workflows. **20 actions.** The namespace is registered by the `MonolithAsset` editor module when `bEnableAsset=true`.
+
+| Action | Kind | Contract |
+|--------|------|----------|
+| `import_texture_from_bytes` | write | Decode base64 image bytes into an exact `/Game/...` `UTexture2D`; explicit `fail`, `replace`, or `unique` collision policy and strict texture-role/settings validation. |
+| `import_font_family` | write | Preflight absolute `.ttf` sources and every output package, then create a composite `UFont` plus `UFontFace` assets; suffixing requires `allow_unique_names=true`. |
+| `import_texture_from_file` | write | Import an external image to the exact requested texture path; malformed/duplicate settings and unexpected imported packages are errors. |
+| `save_asset` | write | Save one loaded asset package and optionally verify persistence by a non-interactive reload. |
+| `delete_assets` | write | Guarded, non-interactive deletion with dry-run, allowed-root checks, postconditions, and optional source-control preflight. |
+| `move_assets` | write | Guarded exact package moves; defaults to dry-run, never overwrites, and rejects chains/cycles. |
+| `cleanup_moved_redirectors` | write | Validate and remove redirectors left by completed exact moves after referencer, destination, file, and source-control checks. |
+| `validate_naming_conventions` | read | Report prefix-rule violations beneath a content path. |
+| `batch_rename_assets` | write | Preview or apply batch renames through AssetTools. |
+| `find_assets` | read | Fuzzy live-AssetRegistry search with bounded integer limits/thresholds and optional adjacent-transposition matching. |
+| `list_supported_asset_enrichers` | read | List typed read-only enrichers available to inspection. |
+| `inspect_asset` | read | Inspect one asset with typed enrichment and optional reflected references. |
+| `inspect_assets_batch` | read | Inspect multiple assets with a success/error result for every requested row. |
+| `validate_typed_asset` | read | Run typed validation and report warnings without mutation. |
+| `register_content_mount_points` | write | Register explicit process-local content mounts; defaults to dry-run and requires exactly one resolver per mount. |
+| `plan_package_graph_copy` | read | Traverse AssetRegistry dependencies and emit an exact source-to-destination copy/remap plan. |
+| `copy_package_graph_with_remap` | write | Duplicate a planned package graph without overwriting; requires dry-run or explicit confirmation. |
+| `copy_package_graph_with_strategy` | write | Plan and orchestrate supported duplicate/advanced/header-patched/opt-in raw-copy strategies; unsupported manual rows remain explicit blockers. |
+| `fixup_copied_references` | write | Rewrite reflected hard/soft references inside copied destination packages; requires dry-run or explicit confirmation. |
+| `validate_dependency_closure` | read | Verify copied destination packages no longer depend on disallowed external or legacy source roots. |
+
+All `asset` actions require native JSON arrays/objects rather than JSON-encoded strings. Boolean parameters, including nested texture settings, must be JSON booleans; strings such as `"true"`/`"false"` return `-32602` instead of being coerced by UE 5.7. Import handlers also reject unknown enum values, malformed integers, and duplicate setting sources with `-32602`; they do not silently choose a default for invalid input. File texture import succeeds only when the exact requested package is produced. Font import uses exact output names by default and performs source/output preflight before creating packages.
+
+For exhaustive parameter schemas, call `describe_query("action_schema", target_namespace="asset", target_action="<action>")`. The authoritative implementation contract is [`specs/SPEC_MonolithAsset.md`](specs/SPEC_MonolithAsset.md).
 
 ---
 
@@ -1704,6 +1738,7 @@ Both invoke the same SQLite indexes the live MCP uses.
 | MonolithUI CommonUI | `WITH_COMMONUI` | 42 (UMG baseline only) |
 | MonolithAudio MetaSound | `WITH_METASOUND` | Sound Cue + CRUD + batch (no MetaSound graph) |
 | MonolithMesh town gen | `bEnableProceduralTownGen` (Editor Preferences, default `false`) | 195 (core mesh only) |
+| MonolithAsset | `bEnableAsset` (Editor Preferences, default `true`) | 0 |
 
 ---
 

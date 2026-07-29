@@ -43,6 +43,7 @@ Each module owns a specific domain:
 | Module | Namespace | What It Does |
 |--------|-----------|--------------|
 | **MonolithCore** | `monolith` | HTTP server, tool registry, discovery, bulk-fill/describe framework, settings, auto-updater |
+| **MonolithAsset** | `asset` | Exact-path texture/font ingest, save/delete, inspection/search, guarded move/rename, and package-graph copy/fixup/closure workflows |
 | **MonolithBlueprint** | `blueprint` | Blueprint read/write, variable/component/graph CRUD, node operations, compile, auto-layout |
 | **MonolithMaterial** | `material` | Material graph editing, inspection, CRUD, instances, functions, HLSL |
 | **MonolithAnimation** | `animation` | Sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch, IKRig, Control Rig |

@@ -217,6 +217,9 @@ public:
 	UPROPERTY(config, EditAnywhere, Category="Modules")
 	bool bEnableUI = true;
 
+	UPROPERTY(config, EditAnywhere, Category="Modules", DisplayName="Enable Asset Module")
+	bool bEnableAsset = true;
+
 	UPROPERTY(config, EditAnywhere, Category="Modules", DisplayName="Enable Mesh Module")
 	bool bEnableMesh = true;
 
