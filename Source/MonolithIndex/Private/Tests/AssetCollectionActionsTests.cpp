@@ -276,9 +276,13 @@ bool FMonolithCollectionLocalLifecycleTest::RunTest(const FString& /*Parameters*
 	const FString Suffix = FGuid::NewGuid().ToString(EGuidFormats::Digits);
 	const FString StaticName = FString::Printf(TEXT("MonolithStatic_%s"), *Suffix);
 	const FString DynamicName = FString::Printf(TEXT("MonolithDynamic_%s"), *Suffix);
+	const FString CycleAName = FString::Printf(TEXT("MonolithCycleA_%s"), *Suffix);
+	const FString CycleBName = FString::Printf(TEXT("MonolithCycleB_%s"), *Suffix);
 	const FString AssetPath = TEXT("/Engine/EngineResources/DefaultTexture.DefaultTexture");
 	bool bStaticExists = false;
 	bool bDynamicExists = false;
+	bool bCycleAExists = false;
+	bool bCycleBExists = false;
 
 	ON_SCOPE_EXIT
 	{
@@ -289,6 +293,14 @@ bool FMonolithCollectionLocalLifecycleTest::RunTest(const FString& /*Parameters*
 		if (bDynamicExists)
 		{
 			DeleteIfPresent(DynamicName);
+		}
+		if (bCycleAExists)
+		{
+			DeleteIfPresent(CycleAName);
+		}
+		if (bCycleBExists)
+		{
+			DeleteIfPresent(CycleBName);
 		}
 	};
 
@@ -499,12 +511,202 @@ bool FMonolithCollectionLocalLifecycleTest::RunTest(const FString& /*Parameters*
 			DynamicContains.Result->GetBoolField(TEXT("contains")));
 	}
 
-	const FMonolithActionResult DeleteDynamic =
+	SetQueryParams->SetStringField(
+		TEXT("query_text"),
+		TEXT("Path=/Engine/EngineResources"));
+	const FMonolithActionResult SetPackagePathQuery =
+		Invoke(TEXT("set_dynamic_query"), SetQueryParams);
+	TestTrue(
+		TEXT("set_dynamic_query accepts a package-folder Path expression"),
+		SetPackagePathQuery.bSuccess);
+	const FMonolithActionResult PackagePathContains =
+		Invoke(TEXT("contains_asset"), DynamicContainsParams);
+	TestTrue(
+		TEXT("contains_asset evaluates a package-folder Path expression"),
+		PackagePathContains.bSuccess);
+	if (TestTrue(
+		TEXT("package-folder Path result returns a payload"),
+		PackagePathContains.Result.IsValid()))
+	{
+		TestTrue(
+			TEXT("Path compares the package folder without the virtual root or asset leaf"),
+			PackagePathContains.Result->GetBoolField(TEXT("contains")));
+	}
+
+	SetQueryParams->SetStringField(
+		TEXT("query_text"),
+		TEXT("Path=/All/Engine/EngineResources/DefaultTexture"));
+	const FMonolithActionResult SetVirtualPathQuery =
+		Invoke(TEXT("set_dynamic_query"), SetQueryParams);
+	TestTrue(
+		TEXT("set_dynamic_query accepts a virtual-path-shaped expression"),
+		SetVirtualPathQuery.bSuccess);
+	const FMonolithActionResult VirtualPathContains =
+		Invoke(TEXT("contains_asset"), DynamicContainsParams);
+	TestTrue(
+		TEXT("contains_asset evaluates a virtual-path-shaped expression"),
+		VirtualPathContains.bSuccess);
+	if (TestTrue(
+		TEXT("virtual-path-shaped result returns a payload"),
+		VirtualPathContains.Result.IsValid()))
+	{
+		TestFalse(
+			TEXT("Path does not expose the /All virtual root or asset leaf"),
+			VirtualPathContains.Result->GetBoolField(TEXT("contains")));
+	}
+
+	SetQueryParams->SetStringField(TEXT("query_text"), TEXT("Type=Texture2D"));
+	const FMonolithActionResult RestoreTypeQuery =
+		Invoke(TEXT("set_dynamic_query"), SetQueryParams);
+	TestTrue(
+		TEXT("dynamic type query is restored for delete safety"),
+		RestoreTypeQuery.bSuccess);
+
+	const FMonolithActionResult DeleteDynamicWithoutForce =
 		Invoke(TEXT("delete_collection"), MakeNamedParams(DynamicName));
-	TestTrue(TEXT("delete_collection removes the dynamic collection"), DeleteDynamic.bSuccess);
+	TestFalse(
+		TEXT("delete_collection rejects a populated dynamic collection without force"),
+		DeleteDynamicWithoutForce.bSuccess);
+	TestTrue(
+		TEXT("dynamic delete rejection explains the non-empty guard"),
+		DeleteDynamicWithoutForce.ErrorMessage.Contains(TEXT("non-empty")));
+
+	TSharedPtr<FJsonObject> ForceDeleteDynamicParams =
+		MakeNamedParams(DynamicName);
+	ForceDeleteDynamicParams->SetBoolField(TEXT("force"), true);
+	const FMonolithActionResult DeleteDynamic =
+		Invoke(TEXT("delete_collection"), ForceDeleteDynamicParams);
+	TestTrue(
+		TEXT("delete_collection removes a populated dynamic collection with force"),
+		DeleteDynamic.bSuccess);
 	if (DeleteDynamic.bSuccess)
 	{
 		bDynamicExists = false;
+	}
+
+	auto CreateDynamicCollection =
+		[this](
+			const FString& Name,
+			bool& bExists)
+		{
+			TSharedPtr<FJsonObject> Params =
+				MonolithCollectionActionsTestDetail::MakeNamedParams(Name);
+			Params->SetStringField(TEXT("storage_mode"), TEXT("dynamic"));
+			const FMonolithActionResult Result =
+				MonolithCollectionActionsTestDetail::Invoke(
+					TEXT("create_collection"), Params);
+			if (TestTrue(
+				*FString::Printf(
+					TEXT("create dynamic collection %s"),
+					*Name),
+				Result.bSuccess))
+			{
+				bExists = true;
+			}
+			return Result.bSuccess;
+		};
+	if (!CreateDynamicCollection(CycleAName, bCycleAExists)
+		|| !CreateDynamicCollection(CycleBName, bCycleBExists))
+	{
+		return false;
+	}
+
+	for (const FString* Name : {&CycleAName, &CycleBName})
+	{
+		TSharedPtr<FJsonObject> QueryParams = MakeNamedParams(*Name);
+		QueryParams->SetStringField(TEXT("query_text"), TEXT("Type=Texture2D"));
+		TestTrue(
+			*FString::Printf(
+				TEXT("set a shared-session query for %s"),
+				**Name),
+			Invoke(TEXT("set_dynamic_query"), QueryParams).bSuccess);
+	}
+
+	TSharedPtr<FJsonObject> ListDynamicParams = MakeShared<FJsonObject>();
+	ListDynamicParams->SetStringField(TEXT("share_type"), TEXT("local"));
+	const FMonolithActionResult SharedDynamicList =
+		Invoke(TEXT("list_collections"), ListDynamicParams);
+	TestTrue(
+		TEXT("list_collections resolves multiple dynamic collections"),
+		SharedDynamicList.bSuccess);
+	if (TestTrue(
+		TEXT("shared dynamic list returns a payload"),
+		SharedDynamicList.Result.IsValid()))
+	{
+		const TArray<TSharedPtr<FJsonValue>>& Collections =
+			SharedDynamicList.Result->GetArrayField(TEXT("collections"));
+		for (const FString* Name : {&CycleAName, &CycleBName})
+		{
+			const TSharedPtr<FJsonValue>* MatchingCollection =
+				Collections.FindByPredicate(
+					[Name](const TSharedPtr<FJsonValue>& Value)
+					{
+						const TSharedPtr<FJsonObject> Object =
+							Value.IsValid() ? Value->AsObject() : nullptr;
+						return Object.IsValid()
+							&& Object->GetStringField(TEXT("name")) == *Name;
+					});
+			if (TestNotNull(
+				*FString::Printf(
+					TEXT("shared list includes %s"),
+					**Name),
+				MatchingCollection))
+			{
+				TestTrue(
+					*FString::Printf(
+						TEXT("shared list resolves assets for %s"),
+						**Name),
+					(*MatchingCollection)
+						->AsObject()
+						->GetIntegerField(TEXT("asset_count")) > 0);
+			}
+		}
+	}
+
+	TSharedPtr<FJsonObject> CycleAQuery = MakeNamedParams(CycleAName);
+	CycleAQuery->SetStringField(
+		TEXT("query_text"),
+		FString::Printf(TEXT("Collection=%s"), *CycleBName));
+	TSharedPtr<FJsonObject> CycleBQuery = MakeNamedParams(CycleBName);
+	CycleBQuery->SetStringField(
+		TEXT("query_text"),
+		FString::Printf(TEXT("Collection=%s"), *CycleAName));
+	TestTrue(
+		TEXT("first nested dynamic query is accepted"),
+		Invoke(TEXT("set_dynamic_query"), CycleAQuery).bSuccess);
+	TestTrue(
+		TEXT("second nested dynamic query is accepted"),
+		Invoke(TEXT("set_dynamic_query"), CycleBQuery).bSuccess);
+
+	const FMonolithActionResult CyclicDetails =
+		Invoke(TEXT("get_collection"), MakeNamedParams(CycleAName));
+	TestFalse(
+		TEXT("nested dynamic evaluation failures propagate to get_collection"),
+		CyclicDetails.bSuccess);
+	TestTrue(
+		TEXT("cyclic dynamic evaluation reports the source-data error"),
+		CyclicDetails.ErrorMessage.Contains(
+			TEXT("Cyclic dynamic collection reference")));
+
+	TSharedPtr<FJsonObject> CycleColorParams = MakeNamedParams(CycleAName);
+	TSharedPtr<FJsonObject> CycleColor = MakeShared<FJsonObject>();
+	CycleColor->SetNumberField(TEXT("r"), 0.4);
+	CycleColor->SetNumberField(TEXT("g"), 0.5);
+	CycleColor->SetNumberField(TEXT("b"), 0.6);
+	CycleColor->SetNumberField(TEXT("a"), 1.0);
+	CycleColorParams->SetObjectField(TEXT("color"), CycleColor);
+	const FMonolithActionResult CycleColorResult =
+		Invoke(TEXT("set_collection_color"), CycleColorParams);
+	TestTrue(
+		TEXT("set_collection_color succeeds without dynamic membership resolution"),
+		CycleColorResult.bSuccess);
+	if (TestTrue(
+		TEXT("cycle-safe color mutation returns a payload"),
+		CycleColorResult.Result.IsValid()))
+	{
+		TestTrue(
+			TEXT("cycle-safe color mutation reports the applied color"),
+			CycleColorResult.Result->HasField(TEXT("color")));
 	}
 
 	return true;

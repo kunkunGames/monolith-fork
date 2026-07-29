@@ -139,6 +139,17 @@ namespace MonolithCollection
 		return Mode == ECollectionStorageMode::Dynamic ? TEXT("dynamic") : TEXT("static");
 	}
 
+	static TSharedPtr<FJsonObject> ColorToJson(
+		const FLinearColor& Color)
+	{
+		TSharedPtr<FJsonObject> ColorObject = MakeShared<FJsonObject>();
+		ColorObject->SetNumberField(TEXT("r"), Color.R);
+		ColorObject->SetNumberField(TEXT("g"), Color.G);
+		ColorObject->SetNumberField(TEXT("b"), Color.B);
+		ColorObject->SetNumberField(TEXT("a"), Color.A);
+		return ColorObject;
+	}
+
 	static bool GetRequiredName(const TSharedPtr<FJsonObject>& Params, FName& OutName, FString& OutError)
 	{
 		FString Name;
@@ -331,6 +342,16 @@ namespace MonolithCollection
 			AssetFullPath.ParseIntoArray(AssetSplitPath, TEXT("/"));
 			Item.AppendItemReference(AssetExportTextName);
 
+			FAssetData AssetData;
+			if (Item.Legacy_TryGetAssetData(AssetData))
+			{
+				AssetPackagePath = AssetData.PackagePath.ToString();
+			}
+			else
+			{
+				Item.GetInternalPath().AppendString(AssetPackagePath);
+			}
+
 			FSoftObjectPath CollectionId;
 			if (Item.TryGetCollectionId(CollectionId))
 			{
@@ -352,13 +373,22 @@ namespace MonolithCollection
 				OutMatches = *Cached;
 				return true;
 			}
+			if (!EvaluationError.IsEmpty())
+			{
+				OutMatches = false;
+				return false;
+			}
 
 			// A dynamic query may reference another dynamic collection.
-			// Fail a cycle closed for this asset instead of recursing forever.
+			// A cycle is invalid source data. Surface it instead of silently
+			// treating the nested collection as a non-match.
 			if (ActiveDynamicCollections.Contains(Collection))
 			{
 				OutMatches = false;
-				return true;
+				EvaluationError = FString::Printf(
+					TEXT("Cyclic dynamic collection reference detected at '%s'"),
+					*Collection.Name.ToString());
+				return false;
 			}
 
 			ActiveDynamicCollections.Add(Collection);
@@ -370,6 +400,11 @@ namespace MonolithCollection
 				OutMatches,
 				&ErrorText);
 			ActiveDynamicCollections.Remove(Collection);
+			if (!EvaluationError.IsEmpty())
+			{
+				OutMatches = false;
+				return false;
+			}
 			if (!bSucceeded)
 			{
 				EvaluationError = ErrorText.IsEmpty()
@@ -503,11 +538,7 @@ namespace MonolithCollection
 				}
 				const bool bMatches =
 					TextFilterUtils::TestBasicStringExpression(
-						Item.GetVirtualPath(),
-						InValue,
-						InTextComparisonMode)
-					|| TextFilterUtils::TestBasicStringExpression(
-						AssetFullPath,
+						AssetPackagePath,
 						InValue,
 						InTextComparisonMode);
 				return InComparisonOperation
@@ -605,6 +636,7 @@ namespace MonolithCollection
 		const TArray<FCollectionNameType>& KnownCollections;
 		FString AssetDisplayName;
 		FString AssetFullPath;
+		FString AssetPackagePath;
 		FString AssetExportTextName;
 		TArray<FString> AssetSplitPath;
 		TArray<FName> AssetCollectionNames;
@@ -658,17 +690,235 @@ namespace MonolithCollection
 		return true;
 	}
 
+	class FDynamicCollectionResolutionSession
+	{
+	public:
+		bool Prepare(
+			const TArray<FCollectionNameType>& Collections,
+			FString& OutError)
+		{
+			if (bPrepared)
+			{
+				if (!PreparationError.IsEmpty())
+				{
+					OutError = PreparationError;
+					return false;
+				}
+				for (const FCollectionNameType& Collection : Collections)
+				{
+					if (!CollectionCache.Contains(Collection))
+					{
+						OutError = FString::Printf(
+							TEXT(
+								"Dynamic resolution session was not prepared "
+								"for collection '%s'"),
+							*Collection.Name.ToString());
+						return false;
+					}
+				}
+				return true;
+			}
+			bPrepared = true;
+
+			TArray<FCollectionNameType> KnownCollections;
+			Container()->GetCollections(KnownCollections);
+			TArray<FDynamicCollectionFilter> Filters;
+			TSet<FCollectionNameType> SeenCollections;
+			for (const FCollectionNameType& Collection : Collections)
+			{
+				if (SeenCollections.Contains(Collection))
+				{
+					continue;
+				}
+				SeenCollections.Add(Collection);
+
+				FCachedResolution& Resolution =
+					CollectionCache.FindOrAdd(Collection);
+				TOptional<FDynamicCollectionFilter> Filter;
+				if (!CompileDynamicCollectionFilter(
+					Collection, Filter, PreparationError))
+				{
+					OutError = PreparationError;
+					return false;
+				}
+				if (Filter.IsSet())
+				{
+					Filters.Add(MoveTemp(Filter.GetValue()));
+				}
+				else
+				{
+					Resolution.bSucceeded = true;
+				}
+			}
+			if (Filters.Num() == 0)
+			{
+				return true;
+			}
+
+			UContentBrowserDataSubsystem* ContentBrowserData =
+				IContentBrowserDataModule::Get().GetSubsystem();
+			if (!ContentBrowserData)
+			{
+				PreparationError = TEXT(
+					"Content Browser data subsystem is unavailable; "
+					"dynamic collection membership cannot be resolved");
+				OutError = PreparationError;
+				return false;
+			}
+			if (!ContentBrowserData->GetActiveDataSources().Contains(
+				FName(TEXT("AssetData"))))
+			{
+				PreparationError = TEXT(
+					"Content Browser AssetData source is inactive; "
+					"dynamic collection membership cannot be resolved");
+				OutError = PreparationError;
+				return false;
+			}
+
+			FContentBrowserDataFilter DataFilter;
+			DataFilter.bRecursivePaths = true;
+			DataFilter.ItemTypeFilter =
+				EContentBrowserItemTypeFilter::IncludeFiles;
+			DataFilter.ItemCategoryFilter =
+				EContentBrowserItemCategoryFilter::IncludeAssets;
+			DataFilter.ItemAttributeFilter =
+				EContentBrowserItemAttributeFilter::IncludeAll;
+
+			static const FName AllContentRoot(TEXT("/All"));
+			ContentBrowserData->EnumerateItemsUnderPath(
+				AllContentRoot,
+				DataFilter,
+				[this, &Filters, &KnownCollections](
+					FContentBrowserItem&& Item)
+				{
+					FAssetData AssetData;
+					if (!Item.Legacy_TryGetAssetData(AssetData))
+					{
+						return true;
+					}
+
+					FDynamicCollectionExpressionContext Context(
+						Item, KnownCollections);
+					for (const FDynamicCollectionFilter& Filter : Filters)
+					{
+						bool bMatches = false;
+						if (!Context.TestDynamicCollection(
+							Filter.Collection, bMatches))
+						{
+							PreparationError =
+								Context.GetEvaluationError();
+							return false;
+						}
+						if (bMatches)
+						{
+							CollectionCache
+								.FindChecked(Filter.Collection)
+								.UniqueAssets.Add(
+									AssetData.GetSoftObjectPath());
+						}
+					}
+					return true;
+				});
+			if (!PreparationError.IsEmpty())
+			{
+				OutError = PreparationError;
+				return false;
+			}
+
+			for (const FDynamicCollectionFilter& Filter : Filters)
+			{
+				FCachedResolution& Resolution =
+					CollectionCache.FindChecked(Filter.Collection);
+				Resolution.Assets.Reserve(
+					Resolution.UniqueAssets.Num());
+				for (const FSoftObjectPath& Asset
+					: Resolution.UniqueAssets)
+				{
+					Resolution.Assets.Add(Asset);
+				}
+				Resolution.Assets.Sort(
+					[](const FSoftObjectPath& Left,
+						const FSoftObjectPath& Right)
+					{
+						return Left.ToString() < Right.ToString();
+					});
+				Resolution.UniqueAssets.Reset();
+				Resolution.bSucceeded = true;
+			}
+			return true;
+		}
+
+		bool Resolve(
+			const FCollectionNameType& Collection,
+			TArray<FSoftObjectPath>& OutAssets,
+			FString& OutError)
+		{
+			if (!bPrepared)
+			{
+				TArray<FCollectionNameType> SingleCollection;
+				SingleCollection.Add(Collection);
+				if (!Prepare(SingleCollection, OutError))
+				{
+					return false;
+				}
+			}
+			if (!PreparationError.IsEmpty())
+			{
+				OutError = PreparationError;
+				return false;
+			}
+			const FCachedResolution* Resolution =
+				CollectionCache.Find(Collection);
+			if (!Resolution)
+			{
+				OutError = FString::Printf(
+					TEXT(
+						"Dynamic resolution session was not prepared "
+						"for collection '%s'"),
+					*Collection.Name.ToString());
+				return false;
+			}
+			if (!Resolution->bSucceeded)
+			{
+				OutError = FString::Printf(
+					TEXT("Failed to resolve dynamic collection '%s'"),
+					*Collection.Name.ToString());
+				return false;
+			}
+			OutAssets = Resolution->Assets;
+			return true;
+		}
+
+	private:
+		struct FCachedResolution
+		{
+			bool bSucceeded = false;
+			TSet<FSoftObjectPath> UniqueAssets;
+			TArray<FSoftObjectPath> Assets;
+		};
+
+		bool bPrepared = false;
+		FString PreparationError;
+		TMap<FCollectionNameType, FCachedResolution> CollectionCache;
+	};
+
 	static bool ResolveCollectionAssets(
 		const FCollectionNameType& RootCollection,
 		ECollectionRecursionFlags::Flags Recursion,
 		TArray<FSoftObjectPath>& OutAssets,
-		FString& OutError)
+		FString& OutError,
+		FDynamicCollectionResolutionSession* SharedDynamicSession = nullptr)
 	{
 		TArray<FCollectionNameType> CollectionScope;
 		GatherCollectionScope(RootCollection, Recursion, CollectionScope);
 
 		TSet<FSoftObjectPath> UniqueAssets;
-		TArray<FDynamicCollectionFilter> DynamicFilters;
+		FDynamicCollectionResolutionSession OwnedDynamicSession;
+		FDynamicCollectionResolutionSession& DynamicSession =
+			SharedDynamicSession
+				? *SharedDynamicSession
+				: OwnedDynamicSession;
+		TArray<FCollectionNameType> DynamicCollections;
 		for (const FCollectionNameType& Collection : CollectionScope)
 		{
 			ECollectionStorageMode::Type StorageMode;
@@ -702,94 +952,24 @@ namespace MonolithCollection
 				continue;
 			}
 
-			TOptional<FDynamicCollectionFilter> DynamicFilter;
-			if (!CompileDynamicCollectionFilter(
-				Collection, DynamicFilter, OutError))
-			{
-				return false;
-			}
-			if (DynamicFilter.IsSet())
-			{
-				DynamicFilters.Add(MoveTemp(DynamicFilter.GetValue()));
-			}
+			DynamicCollections.Add(Collection);
 		}
 
-		if (DynamicFilters.Num() > 0)
+		if (!DynamicSession.Prepare(DynamicCollections, OutError))
 		{
-			UContentBrowserDataSubsystem* ContentBrowserData =
-				IContentBrowserDataModule::Get().GetSubsystem();
-			if (!ContentBrowserData)
+			return false;
+		}
+		for (const FCollectionNameType& Collection : DynamicCollections)
+		{
+			TArray<FSoftObjectPath> DynamicAssets;
+			if (!DynamicSession.Resolve(
+				Collection, DynamicAssets, OutError))
 			{
-				OutError = TEXT(
-					"Content Browser data subsystem is unavailable; "
-					"dynamic collection membership cannot be resolved");
 				return false;
 			}
-			if (!ContentBrowserData->GetActiveDataSources().Contains(
-				FName(TEXT("AssetData"))))
+			for (const FSoftObjectPath& DynamicAsset : DynamicAssets)
 			{
-				OutError = TEXT(
-					"Content Browser AssetData source is inactive; "
-					"dynamic collection membership cannot be resolved");
-				return false;
-			}
-
-			FContentBrowserDataFilter DataFilter;
-			DataFilter.bRecursivePaths = true;
-			DataFilter.ItemTypeFilter =
-				EContentBrowserItemTypeFilter::IncludeFiles;
-			DataFilter.ItemCategoryFilter =
-				EContentBrowserItemCategoryFilter::IncludeAssets;
-			DataFilter.ItemAttributeFilter =
-				EContentBrowserItemAttributeFilter::IncludeAll;
-
-			static const FName AllContentRoot(TEXT("/All"));
-			TArray<FCollectionNameType> KnownCollections;
-			Container()->GetCollections(KnownCollections);
-			FString EvaluationError;
-			ContentBrowserData->EnumerateItemsUnderPath(
-				AllContentRoot,
-				DataFilter,
-				[&DynamicFilters,
-				 &KnownCollections,
-				 &UniqueAssets,
-				 &EvaluationError](
-					FContentBrowserItem&& Item)
-				{
-					FDynamicCollectionExpressionContext Context(
-						Item, KnownCollections);
-					bool bMatches = false;
-					for (const FDynamicCollectionFilter& Filter
-						: DynamicFilters)
-					{
-						if (!Context.TestDynamicCollection(
-							Filter.Collection, bMatches))
-						{
-							EvaluationError =
-								Context.GetEvaluationError();
-							return false;
-						}
-						if (bMatches)
-						{
-							break;
-						}
-					}
-					if (!bMatches)
-					{
-						return true;
-					}
-
-					FAssetData AssetData;
-					if (Item.Legacy_TryGetAssetData(AssetData))
-					{
-						UniqueAssets.Add(AssetData.GetSoftObjectPath());
-					}
-					return true;
-				});
-			if (!EvaluationError.IsEmpty())
-			{
-				OutError = MoveTemp(EvaluationError);
-				return false;
+				UniqueAssets.Add(DynamicAsset);
 			}
 		}
 
@@ -809,7 +989,8 @@ namespace MonolithCollection
 	static bool CollectionToJson(
 		const FCollectionNameType& Collection,
 		TSharedPtr<FJsonObject>& OutObject,
-		FString& OutError)
+		FString& OutError,
+		FDynamicCollectionResolutionSession* SharedDynamicSession = nullptr)
 	{
 		const TSharedRef<ICollectionContainer>& C = Container();
 		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
@@ -818,14 +999,25 @@ namespace MonolithCollection
 		Obj->SetBoolField(TEXT("read_only"), C->IsReadOnly(Collection.Type));
 
 		ECollectionStorageMode::Type StorageMode;
-		if (C->GetCollectionStorageMode(Collection.Name, Collection.Type, StorageMode))
+		if (!C->GetCollectionStorageMode(
+			Collection.Name, Collection.Type, StorageMode))
 		{
-			Obj->SetStringField(TEXT("storage_mode"), StorageModeToString(StorageMode));
+			OutError = FString::Printf(
+				TEXT("Failed to read storage mode for collection '%s'"),
+				*Collection.Name.ToString());
+			return false;
 		}
+		Obj->SetStringField(
+			TEXT("storage_mode"),
+			StorageModeToString(StorageMode));
 
 		TArray<FSoftObjectPath> Assets;
 		if (!ResolveCollectionAssets(
-			Collection, ECollectionRecursionFlags::Self, Assets, OutError))
+			Collection,
+			ECollectionRecursionFlags::Self,
+			Assets,
+			OutError,
+			SharedDynamicSession))
 		{
 			return false;
 		}
@@ -859,12 +1051,7 @@ namespace MonolithCollection
 		TOptional<FLinearColor> Color;
 		if (C->GetCollectionColor(Collection.Name, Collection.Type, Color) && Color.IsSet())
 		{
-			TSharedPtr<FJsonObject> ColorObj = MakeShared<FJsonObject>();
-			ColorObj->SetNumberField(TEXT("r"), Color->R);
-			ColorObj->SetNumberField(TEXT("g"), Color->G);
-			ColorObj->SetNumberField(TEXT("b"), Color->B);
-			ColorObj->SetNumberField(TEXT("a"), Color->A);
-			Obj->SetObjectField(TEXT("color"), ColorObj);
+			Obj->SetObjectField(TEXT("color"), ColorToJson(Color.GetValue()));
 		}
 
 		OutObject = MoveTemp(Obj);
@@ -991,17 +1178,52 @@ FMonolithActionResult FAssetCollectionActions::ListCollections(const TSharedPtr<
 	TArray<FCollectionNameType> Collections;
 	MonolithCollection::Container()->GetCollections(Collections);
 
-	TArray<TSharedPtr<FJsonValue>> Rows;
+	TArray<FCollectionNameType> VisibleCollections;
+	TArray<FCollectionNameType> DynamicCollections;
 	for (const FCollectionNameType& Collection : Collections)
 	{
 		if (bFilter && Collection.Type != FilterType)
 		{
 			continue;
 		}
+		VisibleCollections.Add(Collection);
+
+		ECollectionStorageMode::Type StorageMode;
+		if (!MonolithCollection::Container()->GetCollectionStorageMode(
+			Collection.Name, Collection.Type, StorageMode))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(
+					TEXT("Failed to read storage mode for collection '%s'"),
+					*Collection.Name.ToString()),
+				-32603);
+		}
+		if (StorageMode == ECollectionStorageMode::Dynamic)
+		{
+			DynamicCollections.Add(Collection);
+		}
+	}
+
+	MonolithCollection::FDynamicCollectionResolutionSession
+		DynamicResolutionSession;
+	FString DynamicResolutionError;
+	if (!DynamicResolutionSession.Prepare(
+		DynamicCollections, DynamicResolutionError))
+	{
+		return FMonolithActionResult::Error(
+			DynamicResolutionError, -32603);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	for (const FCollectionNameType& Collection : VisibleCollections)
+	{
 		TSharedPtr<FJsonObject> CollectionObject;
 		FString CollectionError;
 		if (!MonolithCollection::CollectionToJson(
-			Collection, CollectionObject, CollectionError))
+			Collection,
+			CollectionObject,
+			CollectionError,
+			&DynamicResolutionSession))
 		{
 			return FMonolithActionResult::Error(CollectionError, -32603);
 		}
@@ -1108,11 +1330,23 @@ FMonolithActionResult FAssetCollectionActions::DeleteCollection(const TSharedPtr
 	{
 		return MonolithCollection::MutatingReadOnlyError(ShareType);
 	}
-	TArray<FSoftObjectPath> Assets;
-	MonolithCollection::Container()->GetAssetsInCollection(Name, ShareType, Assets);
-	if (!bForce && Assets.Num() > 0)
+	if (!bForce)
 	{
-		return FMonolithActionResult::Error(TEXT("Collection is non-empty; pass force=true to delete"), -32602);
+		TArray<FSoftObjectPath> Assets;
+		if (!MonolithCollection::ResolveCollectionAssets(
+			FCollectionNameType(Name, ShareType),
+			ECollectionRecursionFlags::Self,
+			Assets,
+			Error))
+		{
+			return FMonolithActionResult::Error(Error, -32603);
+		}
+		if (Assets.Num() > 0)
+		{
+			return FMonolithActionResult::Error(
+				TEXT("Collection is non-empty; pass force=true to delete"),
+				-32602);
+		}
 	}
 
 	FText ErrorText;
@@ -1463,7 +1697,20 @@ FMonolithActionResult FAssetCollectionActions::SetCollectionColor(const TSharedP
 	{
 		return FMonolithActionResult::Error(ErrorText.IsEmpty() ? TEXT("Failed to set collection color") : ErrorText.ToString(), -32603);
 	}
-	return GetCollection(Params);
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("updated"), true);
+	Result->SetStringField(TEXT("name"), Name.ToString());
+	Result->SetStringField(
+		TEXT("share_type"),
+		MonolithCollection::ShareTypeToString(ShareType));
+	Result->SetBoolField(TEXT("color_cleared"), !NewColor.IsSet());
+	if (NewColor.IsSet())
+	{
+		Result->SetObjectField(
+			TEXT("color"),
+			MonolithCollection::ColorToJson(NewColor.GetValue()));
+	}
+	return FMonolithActionResult::Success(Result);
 }
 
 FMonolithActionResult FAssetCollectionActions::ValidateCollectionName(const TSharedPtr<FJsonObject>& Params)
