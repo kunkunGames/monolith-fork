@@ -1,10 +1,10 @@
 # Source Control Action Port Verification
 
-**Date:** 2026-07-30
+**Date:** 2026-07-30; final review verification 2026-07-31
 **Scope:** `source_control` namespace and shared source-control preparation utility
 **Base:** `ee1dae25f9a90a45ae768abbfcb0d9356810b0c4`
-**Verified code commit:** `3b0ce866b45a2a0311cfefe124d14afa38d8670e`
-**Verified stable patch ID:** `d58bb74171f10087b595999f476258acd66f49ea`
+**Verified code commit:** `7c6144602c9ceaed8a6e494f82ddd8c6b198d22d`
+**Verified stable patch ID:** `69387eaf536b422bb5c01cc37da9420cea0516d0`
 **Engines:** Unreal Engine 5.7 and 5.8
 
 ---
@@ -26,7 +26,7 @@ Verify that the independent source-control port adds exactly 11 practical action
 | Strict JSON parameters | PASS | Optional booleans accept JSON booleans only; `limit` must be a finite integer in `[1, 5000]`; changelists accept only decimal values or `default` |
 | Destructive-operation gate | PASS | Delete and revert variants require `confirm=true` unless `dry_run=true` |
 | Mounted-package discrimination | PASS | Only registered Unreal mount points are interpreted as package paths; `/home/...` remains a POSIX absolute filesystem path through normalization and response mapping |
-| Preparation safety | PASS | Benign skips remain editable; other-user checkout, stale revision, and unsupported provider states set `blocking=true`, `safe_to_proceed=false`, and abort all checkout/add mutations |
+| Preparation safety | PASS | Benign skips remain editable; other-user checkout, conflict, stale revision, and unknown/unsupported provider states set `blocking=true`, `safe_to_proceed=false`, and abort all checkout/add mutations. A failed checkout suppresses the add phase. |
 | Bounded Perforce work | PASS | At most 5000 inputs/unique paths, 128 paths per command, 24,000 command characters, 40 `p4 where` processes, and 30 seconds per child process |
 | Perforce timeout behavior | PASS | Deadline expiry terminates the process tree, drains captured output, diagnoses the current and unstarted batches, and launches no later batch |
 | Cross-platform arguments | PASS | Windows CRT quoting and Unreal Unix double-quoted argv behavior have focused round-trip coverage; unsupported Unix embedded double quotes fail validation |
@@ -53,7 +53,7 @@ The generated catalog contained 1572 actions across 25 namespaces. Comparison ag
 | UE 5.7 | `D:\Engine\UE_5.7` | `D:\P4\MonolithSourceControlUE57Host\MonolithSourceControlUE57Host.uproject` | `D:\P4\MonolithForkSourceControl` |
 | UE 5.8 | `D:\Engine\UE_5.8` | `D:\P4\MonolithSourceControlUE58ReviewHost\MonolithSourceControlUE58ReviewHost.uproject` | `D:\P4\MonolithForkSourceControlUE58Review` |
 
-Each engine root was resolved from the isolated host project's `.uproject` `EngineAssociation`. The UE 5.8 host used an independent detached worktree at the exact verified code commit; the older dirty UE 5.8 verification worktree was preserved and not reset. `git diff <base> <verified-code-commit> | git patch-id --stable` reported `d58bb74171f10087b595999f476258acd66f49ea`.
+Each engine root was resolved from the isolated host project's `.uproject` `EngineAssociation`. The UE 5.8 host used an independent detached worktree at the exact verified code commit. `git diff <base> <verified-code-commit> | git patch-id --stable` reported `69387eaf536b422bb5c01cc37da9420cea0516d0`.
 
 ---
 
@@ -108,16 +108,16 @@ The temporary configuration was removed immediately after the check and is not p
 
 | Gate | UE 5.7 | UE 5.8 |
 |------|--------|--------|
-| Full editor target build | PASS, incremental review build | PASS, 443 build actions |
-| Final UBT result | `Result: Succeeded`, exit 0 | `Result: Succeeded`, 181.59 seconds |
-| UBT log | `D:\P4\MonolithSourceControlUE57Host\Saved\Logs\SourceControl-Review2-UBT-UE57-20260730-043502.log` | `D:\P4\MonolithSourceControlUE58ReviewHost\Saved\Logs\SourceControl-Review-UBT-UE58-20260730-043931.log` |
+| Full editor target build | PASS, 11 final-head actions | PASS, 11 final-head actions |
+| Final UBT result | `Result: Succeeded`, 13.62 seconds | `Result: Succeeded`, 17.16 seconds |
+| UBT log | `D:\P4\MonolithSourceControlUE57Host\Saved\Logs\SourceControl-FinalReview-UBT-UE57-20260731-021437.log` | `D:\P4\MonolithSourceControlUE58ReviewHost\Saved\Logs\SourceControl-FinalReview-UBT-UE58-20260731-021437.log` |
 | Focused automation | PASS, 10/10 | PASS, 10/10 |
 | Automation warnings / errors | 0 / 0 | 0 / 0 |
-| Automation report | `D:\P4\MonolithSourceControlUE57Host\Saved\Automation\SourceControl-Review2-UE57-20260730-043518\index.json` | `D:\P4\MonolithSourceControlUE58ReviewHost\Saved\Automation\SourceControl-Review-UE58-20260730-044246\index.json` |
-| `UnrealEditor-MonolithCore.dll` bytes | 1,114,112 | 1,060,352 |
-| `MonolithCore` DLL SHA256 | `9F619DDD1AA81EC4F4A3B016712B9ED912ED4FADABF108D94CE785045FA80085` | `3338FB78FA371233B60A2047EC1E8C82DEFBE8CAE7E92A77BB39C93805143E9B` |
-| `UnrealEditor-MonolithSourceControl.dll` bytes | 334,848 | 322,560 |
-| `MonolithSourceControl` DLL SHA256 | `147423F3F28CA2337ECB3B0CB378C343C16AC4B865CE1ECD3505283C17076B9E` | `741D2FECE809AEF7A348613BE0C826EC227E9242C79284E9D5B828F72C880383` |
+| Automation report | `D:\P4\MonolithSourceControlUE57Host\Saved\Automation\SourceControl-FinalReview-UE57-20260731-021543\index.json` | `D:\P4\MonolithSourceControlUE58ReviewHost\Saved\Automation\SourceControl-FinalReview-UE58-20260731-021543\index.json` |
+| `UnrealEditor-MonolithCore.dll` bytes | 1,118,208 | 1,063,424 |
+| `MonolithCore` DLL SHA256 | `ED661310577D9EEFE2315C72FE5F1B4BA79DFFD8094791D4A3ABD2BED3013887` | `A855A24A26E216E30CDE88E9FA9A2A762A2459C4A807A26E468000DBFBDC195C` |
+| `UnrealEditor-MonolithSourceControl.dll` bytes | 338,944 | 325,632 |
+| `MonolithSourceControl` DLL SHA256 | `7D54DFE275458F9C4B06CBABA08C883D610EAD26F4786D467928F0B5FE8EE0A4` | `032EC7626F84D83377BD4D78E9475FC78E1410F1F7797AA9F17796154878F3F3` |
 
 Additional gates:
 
@@ -126,15 +126,15 @@ Additional gates:
 | Hosted static-check equivalent | PASS on the original action port: 0 blocking findings; review hardening did not change action registration or module descriptors |
 | `git diff --check` | PASS on the final review hardening diff |
 | Feature-category exclusion scan | PASS: no forbidden feature implementation found |
-| Worktree identity before build | PASS: UE 5.8 detached worktree at exact code commit `3b0ce866b45a2a0311cfefe124d14afa38d8670e` |
+| Worktree identity before build | PASS: main UE 5.7 worktree source at `7c614460`; UE 5.8 detached worktree at exact code commit `7c6144602c9ceaed8a6e494f82ddd8c6b198d22d` |
 
-The UE 5.8 full target build emitted pre-existing Unreal 5.8 deprecation warnings in unrelated modules. No changed `MonolithSourceControl` or `MonolithCore` source produced a build error.
+The final review pass closes four remaining fail-open paths found by current-line review: stale/conflicted facts now precede the already-open shortcut, an invalid provider state cannot authorize add, checkout failure suppresses the add phase, and `list_opened(resolve_packages=true)` propagates `p4 where` launch/timeout failure. The focused suite proves all ten tests succeed with zero test warnings or errors on both engines.
 
 ---
 
 ## 6. Live MCP Readback
 
-The verified UE 5.8 binary was started on isolated port `9436` with source control and indexing disabled. Schema discovery ran before action calls.
+The earlier `3b0ce866` UE 5.8 binary was started on isolated port `9436` with source control and indexing disabled. Schema discovery ran before action calls. This evidence is retained for live transport/schema/readback coverage; exact-head proof for `7c614460` is the cross-version build and focused automation evidence in Section 5.
 
 | Gate | Result | Evidence |
 |------|--------|----------|
@@ -174,4 +174,4 @@ The first UE 5.7 review run deliberately included the new POSIX contract and fai
 
 ## 9. Conclusion
 
-PASS. The verified implementation adds exactly 11 `source_control` actions, uses strict parameter contracts, recognizes only mounted Unreal package paths, fails closed on blocking preparation states, bounds both Perforce batches and child-process lifetime, preserves row-local mapping diagnostics, builds on UE 5.7 and UE 5.8, passes 10/10 focused automation tests with no test warnings or errors on either engine, and passes live schema/action/readback validation.
+PASS. The verified implementation adds exactly 11 `source_control` actions, uses strict parameter contracts, recognizes only mounted Unreal package paths, fails closed on blocking preparation states, bounds both Perforce batches and child-process lifetime, preserves row-local mapping diagnostics, builds on UE 5.7 and UE 5.8, and passes 10/10 focused automation tests with no test warnings or errors on either engine. Earlier-head live schema/action/readback evidence is reported separately and is not presented as exact-head runtime proof.
