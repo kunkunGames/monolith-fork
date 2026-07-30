@@ -571,6 +571,13 @@ namespace MonolithSourceControlP4
 			const bool bLaunched = Runner(Chunk, StdOut, StdErr, ReturnCode);
 			if (!bLaunched)
 			{
+				// The command never ran, so no path in this chunk received a verdict.
+				// This is a backend failure, not an unmapped path.
+				Result.bBackendUnavailable = true;
+				if (Result.BackendError.IsEmpty())
+				{
+					Result.BackendError = TEXT("Failed to execute p4 where.");
+				}
 				for (const FString& Path : Chunk)
 				{
 					Result.Mappings.FindChecked(Path).Error = TEXT("Failed to execute p4 where.");
@@ -583,6 +590,11 @@ namespace MonolithSourceControlP4
 				const FString TimeoutError = StdErr.IsEmpty()
 					? TEXT("p4 where timed out.")
 					: StdErr;
+				Result.bBackendUnavailable = true;
+				if (Result.BackendError.IsEmpty())
+				{
+					Result.BackendError = TimeoutError;
+				}
 				for (const FString& Path : Chunk)
 				{
 					Result.Mappings.FindChecked(Path).Error = TimeoutError;

@@ -36,6 +36,12 @@ namespace MonolithSourceControlP4
 		int32 ResolvedPathCount = 0;
 		int32 FailedPathCount = 0;
 		bool bRejected = false;
+		// Set when a p4 child process could not be launched or timed out, as
+		// opposed to running successfully and reporting a path as unmapped. The
+		// caller must surface this as a backend error rather than an ordinary
+		// per-row failure, because the command never produced a verdict.
+		bool bBackendUnavailable = false;
+		FString BackendError;
 		FString Error;
 	};
 

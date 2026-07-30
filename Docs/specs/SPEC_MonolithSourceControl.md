@@ -83,12 +83,17 @@ All boolean fields are strict JSON booleans. Quoted strings, numbers, and explic
 | `dry_run=true` | Reports normalized paths and provider states/decisions without executing a provider mutation |
 | Delete or revert family without `confirm=true` | Returns a successful transport result with `ok=false` and a confirmation message; no provider operation runs |
 | Provider disabled or unavailable | Returns provider details with `available=false`; no alternate provider, file-attribute edit, or local substitute is attempted |
-| Already editable, checked out, added, or intentionally not-yet-created | Reports a benign skip with `safe_to_proceed=true`; no unnecessary provider operation runs |
-| Checked out by another user, not at head revision, or otherwise unsupported | Reports a blocking skip with `safe_to_proceed=false`, returns `ok=false`, and performs no checkout/add operation for any path |
+| Already editable, checked out, added, or intentionally not-yet-created | Reports a benign skip with `safe_to_proceed=true`; no unnecessary provider operation runs. Only a genuinely untracked absent file qualifies as not-yet-created |
+| Checked out by another user, conflicted, not at head revision, missing while source-controlled, or otherwise unsupported | Reports a blocking skip with `safe_to_proceed=false`, returns `ok=false`, and performs no checkout/add operation for any path |
+| Untracked file the provider reports as both editable and addable | Classified as `add`, never as an editable benign skip, so it cannot be left out of source control |
 | Provider operation succeeds/fails/cancels | Returns the explicit command result plus provider messages and refreshed states |
 | Mixed valid/invalid path array | Preserves a row for each input; execution proceeds only when at least one valid normalized file remains |
 
 `FMonolithSourceControlUtils::CheckoutOrAddFiles` is the shared preparation path for other modules. Its options independently control dry-run, unavailable-provider handling, and whether not-yet-created files may be planned for add.
+
+`MonolithSourceControlPrepare::Classify` evaluates every blocking provider state — opened by another user, conflicted, and non-current — before any skip shortcut, so a shortcut can never report `ok=true` over a state the caller must resolve first. The untracked-and-addable case is classified ahead of the generic editable shortcut for the same reason.
+
+`map_depot_paths` treats a leading `//` as a Perforce depot path first, because that reading is authoritative. A path that p4 cannot map but that names an existing file is then read as a UNC local path. Every row reports `interpreted_as` (`depot_path` or `unc_local_path`), so the chosen reading is never implicit. When a `p4` child process cannot be launched or times out, the action returns `-32603` instead of per-row failures, because the command produced no verdict for those paths.
 
 ---
 

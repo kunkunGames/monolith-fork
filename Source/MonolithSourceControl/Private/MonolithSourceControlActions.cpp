@@ -892,6 +892,16 @@ FMonolithActionResult FMonolithSourceControlActions::HandleMapDepotPaths(const T
 	{
 		return FMonolithActionResult::Error(MappingResult.Error, -32602);
 	}
+	if (MappingResult.bBackendUnavailable)
+	{
+		// p4 never produced a verdict for at least one chunk, so the per-row
+		// results below would present an operation that did not run as success.
+		return FMonolithActionResult::Error(
+			MappingResult.BackendError.IsEmpty()
+				? TEXT("p4 where could not be executed.")
+				: MappingResult.BackendError,
+			-32603);
+	}
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
 	for (const TSharedPtr<FJsonValue>& Value : Values)
@@ -922,16 +932,41 @@ FMonolithActionResult FMonolithSourceControlActions::HandleMapDepotPaths(const T
 				LocalPath = Mapping->LocalPath;
 				PackagePath = LocalPathToPackagePath(LocalPath);
 				Row->SetBoolField(TEXT("valid"), true);
+				Row->SetStringField(TEXT("interpreted_as"), TEXT("depot_path"));
 				Row->SetStringField(TEXT("local_path"), LocalPath);
 				Row->SetStringField(TEXT("package_path"), PackagePath);
 				Row->SetBoolField(TEXT("is_package"), !PackagePath.IsEmpty());
 			}
 			else
 			{
-				Row->SetBoolField(TEXT("valid"), false);
-				Row->SetStringField(
-					TEXT("error"),
-					Mapping ? Mapping->Error : TEXT("No batched p4 where result was produced for this depot path."));
+				// A leading "//" is ambiguous: it introduces both a Perforce depot
+				// path and a UNC share such as //server/share/Content/Foo.uasset.
+				// Depot resolution is authoritative and is attempted first; only when
+				// p4 has no mapping and the path names an existing file is it read as
+				// a local filesystem path. The chosen reading is always reported.
+				FString UncLocalPath;
+				FString UncError;
+				if (IFileManager::Get().FileExists(*Input)
+					&& FMonolithSourceControlUtils::NormalizePathForSourceControl(
+						Input,
+						UncLocalPath,
+						UncError))
+				{
+					PackagePath = LocalPathToPackagePath(UncLocalPath);
+					Row->SetBoolField(TEXT("valid"), true);
+					Row->SetStringField(TEXT("interpreted_as"), TEXT("unc_local_path"));
+					Row->SetStringField(TEXT("local_path"), UncLocalPath);
+					Row->SetStringField(TEXT("package_path"), PackagePath);
+					Row->SetBoolField(TEXT("is_package"), !PackagePath.IsEmpty());
+				}
+				else
+				{
+					Row->SetBoolField(TEXT("valid"), false);
+					Row->SetStringField(TEXT("interpreted_as"), TEXT("depot_path"));
+					Row->SetStringField(
+						TEXT("error"),
+						Mapping ? Mapping->Error : TEXT("No batched p4 where result was produced for this depot path."));
+				}
 			}
 		}
 		else

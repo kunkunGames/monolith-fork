@@ -338,6 +338,7 @@ TSharedPtr<FJsonObject> FMonolithSourceControlUtils::CheckoutOrAddFiles(
 			StateFacts.bCheckedOut = State->IsCheckedOut();
 			StateFacts.bAdded = State->IsAdded();
 			StateFacts.bCheckedOutOther = State->IsCheckedOutOther(&OtherUser);
+			StateFacts.bConflicted = State->IsConflicted();
 			StateFacts.bCanAdd = State->CanAdd();
 			StateFacts.bCanCheckout = State->CanCheckout();
 			StateFacts.bCanEdit = State->CanEdit();
