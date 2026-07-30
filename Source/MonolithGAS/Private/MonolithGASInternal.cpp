@@ -213,11 +213,34 @@ TArray<FString> ParseStringArray(const TSharedPtr<FJsonObject>& Params, const FS
 
 bool RequireStringParam(const TSharedPtr<FJsonObject>& Params, const FString& ParamName, FString& OutValue, FMonolithActionResult& OutError)
 {
-	OutValue = Params->GetStringField(ParamName);
+	if (!Params.IsValid())
+	{
+		OutError = FMonolithActionResult::Error(
+			FString::Printf(TEXT("Missing required parameter: %s"), *ParamName),
+			-32602);
+		return false;
+	}
+
+	const TSharedPtr<FJsonValue> Field = Params->TryGetField(ParamName);
+	if (!Field.IsValid())
+	{
+		OutError = FMonolithActionResult::Error(
+			FString::Printf(TEXT("Missing required parameter: %s"), *ParamName),
+			-32602);
+		return false;
+	}
+	if (Field->Type != EJson::String || !Field->TryGetString(OutValue))
+	{
+		OutError = FMonolithActionResult::Error(
+			FString::Printf(TEXT("Malformed parameter: %s must be a string"), *ParamName),
+			-32602);
+		return false;
+	}
 	if (OutValue.IsEmpty())
 	{
 		OutError = FMonolithActionResult::Error(
-			FString::Printf(TEXT("Missing required parameter: %s"), *ParamName));
+			FString::Printf(TEXT("Missing required parameter: %s"), *ParamName),
+			-32602);
 		return false;
 	}
 	return true;

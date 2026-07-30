@@ -35,6 +35,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [mesh](#mesh) | 194 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, mesh import (incl. skeletal + animation). +45 town gen registers only with `bEnableProceduralTownGen=true` (experimental, not in the public count) |
 | [ui](#ui) | 138 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, headline scaffolders, navigation/conversion gap-closure, accessibility, CommonUI, GAS UI bindings |
 | [gas](#gas) | 135 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold |
+| [input](#input) | 10 | Enhanced Input asset inspection, guarded `UInputAction` / `UInputMappingContext` authoring, mapping clone/edit, validation |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
 | [ai](#ai) | 221 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
@@ -1163,7 +1164,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithUI.md` for the deep dive including
 
 ## gas
 
-Gameplay Ability System integration. **135 actions** across 11 categories — covers the full GAS authoring pipeline. **Conditional on `#if WITH_GBA`** — projects without the GameplayAbilities plugin register 0 GAS actions.
+Gameplay Ability System integration. **135 actions** across 11 categories — covers the full GAS authoring pipeline. Registration follows `bEnableGAS`; `WITH_GBA` gates only optional Blueprint Attributes support. The separate [`input`](#input) namespace remains registered when `bEnableGAS=false`.
 
 > For full param schemas, call `describe_query("action_schema", target_namespace="gas", target_action="<name>")` (or `monolith_discover("gas", detail=true)`). Plain `monolith_discover("gas")` is terse — names + one-line descriptions only.
 
@@ -1188,6 +1189,41 @@ Gameplay Ability System integration. **135 actions** across 11 categories — co
 Grant a `UGameplayAbility` to a pawn's `UAbilitySystemComponent` directly without scaffold-side wiring or `apply_effect` ceremony. See `describe_query("action_schema", target_namespace="gas", target_action="grant_ability_to_pawn")` for params.
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithGAS.md` for the deep dive.
+
+---
+
+## input
+
+Enhanced Input asset integration. **10 actions** inspect and author `UInputAction` and `UInputMappingContext` assets. This namespace is owned by `MonolithGAS` but registers before the `bEnableGAS` check, so Enhanced Input asset work remains available even when GAS authoring is disabled.
+
+> For exhaustive live schemas, call `describe_query("action_schema", target_namespace="input", target_action="<name>")` (or `monolith_discover("input", detail=true)`).
+
+| Action | Required params | Purpose |
+|--------|-----------------|---------|
+| `list_input_actions` | — | List actions under optional `/Game` `path` (omission defaults to `/Game`); `include_details=true` loads value type, triggers, and modifiers. |
+| `get_input_action` | `asset_path` | Inspect one `UInputAction`. |
+| `create_input_action` | `asset_path` | Create an action or, with `overwrite=true`, update an existing action. |
+| `set_input_action_properties` | `asset_path` | Update value type, description, consumption, pause, reservation, or accumulation properties. |
+| `list_input_mapping_contexts` | — | List contexts under optional `/Game` `path` (omission defaults to `/Game`); `include_details=true` includes mappings. |
+| `get_input_mapping_context` | `asset_path` | Inspect one `UInputMappingContext`. |
+| `create_input_mapping_context` | `asset_path` | Create a context or, with `overwrite=true`, update its description. |
+| `add_input_mapping` | `context_path`, `action_path`, `key` | Add or update a mapping; optionally clone another mapping or instantiate explicit modifier/trigger classes. |
+| `remove_input_mapping` | `context_path`, `action_path`, `key` | Remove matching mappings and report `would_remove_count`. |
+| `validate_input_mappings` | — | Validate selected `context_paths`, or all contexts under optional `path`, for missing actions and duplicate-key conflicts. |
+
+All five writers (`create_input_action`, `set_input_action_properties`, `create_input_mapping_context`, `add_input_mapping`, `remove_input_mapping`) share the same mutation contract:
+
+- `dry_run=true` returns the proposed values with `preview_state="proposed"` without creating an object/package, constructing modifier/trigger UObjects, mutating an asset, dirtying a package, or saving.
+- A committed write requires `confirm=true`; `save` defaults to `false`.
+- Package and asset inputs must resolve within `/Game`; malformed package roots and object paths whose explicit object name differs from the package asset name are rejected. Scalar booleans and strings are type-checked rather than coerced. Schema-declared `modifier_classes`, `trigger_classes`, and `context_paths` accept either a JSON array or the registry's documented JSON-encoded-array compatibility form; recovered array elements are still required to be non-empty strings.
+- A semantic no-op does not call `Modify()`, dirty a package, or save it.
+- Unsaved confirmed creation is fully transactional. Undo removes the new asset from its package path and the Asset Registry; the transaction retains the transient object through GC so Redo restores the same object and proposed state.
+- `save=true` is an explicit disk-persistence boundary. If disk save fails after a mutation, the action returns an error with `error.data` containing the normal action result plus `save_failed=true`, `mutation_committed=true`, `partial_mutation=true`, `retry_safe=false`, `save_error`, and retry guidance.
+- `add_input_mapping` reuses the existing action+key mapping unless `allow_duplicate=true`. Source cloning requires `source_context_path`, `source_action_path`, and `source_key` together. If those fields match more than one source row, the call fails as ambiguous unless `source_mapping_index` selects an exact matching row. Explicit `modifier_classes` / `trigger_classes` replace cloned or existing arrays; an explicit empty array clears them. Dry-run validates soft class-path syntax and any already-loaded class, returns `class_resolution="deferred_until_confirm"`, and defers package/class/CDO loading until a confirmed call.
+- `validate_input_mappings` distinguishes omission from selection: omitted `context_paths` scans the optional `path`, while an explicit empty array checks zero contexts and does not fall back to a project-wide scan. Each array element normalizes Windows `\` separators before canonical `/Game` validation.
+- Removing an absent mapping is a successful no-op with `would_remove_count=0`.
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithGAS.md` and `Plugins/Monolith/Skills/unreal-input/SKILL.md` for the module contract and task workflow.
 
 ---
 
@@ -2025,7 +2061,7 @@ Both invoke the same SQLite indexes the live MCP uses.
 
 | Module | Gate | Actions when ungated |
 |--------|------|----------------------|
-| MonolithGAS | `WITH_GBA` (GameplayAbilities plugin) | 0 |
+| MonolithGAS | `bEnableGAS` / optional `WITH_GBA` | `bEnableGAS=false` removes `gas` but keeps all 10 `input` actions; `WITH_GBA=0` removes only optional Blueprint Attributes behavior |
 | MonolithComboGraph | `WITH_COMBOGRAPH` (ComboGraph marketplace plugin) | 0 |
 | MonolithLogicDriver | `WITH_LOGICDRIVER` (Logic Driver Pro marketplace plugin) | 0 |
 | MonolithAI | `WITH_STATETREE` + `WITH_SMARTOBJECTS` (engine plugins) | 0 |

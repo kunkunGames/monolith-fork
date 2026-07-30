@@ -56,7 +56,7 @@ Each module owns a specific domain:
 | **MonolithSource** | `source` | Engine source lookup, call graphs, class hierarchy |
 | **MonolithSourceControl** | `source_control` | Provider-backed file preparation and bounded Perforce opened/path mapping |
 | **MonolithUI** | `ui` | Widget Blueprint CRUD, templates, styling, animation, settings scaffolding, accessibility |
-| **MonolithGAS** | `gas` | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold (gated on `WITH_GBA`) |
+| **MonolithGAS** | `gas`, `input` | Gameplay Ability System authoring plus 10 Enhanced Input asset actions. `gas` registration follows `bEnableGAS`; `input` remains available independently, and `WITH_GBA` gates only optional Blueprint Attributes integration |
 | **MonolithAI** | `ai` | Behavior trees, blackboards, EQS, StateTree, SmartObjects, perception, navigation, AI controllers |
 | **MonolithAudio** | `audio` | Sound cues, waves, classes, submixes, attenuation, concurrency, MetaSounds |
 | **MonolithAudioRuntime** | -- | Runtime support for the audio module (registers no MCP actions) |
