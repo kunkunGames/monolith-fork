@@ -131,11 +131,26 @@ namespace
 		}
 
 		const FString AssetPath = Path.GetAssetPathString();
+
+		// /Script exports are native and created with their module. ResolveObject
+		// above already covers the loaded case, so only an unloadable module is
+		// indeterminate here rather than automatically valid.
 		if (AssetPath.StartsWith(TEXT("/Script/"), ESearchCase::IgnoreCase))
 		{
 			return true;
 		}
 
+		// A soft path naming a missing subobject, such as /Game/Pkg.Asset:Missing,
+		// fails ResolveObject while its owning asset still has a registry row.
+		// Treating the row as sufficient reported an unresolvable path as existing.
+		if (!Path.GetSubPathString().IsEmpty())
+		{
+			return false;
+		}
+
+		// Only namespaces that genuinely cannot be queried are inherently valid.
+		// Plugin and /Engine mounts are ordinary asset paths, so hard-coding them
+		// as existing hid every missing reference outside /Game.
 		return FMonolithAssetUtils::AssetExists(AssetPath);
 	}
 
@@ -398,6 +413,74 @@ namespace
 					ArrayProp->Inner,
 					Helper.GetRawPtr(Index),
 					FString::Printf(TEXT("%s.%s[%d]"), *Source, *Property->GetName(), Index),
+					OutRefs,
+					Seen,
+					Depth - 1,
+					ArrayLimit);
+			}
+			return;
+		}
+
+		// TSet and TMap were never visited, so hard and soft references stored in
+		// them were absent from inspect_asset(include_references=true) and could
+		// not raise unresolved_soft_reference. They use the same depth and
+		// item-count safeguards as the array case.
+		if (const FSetProperty* SetProp = CastField<FSetProperty>(Property))
+		{
+			FScriptSetHelper Helper(SetProp, ValuePtr);
+			int32 Visited = 0;
+			for (int32 Index = 0; Index < Helper.GetMaxIndex(); ++Index)
+			{
+				if (!Helper.IsValidIndex(Index))
+				{
+					continue;
+				}
+				if (Visited >= ArrayLimit)
+				{
+					break;
+				}
+				++Visited;
+				CollectReferencesFromProperty(
+					SetProp->ElementProp,
+					Helper.GetElementPtr(Index),
+					FString::Printf(TEXT("%s.%s{%d}"), *Source, *Property->GetName(), Index),
+					OutRefs,
+					Seen,
+					Depth - 1,
+					ArrayLimit);
+			}
+			return;
+		}
+
+		if (const FMapProperty* MapProp = CastField<FMapProperty>(Property))
+		{
+			FScriptMapHelper Helper(MapProp, ValuePtr);
+			int32 Visited = 0;
+			for (int32 Index = 0; Index < Helper.GetMaxIndex(); ++Index)
+			{
+				if (!Helper.IsValidIndex(Index))
+				{
+					continue;
+				}
+				if (Visited >= ArrayLimit)
+				{
+					break;
+				}
+				++Visited;
+				const FString EntrySource =
+					FString::Printf(TEXT("%s.%s{%d}"), *Source, *Property->GetName(), Index);
+				CollectReferencesFromProperty(
+					MapProp->KeyProp,
+					Helper.GetKeyPtr(Index),
+					EntrySource + TEXT(".key"),
+					OutRefs,
+					Seen,
+					Depth - 1,
+					ArrayLimit);
+				CollectReferencesFromProperty(
+					MapProp->ValueProp,
+					Helper.GetValuePtr(Index),
+					EntrySource + TEXT(".value"),
 					OutRefs,
 					Seen,
 					Depth - 1,

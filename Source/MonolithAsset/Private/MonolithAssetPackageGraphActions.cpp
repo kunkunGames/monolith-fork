@@ -2787,6 +2787,16 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::PlanPackageGraphCopy(co
 	Result->SetStringField(TEXT("strategy"), Strategy);
 	Result->SetBoolField(TEXT("read_only"), true);
 	Result->SetBoolField(TEXT("truncated"), bTruncated);
+	// A truncated plan omits dependencies queued after the cap, so copying from it
+	// would silently produce an incomplete graph. Consumers must treat the plan as
+	// non-executable unless the caller opts into a partial copy.
+	Result->SetBoolField(TEXT("executable"), !bTruncated);
+	if (bTruncated)
+	{
+		Result->SetStringField(
+			TEXT("not_executable_reason"),
+			TEXT("dependency traversal reached max_packages; raise max_packages or opt into allow_partial_copy"));
+	}
 	Result->SetNumberField(TEXT("max_packages"), MaxPackages);
 	Result->SetArrayField(TEXT("root_remaps"), RemapRows);
 	Result->SetArrayField(TEXT("root_packages"), StringsToJson(RootPackages));
@@ -3608,7 +3618,17 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::ValidateDependencyClosu
 	Result->SetStringField(TEXT("namespace"), TEXT("asset"));
 	Result->SetStringField(TEXT("action"), TEXT("validate_dependency_closure"));
 	Result->SetBoolField(TEXT("read_only"), true);
-	Result->SetBoolField(TEXT("ok"), bOk);
+	// A truncated scan never examined part of the graph, so a clean prefix is not
+	// proof of closure. Reporting ok=true here let copy_fixup_validate mark its
+	// closure phase and the whole workflow successful over an unchecked tail.
+	Result->SetBoolField(TEXT("ok"), bOk && !bTruncated);
+	Result->SetBoolField(TEXT("closure_proven"), bOk && !bTruncated);
+	if (bTruncated)
+	{
+		Result->SetStringField(
+			TEXT("incomplete_reason"),
+			TEXT("package scan reached max_packages; closure cannot be certified over an unchecked tail"));
+	}
 	Result->SetArrayField(TEXT("destination_roots"), StringsToJson(DestinationRoots));
 	Result->SetArrayField(TEXT("allowed_external_roots"), StringsToJson(AllowedExternalRoots));
 	Result->SetArrayField(TEXT("legacy_source_roots"), StringsToJson(LegacySourceRoots));

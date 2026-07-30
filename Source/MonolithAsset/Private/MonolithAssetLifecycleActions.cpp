@@ -513,6 +513,9 @@ namespace
 		bool bHadRegisteredAsset = false;
 		bool bHadLoadedPackage = false;
 		bool bFoundObject = false;
+		// True when the package holds only assets this request asked to delete.
+		// Residual package files are only removed under that proof.
+		bool bPackageExclusivelyRequested = false;
 		bool bResidualRemoved = false;
 		bool bSourceControlFailure = false;
 		bool bFinalRegisteredAsset = false;
@@ -1581,7 +1584,53 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 		}
 	}
 
+	// Establish, per package, whether this request covers every asset it holds.
+	// Removing package files is only safe under that proof.
+	{
+		TMap<FString, TSet<FString>> RequestedObjectPathsByPackage;
+		for (int32 PathIndex = 0; PathIndex < AssetPaths.Num(); ++PathIndex)
+		{
+			FDeleteAssetTarget& Target = Targets[AssetPathTargetIndices[PathIndex]];
+			RequestedObjectPathsByPackage
+				.FindOrAdd(Target.PackageName)
+				.Add(MakeCanonicalAssetObjectPath(AssetPaths[PathIndex], Target.PackageName)
+					.ToLower());
+		}
+
+		for (FDeleteAssetTarget& Target : Targets)
+		{
+			const TSet<FString>* RequestedForPackage =
+				RequestedObjectPathsByPackage.Find(Target.PackageName);
+			if (!RequestedForPackage)
+			{
+				Target.bPackageExclusivelyRequested = false;
+				continue;
+			}
+
+			TArray<FAssetData> PackageAssets;
+			AssetRegistry.GetAssetsByPackageName(
+				FName(*Target.PackageName),
+				PackageAssets,
+				/*bIncludeOnlyOnDiskAssets=*/false);
+
+			bool bAllRequested = PackageAssets.Num() > 0;
+			for (const FAssetData& PackageAsset : PackageAssets)
+			{
+				if (!RequestedForPackage->Contains(
+					PackageAsset.GetSoftObjectPath().ToString().ToLower()))
+				{
+					bAllRequested = false;
+					break;
+				}
+			}
+			Target.bPackageExclusivelyRequested = bAllRequested;
+		}
+	}
+
 	TArray<FString> UnregisteredStringTables;
+	// Package -> dirty flag as it was before this action cleared it, so a refused
+	// deletion can restore the user's unsaved state.
+	TMap<UPackage*, bool> PreDeleteDirtyPackages;
 	for (UObject* Asset : ObjectsToDelete)
 	{
 		if (!Asset)
@@ -1591,8 +1640,14 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 
 		if (!bDryRun)
 		{
+			// Record the dirty flag before clearing it. DeleteObjects can refuse a
+			// non-forced delete (for example while the asset is still referenced),
+			// and the package then survives in a clean state with its editor
+			// closed, so a user's unsaved edits could be discarded later without a
+			// save prompt.
 			if (UPackage* Package = Asset->GetOutermost())
 			{
+				PreDeleteDirtyPackages.Add(Package, Package->IsDirty());
 				Package->SetDirtyFlag(false);
 			}
 			if (GEditor)
@@ -1621,6 +1676,18 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 	{
 		TGuardValue<bool> UnattendedGuard(GIsRunningUnattendedScript, true);
 		NumObjectDeletesReported = ObjectTools::DeleteObjects(ObjectsToDelete, /*bShowConfirmation=*/false);
+
+		// Restore the dirty flag on every package that survived the delete. A
+		// surviving package still holds the user's unsaved edits, and leaving it
+		// clean would let them be dropped without a save prompt.
+		for (const TPair<UPackage*, bool>& DirtyPair : PreDeleteDirtyPackages)
+		{
+			UPackage* Package = DirtyPair.Key;
+			if (DirtyPair.Value && IsValid(Package))
+			{
+				Package->SetDirtyFlag(true);
+			}
+		}
 	}
 
 	TArray<FString> EvictedPackages;
@@ -1647,7 +1714,13 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 				EvictLoadedPackageForDelete(Target.PackageName, EvictedPackages, StalePackages);
 			}
 
-			if (bForce)
+			// force=true previously removed the package file for every normalized
+			// package, even when the exact object was never found. A typo such as
+			// /Game/Hero.Hreo normalizes to package /Game/Hero and would destroy
+			// the valid package; selecting one asset in a multi-asset package
+			// would likewise take its unrequested siblings. Require both an exact
+			// hit and proof that nothing unrequested lives in the package.
+			if (bForce && Target.bFoundObject && Target.bPackageExclusivelyRequested)
 			{
 				const int32 DeletedResidualFilesBefore = DeletedResidualFiles.Num();
 				const int32 SourceControlFailuresBefore = SourceControlFailures.Num();

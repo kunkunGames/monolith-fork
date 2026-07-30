@@ -103,13 +103,9 @@ FMonolithActionResult FMonolithAssetHygieneActions::ValidateNamingConventions(co
 	int32 TotalScanned = 0;
 	int32 TotalPassed = 0;
 
+	int32 TotalViolations = 0;
 	for (const FAssetData& Asset : AllAssets)
 	{
-		if (Violations.Num() >= MaxResults)
-		{
-			break;
-		}
-
 		const FString ClassName = Asset.AssetClassPath.GetAssetName().ToString();
 		const FString* ExpectedPrefix = PrefixRules.Find(ClassName);
 		if (!ExpectedPrefix)
@@ -132,15 +128,25 @@ FMonolithActionResult FMonolithAssetHygieneActions::ValidateNamingConventions(co
 		Violation->SetStringField(TEXT("asset_class"), ClassName);
 		Violation->SetStringField(TEXT("expected_prefix"), *ExpectedPrefix);
 		Violation->SetStringField(TEXT("suggested_name"), *ExpectedPrefix + AssetName);
-		Violations.Add(MakeShared<FJsonValueObject>(Violation));
+		// Keep scanning past the cap so total_assets_scanned, passed, and the
+		// violation total describe the whole requested content path. Breaking
+		// early made those aggregates describe only a prefix.
+		++TotalViolations;
+		if (Violations.Num() < MaxResults)
+		{
+			Violations.Add(MakeShared<FJsonValueObject>(Violation));
+		}
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("scan_path"), ScanPath);
 	Result->SetNumberField(TEXT("total_assets_scanned"), TotalScanned);
 	Result->SetNumberField(TEXT("passed"), TotalPassed);
-	Result->SetNumberField(TEXT("violations"), Violations.Num());
-	Result->SetBoolField(TEXT("truncated"), Violations.Num() >= MaxResults);
+	Result->SetNumberField(TEXT("violations"), TotalViolations);
+	Result->SetNumberField(TEXT("violations_returned"), Violations.Num());
+	// Only a genuinely dropped violation is truncation; a count that merely
+	// equals the cap is complete.
+	Result->SetBoolField(TEXT("truncated"), TotalViolations > Violations.Num());
 	Result->SetArrayField(TEXT("violations_list"), Violations);
 
 	TArray<TSharedPtr<FJsonValue>> RulesArr;
