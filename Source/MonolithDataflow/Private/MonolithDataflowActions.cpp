@@ -392,6 +392,11 @@ FMonolithActionResult FMonolithDataflowActions::ListAssets(
 	IAssetRegistry& AssetRegistry =
 		FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
+	// A registry still performing its initial scan only sees the assets discovered
+	// so far, so any count derived from this enumeration is a lower bound rather
+	// than the project total.
+	const bool bRegistryStillScanning = AssetRegistry.IsLoadingAssets();
+
 	FOutputBudget TextBudget;
 	TArray<TSharedPtr<FJsonValue>> Rows;
 	Rows.Reserve(Limit);
@@ -431,11 +436,15 @@ FMonolithActionResult FMonolithDataflowActions::ListAssets(
 	Result->SetStringField(TEXT("asset_class"), UDataflow::StaticClass()->GetClassPathName().ToString());
 	Result->SetStringField(TEXT("ordering"), TEXT("asset_registry_enumeration"));
 	Result->SetNumberField(TEXT("limit"), Limit);
+	const bool bCountComplete = !bSawExtra && !bRegistryStillScanning;
 	Result->SetNumberField(TEXT("observed_match_count"), ObservedMatchCount);
 	Result->SetNumberField(TEXT("returned_count"), Rows.Num());
 	Result->SetBoolField(TEXT("truncated"), bSawExtra);
-	Result->SetBoolField(TEXT("count_complete"), !bSawExtra);
-	if (!bSawExtra)
+	Result->SetBoolField(TEXT("count_complete"), bCountComplete);
+	Result->SetBoolField(
+		TEXT("asset_registry_scan_in_progress"),
+		bRegistryStillScanning);
+	if (bCountComplete)
 	{
 		Result->SetNumberField(TEXT("total_count"), ObservedMatchCount);
 	}

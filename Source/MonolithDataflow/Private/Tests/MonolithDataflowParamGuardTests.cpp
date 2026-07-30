@@ -216,4 +216,72 @@ bool FMonolithDataflowParamGuardTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithDataflowSurrogateTruncationTest,
+	"Monolith.Dataflow.SurrogateTruncation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithDataflowSurrogateTruncationTest::RunTest(const FString& Parameters)
+{
+	// U+1F600 GRINNING FACE is a supplementary character stored as a surrogate
+	// pair when TCHAR is UTF-16. Truncating between the two code units would
+	// leave an unpaired surrogate that cannot be encoded as UTF-8.
+	const FString Emoji = FString(TEXT("\U0001F600"));
+	const FString Value = Emoji + Emoji + Emoji;
+
+	auto ContainsUnpairedSurrogate = [](const FString& Text)
+	{
+		for (int32 Index = 0; Index < Text.Len(); ++Index)
+		{
+			const uint32 CodeUnit = static_cast<uint32>(Text[Index]);
+			const bool bHigh = CodeUnit >= 0xD800u && CodeUnit <= 0xDBFFu;
+			const bool bLow = CodeUnit >= 0xDC00u && CodeUnit <= 0xDFFFu;
+			if (bLow)
+			{
+				return true; // A low surrogate must be consumed with its high half.
+			}
+			if (bHigh)
+			{
+				if (Index + 1 >= Text.Len())
+				{
+					return true;
+				}
+				const uint32 NextUnit = static_cast<uint32>(Text[Index + 1]);
+				if (NextUnit < 0xDC00u || NextUnit > 0xDFFFu)
+				{
+					return true;
+				}
+				++Index; // Skip the paired low surrogate.
+			}
+		}
+		return false;
+	};
+
+	// Sweep every cut point so both the ellipsis and non-ellipsis branches are
+	// exercised at boundaries that fall inside a surrogate pair.
+	for (int32 MaxChars = 0; MaxChars <= Value.Len(); ++MaxChars)
+	{
+		MonolithDataflow::FOutputBudget Budget;
+		const FString Bounded = Budget.Bound(Value, MaxChars);
+		TestFalse(
+			*FString::Printf(
+				TEXT("bounded value at max_chars=%d has no unpaired surrogate"),
+				MaxChars),
+			ContainsUnpairedSurrogate(Bounded));
+		TestTrue(
+			*FString::Printf(
+				TEXT("bounded value at max_chars=%d respects the cap"),
+				MaxChars),
+			Bounded.Len() <= FMath::Max(MaxChars, 3));
+	}
+
+	MonolithDataflow::FOutputBudget UntruncatedBudget;
+	TestEqual(
+		TEXT("a value within the cap is returned verbatim"),
+		UntruncatedBudget.Bound(Value, Value.Len()),
+		Value);
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

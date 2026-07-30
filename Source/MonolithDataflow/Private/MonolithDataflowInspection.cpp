@@ -1843,6 +1843,7 @@ FMonolithActionResult FMonolithDataflowActions::ListDataflowComments(
 		FMath::Min(ScannedEditorGraphEntryCount, CommentLimit));
 	int32 NullEditorGraphEntryCount = 0;
 	int32 ObservedCommentCount = 0;
+	int32 ConsideredNonCommentNodeCount = 0;
 	for (int32 Index = 0; Index < ScannedEditorGraphEntryCount; ++Index)
 	{
 		const UEdGraphNode* Node = Load.Asset->Nodes[Index];
@@ -1859,8 +1860,14 @@ FMonolithActionResult FMonolithDataflowActions::ListDataflowComments(
 			{
 				ConsideredComments.Add(Comment);
 			}
-			continue;
 		}
+		else
+		{
+			++ConsideredNonCommentNodeCount;
+		}
+		// Comments stay in the membership candidate list so that a comment box
+		// nested inside another one is reported as a contained node.
+		// IsNodeInsideComment already rejects self-membership.
 		ConsideredGraphNodes.Add(Node);
 	}
 
@@ -1904,6 +1911,9 @@ FMonolithActionResult FMonolithDataflowActions::ListDataflowComments(
 		NullEditorGraphEntryCount);
 	Result->SetNumberField(
 		TEXT("considered_non_comment_node_count"),
+		ConsideredNonCommentNodeCount);
+	Result->SetNumberField(
+		TEXT("considered_membership_candidate_count"),
 		ConsideredGraphNodes.Num());
 	Result->SetNumberField(
 		TEXT("observed_comment_count"),

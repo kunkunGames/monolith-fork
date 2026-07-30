@@ -180,6 +180,29 @@ namespace MonolithDataflow
 		return true;
 	}
 
+	namespace
+	{
+		/**
+		 * Returns a cut length no greater than DesiredLength that never slices a
+		 * UTF-16 surrogate pair. On Windows TCHAR is UTF-16, so cutting between a
+		 * high and low surrogate would emit an unpaired surrogate that cannot be
+		 * encoded as UTF-8 during JSON serialization.
+		 */
+		int32 SurrogateSafeCutLength(const FString& Value, int32 DesiredLength)
+		{
+			if (DesiredLength <= 0 || DesiredLength >= Value.Len())
+			{
+				return FMath::Clamp(DesiredLength, 0, Value.Len());
+			}
+
+			const TCHAR LastKeptChar = Value[DesiredLength - 1];
+			const uint32 LastKeptCodeUnit = static_cast<uint32>(LastKeptChar);
+			const bool bLastKeptIsHighSurrogate =
+				LastKeptCodeUnit >= 0xD800u && LastKeptCodeUnit <= 0xDBFFu;
+			return bLastKeptIsHighSurrogate ? DesiredLength - 1 : DesiredLength;
+		}
+	}
+
 	FString FOutputBudget::Bound(const FString& Value, int32 MaxChars)
 	{
 		const int32 PerFieldCharacterCount =
@@ -206,12 +229,14 @@ namespace MonolithDataflow
 		FString Bounded;
 		if (ReturnedCharacterCount <= 3)
 		{
-			Bounded = Value.Left(ReturnedCharacterCount);
+			Bounded = Value.Left(
+				SurrogateSafeCutLength(Value, ReturnedCharacterCount));
 		}
 		else
 		{
 			Bounded =
-				Value.Left(ReturnedCharacterCount - 3)
+				Value.Left(
+					SurrogateSafeCutLength(Value, ReturnedCharacterCount - 3))
 				+ TEXT("...");
 		}
 		ReturnedTextCharacterCount += Bounded.Len();

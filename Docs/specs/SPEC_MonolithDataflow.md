@@ -86,16 +86,16 @@ without authoring, evaluating, regenerating, dirtying, or saving a graph.
 
 | Surface | Completeness contract |
 | --- | --- |
-| Asset discovery | Reports `observed_match_count`, `returned_count`, `truncated`, and `count_complete`; `total_count` appears only for a complete enumeration. |
+| Asset discovery | Reports `observed_match_count`, `returned_count`, `truncated`, `count_complete`, and `asset_registry_scan_in_progress`; `total_count` appears only for a complete enumeration. A registry still performing its initial scan reports `count_complete=false` because enumeration can only observe the assets discovered so far. |
 | Graph snapshot | Reports exact total/returned counts and separate truncation flags for nodes and connections. Connection slicing is independent of the returned node slice. |
 | Pins | Reports `source=registered` or `source=declared` and availability flags; it never silently substitutes an unavailable representation. |
 | Node types | Sorts by case-sensitive category then type, reports registered/valid/matched/returned counts, and exposes truncation. |
 | Validation | Reports separate node/connection scan completeness. An incomplete scan returns `validity_status=incomplete` and omits `valid`; only a complete scan can report `valid=true` or `valid=false`. |
 | Node/default properties | Reports bounded scalar values with `value_read_status`, `value_available`, and `value_truncated`; dynamic containers, structs, fixed arrays, and unsupported types are explicitly omitted instead of entering an unbounded generic export path. |
 | Variables | Reports property-bag availability, total/returned counts, and the same bounded scalar value/read/omission/truncation contract. |
-| Comments | Reports graph-scan, comment-count, returned-comment, per-comment membership, and comparison-budget completeness independently. |
+| Comments | Reports graph-scan, comment-count, returned-comment, per-comment membership, and comparison-budget completeness independently. Membership candidates include comment nodes, so a comment box nested inside another is reported as a contained node; `considered_non_comment_node_count` counts non-comment nodes and `considered_membership_candidate_count` counts every candidate compared. |
 | Aggregate output | Every dynamic response shares a hard 4,096-row budget across top-level and nested arrays. Reflected/free-form strings passed through the bounded reader additionally share 1,048,576 characters. `output_returned_row_count`, `output_rows_truncated`, `output_returned_bounded_text_character_count`, `output_bounded_text_truncated`, and `output_budget_exhausted` make aggregate truncation explicit; fixed-size GUID and contract metadata remain bounded by the row ceiling. |
-| Text | Each free-form field is capped at 4,096 characters; the aggregate character budget applies after that per-field cap and each result reports `truncated_text_field_count`. |
+| Text | Each free-form field is capped at 4,096 characters; the aggregate character budget applies after that per-field cap and each result reports `truncated_text_field_count`. Truncation never splits a UTF-16 surrogate pair, so bounded values stay serializable as UTF-8. |
 
 ---
 
