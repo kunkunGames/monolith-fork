@@ -291,6 +291,27 @@ public:
 		return *this;
 	}
 
+	// --- Exact JSON type variants.
+	// The registry normally recovers JSON-encoded strings for array/object
+	// parameters because some MCP clients serialize complex values as text
+	// (see FMonolithParamSchema::RecoverStringEncodedComplexParams). Security-
+	// or mutation-sensitive actions can opt one parameter out of that
+	// compatibility transform and receive its original EJson type.
+	FParamSchemaBuilder& RequiredExactType(const FString& Name, const FString& Type, const FString& Desc)
+	{
+		AddParam(Name, Type, Desc, /*bRequired=*/true, /*Default=*/TEXT(""), /*bHasDefault=*/false, {}, EMonolithParamKind::Other);
+		DisableStringEncodedComplexRecovery(Name);
+		return *this;
+	}
+
+	FParamSchemaBuilder& OptionalExactType(const FString& Name, const FString& Type, const FString& Desc,
+		const FString& Default = TEXT(""))
+	{
+		AddParam(Name, Type, Desc, /*bRequired=*/false, Default, /*bHasDefault=*/!Default.IsEmpty(), {}, EMonolithParamKind::Other);
+		DisableStringEncodedComplexRecovery(Name);
+		return *this;
+	}
+
 	// --- Survivor D sugar overloads — opt-in to path-kind tagging.
 	// These wrap Required/Optional + set Kind on the resulting entry.
 	// Type is always "string"; default is always empty. Use the non-sugar
@@ -468,6 +489,16 @@ private:
 		Schema->SetObjectField(Name, Param);
 		ParamsByName.Add(Name, Param);
 	}
+
+	// Marks a declared parameter so RecoverStringEncodedComplexParams leaves its
+	// incoming value at the caller's original EJson type.
+	void DisableStringEncodedComplexRecovery(const FString& Name)
+	{
+		if (const TSharedPtr<FJsonObject>* Param = ParamsByName.Find(Name))
+		{
+			(*Param)->SetBoolField(TEXT("allow_string_encoded_complex"), false);
+		}
+	}
 };
 
 /**
@@ -490,5 +521,6 @@ public:
 	static TArray<FString> FindUnknownKeys(const TSharedPtr<FJsonObject>& Schema, const TSharedPtr<FJsonObject>& Params);
 	static int32 RecoverStringEncodedComplexParams(const TSharedPtr<FJsonObject>& Schema, const TSharedPtr<FJsonObject>& Params);
 	static bool ValidateTypedParams(const TSharedPtr<FJsonObject>& Schema, const TSharedPtr<FJsonObject>& Params, TArray<FString>& OutErrors);
+	static bool IsUniversalResponseShapingParam(const FString& ParamName);
 	static bool IsStrictParamsEnabled();
 };

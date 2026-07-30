@@ -17,7 +17,9 @@ public class MonolithInterchange : ModuleRules
 		{
 			"MonolithCore",
 			"UnrealEd",
+			"AssetRegistry",
 			"AssetTools",
+			"InterchangeEngine",
 			"Json",
 			"JsonUtilities"
 		});

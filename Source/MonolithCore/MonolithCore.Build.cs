@@ -31,5 +31,10 @@ public class MonolithCore : ModuleRules
 		{
 			"SourceControl"
 		});
+
+		PrivateDependencyModuleNames.AddRange(new string[]
+		{
+			"SourceControl"
+		});
 	}
 }

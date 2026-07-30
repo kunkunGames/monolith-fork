@@ -1087,6 +1087,18 @@ int32 FMonolithParamSchema::RecoverStringEncodedComplexParams(
 			continue;
 		}
 
+		// A schema entry can set allow_string_encoded_complex=false (via
+		// FParamSchemaBuilder::RequiredExactType / OptionalExactType) when the
+		// action contract must observe the caller's original EJson type instead
+		// of accepting this client-compatibility transform. Security- and
+		// mutation-sensitive actions rely on that opt-out.
+		bool bAllowStringEncodedComplex = true;
+		(*ParamDefinition)->TryGetBoolField(TEXT("allow_string_encoded_complex"), bAllowStringEncodedComplex);
+		if (!bAllowStringEncodedComplex)
+		{
+			continue;
+		}
+
 		FString TypeSpec;
 		if (!(*ParamDefinition)->TryGetStringField(TEXT("type"), TypeSpec))
 		{
@@ -1238,6 +1250,19 @@ bool FMonolithParamSchema::ValidateTypedParams(
 	}
 
 	return OutErrors.Num() == 0;
+}
+
+bool FMonolithParamSchema::IsUniversalResponseShapingParam(
+	const FString& ParamName)
+{
+	// ApplyResponseShaping consumes these exact, case-sensitive keys after the
+	// action handler returns. Keep the contract centralized so registry-level
+	// and action-local strict validation cannot drift apart.
+	return ParamName == TEXT("_fields")
+		|| ParamName == TEXT("_omit")
+		|| ParamName == TEXT("_compact_json")
+		|| ParamName == TEXT("_row_fields")
+		|| ParamName == TEXT("_path_fields");
 }
 
 bool FMonolithParamSchema::IsStrictParamsEnabled()
