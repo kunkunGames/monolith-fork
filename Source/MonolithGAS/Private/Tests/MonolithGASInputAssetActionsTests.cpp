@@ -1067,6 +1067,17 @@ bool FMonolithGASInputAssetSaveFailureReportingTest::RunTest(const FString& /*Pa
 {
 	using namespace MonolithGASInputAssetActionsTestDetail;
 
+#if !PLATFORM_WINDOWS
+	// FScopedSaveBlocker forces the failure by holding a write handle open on the
+	// destination .uasset. That only blocks SavePackage on platforms with
+	// mandatory file locking: POSIX locking is advisory and does not prevent the
+	// temp-file rename, so the save would succeed and none of the structured
+	// failure assertions below could be evaluated. The expected log messages are
+	// Windows-specific for the same reason. The save-failure contract itself is
+	// platform independent; only this way of provoking it is not.
+	AddInfo(TEXT("Skipped: provoking a package save failure requires Windows mandatory file locking."));
+	return true;
+#else
 	FScopedInputAssets Assets;
 	if (!TestTrue(TEXT("save-failure input fixture is created"), Assets.Create()))
 	{
@@ -1214,6 +1225,7 @@ bool FMonolithGASInputAssetSaveFailureReportingTest::RunTest(const FString& /*Pa
 	CleanupTestAsset(CreateContextPath);
 	CleanupTestAsset(CreateActionPath);
 	return bPassed;
+#endif // !PLATFORM_WINDOWS
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(

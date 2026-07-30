@@ -137,6 +137,14 @@ Dry-run modifier/trigger validation now separates syntax from loading: `FSoftCla
 
 All five writers share one post-mutation completion path. When `save=true` fails after an in-memory mutation, the action returns an error rather than a success-shaped payload and explicitly tells the caller that the mutation is committed, partial, and unsafe to retry blindly.
 
+### Review round 3 (head `d5a05516`)
+
+Both remaining findings were confirmed and closed.
+
+Every asset-path parameter in the `input` schemas (`asset_path`, `context_path`, `action_path`, `source_context_path`, `source_action_path`, and the list roots `path`) now uses the `RequiredAssetPath` / `OptionalAssetPath` builder sugar instead of the generic `Required` / `Optional` entries. Those generic entries were classified as `EMonolithParamKind::Other`, so the registry's `AssetPath` rewrite never ran and a Windows client supplying backslashes had its path rejected after normalization produced a malformed `/Game/...` value. The namespace now behaves like the repository's other asset APIs.
+
+`Monolith.ParamGuard.GAS.InputAssets.SaveFailureReporting` is gated to Windows. `FScopedSaveBlocker` provokes the failure by holding a write handle open on the destination `.uasset`, which only blocks `SavePackage` where file locking is mandatory. POSIX locking is advisory and does not prevent the temp-file rename, so on macOS/Linux the save would succeed and every structured-failure assertion would fail; the expected log messages are Windows-specific for the same reason. The save-failure contract is platform independent, but this way of provoking it is not, so the test reports an explicit skip rather than a false failure.
+
 ---
 
 ## 8. Visual and Delivery Scope

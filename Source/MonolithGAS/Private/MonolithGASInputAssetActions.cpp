@@ -1114,7 +1114,7 @@ void FMonolithGASInputAssetActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("List Enhanced Input UInputAction assets"),
 		FMonolithActionHandler::CreateStatic(&HandleListInputActions),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path"), TEXT("string"), TEXT("Optional package path root, e.g. /Game/Input"))
+			.OptionalAssetPath(TEXT("path"), TEXT("Optional package path root, e.g. /Game/Input"))
 			.Optional(TEXT("include_details"), TEXT("boolean"), TEXT("Load assets and include value type/triggers/modifiers"), TEXT("false"))
 			.Build());
 
@@ -1122,14 +1122,14 @@ void FMonolithGASInputAssetActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Inspect an Enhanced Input UInputAction asset"),
 		FMonolithActionHandler::CreateStatic(&HandleGetInputAction),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("InputAction asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("InputAction asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("input"), TEXT("create_input_action"),
 		TEXT("Create or update a UInputAction asset. Requires dry_run=true or confirm=true."),
 		FMonolithActionHandler::CreateStatic(&HandleCreateInputAction),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Package path, e.g. /Game/Input/IA_Jump"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Package path, e.g. /Game/Input/IA_Jump"))
 			.Optional(TEXT("value_type"), TEXT("string"), TEXT("Boolean, Axis1D, Axis2D, or Axis3D"), TEXT("Boolean"))
 			.Optional(TEXT("description"), TEXT("string"), TEXT("Localized description text"))
 			.Optional(TEXT("consume_input"), TEXT("boolean"), TEXT("Consume lower priority enhanced input mappings"), TEXT("true"))
@@ -1145,7 +1145,7 @@ void FMonolithGASInputAssetActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Update common UInputAction properties. Requires dry_run=true or confirm=true."),
 		FMonolithActionHandler::CreateStatic(&HandleSetInputActionProperties),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("InputAction asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("InputAction asset path"))
 			.Optional(TEXT("value_type"), TEXT("string"), TEXT("Boolean, Axis1D, Axis2D, or Axis3D"))
 			.Optional(TEXT("description"), TEXT("string"), TEXT("Localized description text"))
 			.Optional(TEXT("consume_input"), TEXT("boolean"), TEXT("Consume lower priority enhanced input mappings"))
@@ -1162,7 +1162,7 @@ void FMonolithGASInputAssetActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("List Enhanced Input UInputMappingContext assets"),
 		FMonolithActionHandler::CreateStatic(&HandleListInputMappingContexts),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path"), TEXT("string"), TEXT("Optional package path root, e.g. /Game/Input"))
+			.OptionalAssetPath(TEXT("path"), TEXT("Optional package path root, e.g. /Game/Input"))
 			.Optional(TEXT("include_details"), TEXT("boolean"), TEXT("Load assets and include mappings"), TEXT("false"))
 			.Build());
 
@@ -1170,14 +1170,14 @@ void FMonolithGASInputAssetActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Inspect an Enhanced Input UInputMappingContext asset"),
 		FMonolithActionHandler::CreateStatic(&HandleGetInputMappingContext),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("InputMappingContext asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("InputMappingContext asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("input"), TEXT("create_input_mapping_context"),
 		TEXT("Create or update a UInputMappingContext asset. Requires dry_run=true or confirm=true."),
 		FMonolithActionHandler::CreateStatic(&HandleCreateInputMappingContext),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Package path, e.g. /Game/Input/IMC_Default"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Package path, e.g. /Game/Input/IMC_Default"))
 			.Optional(TEXT("description"), TEXT("string"), TEXT("Localized description text"))
 			.Optional(TEXT("overwrite"), TEXT("boolean"), TEXT("Allow updating an existing context"), TEXT("false"))
 			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Preview without modifying or creating an asset"), TEXT("false"))
@@ -1189,11 +1189,11 @@ void FMonolithGASInputAssetActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Add or update a key mapping on an Input Mapping Context. Requires dry_run=true or confirm=true. Idempotently reuses an existing action+key mapping unless allow_duplicate=true, and can clone modifiers/triggers from another mapping or instantiate explicit modifier/trigger classes."),
 		FMonolithActionHandler::CreateStatic(&HandleAddInputMapping),
 		FParamSchemaBuilder()
-			.Required(TEXT("context_path"), TEXT("string"), TEXT("InputMappingContext asset path"))
-			.Required(TEXT("action_path"), TEXT("string"), TEXT("InputAction asset path"))
+			.RequiredAssetPath(TEXT("context_path"), TEXT("InputMappingContext asset path"))
+			.RequiredAssetPath(TEXT("action_path"), TEXT("InputAction asset path"))
 			.Required(TEXT("key"), TEXT("string"), TEXT("FKey name, e.g. SpaceBar, LeftMouseButton, Gamepad_FaceButton_Bottom"))
-			.Optional(TEXT("source_context_path"), TEXT("string"), TEXT("Optional source InputMappingContext to clone modifiers/triggers from"))
-			.Optional(TEXT("source_action_path"), TEXT("string"), TEXT("Source InputAction for the mapping to clone"))
+			.OptionalAssetPath(TEXT("source_context_path"), TEXT("Optional source InputMappingContext to clone modifiers/triggers from"))
+			.OptionalAssetPath(TEXT("source_action_path"), TEXT("Source InputAction for the mapping to clone"))
 			.Optional(TEXT("source_key"), TEXT("string"), TEXT("Source FKey for the mapping to clone"))
 			.Optional(TEXT("modifier_classes"), TEXT("array"), TEXT("Optional UInputModifier class paths. If present, replaces cloned/existing modifiers; empty array clears modifiers."))
 			.Optional(TEXT("trigger_classes"), TEXT("array"), TEXT("Optional UInputTrigger class paths. If present, replaces cloned/existing triggers; empty array clears triggers."))
@@ -1207,8 +1207,8 @@ void FMonolithGASInputAssetActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Remove a key mapping from an Input Mapping Context. Requires dry_run=true or confirm=true."),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveInputMapping),
 		FParamSchemaBuilder()
-			.Required(TEXT("context_path"), TEXT("string"), TEXT("InputMappingContext asset path"))
-			.Required(TEXT("action_path"), TEXT("string"), TEXT("InputAction asset path"))
+			.RequiredAssetPath(TEXT("context_path"), TEXT("InputMappingContext asset path"))
+			.RequiredAssetPath(TEXT("action_path"), TEXT("InputAction asset path"))
 			.Required(TEXT("key"), TEXT("string"), TEXT("FKey name to remove"))
 			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Preview without modifying the context"), TEXT("false"))
 			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true for non-dry-run writes"), TEXT("false"))
@@ -1220,7 +1220,7 @@ void FMonolithGASInputAssetActions::RegisterActions(FMonolithToolRegistry& Regis
 		FMonolithActionHandler::CreateStatic(&HandleValidateInputMappings),
 		FParamSchemaBuilder()
 			.Optional(TEXT("context_paths"), TEXT("array"), TEXT("Specific InputMappingContext paths; omitted means all contexts"))
-			.Optional(TEXT("path"), TEXT("string"), TEXT("Optional package path root when context_paths is omitted"))
+			.OptionalAssetPath(TEXT("path"), TEXT("Optional package path root when context_paths is omitted"))
 			.Build());
 
 }
