@@ -88,4 +88,17 @@ private:
 	//   (mirrors UAnimGraphNode_LinkedAnimLayer::GetGuidForLayer), then ReconstructNode().
 	static FMonolithActionResult HandleAddAnimControlRigNode(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleAddLinkedAnimLayer(const TSharedPtr<FJsonObject>& Params);
+
+	// ABP-native anim layer authoring — add_anim_layer_graph.
+	// Creates a UAnimationGraph in UBlueprint::FunctionGraphs: the topology the editor's
+	// My Blueprint -> + -> Animation Layer button produces, with NO UAnimLayerInterface asset.
+	// Mirrors FBlueprintEditor::NewDocument_OnClicked's CGT_NewAnimationLayer pair —
+	// FBlueprintEditorUtils::CreateNewGraph(ABP, Name, UAnimationGraph, UAnimationGraphSchema)
+	// then FBlueprintEditorUtils::AddDomainSpecificGraph — which is the whole feature; the rest of
+	// that editor path is asset-editor UX and is skippable (the ABP factory in UnrealEd runs the
+	// same pair headless for the default AnimGraph). Optional input poses spawn
+	// UAnimGraphNode_LinkedInputPose nodes directly via FGraphNodeCreator, because that node's
+	// IsCompatibleWithGraph accepts only the default AnimGraph, so every filtered action-menu
+	// path refuses it inside a layer graph.
+	static FMonolithActionResult HandleAddAnimLayerGraph(const TSharedPtr<FJsonObject>& Params);
 };
