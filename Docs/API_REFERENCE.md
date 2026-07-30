@@ -37,6 +37,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
 | [audio](#audio) | 98 | Sound Cue + MetaSound graph CRUD + document introspection, attenuation/class/mix/submix/concurrency, batch ops, Sound Cue templates, perception bindings |
 | [level_sequence](#level_sequence) | 8 | Level Sequence inspection: binding inventory (legacy + UE 5.7 custom bindings), Director Blueprint functions/variables, event-track bindings, cross-sequence reverse lookup |
+| [interchange](#interchange) | 15 | Guarded import, batch import, reimport-source management, reimport, export, and source/format inspection |
 | [bulk_fill](#bulk_fill) | 2 | Reflection-walker bulk property fill across 12 per-namespace adapters (`apply`, `list_namespaces`) |
 | [describe](#describe) | 3 | Read-only schema introspection for the same 12 adapters (`schema`, `list_targets`, `action_schema`) |
 | [decision](#decision) | 5 | **New v0.17.0.** Reflection Intelligence — architectural decision records mined from markdown corpora |
@@ -47,6 +48,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [reflect](#reflect) | 1 | **New v0.19.0.** Reflection Intelligence — index maintenance (`rebuild_reflection_index`, project-only force-rebuild of the RI reflection tables; WRITE/maintenance) |
 | **In-tree subtotal** | **~1,400+** | Counts are intentionally approximate; query `monolith_discover()` for the current registry total. |
 | **In-tree subtotal** | **1417** | (all default-active; +45 experimental town gen → 1462 when registered) |
+| **In-tree subtotal** | **1405** | (all default-active; +45 experimental town gen → 1450 when registered) |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -1275,6 +1277,25 @@ Scalar params require exact JSON types. Object paths reject whitespace, backslas
 | `trace_channel_usage` | `channel_tag?`, `source_root?`, `source_roots?`, `include_monolith_source?`, `include_engine_gameplay_message_sources?`, `max_files?`, `max_results?`, `include_line_text?` | Per-call bounded lexical candidates; nested project-plugin roots; physical path enforcement; truncation-safe orphan status; source excerpts are opt-in; no PIE, listeners, or broadcasts |
 Scalar params require exact JSON types. Object paths reject whitespace, backslashes, extensions, subobjects, redirects, case changes, and resolved-path substitutions. Channel tags may be a valid single segment but reject leading, trailing, or internal empty dot segments. `max_files` is `1..5000`; `max_results` is `1..1000`; values are never clamped. `summary.orphan_analysis_complete=false` means bounds or skipped input made absence claims indeterminate, so no orphan candidate is emitted.
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithGameplayMessage.md`.
+## interchange
+Guarded asset import/export pipeline. Read-only actions validate sources and inspect import metadata; every filesystem or asset mutation requires `confirm=true` unless `dry_run=true`.
+|--------|------------|-------|
+| `get_supported_formats` | none | Lists known source formats, runtime module availability, allowed roots, and mutation policy. |
+| `can_import` | `source_file`; optional `destination_path`, `allow_external` | Normalizes harmless folder whitespace/trailing separators, then validates source existence, extension support, a registered Interchange translator or legacy factory, link-safe root policy, and destination package syntax without mutation. |
+| `can_reimport` | `asset_path` | Reports the result and source paths from `FReimportManager::CanReimport`. |
+| `get_import_data` | `asset_path` | Returns the reflected source-file rows for an existing asset. |
+| `import_asset` | `source_file`, `destination_path`, `conflict_policy`; optional `allow_external`, `confirm`, `dry_run` | Imports one source with an explicit `fail`, `overwrite`, or uniquely resolved `rename` policy for single-output formats. Scene/mesh sources require `fail` plus a dedicated destination proven empty by complete bounded inspection. |
+| `import_assets` | `source_files`, `destination_path`, `conflict_policy`; optional `allow_external`, `confirm`, `dry_run` | Imports sources sequentially and returns one structured row per source. Dry-run reserves each successful single-output row's prospective package so later same-name rows predict the same result as confirmation. A multi-source batch rejects scene/mesh inputs because secondary output packages cannot be predicted safely. |
+| `import_scene` | same as `import_asset` | Requires a scene-capable source, registered scene factory, `conflict_policy=fail`, and a dedicated empty destination. |
+| `import_mesh` | same as `import_asset` | Configures and verifies a static-mesh import under the multi-output destination guard. |
+| `import_skeletal_mesh` | same as `import_asset` | Configures FBX skeletal import explicitly and verifies a skeletal-mesh result under the multi-output destination guard. |
+| `import_texture` | same as `import_asset` | Requires a texture source and verifies a texture result. |
+| `import_audio` | same as `import_asset` | Requires a wave-audio source and verifies a sound-wave result. |
+| `update_reimport_path` | `asset_path`, `source_file`; optional `source_file_index`, `allow_external`, `confirm`, `dry_run` | Requires a registered handler, requires an exact integer source index when present, updates the path, and verifies handler readback. |
+| `reimport_asset` | `asset_path`; optional `source_file`, `source_file_index`, `allow_external`, `confirm`, `dry_run` | Validates every retained handler source and an exact integer replacement index. A provided replacement source must be an exact non-empty string and must match the target asset kind plus a registered backend before Unreal's reimport manager is called. |
+| `reimport_assets` | `asset_paths`; optional `allow_external`, `confirm`, `dry_run` | Reimports assets sequentially after validating each handler-reported source path. |
+| `export_asset` | `asset_path`, `file_path`; optional `replace_existing`, `allow_external`, `confirm`, `dry_run` | Requires a matching exporter and rejects an existing directory masquerading as a filename before either dry-run success or export. |
+Typed mesh, skeletal-mesh, texture, and audio imports snapshot the destination before mutation. If Unreal returns no object of the requested class, Monolith attempts to remove every newly returned asset. A complete cleanup returns `status="error"`, `rollback_complete=true`, and `partial_mutation=false`; retained pre-existing, unmanaged, or undeletable results return `status="partial_import"` and `partial_mutation=true`. The row includes `rollback_candidates`, `rolled_back_assets`, `pre_existing_import_results`, `unmanaged_import_results`, rollback counts, and `dirty_packages_before_rollback` so callers can decide whether a retry is safe.
 
 ---
 

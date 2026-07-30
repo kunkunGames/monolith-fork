@@ -28,6 +28,10 @@
 			"Enabled": true
 		},
 		{
+			"Name": "Interchange",
+			"Enabled": true
+		},
+		{
 			"Name": "EditorScriptingUtilities",
 			"Enabled": true
 		},
@@ -233,6 +237,7 @@
 		},
 		{
 			"Name": "MonolithGameplayMessage",
+			"Name": "MonolithInterchange",
 			"Type": "Editor",
 			"LoadingPhase": "Default"
 		},

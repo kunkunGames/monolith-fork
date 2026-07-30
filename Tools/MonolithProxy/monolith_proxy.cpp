@@ -128,6 +128,7 @@ static const std::vector<std::string> CORE_QUERY_TOOLS = {
     "audio_query",
     "level_sequence_query",
     "dataflow_query",
+    "interchange_query",
 };
 
 // ============================================================================

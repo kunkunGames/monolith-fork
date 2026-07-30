@@ -9,6 +9,7 @@ if errorlevel 1 (
     )
     if not exist "!VSWHERE!" (
         echo FAILED: vswhere.exe was not found and cl.exe is not already configured
+        echo FAILED: cl.exe is not on PATH and vswhere.exe was not found
         exit /b 1
     )
 
@@ -37,6 +38,10 @@ pushd "%~dp0"
 if errorlevel 1 (
     echo FAILED: could not enter "%~dp0"
     exit /b 1
+    for /f "usebackq tokens=*" %%I in (`"!VSWHERE!" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%I"
+        echo FAILED: Visual Studio with the C++ toolchain was not found
+    call "!VSINSTALL!\VC\Auxiliary\Build\vcvars64.bat"
+        echo FAILED: vcvars64.bat failed for "!VSINSTALL!"
 )
 echo CWD: %CD%
 dir monolith_proxy.cpp
