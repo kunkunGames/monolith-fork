@@ -1,6 +1,8 @@
 #pragma once
+#include "Containers/Map.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Math/UnrealMathUtility.h"
 #include <initializer_list>
 
 /**
@@ -200,6 +202,25 @@ public:
 		return *this;
 	}
 
+	// Adds machine-readable inclusive numeric bounds to an existing parameter.
+	// Runtime handlers must still reject invalid values; this is the discovery contract.
+	FParamSchemaBuilder& Range(const FString& Name, double MinValue, double MaxValue)
+	{
+		checkf(
+			FMath::IsFinite(MinValue)
+				&& FMath::IsFinite(MaxValue)
+				&& MinValue <= MaxValue,
+			TEXT("Invalid schema range for '%s': %g..%g"),
+			*Name,
+			MinValue,
+			MaxValue);
+		TSharedPtr<FJsonObject>& Param = ParamsByName.FindChecked(Name);
+		checkf(Param.IsValid(), TEXT("Schema param '%s' is invalid"), *Name);
+		Param->SetNumberField(TEXT("minimum"), MinValue);
+		Param->SetNumberField(TEXT("maximum"), MaxValue);
+		return *this;
+	}
+
 	TSharedPtr<FJsonObject> Build()
 	{
 		return Schema;
@@ -207,6 +228,7 @@ public:
 
 private:
 	TSharedPtr<FJsonObject> Schema = MakeShared<FJsonObject>();
+	TMap<FString, TSharedPtr<FJsonObject>> ParamsByName;
 
 	void DisableStringEncodedComplexRecovery(const FString& Name)
 	{
@@ -244,6 +266,7 @@ private:
 		{
 			Param->SetStringField(TEXT("kind"), MonolithParamKind::ToString(Kind));
 		}
+		ParamsByName.Add(Name, Param);
 		Schema->SetObjectField(Name, Param);
 	}
 };
@@ -255,6 +278,9 @@ private:
  *   Returns false if both alias and canonical are supplied (caller treats as ErrInvalidParams).
  * - FindUnknownKeys: returns Params keys that are neither canonical nor declared aliases.
  *   Used by K3 unknown-param warnings.
+ * - IsUniversalResponseShapingParam: identifies the exact reserved keys consumed
+ *   after action dispatch by ApplyResponseShaping. Action-local strict readers
+ *   use the same contract instead of duplicating the reserved-key list.
  * - IsStrictParamsEnabled: env-var STRICT_PARAMS=1 promotes K3 warnings to hard errors.
  */
 class MONOLITHCORE_API FMonolithParamSchema
@@ -262,5 +288,6 @@ class MONOLITHCORE_API FMonolithParamSchema
 public:
 	static bool ApplyAliases(const TSharedPtr<FJsonObject>& Schema, const TSharedPtr<FJsonObject>& Params, FString& OutCollision);
 	static TArray<FString> FindUnknownKeys(const TSharedPtr<FJsonObject>& Schema, const TSharedPtr<FJsonObject>& Params);
+	static bool IsUniversalResponseShapingParam(const FString& ParamName);
 	static bool IsStrictParamsEnabled();
 };

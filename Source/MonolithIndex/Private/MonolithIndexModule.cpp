@@ -12,13 +12,12 @@
 #include "Actions/ProjectGetSavedAssetStateAction.h"
 #include "Actions/ProjectCleanupGeneratedAssetsAction.h"
 #include "Actions/ProjectExportAssetTextAction.h"
+#include "Actions/AssetCollectionActions.h"
 
 #define LOCTEXT_NAMESPACE "FMonolithIndexModule"
 
 void FMonolithIndexModule::StartupModule()
 {
-	UE_LOG(LogMonolithIndex, Verbose, TEXT("Monolith -- Index module loaded (10 actions, SQLite+FTS5)"));
-
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 
 	Registry.RegisterAction(TEXT("project"), FProjectSearchAction::GetName(),
@@ -75,11 +74,18 @@ void FMonolithIndexModule::StartupModule()
 		FProjectExportAssetTextAction::GetDescription(),
 		FMonolithActionHandler::CreateStatic(&FProjectExportAssetTextAction::Execute),
 		FProjectExportAssetTextAction::GetSchema());
+
+	FAssetCollectionActions::Register(Registry);
+
+	UE_LOG(LogMonolithIndex, Verbose, TEXT("Monolith -- Index module loaded (%d project actions, %d collection actions, SQLite+FTS5)"),
+		Registry.GetActions(TEXT("project")).Num(),
+		Registry.GetActions(TEXT("collection")).Num());
 }
 
 void FMonolithIndexModule::ShutdownModule()
 {
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("project"));
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("collection"));
 }
 
 #undef LOCTEXT_NAMESPACE
