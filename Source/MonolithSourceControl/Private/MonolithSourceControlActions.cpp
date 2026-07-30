@@ -805,6 +805,14 @@ FMonolithActionResult FMonolithSourceControlActions::HandleListOpened(const TSha
 	{
 		return FMonolithActionResult::Error(MappingResult.Error, -32602);
 	}
+	if (MappingResult.bBackendUnavailable)
+	{
+		return FMonolithActionResult::Error(
+			MappingResult.BackendError.IsEmpty()
+				? TEXT("p4 where could not resolve opened-file package paths.")
+				: MappingResult.BackendError,
+			-32603);
+	}
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
 	Rows.Reserve(ReturnedRecordCount);

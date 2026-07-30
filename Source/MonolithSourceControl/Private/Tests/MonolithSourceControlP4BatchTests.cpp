@@ -338,6 +338,9 @@ bool FMonolithSourceControlP4ProcessDeadlineTest::RunTest(const FString& /*Param
 	bPassed &= TestFalse(
 		TEXT("a backend timeout is reported per row rather than as input rejection"),
 		BatchResult.bRejected);
+	bPassed &= TestTrue(
+		TEXT("a backend timeout is distinguished from an ordinary unmapped path"),
+		BatchResult.bBackendUnavailable);
 	for (const FString& Path : Paths)
 	{
 		const MonolithSourceControlP4::FDepotPathMapping* Mapping =

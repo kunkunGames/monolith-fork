@@ -28,6 +28,18 @@ bool FMonolithSourceControlPrepareDecisionTest::RunTest(const FString& /*Paramet
 		TEXT("already checked-out files are safe to edit"),
 		CheckedOutDecision.bSafeToProceed);
 
+	FStateFacts CheckedOutButStale = CheckedOut;
+	CheckedOutButStale.bCurrent = false;
+	const FDecision CheckedOutButStaleDecision =
+		Classify(CheckedOutButStale, true, false);
+	bPassed &= TestEqual(
+		TEXT("already checked-out but non-current files still block"),
+		static_cast<int32>(CheckedOutButStaleDecision.Kind),
+		static_cast<int32>(EDecision::BlockingSkip));
+	bPassed &= TestFalse(
+		TEXT("already checked-out but non-current files are unsafe to edit"),
+		CheckedOutButStaleDecision.bSafeToProceed);
+
 	FStateFacts CheckedOutOther;
 	CheckedOutOther.bStateValid = true;
 	CheckedOutOther.bSourceControlled = true;
@@ -99,6 +111,21 @@ bool FMonolithSourceControlPrepareDecisionTest::RunTest(const FString& /*Paramet
 		TEXT("not-yet-created files do not block pre-creation preparation"),
 		MissingDecision.bSafeToProceed);
 
+	const FDecision UnknownExistingDecision = Classify(FStateFacts(), true, true);
+	bPassed &= TestEqual(
+		TEXT("an invalid provider state blocks add for an existing file"),
+		static_cast<int32>(UnknownExistingDecision.Kind),
+		static_cast<int32>(EDecision::BlockingSkip));
+	bPassed &= TestFalse(
+		TEXT("an invalid provider state is not evidence that a file is untracked"),
+		UnknownExistingDecision.bSafeToProceed);
+
+	const FDecision UnknownNewFileDecision = Classify(FStateFacts(), false, true);
+	bPassed &= TestEqual(
+		TEXT("an invalid provider state blocks add-missing preparation"),
+		static_cast<int32>(UnknownNewFileDecision.Kind),
+		static_cast<int32>(EDecision::BlockingSkip));
+
 	// A source-controlled file that is absent locally is stale or deleted, not a
 	// future file. Skipping it would let the caller recreate it over the depot
 	// revision without resolving that state.
@@ -159,6 +186,28 @@ bool FMonolithSourceControlPrepareDecisionTest::RunTest(const FString& /*Paramet
 		TEXT("untracked addable files are added even when reported editable"),
 		static_cast<int32>(UntrackedDecision.Kind),
 		static_cast<int32>(EDecision::Add));
+
+	FStateFacts UntrackedNotAddable;
+	UntrackedNotAddable.bStateValid = true;
+	UntrackedNotAddable.bSourceControlled = false;
+	UntrackedNotAddable.bCurrent = true;
+	UntrackedNotAddable.bCanEdit = true;
+	const FDecision UntrackedNotAddableDecision =
+		Classify(UntrackedNotAddable, true, true);
+	bPassed &= TestEqual(
+		TEXT("an untracked file that cannot be added blocks preparation"),
+		static_cast<int32>(UntrackedNotAddableDecision.Kind),
+		static_cast<int32>(EDecision::BlockingSkip));
+
+	bPassed &= TestTrue(
+		TEXT("add runs when no checkout was required"),
+		ShouldExecuteAdd(false, true));
+	bPassed &= TestTrue(
+		TEXT("add runs after a successful checkout"),
+		ShouldExecuteAdd(true, true));
+	bPassed &= TestFalse(
+		TEXT("add does not run after a failed checkout"),
+		ShouldExecuteAdd(true, false));
 
 	return bPassed;
 }

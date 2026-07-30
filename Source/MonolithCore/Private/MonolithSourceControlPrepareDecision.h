@@ -38,15 +38,6 @@ namespace MonolithSourceControlPrepare
 		bool bFileExists,
 		bool bAddMissingFiles)
 	{
-		if (State.bStateValid && (State.bCheckedOut || State.bAdded))
-		{
-			return {
-				EDecision::BenignSkip,
-				true,
-				TEXT("already checked out or added")
-			};
-		}
-
 		// Every blocking provider state is classified before any skip shortcut.
 		// A skip that runs first would report ok=true for a file the caller must
 		// not overwrite.
@@ -80,6 +71,15 @@ namespace MonolithSourceControlPrepare
 			};
 		}
 
+		if (State.bStateValid && (State.bCheckedOut || State.bAdded))
+		{
+			return {
+				EDecision::BenignSkip,
+				true,
+				TEXT("already checked out or added")
+			};
+		}
+
 		if (!bFileExists && !bAddMissingFiles)
 		{
 			// Only a genuinely untracked future file is safe to skip. A missing
@@ -104,12 +104,30 @@ namespace MonolithSourceControlPrepare
 		// An untracked file that the provider can add must be added. The generic
 		// editable shortcut would report success while leaving it out of source
 		// control, so it is classified first.
-		if (!State.bStateValid || (!State.bSourceControlled && State.bCanAdd))
+		if (!State.bStateValid)
+		{
+			return {
+				EDecision::BlockingSkip,
+				false,
+				TEXT("provider did not return a valid state for the file")
+			};
+		}
+
+		if (!State.bSourceControlled && State.bCanAdd)
 		{
 			return {
 				EDecision::Add,
 				true,
 				TEXT("file is not source controlled and can be added")
+			};
+		}
+
+		if (!State.bSourceControlled)
+		{
+			return {
+				EDecision::BlockingSkip,
+				false,
+				TEXT("file is not source controlled and the provider cannot add it")
 			};
 		}
 
@@ -151,5 +169,13 @@ namespace MonolithSourceControlPrepare
 		default:
 			return TEXT("skip");
 		}
+	}
+
+	inline bool ShouldExecuteAdd(bool bCheckoutAttempted, bool bCheckoutSucceeded)
+	{
+		// Preparation is ordered: a failed checkout invalidates the whole plan.
+		// Opening additional files for add after that failure would create
+		// source-control side effects even though the caller must abort.
+		return !bCheckoutAttempted || bCheckoutSucceeded;
 	}
 }

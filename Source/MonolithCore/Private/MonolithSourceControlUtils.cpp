@@ -408,22 +408,36 @@ TSharedPtr<FJsonObject> FMonolithSourceControlUtils::CheckoutOrAddFiles(
 	}
 
 	bool bOk = true;
+	bool bCheckoutAttempted = false;
+	bool bCheckoutSucceeded = true;
 	if (FilesToCheckout.Num() > 0)
 	{
+		bCheckoutAttempted = true;
 		FSourceControlOperationRef Operation = ISourceControlOperation::Create<FCheckOut>();
 		const ECommandResult::Type CommandResult = Provider.Execute(Operation, FilesToCheckout, EConcurrency::Synchronous);
 		Result->SetStringField(TEXT("checkout_result"), CommandResultToString(CommandResult));
 		AddOperationMessages(Operation, Result, TEXT("checkout"));
-		bOk = bOk && CommandResult == ECommandResult::Succeeded;
+		bCheckoutSucceeded = CommandResult == ECommandResult::Succeeded;
+		bOk = bOk && bCheckoutSucceeded;
 	}
 
-	if (FilesToAdd.Num() > 0)
+	if (FilesToAdd.Num() > 0
+		&& MonolithSourceControlPrepare::ShouldExecuteAdd(
+			bCheckoutAttempted,
+			bCheckoutSucceeded))
 	{
 		FSourceControlOperationRef Operation = ISourceControlOperation::Create<FMarkForAdd>();
 		const ECommandResult::Type CommandResult = Provider.Execute(Operation, FilesToAdd, EConcurrency::Synchronous);
 		Result->SetStringField(TEXT("add_result"), CommandResultToString(CommandResult));
 		AddOperationMessages(Operation, Result, TEXT("add"));
 		bOk = bOk && CommandResult == ECommandResult::Succeeded;
+	}
+	else if (FilesToAdd.Num() > 0)
+	{
+		Result->SetStringField(TEXT("add_result"), TEXT("skipped"));
+		Result->SetStringField(
+			TEXT("add_skip_reason"),
+			TEXT("checkout failed or was cancelled; no add operation was executed"));
 	}
 
 	Result->SetBoolField(TEXT("ok"), bOk);

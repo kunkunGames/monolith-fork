@@ -91,7 +91,7 @@ All boolean fields are strict JSON booleans. Quoted strings, numbers, and explic
 
 `FMonolithSourceControlUtils::CheckoutOrAddFiles` is the shared preparation path for other modules. Its options independently control dry-run, unavailable-provider handling, and whether not-yet-created files may be planned for add.
 
-`MonolithSourceControlPrepare::Classify` evaluates every blocking provider state — opened by another user, conflicted, and non-current — before any skip shortcut, so a shortcut can never report `ok=true` over a state the caller must resolve first. The untracked-and-addable case is classified ahead of the generic editable shortcut for the same reason.
+`MonolithSourceControlPrepare::Classify` evaluates every blocking provider state — opened by another user, conflicted, and non-current — before any skip shortcut, including the already-checked-out/added shortcut, so a shortcut can never report `ok=true` over a state the caller must resolve first. An invalid provider state blocks preparation rather than being interpreted as an untracked file; only a valid, explicitly untracked-and-addable state produces an add plan. Execution is ordered: if checkout fails or is cancelled, the add phase is skipped and reports its reason instead of creating additional provider side effects.
 
 `map_depot_paths` treats a leading `//` as a Perforce depot path first, because that reading is authoritative. A path that p4 cannot map but that names an existing file is then read as a UNC local path. Every row reports `interpreted_as` (`depot_path` or `unc_local_path`), so the chosen reading is never implicit. When a `p4` child process cannot be launched or times out, the action returns `-32603` instead of per-row failures, because the command produced no verdict for those paths.
 
@@ -109,7 +109,7 @@ All boolean fields are strict JSON booleans. Quoted strings, numbers, and explic
 | `list_opened` result limit | 1..5,000 | Integral parameter validation |
 | Opened-result probe | `limit + 1` | One sentinel row distinguishes exact counts from lower bounds |
 
-`list_opened` reports `observed_count`, `returned_count`, `sentinel_record_count`, `count_is_lower_bound`, `has_more`, and `truncated`; callers must not treat the bounded observation as an exact depot-wide total when `count_is_lower_bound=true`.
+`list_opened` reports `observed_count`, `returned_count`, `sentinel_record_count`, `count_is_lower_bound`, `has_more`, and `truncated`; callers must not treat the bounded observation as an exact depot-wide total when `count_is_lower_bound=true`. When `resolve_packages=true`, a launch failure or timeout in the required `p4 where` stage fails the whole action with a backend error instead of returning `ok=true` rows containing only mapping diagnostics.
 
 `map_depot_paths` de-duplicates depot queries for process efficiency while preserving input order and one output row per raw input. The last matching `p4 where` record wins, including exclusion/overlay records. Control characters are rejected before command construction. Windows command lines use CRT-compatible quoting; Unix command lines use Unreal child-process-compatible double-quoted arguments and reject embedded double quotes. If a Perforce child reaches the deadline, its process tree is terminated, its remaining output is drained, the current and unstarted batches receive timeout diagnostics, and no later batch launches.
 
@@ -145,7 +145,7 @@ Input errors identify the rejected field. The module never silently converts str
 | Catalog | Generated registry scan contains exactly 11 new `source_control.*` actions and no unrelated action delta |
 | Parameter contract | `Monolith.SourceControl.ParamValidation.*` passes strict-type, alias, registration, and path-mapping cases |
 | Perforce batching | `Monolith.SourceControl.P4WhereBatch.*` passes parsing, bounds, Windows/Unix quoting, timeout termination, batching, sentinel, and mapping-order cases |
-| Preparation safety | `Monolith.SourceControl.PrepareDecision.*` proves benign and blocking provider states cannot be conflated |
+| Preparation safety | `Monolith.SourceControl.PrepareDecision.*` proves benign and blocking provider states cannot be conflated, unknown state cannot authorize add, and checkout failure suppresses the add phase |
 | Compile floor | Fresh linked Editor builds pass on Unreal Engine 5.7 and 5.8 |
 | Repository checks | Static checks, `git diff --check`, and a final changed-file audit pass |
 | Visual proof | Not applicable: this module has no rendered UI, gameplay, asset-presentation, or editor-panel surface |
