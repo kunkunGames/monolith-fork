@@ -4,6 +4,7 @@
 #include "HAL/FileManager.h"
 #include "Engine/Texture2D.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/Base64.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
@@ -196,12 +197,20 @@ bool FMonolithParamGuardInterchangeImportMalformedParamsTest::RunTest(const FStr
 		const FString SourceB = FixtureRoot / TEXT("B/duplicate.png");
 		IFileManager::Get().MakeDirectory(*FPaths::GetPath(SourceA), true);
 		IFileManager::Get().MakeDirectory(*FPaths::GetPath(SourceB), true);
+		TArray<uint8> PngBytes;
+		TestTrue(
+			TEXT("batch-preview PNG fixture decodes"),
+			FBase64::Decode(
+				TEXT(
+					"iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFUlEQVR4nGP8z8Dwn4GB"
+					"gYEJRIAwAB8XAgICR7MUAAAAAElFTkSuQmCC"),
+				PngBytes));
 		TestTrue(
 			TEXT("first batch-preview fixture was written"),
-			FFileHelper::SaveStringToFile(TEXT("preview fixture A"), *SourceA));
+			FFileHelper::SaveArrayToFile(PngBytes, *SourceA));
 		TestTrue(
 			TEXT("second batch-preview fixture was written"),
-			FFileHelper::SaveStringToFile(TEXT("preview fixture B"), *SourceB));
+			FFileHelper::SaveArrayToFile(PngBytes, *SourceB));
 
 		const FString DestinationPath =
 			TEXT("/Game/Tests/Monolith/Interchange/Batch_") + FixtureId;
