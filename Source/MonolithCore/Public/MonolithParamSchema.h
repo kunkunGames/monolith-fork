@@ -249,6 +249,9 @@ private:
  *   Returns false if both alias and canonical are supplied (caller treats as ErrInvalidParams).
  * - FindUnknownKeys: returns Params keys that are neither canonical nor declared aliases.
  *   Used by K3 unknown-param warnings.
+ * - IsUniversalResponseShapingParam: identifies the exact reserved keys consumed
+ *   after action dispatch by ApplyResponseShaping. Action-local strict readers
+ *   use the same contract instead of duplicating the reserved-key list.
  * - IsStrictParamsEnabled: env-var STRICT_PARAMS=1 promotes K3 warnings to hard errors.
  */
 class MONOLITHCORE_API FMonolithParamSchema
@@ -256,5 +259,6 @@ class MONOLITHCORE_API FMonolithParamSchema
 public:
 	static bool ApplyAliases(const TSharedPtr<FJsonObject>& Schema, const TSharedPtr<FJsonObject>& Params, FString& OutCollision);
 	static TArray<FString> FindUnknownKeys(const TSharedPtr<FJsonObject>& Schema, const TSharedPtr<FJsonObject>& Params);
+	static bool IsUniversalResponseShapingParam(const FString& ParamName);
 	static bool IsStrictParamsEnabled();
 };

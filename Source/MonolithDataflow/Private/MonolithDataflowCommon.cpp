@@ -2,6 +2,7 @@
 
 #include "Dataflow/DataflowObject.h"
 #include "Misc/PackageName.h"
+#include "MonolithParamSchema.h"
 #include "UObject/ObjectRedirector.h"
 #include "UObject/Package.h"
 #include "UObject/UObjectGlobals.h"
@@ -163,7 +164,8 @@ namespace MonolithDataflow
 
 		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Params->Values)
 		{
-			bool bKnown = false;
+			bool bKnown =
+				FMonolithParamSchema::IsUniversalResponseShapingParam(Pair.Key);
 			for (const TCHAR* AllowedField : AllowedFields)
 			{
 				if (Pair.Key.Equals(AllowedField, ESearchCase::CaseSensitive))

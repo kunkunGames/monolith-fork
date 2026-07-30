@@ -95,7 +95,7 @@ Standard codes mirror the JSON-RPC 2.0 spec. Monolith server-defined codes live 
 
 **`warnings[]` channel (Phase 1.0, 2026-05-27).** Successful responses may carry an optional top-level `warnings: string[]` array. The array is appended to (not replaced) by three independent sources before emit, and is omitted when empty:
 
-1. **K3 unknown-param soft-warn** — typo / not-in-schema param keys. Hard error only when `STRICT_PARAMS=1`. K3's per-action allowlist additionally admits the three universal response-shaping params `_fields` / `_omit` / `_compact_json` (Phase 1.0) plus the pre-existing `asset_path` legacy alias. See `MonolithToolRegistry.cpp` around line 115.
+1. **K3 unknown-param soft-warn** — typo / not-in-schema param keys. Hard error only when `STRICT_PARAMS=1`. K3's per-action allowlist additionally admits all five universal response-shaping params: `_fields` / `_omit` / `_compact_json` (Phase 1.0) and `_row_fields` / `_path_fields` (Phase 1.1), plus the pre-existing `asset_path` legacy alias. `FMonolithParamSchema::IsUniversalResponseShapingParam` is the shared exact-key contract used by registry-level and action-local strict readers.
 2. **Survivor D AssetPath rewrite** — when a `Kind == AssetPath` param receives a backslash-bearing value, the dispatcher rewrites `\` → `/` and appends a notification. Never silent. See §14.2.
 3. **Survivor B `_fields` / `_omit` collision** — when both response-shaping whitelist and blacklist are non-empty, `_fields` wins and a warning is appended. See §14.1.
 

@@ -1178,6 +1178,12 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithDataflow.md`.
 parameter. It is a discovery contract only: action handlers must still perform
 strict runtime type and range validation.
 
+`FMonolithParamSchema::IsUniversalResponseShapingParam(name)` identifies the
+five exact, case-sensitive parameters consumed after action dispatch:
+`_fields`, `_omit`, `_compact_json`, `_row_fields`, and `_path_fields`.
+Action-local strict readers call this helper so they preserve typo rejection
+without rejecting the framework's universal response-shaping contract.
+
 ---
 
 ## bulk_fill

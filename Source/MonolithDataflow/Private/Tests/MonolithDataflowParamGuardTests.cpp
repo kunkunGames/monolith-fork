@@ -104,6 +104,34 @@ bool FMonolithDataflowParamGuardTest::RunTest(const FString& Parameters)
 		UnknownParam,
 		TEXT("unknown status param"));
 
+	TSharedPtr<FJsonObject> UniversalShapingParams = MakeShared<FJsonObject>();
+	UniversalShapingParams->SetArrayField(
+		TEXT("_fields"),
+		{MakeShared<FJsonValueString>(TEXT("namespace"))});
+	UniversalShapingParams->SetArrayField(
+		TEXT("_omit"),
+		{MakeShared<FJsonValueString>(TEXT("domain"))});
+	UniversalShapingParams->SetBoolField(TEXT("_compact_json"), true);
+	UniversalShapingParams->SetArrayField(
+		TEXT("_row_fields"),
+		{MakeShared<FJsonValueString>(TEXT("name"))});
+	UniversalShapingParams->SetArrayField(
+		TEXT("_path_fields"),
+		{MakeShared<FJsonValueString>(TEXT("namespace"))});
+	const FMonolithActionResult ShapedStatus = Registry.ExecuteAction(
+		TEXT("dataflow"),
+		TEXT("get_status"),
+		UniversalShapingParams);
+	TestTrue(
+		TEXT("all universal response-shaping params pass action-local strict validation"),
+		ShapedStatus.bSuccess);
+	if (ShapedStatus.bSuccess && ShapedStatus.Result.IsValid())
+	{
+		TestTrue(
+			TEXT("universal response shaping still runs after Dataflow dispatch"),
+			ShapedStatus.Result->HasField(TEXT("namespace")));
+	}
+
 	TSharedPtr<FJsonObject> ShorthandAsset = MakeShared<FJsonObject>();
 	ShorthandAsset->SetStringField(
 		TEXT("asset_path"),

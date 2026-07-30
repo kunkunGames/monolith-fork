@@ -133,13 +133,14 @@ reports `authoring=false`, `evaluation=false`, and `regeneration=false`.
 | Gate | Required result |
 | --- | --- |
 | Registry | Exactly eight `dataflow` actions with required/default schemas and discoverable numeric bounds. |
-| Param guards | Wrong scalar types, fractional/out-of-range integers, unknown keys, `/GameX`, shorthand/file asset paths, excessive comment work, and direct aggregate row/text budget overflow checks fail closed. |
+| Param guards | Wrong scalar types, fractional/out-of-range integers, genuinely unknown keys, `/GameX`, shorthand/file asset paths, excessive comment work, and direct aggregate row/text budget overflow checks fail closed; all five universal response-shaping keys remain accepted. |
 | Identity | Case-exact registered node schema succeeds; a case-only type substitution returns `node_type_case_mismatch`. |
 | Read-only behavior | AssetRegistry discovery does not load assets; successful and rejected graph loads preserve package dirty state; long strings are capped at 4,096 characters; aggregate output stops at 4,096 rows/1,048,576 characters with explicit metadata; container values are explicitly omitted without generic serialization. |
 | Validation | Complete empty-graph validation reports `validity_status=valid`; incomplete validation cannot emit `valid`. |
-| UE 5.7 build/test | `UnrealEditor-MonolithDataflow.dll` links and `Monolith.Dataflow` passes 3/3. |
-| UE 5.8 build/test | `UnrealEditor-MonolithDataflow.dll` links and `Monolith.Dataflow` passes 3/3. |
+| UE 5.7 build/test | `UnrealEditor-MonolithDataflow.dll` links and `Monolith.Dataflow` passes 4/4. |
+| UE 5.8 build/test | `UnrealEditor-MonolithDataflow.dll` links and `Monolith.Dataflow` passes 4/4. |
 | Catalog | Generated catalog adds exactly eight actions under one new namespace and removes none. |
+| Offline proxy seed | Python/native seed lists are identical, include `dataflow_query`, and the native proxy rebuilds successfully. |
 | Mutation audit | The module has no authoring, transaction, dirty-mark, save, evaluate, or regenerate call path. |
 | Exclusions | No security, benchmark, invocation-log, metadata/RL, execution-policy, or search-planning capability is added. |
 
