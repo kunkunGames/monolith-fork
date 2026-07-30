@@ -63,6 +63,7 @@ public class MonolithAnimation : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"MonolithCore",
+			"AssetRegistry",
 			"UnrealEd",
 			"Slate",        // STableRow/SCompoundWidget instantiation (FRetargetChainElement rows).
 			"SlateCore",    // FSlateAttributeDescriptor / SWidget::PrivateRegisterAttributes — was

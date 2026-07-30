@@ -36,6 +36,20 @@ public:
 	UPROPERTY(config, EditAnywhere, Category="MCP Server", meta=(ClampMin="1024", ClampMax="65535"))
 	int32 ServerPort = 9316;
 
+	/** Enables read-only GameFeatures inspection actions beyond get_status. */
+	UPROPERTY(config, EditAnywhere, Category="Project|GameFeatures",
+		meta=(DisplayName="Enable GameFeature Inspection Actions",
+			  ToolTip="Registers read-only gamefeatures inspection actions beyond get_status. Default off."))
+	bool bEnableGameFeatureActions = false;
+
+	/** Reserved guard for a future plugin creation slice. No creation action is
+	 *  registered by the current GameFeatures module. */
+	UPROPERTY(config, EditAnywhere, Category="Project|GameFeatures",
+		meta=(DisplayName="Allow GameFeature Plugin Creation",
+			  EditCondition="bEnableGameFeatureActions",
+			  ToolTip="Reserved for future manifest-based GameFeature plugin creation. Current Monolith builds only report this gate."))
+	bool bAllowGameFeaturePluginCreation = false;
+
 	// --- Auto-Update ---
 
 	/** Check GitHub Releases for updates on editor startup. Off by default

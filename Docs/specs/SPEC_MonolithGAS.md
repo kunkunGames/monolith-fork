@@ -8,12 +8,12 @@
 
 ## MonolithGAS
 
-**Dependencies:** Core, CoreUObject, Engine, MonolithCore, GameplayAbilities, GameplayTags
-**Namespace:** `gas` (135 actions) + 4 cross-namespace aliases into `ui` | **Tool:** `gas_query(action, params)` | **Actions:** 135 (Phase J F8: +`grant_ability_to_pawn`)
-**Conditional:** GBA (Blueprint Attributes) features wrapped in `#if WITH_GBA`. Core GAS engine modules (GameplayAbilities, GameplayTags, GameplayTasks) are always available. When GBA is absent, Blueprint AttributeSet creation is disabled but all 135 actions still register and compile cleanly. When `bEnableGAS` is disabled in settings, 0 actions registered.
-**Settings toggle:** `bEnableGAS` (default: True)
+**Dependencies:** Core, CoreUObject, Engine, MonolithCore, GameplayAbilities, GameplayTags, GameplayTasks, EnhancedInput, InputCore
+**Namespaces:** `gas` (135 actions) + `input` (10 actions) + 4 `gas` aliases into `ui` | **Tools:** `gas_query(action, params)`, `input_query(action, params)`
+**Conditional:** `input` always registers. `gas` registration follows `bEnableGAS`; GBA (Blueprint Attributes) features alone are wrapped in `#if WITH_GBA`. Core GAS and Enhanced Input engine modules are regular module dependencies.
+**Settings toggle:** `bEnableGAS` (default: True; affects `gas`, not `input`)
 
-MonolithGAS provides full MCP coverage of the Gameplay Ability System. It covers ability CRUD, attribute set management, gameplay effect authoring, ASC (Ability System Component) inspection and manipulation, gameplay tag operations, gameplay cue management, target data, input binding, runtime inspection, scaffolding of common GAS patterns, and Widget→Attribute binding via class-extension authoring.
+MonolithGAS provides full MCP coverage of the Gameplay Ability System plus an independent Enhanced Input asset surface. The `gas` namespace covers ability CRUD, attribute set management, gameplay effect authoring, ASC (Ability System Component) inspection and manipulation, gameplay tag operations, gameplay cue management, target data, ability-input binding, runtime inspection, scaffolding, and Widget→Attribute binding. The `input` namespace directly inspects and authors `UInputAction` and `UInputMappingContext` assets.
 
 ### Action Categories
 
@@ -26,12 +26,36 @@ MonolithGAS provides full MCP coverage of the Gameplay Ability System. It covers
 | Tags | 10 | Query gameplay tag hierarchy, check tag matches, add/remove loose tags, tag containers, tag queries |
 | Cues | 10 | Create/edit gameplay cue notifies (static and actor), cue tags, cue parameters, handler lookup |
 | Targets | 5 | Target data handles, target actor selection, target data confirmation, custom target data types |
-| Input | 5 | Bind abilities to Enhanced Input actions, input tag mapping, activation on input |
+| GAS ability input | 5 | Bind abilities to Enhanced Input actions, input tag mapping, activation on input |
 | Inspect | 6 | Runtime inspection of active abilities, applied effects, attribute snapshots, ability task state, prediction keys |
 | Scaffold | 7 | Scaffold common GAS setups: init_attribute_set, init_asc_actor, init_ability_set, init_damage_pipeline, init_cooldown_system, init_stacking_effect, **`grant_ability_to_pawn`** (Phase J F8 — author-time append to ASC startup-abilities array via reflection) |
 | UI Binding | 4 | `bind_widget_to_attribute`, `unbind_widget_attribute`, `list_attribute_bindings`, `clear_widget_attribute_bindings`. Authored via `UMonolithGASAttributeBindingClassExtension`. **Also registered as aliases in the `ui` namespace** (so `ui::bind_widget_to_attribute` and `gas::bind_widget_to_attribute` dispatch to the same handler — see `MonolithGASUIBindingActions.cpp:561-577`). The `ui::` aliases are documented in [SPEC_MonolithUI.md](SPEC_MonolithUI.md) "GAS Bridge Aliases" section |
 
 **Total:** 28 + 20 + 26 + 14 + 10 + 10 + 5 + 5 + 6 + 7 + 4 = **135**.
+
+### Enhanced Input Asset Surface (`input` namespace)
+
+The 10 `input` actions are distinct from the five `gas` ability-input bindings above. They remain registered when `bEnableGAS=false` because `FMonolithGASInputAssetActions::RegisterActions` runs before the GAS settings guard.
+
+| Category | Actions | Contract |
+|----------|---------|----------|
+| Input Action read | `list_input_actions`, `get_input_action` | Enumerate or inspect `UInputAction` assets under `/Game`. |
+| Input Action write | `create_input_action`, `set_input_action_properties` | Guarded creation/update of value type, descriptions, input consumption, paused/reserved behavior, and accumulation. |
+| Mapping Context read | `list_input_mapping_contexts`, `get_input_mapping_context` | Enumerate or inspect `UInputMappingContext` assets and their mappings. |
+| Mapping Context write | `create_input_mapping_context`, `add_input_mapping`, `remove_input_mapping` | Guarded context creation plus deterministic action/key mapping edits, modifier/trigger cloning, and removal previews. |
+| Validation | `validate_input_mappings` | Validate explicit `context_paths`, or all contexts under an optional `/Game` root, for missing actions and duplicate-key conflicts. |
+
+Mutation and validation invariants:
+
+1. Every writer requires either `dry_run=true` or `confirm=true`; `save` defaults to `false`.
+2. Every dry-run reports `preview_state="proposed"` and returns before object/package creation, modifier/trigger package/class/CDO loading or UObject construction, mutation, dirtying, or save. Soft class-path syntax and already-loaded class compatibility are still validated; full class resolution is deferred until confirmation.
+3. Asset paths and list roots must be valid `/Game` package paths. Omitted list roots default to `/Game`; no unscoped Engine/plugin scan is permitted. Explicit object names must match the package asset name. Scalar booleans and strings retain strict JSON types. Schema-declared class arrays and `context_paths` also accept the core registry's JSON-encoded-array compatibility form, then strictly validate every recovered element.
+4. Semantic no-ops do not call `Modify()`, dirty a package, or save it.
+5. `add_input_mapping` reuses an existing action+key mapping unless `allow_duplicate=true`. Cloning requires the complete `source_context_path` + `source_action_path` + `source_key` selector. A selector matching duplicate rows is rejected unless `source_mapping_index` identifies an exact matching row. Explicit `modifier_classes` or `trigger_classes` replace the cloned/existing arrays; an explicit empty array clears one.
+6. `remove_input_mapping` reports `would_remove_count`; an absent mapping is a clean successful no-op.
+7. Omitted `context_paths` selects contexts from optional `path`; explicit `context_paths: []` selects none and never falls back to a global scan. Array elements normalize Windows separators before canonical `/Game` validation.
+8. Unsaved confirmed asset creation uses a package-stable custom transaction change. Undo removes the asset from its package path and the Asset Registry while the change retains it through GC; Redo restores the same object and authored values.
+9. `save=true` is the explicit disk-persistence boundary. A post-mutation save failure returns structured `error.data` with the action result and explicit `mutation_committed`, `partial_mutation`, `save_failed`, and `retry_safe=false` state.
 
 ### Phase J fixes touching this module
 
@@ -48,7 +72,7 @@ See [SPEC_CORE.md §11 Recent Fixes](../SPEC_CORE.md#recent-fixes-phase-j--shipp
 
 > **Runtime actions (Inspect category) require PIE.** These actions query live game state and return errors if called outside a Play-In-Editor session.
 >
-> **GBA conditional support:** The `WITH_GBA` define is set automatically by the module's `Build.cs` when GameplayAbilities is found. Projects without GAS get zero compile overhead — the entire module compiles to an empty stub.
+> **GBA conditional support:** `WITH_GBA` is set by `MonolithGAS.Build.cs` only when the optional Blueprint Attributes plugin is found. It does not gate core GAS engine modules or the `input` namespace. `bEnableGAS=false` suppresses `gas` registration while leaving all 10 Enhanced Input asset actions available.
 >
 > **UI Binding cooked-build caveat.** `UMonolithGASAttributeBindingClassExtension` is an editor-only class — content WBPs that reference it will fail to apply bindings in cooked Steam builds. See [COOKED_BUILD_TODO.md](../COOKED_BUILD_TODO.md) for the resolution path (Option A/B/C deferred to pre-Steam-launch checkpoint).
 >
@@ -68,7 +92,7 @@ The `gas` namespace registers a `FMonolithBulkFillRegistry` adapter (`MonolithGA
 |---|---|---|
 | `AttributeInitDataTable` | `UCurveTable` / `UDataTable` set up for `FAttributeMetaData` | `rows:{}` keyed by `[GroupName].[Level]` (per the engine's `FAttributeSetInitterDiscreteLevels` convention at `AttributeSet.h:303-318`), values are per-attribute scalars or `{base, min, max}` objects |
 
-**H5 stub-adapter invariant:** the adapter's `Register()` call runs unconditionally from `FMonolithGASModule::StartupModule` regardless of `WITH_GBA`. The adapter BODY switches on `WITH_GBA` — the dev build wires the real handlers; release builds without GAS return a clean `"GAS optional dep not available (WITH_GBA=0)"` error. This guarantees `monolith_discover("gas")` action surface is identical across dev + release builds.
+**H5 stub-adapter invariant:** when `bEnableGAS=true`, the adapter's `Register()` call runs regardless of `WITH_GBA`. The adapter body switches on `WITH_GBA` — the dev build wires the optional handlers; release builds without GBA return a clean `"GAS optional dep not available (WITH_GBA=0)"` error. This keeps the enabled `gas` discovery surface identical across dev + release builds. The `input` surface does not use this adapter or `WITH_GBA`.
 
 #### `bulk_fill_query("apply", target_namespace="gas", target_asset=..., tree=...)`
 
@@ -106,5 +130,9 @@ Returns:
 ### Files
 
 - `Plugins/Monolith/Source/MonolithGAS/Private/MonolithGASBulkFillAdapter.h` / `.cpp` — the adapter
-- `Plugins/Monolith/Source/MonolithGAS/Private/MonolithGASModule.cpp` — `Register()` + `Unregister()` call sites
+- `Plugins/Monolith/Source/MonolithGAS/Public/MonolithGASInputAssetActions.h` — Enhanced Input handler surface
+- `Plugins/Monolith/Source/MonolithGAS/Private/MonolithGASInputAssetActions.cpp` — 10 `input` action schemas and handlers
+- `Plugins/Monolith/Source/MonolithGAS/Private/Tests/MonolithGASInputAssetActionsTests.cpp` — registration, guard, allocation-free dry-run, strict type/path handling, creation Undo/Redo, lifecycle/clone, and no-op automation
+- `Plugins/Monolith/Source/MonolithGAS/Private/MonolithGASModule.cpp` — namespace registration and shutdown
+- `Plugins/Monolith/Skills/unreal-input/SKILL.md` — schema-first Enhanced Input workflow
 
