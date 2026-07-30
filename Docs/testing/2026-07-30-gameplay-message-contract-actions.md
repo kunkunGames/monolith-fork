@@ -108,7 +108,7 @@ Each engine root was resolved from the corresponding host project's
 independent physical plugin copies so UHT records, import libraries, and DLLs
 cannot cross-contaminate engine versions.
 
-The final worktree, UE 5.7 host, and UE 5.8 host matched for all 14 build inputs
+The final worktree, UE 5.7 host, and UE 5.8 host matched for all 16 build inputs
 (the descriptor plus every module/source/test file). Representative final
 SHA-256 values:
 
@@ -123,16 +123,25 @@ MonolithGameplayMessageCommon.cpp
 D57719FF6B7A16A8049CAD38216BDFFC3326DDCECF114FB2FF9B4E994E977AC3
 
 MonolithGameplayMessageTrace.cpp
-195A824F8630789C3B801228684E11912480F67CF50643CDD8C2D4DE9BB8B6A5
+8375F934185C2AB5762913312FD29EC1AF4C964836D25B033FBE7020B9B303AC
 
 MonolithGameplayMessageParamGuardTests.cpp
 408EA679C511A58E1B552505E72BE1EFCA08E96DA7523FA802F38773D8E39B39
 
 MonolithGameplayMessageTraceTests.cpp
-C8DA563D47A00945A8C9012879E954466BB6894E8BFC10DC38EBC2839B46FF9C
+36BF6565E19862F0D6C9AD0B34FB4FDA9B97676F54A58A5859BC208CB60BE3E9
 
 MonolithGameplayMessageValidationTests.cpp
 2039A3A5847BA6E85AB901E1839F6F1F2852A10BA5C3CA004E1C317A95CD3759
+
+AA_DeterministicFirst.inl
+511C10DDA130D58E9DA83204B5157A034B94AD03D20B6F96061A764AF820A3B5
+
+GameplayMessageTraceFixture.inl
+A3A80191684861627A57253A1E7974E3C5DEE724CB0F9ADED8C5C82382FD2374
+
+ZZ_DeterministicLast.inl
+944E8ABE4E6C080B99E1DA915616875B82F35C643640596AC79987C41D662562
 ```
 
 ---
@@ -142,11 +151,11 @@ MonolithGameplayMessageValidationTests.cpp
 | Engine | Gate | Result | Evidence |
 |---|---|---|---|
 | UE 5.7 | Physically isolated full editor-target build | PASS — 452/452 actions explicitly compiled all four implementation files and four test files, then linked `UnrealEditor-MonolithGameplayMessage.dll`. | `D:\P4\MonolithGameplayMessageUE57Host\Build-UE57-Initial-20260730.log` |
-| UE 5.7 | Final AI-review rebuild | PASS — 9/9 actions recompiled every changed implementation/test translation unit and freshly linked the affected DLL with `Result: Succeeded`. | `D:\P4\MonolithGameplayMessageUE57Host\Build-UE57-GameplayMessage-ReviewAccepted-AllInputs-20260730.log` |
-| UE 5.7 | Final affected DLL | PASS — 318,464 bytes, SHA-256 `7632FEE066792335C62525836C797033BB4DCF7179AEAC4E6647EB65EFE3E7ED`. | `D:\P4\MonolithGameplayMessageUE57Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithGameplayMessage.dll` |
+| UE 5.7 | Final source-trace review build | PASS — exact 16-input source identity, `-NoEngineChanges`, 411/411 actions, all eight GameplayMessage implementation/test translation units compiled, two affected library/DLL link actions, and `Result: Succeeded`. | `D:\P4\MonolithGameplayMessageUE57Host\Build-UE57-GameplayMessage-FinalReview-20260731.log` |
+| UE 5.7 | Final affected DLL | PASS — 344,064 bytes, SHA-256 `D80493DC2FBB6A23FCB3E91B03C11F372C44C412484C0D9A0ACEF40F228B89E9`. | `D:\P4\MonolithGameplayMessageUE57Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithGameplayMessage.dll` |
 | UE 5.8 | Physically isolated full editor-target build | PASS — 452/452 actions explicitly compiled all four implementation files and four test files, then linked the affected DLL with `Result: Succeeded`. | `D:\P4\MonolithGameplayMessageUE58Host\Build-UE58-GameplayMessage-20260730-050838.log` |
-| UE 5.8 | Final AI-review rebuild | PASS — 9/9 actions recompiled every changed implementation/test translation unit and freshly linked the affected DLL with `Result: Succeeded`. | `D:\P4\MonolithGameplayMessageUE58Host\Build-UE58-GameplayMessage-ReviewAccepted-AllInputs-20260730.log` |
-| UE 5.8 | Final affected DLL | PASS — 296,960 bytes, SHA-256 `F249545FB33407CBB24DEC957477B3C824FEA47F6B44888C7BE6888C7DCF4D7E`. | `D:\P4\MonolithGameplayMessageUE58Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithGameplayMessage.dll` |
+| UE 5.8 | Final source-trace review build | PASS — exact 16-input source identity, `-NoEngineChanges`, 411/411 actions, all eight GameplayMessage implementation/test translation units compiled, two affected library/DLL link actions, and `Result: Succeeded`. | `D:\P4\MonolithGameplayMessageUE58Host\Build-UE58-GameplayMessage-FinalReview-20260731.log` |
+| UE 5.8 | Final affected DLL | PASS — 323,072 bytes, SHA-256 `ECB0598FF865FFB582B2B29D44E6BFB0950CB5CCF80546B56DE9E712388D7D18`. | `D:\P4\MonolithGameplayMessageUE58Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithGameplayMessage.dll` |
 
 The UE 5.8 full build emitted deprecation warnings from pre-existing modules.
 The new GameplayMessage module emitted no compiler warning or error.
@@ -164,8 +173,8 @@ Both engines ran one fresh process with:
 
 | Engine | Started | Succeeded | Failed | Queue-empty marker | TestExit marker | Accepted log |
 |---|---:|---:|---:|---:|---:|---|
-| UE 5.7 | 4 | 4 | 0 | present | present | `D:\P4\MonolithGameplayMessageUE57Host\GameplayMessage-UE57-ReviewAccepted-Console-20260730.log` |
-| UE 5.8 | 4 | 4 | 0 | present | present | `D:\P4\MonolithGameplayMessageUE58Host\GameplayMessage-UE58-ReviewAccepted-Console-20260730.log` |
+| UE 5.7 | 4 | 4 | 0 | present | present | `D:\P4\MonolithGameplayMessageUE57Host\GameplayMessage-UE57-FinalReview-Console-20260731.log` |
+| UE 5.8 | 4 | 4 | 0 | present | present | `D:\P4\MonolithGameplayMessageUE58Host\GameplayMessage-UE58-FinalReview-Console-20260731.log` |
 
 The four tests are:
 
@@ -184,7 +193,8 @@ The first UE 5.7 automation run correctly exposed three contract defects:
 The root fix checks exact `EJson` types, uses explicit case-sensitive string
 comparison, and adds canonical no-whitespace/no-empty-segment tag validation.
 The final suites additionally cover every review remediation listed in
-Section 3.1. Both accepted commands omit a queued `Quit` command and let
+Section 3.1, including deterministic path selection and exact selected-versus-
+scanned counters. Both accepted commands omit a queued `Quit` command and let
 `-TestExit="Automation Test Queue Empty"` own termination. Acceptance requires
 all four named success markers, zero failure markers, the `4 tests performed`
 queue-empty marker, and the final `TestExit` marker; process exit code alone is
@@ -247,6 +257,6 @@ PASS. The fork gains exactly five bounded, read-only GameplayMessageRouter
 contract diagnostics through an isolated module. The same source compiles and
 links on UE 5.7 and UE 5.8, passes 4/4 focused tests on each engine under the
 non-racy `TestExit` termination contract with complete log markers, and closes
-all ten AI-review findings with executable regressions. The generated catalog
+every reproduced review finding with executable regressions. The generated catalog
 changes only by the intended five actions, introduces no new static finding,
 and adds none of the excluded feature classes.
