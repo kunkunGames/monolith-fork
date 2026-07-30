@@ -2,6 +2,7 @@
 
 #include "MonolithGASInternal.h"
 #include "MonolithParamSchema.h"
+#include "MonolithParamUtils.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Dom/JsonObject.h"
@@ -13,6 +14,7 @@
 #include "InputModifiers.h"
 #include "InputTriggers.h"
 #include "Misc/PackageName.h"
+#include "PlayerMappableKeySettings.h"
 #include "ScopedTransaction.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
@@ -95,6 +97,21 @@ namespace
 		default:
 			return TEXT("Untracked");
 		}
+	}
+
+	bool ParseTrackingMode(const FString& Input, EMappingContextRegistrationTrackingMode& OutMode)
+	{
+		if (Input.Equals(TEXT("Untracked"), ESearchCase::IgnoreCase))
+		{
+			OutMode = EMappingContextRegistrationTrackingMode::Untracked;
+			return true;
+		}
+		if (Input.Equals(TEXT("CountRegistrations"), ESearchCase::IgnoreCase))
+		{
+			OutMode = EMappingContextRegistrationTrackingMode::CountRegistrations;
+			return true;
+		}
+		return false;
 	}
 
 	FString NormalizeObjectPath(const FString& Path)
@@ -346,6 +363,218 @@ namespace
 			&& AreInstancedObjectArraysEquivalent(A.Triggers, B.Triggers);
 	}
 
+	struct FMonolithGASInputExactDuplicateGroup
+	{
+		FString ActionPath;
+		FString KeyName;
+		TArray<int32> Indices;
+	};
+
+	TArray<FMonolithGASInputExactDuplicateGroup> FindMonolithGASInputExactDuplicateGroups(
+		const TArray<FEnhancedActionKeyMapping>& Mappings)
+	{
+		TArray<FMonolithGASInputExactDuplicateGroup> Groups;
+		TArray<bool> bConsumed;
+		bConsumed.Init(false, Mappings.Num());
+
+		for (int32 Index = 0; Index < Mappings.Num(); ++Index)
+		{
+			if (bConsumed[Index])
+			{
+				continue;
+			}
+
+			const FEnhancedActionKeyMapping& Mapping = Mappings[Index];
+			if (!Mapping.Action || !Mapping.Key.IsValid())
+			{
+				continue;
+			}
+
+			FMonolithGASInputExactDuplicateGroup Group;
+			Group.ActionPath = Mapping.Action->GetPathName();
+			Group.KeyName = Mapping.Key.ToString();
+			Group.Indices.Add(Index);
+			bConsumed[Index] = true;
+
+			for (int32 CandidateIndex = Index + 1; CandidateIndex < Mappings.Num(); ++CandidateIndex)
+			{
+				if (bConsumed[CandidateIndex])
+				{
+					continue;
+				}
+
+				const FEnhancedActionKeyMapping& Candidate = Mappings[CandidateIndex];
+				if (Candidate.Action
+					&& Candidate.Key.IsValid()
+					&& AreMappingsEquivalentForAuthoring(Mapping, Candidate))
+				{
+					Group.Indices.Add(CandidateIndex);
+					bConsumed[CandidateIndex] = true;
+				}
+			}
+
+			if (Group.Indices.Num() > 1)
+			{
+				Groups.Add(MoveTemp(Group));
+			}
+		}
+
+		return Groups;
+	}
+
+	struct FMonolithGASInputSharedKeyGroup
+	{
+		TArray<FString> ActionPaths;
+		TArray<int32> Indices;
+	};
+
+	bool ResolvePlayerMappableProperties(
+		FProperty*& OutBehaviorProperty,
+		FObjectPropertyBase*& OutSettingsProperty,
+		FString& OutError)
+	{
+		UScriptStruct* MappingStruct = FEnhancedActionKeyMapping::StaticStruct();
+		OutBehaviorProperty = MappingStruct
+			? MappingStruct->FindPropertyByName(TEXT("SettingBehavior"))
+			: nullptr;
+		OutSettingsProperty = MappingStruct
+			? CastField<FObjectPropertyBase>(MappingStruct->FindPropertyByName(TEXT("PlayerMappableKeySettings")))
+			: nullptr;
+
+		if ((!CastField<FEnumProperty>(OutBehaviorProperty) && !CastField<FByteProperty>(OutBehaviorProperty))
+			|| !OutSettingsProperty)
+		{
+			OutError = TEXT(
+				"UE Enhanced Input FEnhancedActionKeyMapping player-mappable property layout is unsupported; "
+				"expected SettingBehavior enum and PlayerMappableKeySettings object properties.");
+			return false;
+		}
+		return true;
+	}
+
+	bool ReadPlayerMappableBehavior(
+		const FEnhancedActionKeyMapping& Mapping,
+		EPlayerMappableKeySettingBehaviors& OutBehavior,
+		FString& OutError)
+	{
+		FProperty* BehaviorProperty = nullptr;
+		FObjectPropertyBase* SettingsProperty = nullptr;
+		if (!ResolvePlayerMappableProperties(BehaviorProperty, SettingsProperty, OutError))
+		{
+			return false;
+		}
+
+		if (const FEnumProperty* EnumProperty = CastField<FEnumProperty>(BehaviorProperty))
+		{
+			const void* ValuePtr = EnumProperty->ContainerPtrToValuePtr<const void>(&Mapping);
+			OutBehavior = static_cast<EPlayerMappableKeySettingBehaviors>(
+				EnumProperty->GetUnderlyingProperty()->GetSignedIntPropertyValue(ValuePtr));
+			return true;
+		}
+
+		const FByteProperty* ByteProperty = CastFieldChecked<FByteProperty>(BehaviorProperty);
+		OutBehavior = static_cast<EPlayerMappableKeySettingBehaviors>(
+			ByteProperty->GetPropertyValue_InContainer(&Mapping));
+		return true;
+	}
+
+	bool WritePlayerMappableBehavior(
+		FEnhancedActionKeyMapping& Mapping,
+		EPlayerMappableKeySettingBehaviors Behavior,
+		UPlayerMappableKeySettings* Settings,
+		FString& OutError)
+	{
+		FProperty* BehaviorProperty = nullptr;
+		FObjectPropertyBase* SettingsProperty = nullptr;
+		if (!ResolvePlayerMappableProperties(BehaviorProperty, SettingsProperty, OutError))
+		{
+			return false;
+		}
+
+		if (FEnumProperty* EnumProperty = CastField<FEnumProperty>(BehaviorProperty))
+		{
+			void* ValuePtr = EnumProperty->ContainerPtrToValuePtr<void>(&Mapping);
+			EnumProperty->GetUnderlyingProperty()->SetIntPropertyValue(
+				ValuePtr,
+				static_cast<int64>(Behavior));
+		}
+		else
+		{
+			CastFieldChecked<FByteProperty>(BehaviorProperty)->SetPropertyValue_InContainer(
+				&Mapping,
+				static_cast<uint8>(Behavior));
+		}
+		SettingsProperty->SetObjectPropertyValue_InContainer(&Mapping, Settings);
+		return true;
+	}
+
+	bool IsPlayerMappableStateEquivalent(
+		const FEnhancedActionKeyMapping& Mapping,
+		bool bPlayerMappable,
+		const FString& MappingName,
+		const FString& DisplayName,
+		const FString& DisplayCategory,
+		const TArray<FString>& SupportedKeyProfileIds,
+		bool& bOutEquivalent,
+		FString& OutError)
+	{
+		EPlayerMappableKeySettingBehaviors Behavior;
+		if (!ReadPlayerMappableBehavior(Mapping, Behavior, OutError))
+		{
+			return false;
+		}
+
+		if (!bPlayerMappable)
+		{
+			bOutEquivalent = Behavior == EPlayerMappableKeySettingBehaviors::IgnoreSettings;
+			return true;
+		}
+
+		const UPlayerMappableKeySettings* Settings = Mapping.GetPlayerMappableKeySettings();
+		bOutEquivalent =
+			Behavior == EPlayerMappableKeySettingBehaviors::OverrideSettings
+			&& Settings
+			&& Settings->Name == FName(*MappingName)
+			&& Settings->DisplayName.EqualTo(FText::FromString(DisplayName))
+			&& Settings->DisplayCategory.EqualTo(FText::FromString(DisplayCategory))
+			&& Settings->SupportedKeyProfileIds == SupportedKeyProfileIds;
+		return true;
+	}
+
+	bool ConfigurePlayerMappableState(
+		FEnhancedActionKeyMapping& Mapping,
+		UObject* Outer,
+		bool bPlayerMappable,
+		const FString& MappingName,
+		const FString& DisplayName,
+		const FString& DisplayCategory,
+		const TArray<FString>& SupportedKeyProfileIds,
+		FString& OutError)
+	{
+		UPlayerMappableKeySettings* Settings = nullptr;
+		EPlayerMappableKeySettingBehaviors Behavior = EPlayerMappableKeySettingBehaviors::IgnoreSettings;
+		if (bPlayerMappable)
+		{
+			Settings = NewObject<UPlayerMappableKeySettings>(
+				Outer,
+				UPlayerMappableKeySettings::StaticClass(),
+				NAME_None,
+				RF_Transactional);
+			if (!Settings)
+			{
+				OutError = TEXT("Failed to create UPlayerMappableKeySettings for the input mapping.");
+				return false;
+			}
+			Settings->Name = FName(*MappingName);
+			Settings->DisplayName = FText::FromString(DisplayName);
+			Settings->DisplayCategory = FText::FromString(DisplayCategory);
+			Settings->SupportedKeyProfileIds = SupportedKeyProfileIds;
+			Behavior = EPlayerMappableKeySettingBehaviors::OverrideSettings;
+		}
+
+		return WritePlayerMappableBehavior(Mapping, Behavior, Settings, OutError);
+	}
+
 	template <typename AssetType>
 	AssetType* FindExistingInputAssetForCreate(const FString& ObjectPath, const TCHAR* ExpectedTypeName, FString& OutError)
 	{
@@ -591,17 +820,18 @@ void FMonolithGASInputAssetActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Build());
 
 	Registry.RegisterAction(TEXT("input"), TEXT("create_input_mapping_context"),
-		TEXT("Create or update a UInputMappingContext asset"),
+		TEXT("Create or update a UInputMappingContext asset and its registration ownership policy"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateInputMappingContext),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Package path, e.g. /Game/Input/IMC_Default"))
 			.Optional(TEXT("description"), TEXT("string"), TEXT("Localized description text"))
+			.Optional(TEXT("registration_tracking_mode"), TEXT("string"), TEXT("Untracked or CountRegistrations"))
 			.Optional(TEXT("overwrite"), TEXT("boolean"), TEXT("Allow updating an existing context"), TEXT("false"))
 			.Optional(TEXT("save"), TEXT("boolean"), TEXT("Save package immediately"), TEXT("true"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("input"), TEXT("add_input_mapping"),
-		TEXT("Add or update a key mapping on an Input Mapping Context. Idempotently reuses an existing action+key mapping unless allow_duplicate=true, and can clone modifiers/triggers from another mapping or instantiate explicit modifier/trigger classes."),
+		TEXT("Add or update a key mapping on an Input Mapping Context. Idempotently reuses an existing action+key mapping unless allow_duplicate=true, can clone modifiers/triggers, and can author per-row Enhanced Input player-mappable metadata."),
 		FMonolithActionHandler::CreateStatic(&HandleAddInputMapping),
 		FParamSchemaBuilder()
 			.Required(TEXT("context_path"), TEXT("string"), TEXT("InputMappingContext asset path"))
@@ -612,6 +842,11 @@ void FMonolithGASInputAssetActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Optional(TEXT("source_key"), TEXT("string"), TEXT("Source FKey for the mapping to clone"))
 			.Optional(TEXT("modifier_classes"), TEXT("array"), TEXT("Optional UInputModifier class paths. If present, replaces cloned/existing modifiers; empty array clears modifiers."))
 			.Optional(TEXT("trigger_classes"), TEXT("array"), TEXT("Optional UInputTrigger class paths. If present, replaces cloned/existing triggers; empty array clears triggers."))
+			.Optional(TEXT("player_mappable"), TEXT("boolean"), TEXT("When true, author per-mapping override metadata; when false, explicitly opt this row out. Omit to preserve existing behavior."))
+			.Optional(TEXT("mapping_name"), TEXT("string"), TEXT("Stable save/remap row name; required when player_mappable=true"))
+			.Optional(TEXT("display_name"), TEXT("string"), TEXT("Localized settings-screen row label; required when player_mappable=true"))
+			.Optional(TEXT("display_category"), TEXT("string"), TEXT("Localized settings-screen category; required when player_mappable=true"))
+			.Optional(TEXT("supported_key_profile_ids"), TEXT("array"), TEXT("Optional array of Enhanced Input key profile IDs for this row"))
 			.Optional(TEXT("allow_duplicate"), TEXT("boolean"), TEXT("Always add a new mapping instead of updating an existing action+key mapping"), TEXT("false"))
 			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Preview the edit without modifying the asset"), TEXT("false"))
 			.Optional(TEXT("save"), TEXT("boolean"), TEXT("Save package immediately"), TEXT("true"))
@@ -628,11 +863,12 @@ void FMonolithGASInputAssetActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Build());
 
 	Registry.RegisterAction(TEXT("input"), TEXT("validate_input_mappings"),
-		TEXT("Validate Enhanced Input Mapping Contexts for missing actions and duplicate key conflicts"),
+		TEXT("Validate Enhanced Input Mapping Contexts for missing actions and exact duplicate mappings; report legal shared keys and unbound rows separately"),
 		FMonolithActionHandler::CreateStatic(&HandleValidateInputMappings),
 		FParamSchemaBuilder()
 			.Optional(TEXT("context_paths"), TEXT("array"), TEXT("Specific InputMappingContext paths; omitted means all contexts"))
 			.Optional(TEXT("path"), TEXT("string"), TEXT("Optional package path root when context_paths is omitted"))
+			.Optional(TEXT("fail_on_unbound"), TEXT("boolean"), TEXT("Treat EKeys::Invalid/None rows as validation errors instead of informational unbound mappings"), TEXT("false"))
 			.Build());
 
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("input"), TEXT("create_input_action"),
@@ -640,17 +876,17 @@ void FMonolithGASInputAssetActions::RegisterActions(FMonolithToolRegistry& Regis
 		{ TEXT("new_input_action"), TEXT("make_ia"), TEXT("add_input_action") },
 		{ TEXT("create an Input Action asset IA_Jump"), TEXT("make a 2D axis input action for movement") });
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("input"), TEXT("create_input_mapping_context"),
-		{ TEXT("enhanced input"), TEXT("IMC asset"), TEXT("mapping context"), TEXT("input context"), TEXT("default mapping") },
+		{ TEXT("enhanced input"), TEXT("IMC asset"), TEXT("mapping context"), TEXT("input context"), TEXT("default mapping"), TEXT("registration tracking"), TEXT("CountRegistrations"), TEXT("shared ownership") },
 		{ TEXT("new_input_mapping_context"), TEXT("make_imc"), TEXT("create_imc") },
-		{ TEXT("create an Input Mapping Context IMC_Default"), TEXT("make a new IMC for the player") });
+		{ TEXT("create an Input Mapping Context IMC_Default"), TEXT("make a new IMC for the player"), TEXT("set an IMC to CountRegistrations for shared ownership") });
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("input"), TEXT("add_input_mapping"),
 		{ TEXT("bind key"), TEXT("key mapping"), TEXT("map key to action"), TEXT("FKey"), TEXT("spacebar gamepad"), TEXT("keybind"), TEXT("modifiers"), TEXT("triggers"), TEXT("clone input mapping") },
 		{ TEXT("map_key"), TEXT("bind_key"), TEXT("add_key_mapping"), TEXT("add_keybinding"), TEXT("clone_key_mapping") },
 		{ TEXT("bind SpaceBar to IA_Jump in IMC_Default"), TEXT("clone modifiers and triggers from an existing input mapping") });
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("input"), TEXT("validate_input_mappings"),
-		{ TEXT("duplicate key"), TEXT("key conflict"), TEXT("missing action"), TEXT("unbound"), TEXT("lint input"), TEXT("check bindings") },
-		{ TEXT("check_input_mappings"), TEXT("lint_input"), TEXT("find_key_conflicts") },
-		{ TEXT("find duplicate key bindings across mapping contexts"), TEXT("check input mappings for missing actions") });
+		{ TEXT("duplicate mapping"), TEXT("exact duplicate"), TEXT("shared key"), TEXT("missing action"), TEXT("unbound"), TEXT("lint input"), TEXT("check bindings") },
+		{ TEXT("check_input_mappings"), TEXT("lint_input"), TEXT("find_mapping_conflicts") },
+		{ TEXT("find exact duplicate input mappings"), TEXT("report shared keys without treating them as conflicts"), TEXT("check input mappings for missing actions and unbound rows") });
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("input"), TEXT("get_input_action"),
 		{ TEXT("inspect IA"), TEXT("value type"), TEXT("triggers modifiers"), TEXT("action properties"), TEXT("read input action") },
 		{ TEXT("describe_input_action"), TEXT("show_ia"), TEXT("read_input_action") },
@@ -1076,6 +1312,40 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputMappingCon
 		return FMonolithActionResult::Error(TEXT("Invalid parameter: description must be a string"));
 	}
 
+	FString TrackingModeText;
+	const bool bHasTrackingMode = Params.IsValid() && Params->HasField(TEXT("registration_tracking_mode"));
+	if (bHasTrackingMode &&
+		!MonolithGAS::TryReadOptionalStringParam(
+			Params,
+			TEXT("registration_tracking_mode"),
+			TrackingModeText,
+			Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	EMappingContextRegistrationTrackingMode TrackingMode =
+		EMappingContextRegistrationTrackingMode::Untracked;
+	FEnumProperty* TrackingModeProperty = nullptr;
+	if (bHasTrackingMode)
+	{
+		if (!ParseTrackingMode(TrackingModeText, TrackingMode))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(
+					TEXT("Invalid registration_tracking_mode '%s'; expected Untracked or CountRegistrations"),
+					*TrackingModeText));
+		}
+		TrackingModeProperty = FindFProperty<FEnumProperty>(
+			UInputMappingContext::StaticClass(),
+			TEXT("RegistrationTrackingMode"));
+		if (!TrackingModeProperty)
+		{
+			return FMonolithActionResult::Error(
+				TEXT("UInputMappingContext.RegistrationTrackingMode reflection property was not found"));
+		}
+	}
+
 	bool bCreated = false;
 	if (!Context)
 	{
@@ -1107,6 +1377,13 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputMappingCon
 	{
 		Context->ContextDescription = FText::FromString(Description);
 	}
+	if (TrackingModeProperty)
+	{
+		void* TrackingModeValue = TrackingModeProperty->ContainerPtrToValuePtr<void>(Context);
+		TrackingModeProperty->GetUnderlyingProperty()->SetIntPropertyValue(
+			TrackingModeValue,
+			static_cast<int64>(TrackingMode));
+	}
 
 	bool bSaved = false;
 	if (!SaveAssetIfRequested(Context, bSave, bSaved, Error))
@@ -1132,13 +1409,74 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 	bool bSave = true;
 	bool bAllowDuplicate = false;
 	bool bDryRun = false;
+	bool bPlayerMappable = false;
 
 	FString Error;
 	if (!MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("save"), bSave, Error)
 		|| !MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("allow_duplicate"), bAllowDuplicate, Error)
-		|| !MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("dry_run"), bDryRun, Error))
+		|| !MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("dry_run"), bDryRun, Error)
+		|| !MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("player_mappable"), bPlayerMappable, Error))
 	{
 		return FMonolithActionResult::Error(Error);
+	}
+
+	const bool bHasPlayerMappable = Params.IsValid() && Params->HasField(TEXT("player_mappable"));
+	const bool bHasPlayerMappableMetadata = Params.IsValid()
+		&& (Params->HasField(TEXT("mapping_name"))
+			|| Params->HasField(TEXT("display_name"))
+			|| Params->HasField(TEXT("display_category"))
+			|| Params->HasField(TEXT("supported_key_profile_ids")));
+
+	FString MappingName;
+	FString DisplayName;
+	FString DisplayCategory;
+	TArray<FString> SupportedKeyProfileIds;
+	if (bHasPlayerMappable && bPlayerMappable)
+	{
+		if (!MonolithGAS::RequireStringParam(Params, TEXT("mapping_name"), MappingName, Err)) return Err;
+		if (!MonolithGAS::RequireStringParam(Params, TEXT("display_name"), DisplayName, Err)) return Err;
+		if (!MonolithGAS::RequireStringParam(Params, TEXT("display_category"), DisplayCategory, Err)) return Err;
+		if (FName(*MappingName).IsNone())
+		{
+			return FMonolithActionResult::Error(
+				TEXT("Invalid parameter: mapping_name must resolve to a non-None FName"));
+		}
+		if (!MonolithParamUtils::GetOptionalStringArrayParam(
+			Params,
+			TEXT("supported_key_profile_ids"),
+			SupportedKeyProfileIds,
+			Error))
+		{
+			return FMonolithActionResult::Error(Error);
+		}
+
+		TArray<FString> NormalizedProfileIds;
+		for (FString ProfileId : SupportedKeyProfileIds)
+		{
+			ProfileId.TrimStartAndEndInline();
+			if (ProfileId.IsEmpty())
+			{
+				return FMonolithActionResult::Error(
+					TEXT("Invalid parameter: supported_key_profile_ids entries must be non-empty strings"));
+			}
+			NormalizedProfileIds.AddUnique(ProfileId);
+		}
+		SupportedKeyProfileIds = MoveTemp(NormalizedProfileIds);
+	}
+	else if (bHasPlayerMappableMetadata)
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Player-mappable metadata is valid only when player_mappable=true."));
+	}
+
+	if (bHasPlayerMappable)
+	{
+		FProperty* BehaviorProperty = nullptr;
+		FObjectPropertyBase* SettingsProperty = nullptr;
+		if (!ResolvePlayerMappableProperties(BehaviorProperty, SettingsProperty, Error))
+		{
+			return FMonolithActionResult::Error(Error);
+		}
 	}
 
 	TArray<UClass*> ModifierClasses;
@@ -1250,11 +1588,30 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 
 	bool bCreated = ExistingIndex == INDEX_NONE;
 	bool bUpdated = false;
+	bool bPlayerMappableUpdated = false;
 	int32 MappingIndex = ExistingIndex;
 	if (ExistingIndex != INDEX_NONE)
 	{
 		const FEnhancedActionKeyMapping& ExistingMapping = Context->GetMappings()[ExistingIndex];
 		bUpdated = !AreMappingsEquivalentForAuthoring(ExistingMapping, DesiredMapping);
+		if (bHasPlayerMappable)
+		{
+			bool bEquivalent = false;
+			if (!IsPlayerMappableStateEquivalent(
+				ExistingMapping,
+				bPlayerMappable,
+				MappingName,
+				DisplayName,
+				DisplayCategory,
+				SupportedKeyProfileIds,
+				bEquivalent,
+				Error))
+			{
+				return FMonolithActionResult::Error(Error);
+			}
+			bPlayerMappableUpdated = !bEquivalent;
+			bUpdated |= bPlayerMappableUpdated;
+		}
 	}
 
 	const bool bChanged = bCreated || bUpdated;
@@ -1280,6 +1637,19 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 		{
 			return FMonolithActionResult::Error(Error);
 		}
+		if (bHasPlayerMappable
+			&& !ConfigurePlayerMappableState(
+				TargetMapping,
+				Context,
+				bPlayerMappable,
+				MappingName,
+				DisplayName,
+				DisplayCategory,
+				SupportedKeyProfileIds,
+				Error))
+		{
+			return FMonolithActionResult::Error(Error);
+		}
 	}
 	else if (bCreated && bDryRun)
 	{
@@ -1301,13 +1671,35 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 	Result->SetNumberField(TEXT("mapping_index"), MappingIndex);
 	Result->SetBoolField(TEXT("created"), bCreated);
 	Result->SetBoolField(TEXT("updated"), bUpdated);
+	Result->SetBoolField(TEXT("player_mappable_updated"), bPlayerMappableUpdated);
 	Result->SetBoolField(TEXT("changed"), bChanged);
 	Result->SetBoolField(TEXT("dry_run"), bDryRun);
 	Result->SetBoolField(TEXT("allow_duplicate"), bAllowDuplicate);
 	Result->SetBoolField(TEXT("cloned_from_source"), SourceMapping != nullptr);
+	Result->SetBoolField(TEXT("player_mappable_requested"), bHasPlayerMappable);
+	if (bHasPlayerMappable)
+	{
+		Result->SetBoolField(TEXT("requested_player_mappable"), bPlayerMappable);
+		if (bPlayerMappable)
+		{
+			Result->SetStringField(TEXT("requested_mapping_name"), MappingName);
+			Result->SetStringField(TEXT("requested_display_name"), DisplayName);
+			Result->SetStringField(TEXT("requested_display_category"), DisplayCategory);
+			TArray<TSharedPtr<FJsonValue>> ProfileIdsJson;
+			for (const FString& ProfileId : SupportedKeyProfileIds)
+			{
+				ProfileIdsJson.Add(MakeShared<FJsonValueString>(ProfileId));
+			}
+			Result->SetArrayField(TEXT("requested_supported_key_profile_ids"), ProfileIdsJson);
+		}
+	}
 	Result->SetNumberField(TEXT("modifier_count"), DesiredMapping.Modifiers.Num());
 	Result->SetNumberField(TEXT("trigger_count"), DesiredMapping.Triggers.Num());
 	Result->SetBoolField(TEXT("saved"), bSaved);
+	if (!bDryRun && Context->GetMappings().IsValidIndex(MappingIndex))
+	{
+		Result->SetObjectField(TEXT("mapping"), MappingToJson(Context->GetMappings()[MappingIndex], MappingIndex));
+	}
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -1370,6 +1762,13 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleRemoveInputMapping(co
 
 FMonolithActionResult FMonolithGASInputAssetActions::HandleValidateInputMappings(const TSharedPtr<FJsonObject>& Params)
 {
+	bool bFailOnUnbound = false;
+	FString ParamError;
+	if (!MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("fail_on_unbound"), bFailOnUnbound, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError);
+	}
+
 	TArray<FString> ContextPaths = ReadContextPaths(Params);
 	if (ContextPaths.Num() == 0)
 	{
@@ -1389,6 +1788,8 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleValidateInputMappings
 	int32 ConflictCount = 0;
 	int32 MissingActionCount = 0;
 	int32 ContextLoadFailureCount = 0;
+	int32 SharedKeyGroupCount = 0;
+	int32 UnboundMappingCount = 0;
 
 	for (const FString& ContextPath : ContextPaths)
 	{
@@ -1405,8 +1806,13 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleValidateInputMappings
 			continue;
 		}
 
-		TMap<FString, TArray<FString>> KeyToActions;
+		TMap<FString, FMonolithGASInputSharedKeyGroup> SharedKeyCandidates;
 		TArray<TSharedPtr<FJsonValue>> Issues;
+		TArray<TSharedPtr<FJsonValue>> UnboundMappings;
+		TArray<TSharedPtr<FJsonValue>> SharedKeys;
+		int32 ContextConflictCount = 0;
+		int32 ContextMissingActionCount = 0;
+		int32 ContextUnboundMappingCount = 0;
 		const TArray<FEnhancedActionKeyMapping>& Mappings = Context->GetMappings();
 		for (int32 Index = 0; Index < Mappings.Num(); ++Index)
 		{
@@ -1422,47 +1828,116 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleValidateInputMappings
 				Issue->SetStringField(TEXT("key"), KeyName);
 				Issues.Add(MakeShared<FJsonValueObject>(Issue));
 				MissingActionCount++;
+				ContextMissingActionCount++;
+			}
+
+			if (!Mapping.Key.IsValid())
+			{
+				TSharedPtr<FJsonObject> Unbound = MakeShared<FJsonObject>();
+				Unbound->SetNumberField(TEXT("index"), Index);
+				Unbound->SetStringField(TEXT("action"), ActionPath);
+				Unbound->SetStringField(TEXT("action_name"), Mapping.Action ? Mapping.Action->GetName() : TEXT(""));
+				UnboundMappings.Add(MakeShared<FJsonValueObject>(Unbound));
+				UnboundMappingCount++;
+				ContextUnboundMappingCount++;
+
+				if (bFailOnUnbound)
+				{
+					TSharedPtr<FJsonObject> Issue = MakeShared<FJsonObject>();
+					Issue->SetStringField(TEXT("type"), TEXT("unbound_mapping"));
+					Issue->SetNumberField(TEXT("index"), Index);
+					Issue->SetStringField(TEXT("action"), ActionPath);
+					Issues.Add(MakeShared<FJsonValueObject>(Issue));
+				}
 				continue;
 			}
 
-			TArray<FString>& Actions = KeyToActions.FindOrAdd(KeyName);
-			if (!Actions.Contains(ActionPath))
+			if (!Mapping.Action)
 			{
-				Actions.Add(ActionPath);
+				continue;
 			}
+
+			FMonolithGASInputSharedKeyGroup& Candidate = SharedKeyCandidates.FindOrAdd(KeyName);
+			Candidate.ActionPaths.AddUnique(ActionPath);
+			Candidate.Indices.Add(Index);
 		}
 
-		for (const TPair<FString, TArray<FString>>& Pair : KeyToActions)
+		for (const FMonolithGASInputExactDuplicateGroup& Group : FindMonolithGASInputExactDuplicateGroups(Mappings))
 		{
-			if (Pair.Value.Num() > 1)
+			TSharedPtr<FJsonObject> Issue = MakeShared<FJsonObject>();
+			Issue->SetStringField(TEXT("type"), TEXT("duplicate_mapping_conflict"));
+			Issue->SetStringField(TEXT("action"), Group.ActionPath);
+			Issue->SetStringField(TEXT("key"), Group.KeyName);
+			Issue->SetNumberField(TEXT("mapping_count"), Group.Indices.Num());
+			TArray<TSharedPtr<FJsonValue>> IndicesJson;
+			for (const int32 Index : Group.Indices)
 			{
-				TSharedPtr<FJsonObject> Issue = MakeShared<FJsonObject>();
-				Issue->SetStringField(TEXT("type"), TEXT("duplicate_key_conflict"));
-				Issue->SetStringField(TEXT("key"), Pair.Key);
+				IndicesJson.Add(MakeShared<FJsonValueNumber>(Index));
+			}
+			Issue->SetArrayField(TEXT("indices"), IndicesJson);
+			Issues.Add(MakeShared<FJsonValueObject>(Issue));
+			ConflictCount++;
+			ContextConflictCount++;
+		}
+
+		TArray<FString> SharedKeyNames;
+		SharedKeyCandidates.GetKeys(SharedKeyNames);
+		SharedKeyNames.Sort();
+		for (const FString& SharedKeyName : SharedKeyNames)
+		{
+			FMonolithGASInputSharedKeyGroup& Group = SharedKeyCandidates.FindChecked(SharedKeyName);
+			if (Group.ActionPaths.Num() > 1)
+			{
+				Group.ActionPaths.Sort();
+				Group.Indices.Sort();
+				TSharedPtr<FJsonObject> SharedKey = MakeShared<FJsonObject>();
+				SharedKey->SetStringField(TEXT("key"), SharedKeyName);
+				SharedKey->SetNumberField(TEXT("mapping_count"), Group.Indices.Num());
 				TArray<TSharedPtr<FJsonValue>> ActionsJson;
-				for (const FString& Action : Pair.Value)
+				for (const FString& Action : Group.ActionPaths)
 				{
 					ActionsJson.Add(MakeShared<FJsonValueString>(Action));
 				}
-				Issue->SetArrayField(TEXT("actions"), ActionsJson);
-				Issues.Add(MakeShared<FJsonValueObject>(Issue));
-				ConflictCount++;
+				SharedKey->SetArrayField(TEXT("actions"), ActionsJson);
+				TArray<TSharedPtr<FJsonValue>> IndicesJson;
+				for (const int32 Index : Group.Indices)
+				{
+					IndicesJson.Add(MakeShared<FJsonValueNumber>(Index));
+				}
+				SharedKey->SetArrayField(TEXT("indices"), IndicesJson);
+				SharedKeys.Add(MakeShared<FJsonValueObject>(SharedKey));
+				SharedKeyGroupCount++;
 			}
 		}
 
 		ContextResult->SetBoolField(TEXT("valid"), Issues.Num() == 0);
 		ContextResult->SetStringField(TEXT("asset_path"), Context->GetPathName());
 		ContextResult->SetNumberField(TEXT("mapping_count"), Mappings.Num());
+		ContextResult->SetNumberField(TEXT("conflicts"), ContextConflictCount);
+		ContextResult->SetNumberField(TEXT("missing_actions"), ContextMissingActionCount);
+		ContextResult->SetNumberField(TEXT("shared_key_groups"), SharedKeys.Num());
+		ContextResult->SetNumberField(TEXT("unbound_mappings"), ContextUnboundMappingCount);
 		ContextResult->SetArrayField(TEXT("issues"), Issues);
+		ContextResult->SetArrayField(TEXT("shared_keys"), SharedKeys);
+		ContextResult->SetArrayField(TEXT("unbound_rows"), UnboundMappings);
 		ContextResults.Add(MakeShared<FJsonValueObject>(ContextResult));
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetBoolField(TEXT("valid"), ConflictCount == 0 && MissingActionCount == 0 && ContextLoadFailureCount == 0);
+	Result->SetBoolField(
+		TEXT("valid"),
+		ConflictCount == 0
+			&& MissingActionCount == 0
+			&& ContextLoadFailureCount == 0
+			&& (!bFailOnUnbound || UnboundMappingCount == 0));
 	Result->SetNumberField(TEXT("contexts_checked"), ContextPaths.Num());
 	Result->SetNumberField(TEXT("context_load_failures"), ContextLoadFailureCount);
 	Result->SetNumberField(TEXT("conflicts"), ConflictCount);
+	Result->SetNumberField(TEXT("duplicate_mapping_conflicts"), ConflictCount);
 	Result->SetNumberField(TEXT("missing_actions"), MissingActionCount);
+	Result->SetNumberField(TEXT("shared_key_groups"), SharedKeyGroupCount);
+	Result->SetNumberField(TEXT("unbound_mappings"), UnboundMappingCount);
+	Result->SetBoolField(TEXT("fail_on_unbound"), bFailOnUnbound);
 	Result->SetArrayField(TEXT("contexts"), ContextResults);
 	return FMonolithActionResult::Success(Result);
 }

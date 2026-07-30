@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/PackageName.h"
+#include "Misc/ScopeExit.h"
 
 // JSON / registry
 #include "Dom/JsonObject.h"
@@ -20,6 +21,7 @@
 // Animation
 #include "Animation/WidgetAnimation.h"
 #include "MovieScene.h"
+#include "MovieScenePossessable.h"
 #include "Tracks/MovieSceneFloatTrack.h"
 #include "Sections/MovieSceneFloatSection.h"
 #include "Channels/MovieSceneFloatChannel.h"
@@ -1200,6 +1202,847 @@ bool FMonolithUIAnimationDeltaRegistryContractTest::RunTest(const FString& Param
     }
 
     return bOk;
+}
+
+
+/**
+ * MonolithUI.AnimationBindingRemap.RegistryContract
+ *
+ * Locks the guarded write defaults for resident-target animation binding repair.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithUIAnimationBindingRemapRegistryContractTest,
+    "MonolithUI.AnimationBindingRemap.RegistryContract",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIAnimationBindingRemapRegistryContractTest::RunTest(
+    const FString& Parameters)
+{
+    FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+    if (!Registry.HasAction(TEXT("ui"), TEXT("remap_animation_binding")))
+    {
+        FMonolithUIAnimationActions::RegisterActions(Registry);
+    }
+
+    bool bFoundAction = false;
+    bool bDryRunDefault = false;
+    bool bConfirmDefault = false;
+    bool bCompileDefault = false;
+    bool bReadBackDefault = false;
+    for (const FMonolithActionInfo& ActionInfo :
+         Registry.GetActions(TEXT("ui")))
+    {
+        if (ActionInfo.Action != TEXT("remap_animation_binding"))
+        {
+            continue;
+        }
+
+        bFoundAction = true;
+        if (ActionInfo.ParamSchema.IsValid())
+        {
+            const TSharedPtr<FJsonObject>* DryRun = nullptr;
+            const TSharedPtr<FJsonObject>* Confirm = nullptr;
+            const TSharedPtr<FJsonObject>* Compile = nullptr;
+            const TSharedPtr<FJsonObject>* ReadBack = nullptr;
+            FString DefaultValue;
+
+            bDryRunDefault =
+                ActionInfo.ParamSchema->TryGetObjectField(
+                    TEXT("dry_run"), DryRun)
+                && DryRun && DryRun->IsValid()
+                && (*DryRun)->TryGetStringField(
+                    TEXT("default"), DefaultValue)
+                && DefaultValue == TEXT("true");
+            bConfirmDefault =
+                ActionInfo.ParamSchema->TryGetObjectField(
+                    TEXT("confirm"), Confirm)
+                && Confirm && Confirm->IsValid()
+                && (*Confirm)->TryGetStringField(
+                    TEXT("default"), DefaultValue)
+                && DefaultValue == TEXT("false");
+            bCompileDefault =
+                ActionInfo.ParamSchema->TryGetObjectField(
+                    TEXT("compile"), Compile)
+                && Compile && Compile->IsValid()
+                && (*Compile)->TryGetStringField(
+                    TEXT("default"), DefaultValue)
+                && DefaultValue == TEXT("true");
+            bReadBackDefault =
+                ActionInfo.ParamSchema->TryGetObjectField(
+                    TEXT("read_back"), ReadBack)
+                && ReadBack && ReadBack->IsValid()
+                && (*ReadBack)->TryGetStringField(
+                    TEXT("default"), DefaultValue)
+                && DefaultValue == TEXT("true");
+        }
+        break;
+    }
+
+    bool bOk = true;
+    bOk &= TestTrue(
+        TEXT("ui.remap_animation_binding is registered"),
+        Registry.HasAction(TEXT("ui"), TEXT("remap_animation_binding")));
+    bOk &= TestTrue(
+        TEXT("remap_animation_binding action info found"),
+        bFoundAction);
+    bOk &= TestEqual(
+        TEXT("ui.remap_animation_binding is transaction_optional"),
+        Registry.GetActionExecutionPolicy(
+            TEXT("ui"), TEXT("remap_animation_binding")).PolicyId,
+        FString(TEXT("transaction_optional")));
+    bOk &= TestTrue(TEXT("dry_run defaults true"), bDryRunDefault);
+    bOk &= TestTrue(TEXT("confirm defaults false"), bConfirmDefault);
+    bOk &= TestTrue(TEXT("compile defaults true"), bCompileDefault);
+    bOk &= TestTrue(TEXT("read_back defaults true"), bReadBackDefault);
+    return bOk;
+}
+
+
+/**
+ * MonolithUI.AnimationBindingRemove.RegistryContract
+ *
+ * Locks the guarded destructive defaults for stale animation binding removal.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithUIAnimationBindingRemoveRegistryContractTest,
+    "MonolithUI.AnimationBindingRemove.RegistryContract",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIAnimationBindingRemoveRegistryContractTest::RunTest(
+    const FString& Parameters)
+{
+    FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+    if (!Registry.HasAction(TEXT("ui"), TEXT("remove_animation_binding")))
+    {
+        FMonolithUIAnimationActions::RegisterActions(Registry);
+    }
+
+    bool bFoundAction = false;
+    bool bDryRunDefault = false;
+    bool bConfirmDefault = false;
+    bool bConfirmDeleteDefault = false;
+    bool bRequireWidgetMissingDefault = false;
+    bool bCompileDefault = false;
+    bool bReadBackDefault = false;
+    for (const FMonolithActionInfo& ActionInfo :
+         Registry.GetActions(TEXT("ui")))
+    {
+        if (ActionInfo.Action != TEXT("remove_animation_binding"))
+        {
+            continue;
+        }
+
+        bFoundAction = true;
+        if (ActionInfo.ParamSchema.IsValid())
+        {
+            const TSharedPtr<FJsonObject>* DryRun = nullptr;
+            const TSharedPtr<FJsonObject>* Confirm = nullptr;
+            const TSharedPtr<FJsonObject>* ConfirmDelete = nullptr;
+            const TSharedPtr<FJsonObject>* RequireWidgetMissing = nullptr;
+            const TSharedPtr<FJsonObject>* Compile = nullptr;
+            const TSharedPtr<FJsonObject>* ReadBack = nullptr;
+            FString DefaultValue;
+
+            bDryRunDefault =
+                ActionInfo.ParamSchema->TryGetObjectField(
+                    TEXT("dry_run"), DryRun)
+                && DryRun && DryRun->IsValid()
+                && (*DryRun)->TryGetStringField(
+                    TEXT("default"), DefaultValue)
+                && DefaultValue == TEXT("true");
+            bConfirmDefault =
+                ActionInfo.ParamSchema->TryGetObjectField(
+                    TEXT("confirm"), Confirm)
+                && Confirm && Confirm->IsValid()
+                && (*Confirm)->TryGetStringField(
+                    TEXT("default"), DefaultValue)
+                && DefaultValue == TEXT("false");
+            bConfirmDeleteDefault =
+                ActionInfo.ParamSchema->TryGetObjectField(
+                    TEXT("confirm_delete"), ConfirmDelete)
+                && ConfirmDelete && ConfirmDelete->IsValid()
+                && (*ConfirmDelete)->TryGetStringField(
+                    TEXT("default"), DefaultValue)
+                && DefaultValue == TEXT("false");
+            bRequireWidgetMissingDefault =
+                ActionInfo.ParamSchema->TryGetObjectField(
+                    TEXT("require_widget_missing"), RequireWidgetMissing)
+                && RequireWidgetMissing && RequireWidgetMissing->IsValid()
+                && (*RequireWidgetMissing)->TryGetStringField(
+                    TEXT("default"), DefaultValue)
+                && DefaultValue == TEXT("true");
+            bCompileDefault =
+                ActionInfo.ParamSchema->TryGetObjectField(
+                    TEXT("compile"), Compile)
+                && Compile && Compile->IsValid()
+                && (*Compile)->TryGetStringField(
+                    TEXT("default"), DefaultValue)
+                && DefaultValue == TEXT("true");
+            bReadBackDefault =
+                ActionInfo.ParamSchema->TryGetObjectField(
+                    TEXT("read_back"), ReadBack)
+                && ReadBack && ReadBack->IsValid()
+                && (*ReadBack)->TryGetStringField(
+                    TEXT("default"), DefaultValue)
+                && DefaultValue == TEXT("true");
+        }
+        break;
+    }
+
+    bool bOk = true;
+    bOk &= TestTrue(
+        TEXT("ui.remove_animation_binding is registered"),
+        Registry.HasAction(TEXT("ui"), TEXT("remove_animation_binding")));
+    bOk &= TestTrue(
+        TEXT("remove_animation_binding action info found"),
+        bFoundAction);
+    bOk &= TestEqual(
+        TEXT("ui.remove_animation_binding is transaction_optional"),
+        Registry.GetActionExecutionPolicy(
+            TEXT("ui"), TEXT("remove_animation_binding")).PolicyId,
+        FString(TEXT("transaction_optional")));
+    bOk &= TestTrue(TEXT("dry_run defaults true"), bDryRunDefault);
+    bOk &= TestTrue(TEXT("confirm defaults false"), bConfirmDefault);
+    bOk &= TestTrue(
+        TEXT("confirm_delete defaults false"),
+        bConfirmDeleteDefault);
+    bOk &= TestTrue(
+        TEXT("require_widget_missing defaults true"),
+        bRequireWidgetMissingDefault);
+    bOk &= TestTrue(TEXT("compile defaults true"), bCompileDefault);
+    bOk &= TestTrue(TEXT("read_back defaults true"), bReadBackDefault);
+    return bOk;
+}
+
+
+/**
+ * MonolithUI.AnimationBindingRemap.PreservesBindingAndTracks
+ *
+ * Replaces an animation binding target after the original widget leaves the
+ * WidgetTree, while preserving its GUID, track, section, and keys.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithUIAnimationBindingRemapPreservesBindingAndTracksTest,
+    "MonolithUI.AnimationBindingRemap.PreservesBindingAndTracks",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIAnimationBindingRemapPreservesBindingAndTracksTest::RunTest(
+    const FString& Parameters)
+{
+    using namespace MonolithUI::AnimationCoreTests;
+    using MonolithUI::TestUtils::CreateOrReuseUnsavedTestWidgetBlueprint;
+
+    const FString RemapTestPath =
+        TEXT("/Game/Tests/Monolith/UI/WBP_AnimationBindingRemapTest");
+    FString FixtureError;
+    if (!CreateOrReuseUnsavedTestWidgetBlueprint(
+            RemapTestPath,
+            FName(TEXT("LegacyAnimatedWidget")),
+            nullptr,
+            FixtureError))
+    {
+        AddError(FString::Printf(
+            TEXT("Fixture build failed: %s"),
+            *FixtureError));
+        return false;
+    }
+
+    TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+    CreateParams->SetStringField(TEXT("asset_path"), RemapTestPath);
+    CreateParams->SetStringField(TEXT("animation_name"), TEXT("RemapFade"));
+    CreateParams->SetNumberField(TEXT("duration_sec"), 1.0);
+    CreateParams->SetBoolField(TEXT("compile_once"), true);
+
+    TArray<TSharedPtr<FJsonValue>> Tracks;
+    TSharedPtr<FJsonObject> Track = MakeShared<FJsonObject>();
+    Track->SetStringField(
+        TEXT("widget_name"),
+        TEXT("LegacyAnimatedWidget"));
+    Track->SetStringField(TEXT("property"), TEXT("RenderOpacity"));
+    TArray<TSharedPtr<FJsonValue>> Keys;
+    const TPair<double, double> TimeValues[] = {
+        TPair<double, double>(0.0, 0.0),
+        TPair<double, double>(1.0, 1.0)
+    };
+    for (const TPair<double, double>& TimeValue : TimeValues)
+    {
+        TSharedPtr<FJsonObject> Key = MakeShared<FJsonObject>();
+        Key->SetNumberField(TEXT("time"), TimeValue.Key);
+        Key->SetNumberField(TEXT("value"), TimeValue.Value);
+        Key->SetStringField(TEXT("interp"), TEXT("linear"));
+        Keys.Add(MakeShared<FJsonValueObject>(Key));
+    }
+    Track->SetArrayField(TEXT("keys"), Keys);
+    Tracks.Add(MakeShared<FJsonValueObject>(Track));
+    CreateParams->SetArrayField(TEXT("tracks"), Tracks);
+
+    const FMonolithActionResult CreateResult =
+        FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"), TEXT("create_animation_v2"), CreateParams);
+    TestTrue(TEXT("create_animation_v2 succeeds"), CreateResult.bSuccess);
+    if (!CreateResult.bSuccess)
+    {
+        AddError(FString::Printf(
+            TEXT("create_animation_v2 failed: %s"),
+            *CreateResult.ErrorMessage));
+        return false;
+    }
+
+    UWidgetBlueprint* WBP =
+        LoadObject<UWidgetBlueprint>(nullptr, *RemapTestPath);
+    TestNotNull(TEXT("remap fixture WBP loads"), WBP);
+    if (!WBP || !WBP->WidgetTree)
+    {
+        return false;
+    }
+    ON_SCOPE_EXIT
+    {
+        if (UPackage* FixturePackage = WBP->GetOutermost())
+        {
+            FixturePackage->SetDirtyFlag(false);
+        }
+    };
+
+    UWidgetAnimation* Animation =
+        FindAnimationByReadableName(WBP, TEXT("RemapFade"));
+    TestNotNull(TEXT("RemapFade animation found"), Animation);
+    if (!Animation || !Animation->GetMovieScene()
+        || Animation->AnimationBindings.Num() != 1)
+    {
+        return false;
+    }
+
+    const FGuid OriginalGuid =
+        Animation->AnimationBindings[0].AnimationGuid;
+    UMovieSceneFloatTrack* OriginalTrack =
+        FindFloatTrackByProperty(Animation, FName(TEXT("RenderOpacity")));
+    TestNotNull(TEXT("original RenderOpacity track found"), OriginalTrack);
+    TestEqual(
+        TEXT("original track has two keys"),
+        CountFloatTrackKeys(OriginalTrack),
+        2);
+
+    UPanelWidget* RootPanel =
+        Cast<UPanelWidget>(WBP->WidgetTree->RootWidget);
+    UWidget* LegacyWidget =
+        WBP->WidgetTree->FindWidget(FName(TEXT("LegacyAnimatedWidget")));
+    TestNotNull(TEXT("legacy animated widget exists"), LegacyWidget);
+    TestNotNull(TEXT("fixture root is a panel"), RootPanel);
+    if (!RootPanel || !LegacyWidget)
+    {
+        return false;
+    }
+
+    UWidget* ReplacementWidget =
+        WBP->WidgetTree->ConstructWidget<UWidget>(
+            UImage::StaticClass(),
+            FName(TEXT("ReplacementAnimatedWidget")));
+    TestNotNull(TEXT("replacement animated widget constructed"), ReplacementWidget);
+    if (!ReplacementWidget)
+    {
+        return false;
+    }
+    RootPanel->AddChild(ReplacementWidget);
+    WBP->WidgetVariableNameToGuidMap.Add(
+        ReplacementWidget->GetFName(),
+        FGuid::NewGuid());
+    RootPanel->RemoveChild(LegacyWidget);
+    LegacyWidget->Rename(
+        nullptr,
+        GetTransientPackage(),
+        REN_DoNotDirty
+            | REN_DontCreateRedirectors
+            | REN_AllowPackageLinkerMismatch);
+    WBP->WidgetVariableNameToGuidMap.Remove(
+        FName(TEXT("LegacyAnimatedWidget")));
+
+    auto MakeRemapParams = [&RemapTestPath](
+        const bool bDryRun,
+        const bool bSetConfirm)
+    {
+        TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+        Params->SetStringField(TEXT("asset_path"), RemapTestPath);
+        Params->SetStringField(TEXT("animation_name"), TEXT("RemapFade"));
+        Params->SetStringField(
+            TEXT("from_widget_name"),
+            TEXT("LegacyAnimatedWidget"));
+        Params->SetStringField(
+            TEXT("to_widget_name"),
+            TEXT("ReplacementAnimatedWidget"));
+        Params->SetBoolField(TEXT("dry_run"), bDryRun);
+        if (bSetConfirm)
+        {
+            Params->SetBoolField(TEXT("confirm"), true);
+        }
+        Params->SetBoolField(TEXT("compile"), true);
+        Params->SetBoolField(TEXT("read_back"), true);
+        return Params;
+    };
+
+    const FMonolithActionResult DryRun =
+        FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"),
+            TEXT("remap_animation_binding"),
+            MakeRemapParams(true, false));
+    TestTrue(TEXT("binding remap dry-run succeeds"), DryRun.bSuccess);
+    TestEqual(
+        TEXT("dry-run preserves old widget name"),
+        Animation->AnimationBindings[0].WidgetName,
+        FName(TEXT("LegacyAnimatedWidget")));
+
+    const FMonolithActionResult MissingConfirm =
+        FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"),
+            TEXT("remap_animation_binding"),
+            MakeRemapParams(false, false));
+    TestFalse(
+        TEXT("binding remap write without confirm fails"),
+        MissingConfirm.bSuccess);
+
+    const FMonolithActionResult Apply =
+        FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"),
+            TEXT("remap_animation_binding"),
+            MakeRemapParams(false, true));
+    TestTrue(TEXT("binding remap apply succeeds"), Apply.bSuccess);
+    if (!Apply.bSuccess || !Apply.Result.IsValid())
+    {
+        AddError(FString::Printf(
+            TEXT("binding remap failed: %s"),
+            *Apply.ErrorMessage));
+        return false;
+    }
+
+    bool bMutated = false;
+    TestTrue(
+        TEXT("binding remap result has mutated"),
+        Apply.Result->TryGetBoolField(TEXT("mutated"), bMutated));
+    TestTrue(TEXT("binding remap mutated"), bMutated);
+    TestEqual(
+        TEXT("binding target name replaced"),
+        Animation->AnimationBindings[0].WidgetName,
+        FName(TEXT("ReplacementAnimatedWidget")));
+    TestEqual(
+        TEXT("binding GUID preserved"),
+        Animation->AnimationBindings[0].AnimationGuid,
+        OriginalGuid);
+
+    FMovieScenePossessable* Possessable =
+        Animation->GetMovieScene()->FindPossessable(OriginalGuid);
+    TestNotNull(TEXT("possessable remains resident"), Possessable);
+    if (Possessable)
+    {
+        TestEqual(
+            TEXT("possessable name follows replacement widget"),
+            Possessable->GetName(),
+            FString(TEXT("ReplacementAnimatedWidget")));
+    }
+    TestTrue(
+        TEXT("compiled remapped WBP has no error status"),
+        WBP->Status != BS_Error);
+
+    UMovieSceneFloatTrack* RemappedTrack =
+        FindFloatTrackByProperty(Animation, FName(TEXT("RenderOpacity")));
+    TestTrue(
+        TEXT("track UObject identity preserved"),
+        RemappedTrack == OriginalTrack);
+    TestEqual(
+        TEXT("remapped track keeps two keys"),
+        CountFloatTrackKeys(RemappedTrack),
+        2);
+
+    const FMonolithActionResult IdempotentApply =
+        FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"),
+            TEXT("remap_animation_binding"),
+            MakeRemapParams(false, true));
+    TestTrue(
+        TEXT("already-remapped write is idempotent"),
+        IdempotentApply.bSuccess);
+    if (IdempotentApply.bSuccess && IdempotentApply.Result.IsValid())
+    {
+        bool bAlreadyRemapped = false;
+        bool bSecondMutation = true;
+        TestTrue(
+            TEXT("idempotent result reports already_remapped"),
+            IdempotentApply.Result->TryGetBoolField(
+                TEXT("already_remapped"), bAlreadyRemapped));
+        TestTrue(TEXT("already_remapped is true"), bAlreadyRemapped);
+        TestTrue(
+            TEXT("idempotent result reports mutated"),
+            IdempotentApply.Result->TryGetBoolField(
+                TEXT("mutated"), bSecondMutation));
+        TestFalse(TEXT("idempotent apply does not mutate"), bSecondMutation);
+    }
+
+    return true;
+}
+
+
+/**
+ * MonolithUI.AnimationBindingRemove.RemovesOnlyExactStaleBinding
+ *
+ * Deletes one binding after its widget leaves the WidgetTree, proves the
+ * destructive confirmation gates, and preserves an unrelated binding/track.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithUIAnimationBindingRemoveExactStaleBindingTest,
+    "MonolithUI.AnimationBindingRemove.RemovesOnlyExactStaleBinding",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIAnimationBindingRemoveExactStaleBindingTest::RunTest(
+    const FString& Parameters)
+{
+    using namespace MonolithUI::AnimationCoreTests;
+    using MonolithUI::TestUtils::CreateOrReuseUnsavedTestWidgetBlueprint;
+
+    const FString RemoveTestPath =
+        TEXT("/Game/Tests/Monolith/UI/WBP_AnimationBindingRemoveTest");
+    FString FixtureError;
+    if (!CreateOrReuseUnsavedTestWidgetBlueprint(
+            RemoveTestPath,
+            FName(TEXT("LegacyAnimatedWidget")),
+            nullptr,
+            FixtureError))
+    {
+        AddError(FString::Printf(
+            TEXT("Fixture build failed: %s"),
+            *FixtureError));
+        return false;
+    }
+
+    UWidgetBlueprint* WBP =
+        LoadObject<UWidgetBlueprint>(nullptr, *RemoveTestPath);
+    TestNotNull(TEXT("remove fixture WBP loads"), WBP);
+    if (!WBP || !WBP->WidgetTree)
+    {
+        return false;
+    }
+    ON_SCOPE_EXIT
+    {
+        if (UPackage* FixturePackage = WBP->GetOutermost())
+        {
+            FixturePackage->SetDirtyFlag(false);
+        }
+    };
+
+    for (UWidgetAnimation* ExistingAnimation : WBP->Animations)
+    {
+        if (ExistingAnimation)
+        {
+            ExistingAnimation->Rename(
+                nullptr,
+                GetTransientPackage(),
+                REN_DoNotDirty
+                    | REN_DontCreateRedirectors
+                    | REN_AllowPackageLinkerMismatch);
+        }
+    }
+    WBP->Animations.Empty();
+
+    UPanelWidget* RootPanel =
+        Cast<UPanelWidget>(WBP->WidgetTree->RootWidget);
+    TestNotNull(TEXT("remove fixture root is a panel"), RootPanel);
+    if (!RootPanel)
+    {
+        return false;
+    }
+
+    UWidget* RetainedWidget =
+        WBP->WidgetTree->ConstructWidget<UWidget>(
+            UImage::StaticClass(),
+            FName(TEXT("RetainedAnimatedWidget")));
+    TestNotNull(TEXT("retained animated widget constructed"), RetainedWidget);
+    if (!RetainedWidget)
+    {
+        return false;
+    }
+    RootPanel->AddChild(RetainedWidget);
+    WBP->WidgetVariableNameToGuidMap.Add(
+        RetainedWidget->GetFName(),
+        FGuid::NewGuid());
+
+    auto MakeOpacityTrack = [](
+        const FString& WidgetName,
+        const double StartValue,
+        const double EndValue)
+    {
+        TSharedPtr<FJsonObject> Track = MakeShared<FJsonObject>();
+        Track->SetStringField(TEXT("widget_name"), WidgetName);
+        Track->SetStringField(TEXT("property"), TEXT("RenderOpacity"));
+
+        TArray<TSharedPtr<FJsonValue>> Keys;
+        const TPair<double, double> TimeValues[] = {
+            TPair<double, double>(0.0, StartValue),
+            TPair<double, double>(1.0, EndValue)
+        };
+        for (const TPair<double, double>& TimeValue : TimeValues)
+        {
+            TSharedPtr<FJsonObject> Key = MakeShared<FJsonObject>();
+            Key->SetNumberField(TEXT("time"), TimeValue.Key);
+            Key->SetNumberField(TEXT("value"), TimeValue.Value);
+            Key->SetStringField(TEXT("interp"), TEXT("linear"));
+            Keys.Add(MakeShared<FJsonValueObject>(Key));
+        }
+        Track->SetArrayField(TEXT("keys"), Keys);
+        return MakeShared<FJsonValueObject>(Track);
+    };
+
+    TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+    CreateParams->SetStringField(TEXT("asset_path"), RemoveTestPath);
+    CreateParams->SetStringField(
+        TEXT("animation_name"),
+        TEXT("RemoveStaleFade"));
+    CreateParams->SetNumberField(TEXT("duration_sec"), 1.0);
+    CreateParams->SetBoolField(TEXT("compile_once"), true);
+    TArray<TSharedPtr<FJsonValue>> Tracks;
+    Tracks.Add(MakeOpacityTrack(
+        TEXT("LegacyAnimatedWidget"),
+        0.0,
+        1.0));
+    Tracks.Add(MakeOpacityTrack(
+        TEXT("RetainedAnimatedWidget"),
+        1.0,
+        0.5));
+    CreateParams->SetArrayField(TEXT("tracks"), Tracks);
+
+    const FMonolithActionResult CreateResult =
+        FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"), TEXT("create_animation_v2"), CreateParams);
+    TestTrue(TEXT("create_animation_v2 succeeds"), CreateResult.bSuccess);
+    if (!CreateResult.bSuccess)
+    {
+        AddError(FString::Printf(
+            TEXT("create_animation_v2 failed: %s"),
+            *CreateResult.ErrorMessage));
+        return false;
+    }
+
+    UWidgetAnimation* Animation =
+        FindAnimationByReadableName(WBP, TEXT("RemoveStaleFade"));
+    TestNotNull(TEXT("RemoveStaleFade animation found"), Animation);
+    if (!Animation || !Animation->GetMovieScene())
+    {
+        return false;
+    }
+
+    FGuid LegacyGuid;
+    FGuid RetainedGuid;
+    for (const FWidgetAnimationBinding& Binding :
+         Animation->AnimationBindings)
+    {
+        if (Binding.WidgetName == FName(TEXT("LegacyAnimatedWidget")))
+        {
+            LegacyGuid = Binding.AnimationGuid;
+        }
+        else if (
+            Binding.WidgetName == FName(TEXT("RetainedAnimatedWidget")))
+        {
+            RetainedGuid = Binding.AnimationGuid;
+        }
+    }
+    TestTrue(TEXT("legacy binding GUID is valid"), LegacyGuid.IsValid());
+    TestTrue(TEXT("retained binding GUID is valid"), RetainedGuid.IsValid());
+    if (!LegacyGuid.IsValid() || !RetainedGuid.IsValid())
+    {
+        return false;
+    }
+
+    UMovieScene* MovieScene = Animation->GetMovieScene();
+    UMovieSceneFloatTrack* RetainedTrack =
+        MovieScene->FindTrack<UMovieSceneFloatTrack>(
+            RetainedGuid,
+            FName(TEXT("RenderOpacity")));
+    TestNotNull(TEXT("retained RenderOpacity track found"), RetainedTrack);
+    TestEqual(
+        TEXT("retained track begins with two keys"),
+        CountFloatTrackKeys(RetainedTrack),
+        2);
+
+    auto MakeRemoveParams = [&RemoveTestPath](
+        const bool bDryRun,
+        const bool bSetConfirm,
+        const bool bSetConfirmDelete)
+    {
+        TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+        Params->SetStringField(TEXT("asset_path"), RemoveTestPath);
+        Params->SetStringField(
+            TEXT("animation_name"),
+            TEXT("RemoveStaleFade"));
+        Params->SetStringField(
+            TEXT("widget_name"),
+            TEXT("LegacyAnimatedWidget"));
+        Params->SetBoolField(TEXT("dry_run"), bDryRun);
+        if (bSetConfirm)
+        {
+            Params->SetBoolField(TEXT("confirm"), true);
+        }
+        if (bSetConfirmDelete)
+        {
+            Params->SetBoolField(TEXT("confirm_delete"), true);
+        }
+        Params->SetBoolField(TEXT("compile"), true);
+        Params->SetBoolField(TEXT("read_back"), true);
+        return Params;
+    };
+
+    const FMonolithActionResult ResidentReject =
+        FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"),
+            TEXT("remove_animation_binding"),
+            MakeRemoveParams(true, false, false));
+    TestFalse(
+        TEXT("resident widget binding removal fails closed"),
+        ResidentReject.bSuccess);
+
+    UWidget* LegacyWidget =
+        WBP->WidgetTree->FindWidget(FName(TEXT("LegacyAnimatedWidget")));
+    TestNotNull(TEXT("legacy animated widget exists"), LegacyWidget);
+    if (!LegacyWidget)
+    {
+        return false;
+    }
+    RootPanel->RemoveChild(LegacyWidget);
+    LegacyWidget->Rename(
+        nullptr,
+        GetTransientPackage(),
+        REN_DoNotDirty
+            | REN_DontCreateRedirectors
+            | REN_AllowPackageLinkerMismatch);
+    WBP->WidgetVariableNameToGuidMap.Remove(
+        FName(TEXT("LegacyAnimatedWidget")));
+
+    const FMonolithActionResult DryRun =
+        FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"),
+            TEXT("remove_animation_binding"),
+            MakeRemoveParams(true, false, false));
+    TestTrue(TEXT("binding removal dry-run succeeds"), DryRun.bSuccess);
+    TestNotNull(
+        TEXT("dry-run preserves legacy possessable"),
+        MovieScene->FindPossessable(LegacyGuid));
+
+    const FMonolithActionResult MissingConfirm =
+        FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"),
+            TEXT("remove_animation_binding"),
+            MakeRemoveParams(false, false, false));
+    TestFalse(
+        TEXT("binding removal write without confirm fails"),
+        MissingConfirm.bSuccess);
+    TestNotNull(
+        TEXT("missing confirm preserves legacy possessable"),
+        MovieScene->FindPossessable(LegacyGuid));
+
+    const FMonolithActionResult MissingDeleteConfirm =
+        FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"),
+            TEXT("remove_animation_binding"),
+            MakeRemoveParams(false, true, false));
+    TestFalse(
+        TEXT("binding removal write without confirm_delete fails"),
+        MissingDeleteConfirm.bSuccess);
+    TestNotNull(
+        TEXT("missing delete confirm preserves legacy possessable"),
+        MovieScene->FindPossessable(LegacyGuid));
+
+    const FMonolithActionResult Apply =
+        FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"),
+            TEXT("remove_animation_binding"),
+            MakeRemoveParams(false, true, true));
+    TestTrue(TEXT("binding removal apply succeeds"), Apply.bSuccess);
+    if (!Apply.bSuccess || !Apply.Result.IsValid())
+    {
+        AddError(FString::Printf(
+            TEXT("binding removal failed: %s"),
+            *Apply.ErrorMessage));
+        return false;
+    }
+
+    bool bMutated = false;
+    double RemovedTrackCount = 0.0;
+    TestTrue(
+        TEXT("binding removal result has mutated"),
+        Apply.Result->TryGetBoolField(TEXT("mutated"), bMutated));
+    TestTrue(TEXT("binding removal mutated"), bMutated);
+    TestTrue(
+        TEXT("binding removal result has track_count"),
+        Apply.Result->TryGetNumberField(
+            TEXT("track_count"),
+            RemovedTrackCount));
+    TestEqual(
+        TEXT("one legacy track was removed"),
+        static_cast<int32>(RemovedTrackCount),
+        1);
+
+    int32 LegacyBindingCount = 0;
+    int32 RetainedBindingCount = 0;
+    for (const FWidgetAnimationBinding& Binding :
+         Animation->AnimationBindings)
+    {
+        LegacyBindingCount +=
+            Binding.WidgetName == FName(TEXT("LegacyAnimatedWidget")) ? 1 : 0;
+        RetainedBindingCount +=
+            Binding.WidgetName == FName(TEXT("RetainedAnimatedWidget")) ? 1 : 0;
+    }
+    TestEqual(
+        TEXT("legacy animation binding removed"),
+        LegacyBindingCount,
+        0);
+    TestEqual(
+        TEXT("retained animation binding preserved"),
+        RetainedBindingCount,
+        1);
+    TestNull(
+        TEXT("legacy possessable removed"),
+        MovieScene->FindPossessable(LegacyGuid));
+    TestNull(
+        TEXT("legacy MovieScene binding and tracks removed"),
+        static_cast<const UMovieScene*>(MovieScene)->FindBinding(LegacyGuid));
+    TestNotNull(
+        TEXT("retained possessable remains"),
+        MovieScene->FindPossessable(RetainedGuid));
+    UMovieSceneFloatTrack* RetainedTrackAfter =
+        MovieScene->FindTrack<UMovieSceneFloatTrack>(
+            RetainedGuid,
+            FName(TEXT("RenderOpacity")));
+    TestTrue(
+        TEXT("retained track UObject identity preserved"),
+        RetainedTrackAfter == RetainedTrack);
+    TestEqual(
+        TEXT("retained track keeps two keys"),
+        CountFloatTrackKeys(RetainedTrackAfter),
+        2);
+    TestTrue(
+        TEXT("compiled binding-removed WBP has no error status"),
+        WBP->Status != BS_Error);
+
+    const FMonolithActionResult IdempotentApply =
+        FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"),
+            TEXT("remove_animation_binding"),
+            MakeRemoveParams(false, true, true));
+    TestTrue(
+        TEXT("already-removed write is idempotent"),
+        IdempotentApply.bSuccess);
+    if (IdempotentApply.bSuccess && IdempotentApply.Result.IsValid())
+    {
+        bool bAlreadyRemoved = false;
+        bool bSecondMutation = true;
+        TestTrue(
+            TEXT("idempotent result reports already_removed"),
+            IdempotentApply.Result->TryGetBoolField(
+                TEXT("already_removed"), bAlreadyRemoved));
+        TestTrue(TEXT("already_removed is true"), bAlreadyRemoved);
+        TestTrue(
+            TEXT("idempotent result reports mutated"),
+            IdempotentApply.Result->TryGetBoolField(
+                TEXT("mutated"), bSecondMutation));
+        TestFalse(TEXT("idempotent apply does not mutate"), bSecondMutation);
+    }
+
+    return true;
 }
 
 

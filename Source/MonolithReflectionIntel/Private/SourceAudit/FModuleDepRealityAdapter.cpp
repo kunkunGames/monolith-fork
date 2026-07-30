@@ -16,6 +16,7 @@
 // project module.
 
 #include "SourceAudit/FModuleDepRealityAdapter.h"
+#include "SourceAudit/ModuleDepRealityUtils.h"
 #include "MonolithReflectionIntelModule.h"
 #include "MonolithSourceSubsystem.h"
 #include "MonolithSourceDatabase.h"
@@ -32,12 +33,164 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithParamUtils.h"
 #include "MonolithParamSchema.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "SQLiteDatabase.h"
 #include "Templates/TypeHash.h"
+
+namespace MonolithModuleDepReality
+{
+	namespace
+	{
+		bool IsEngineSourceCategory(const FString& Segment)
+		{
+			return Segment.Equals(TEXT("Runtime"), ESearchCase::IgnoreCase)
+				|| Segment.Equals(TEXT("Editor"), ESearchCase::IgnoreCase)
+				|| Segment.Equals(TEXT("Developer"), ESearchCase::IgnoreCase)
+				|| Segment.Equals(TEXT("Programs"), ESearchCase::IgnoreCase)
+				|| Segment.Equals(TEXT("ThirdParty"), ESearchCase::IgnoreCase);
+		}
+
+		bool DeriveModuleFromSourcePathInternal(
+			const FString& FilePath,
+			const FString& IndexedModuleName,
+			FString& OutModuleName,
+			FString& OutModuleDir)
+		{
+			OutModuleName.Empty();
+			OutModuleDir.Empty();
+
+			FString NormalizedPath = FilePath;
+			FPaths::NormalizeFilename(NormalizedPath);
+
+			int32 AfterSource = INDEX_NONE;
+			const int32 SourceIndex = NormalizedPath.Find(
+				TEXT("/Source/"),
+				ESearchCase::IgnoreCase,
+				ESearchDir::FromEnd);
+			if (SourceIndex != INDEX_NONE)
+			{
+				AfterSource = SourceIndex + 8;
+			}
+			else if (NormalizedPath.StartsWith(TEXT("Source/"), ESearchCase::IgnoreCase))
+			{
+				AfterSource = 7;
+			}
+			if (AfterSource == INDEX_NONE)
+			{
+				return false;
+			}
+
+			TArray<FString> Segments;
+			NormalizedPath.Mid(AfterSource).ParseIntoArray(
+				Segments,
+				TEXT("/"),
+				/*InCullEmpty=*/true);
+			if (Segments.IsEmpty())
+			{
+				return false;
+			}
+
+			// Runtime/Editor/Developer/Programs/ThirdParty are grouping
+			// directories only for engine source. Absolute paths can be checked
+			// against the current engine root. EngineSource.db deliberately
+			// stores many engine paths relative to Engine/ as
+			// Source/Runtime/<Module>/..., so those rows additionally use the
+			// indexed module name to prove that segment 1 is the module. This
+			// keeps Source/Runtime/Private/... valid for a project module that is
+			// literally named Runtime.
+			FString FullNormalizedPath = FPaths::ConvertRelativePathToFull(NormalizedPath);
+			FPaths::NormalizeFilename(FullNormalizedPath);
+			FString EngineSourceDir =
+				FPaths::ConvertRelativePathToFull(FPaths::EngineDir() / TEXT("Source"));
+			FPaths::NormalizeDirectoryName(EngineSourceDir);
+			const bool bUnderCurrentEngineSource =
+				FPaths::IsUnderDirectory(FullNormalizedPath, EngineSourceDir);
+
+			const FString& FirstSegment = Segments[0];
+			const bool bCategoryCandidate =
+				Segments.Num() > 1 && IsEngineSourceCategory(FirstSegment);
+			const bool bIndexedCategoryProof =
+				bCategoryCandidate
+				&& !IndexedModuleName.IsEmpty()
+				&& IndexedModuleName.Equals(Segments[1], ESearchCase::IgnoreCase);
+			const bool bEngineSourceCategory =
+				bCategoryCandidate
+				&& (bUnderCurrentEngineSource || bIndexedCategoryProof);
+			const int32 ModuleSegmentIndex = bEngineSourceCategory ? 1 : 0;
+
+			OutModuleName = Segments[ModuleSegmentIndex];
+			if (OutModuleName.IsEmpty())
+			{
+				return false;
+			}
+
+			TArray<FString> ModulePathSegments;
+			for (int32 SegmentIndex = 0; SegmentIndex <= ModuleSegmentIndex; ++SegmentIndex)
+			{
+				ModulePathSegments.Add(Segments[SegmentIndex]);
+			}
+			OutModuleDir =
+				NormalizedPath.Left(AfterSource)
+				+ FString::Join(ModulePathSegments, TEXT("/"));
+			return true;
+		}
+	}
+
+	bool DeriveModuleFromSourcePath(
+		const FString& FilePath,
+		FString& OutModuleName,
+		FString& OutModuleDir)
+	{
+		return DeriveModuleFromSourcePathInternal(
+			FilePath,
+			FString(),
+			OutModuleName,
+			OutModuleDir);
+	}
+
+	bool DeriveModuleFromIndexedSourcePath(
+		const FString& FilePath,
+		const FString& IndexedModuleName,
+		FString& OutModuleName,
+		FString& OutModuleDir)
+	{
+		return DeriveModuleFromSourcePathInternal(
+			FilePath,
+			IndexedModuleName,
+			OutModuleName,
+			OutModuleDir);
+	}
+
+	bool IsDependencyTypeSymbolKind(const FString& SymbolKind)
+	{
+		return SymbolKind.Equals(TEXT("class"), ESearchCase::IgnoreCase)
+			|| SymbolKind.Equals(TEXT("struct"), ESearchCase::IgnoreCase)
+			|| SymbolKind.Equals(TEXT("enum"), ESearchCase::IgnoreCase)
+			|| SymbolKind.Equals(TEXT("union"), ESearchCase::IgnoreCase)
+			|| SymbolKind.Equals(TEXT("typedef"), ESearchCase::IgnoreCase)
+			|| SymbolKind.Equals(TEXT("type_alias"), ESearchCase::IgnoreCase);
+	}
+
+	bool IsDependencyCandidateIdentifier(const FString& Candidate)
+	{
+		static const TSet<FString> ReflectionMacros = {
+			TEXT("UCLASS"),
+			TEXT("UDELEGATE"),
+			TEXT("UENUM"),
+			TEXT("UFUNCTION"),
+			TEXT("UINTERFACE"),
+			TEXT("UMETA"),
+			TEXT("UPARAM"),
+			TEXT("UPROPERTY"),
+			TEXT("USTRUCT"),
+		};
+		return !Candidate.IsEmpty() && !ReflectionMacros.Contains(Candidate);
+	}
+}
 
 namespace
 {
@@ -231,37 +384,6 @@ namespace
 	}
 
 	/**
-	 * Path-first declaring-module resolution (item 6). Parse `Source/<Module>/...`
-	 * out of a file path (handles both `Source/<Module>/` and
-	 * `Plugins/<X>/Source/<Module>/` — the LAST `/Source/` wins, so the innermost
-	 * module dir is taken). Returns the module name + the `Source/<Module>/` dir.
-	 * Does NOT touch the DB — works on uncommitted/unindexed files.
-	 */
-	bool DeriveDeclaringModule(const FString& FilePath, FString& OutModuleName, FString& OutModuleDir)
-	{
-		OutModuleName.Empty();
-		OutModuleDir.Empty();
-
-		FString Norm = FilePath;
-		Norm.ReplaceInline(TEXT("\\"), TEXT("/"));
-
-		const int32 SrcIdx = Norm.Find(TEXT("/Source/"), ESearchCase::IgnoreCase, ESearchDir::FromEnd);
-		if (SrcIdx == INDEX_NONE) { return false; }
-
-		const int32 AfterSrc = SrcIdx + 8; // past "/Source/"
-		FString Rest = Norm.Mid(AfterSrc);
-		int32 NextSlash = INDEX_NONE;
-		if (!Rest.FindChar(TEXT('/'), NextSlash)) { return false; }
-
-		OutModuleName = Rest.Left(NextSlash);
-		if (OutModuleName.IsEmpty()) { return false; }
-
-		// Module dir is the native form up through `Source/<Module>`.
-		OutModuleDir = FilePath.Left(AfterSrc + NextSlash);
-		return true;
-	}
-
-	/**
 	 * Locate the `<Module>.Build.cs` for a declaring module dir. Prefer the exact
 	 * `<ModuleDir>/<Module>.Build.cs`; fall back to a recursive search under the
 	 * module dir (some modules keep the .Build.cs in a subfolder). Returns empty
@@ -291,6 +413,57 @@ namespace
 		const FString Lower = Path.ToLower();
 		return Lower.EndsWith(TEXT(".h")) || Lower.EndsWith(TEXT(".hpp")) ||
 			   Lower.EndsWith(TEXT(".cpp")) || Lower.EndsWith(TEXT(".inl"));
+	}
+
+	/**
+	 * Resolve one source identifier to the unique UBT modules that declare a
+	 * type with that name. Non-type symbols and UE macros are intentionally
+	 * ignored; indexed source paths override aggregate plugin index labels.
+	 */
+	TArray<FString> ResolveDependencyTypeModules(
+		FSQLitePreparedStatement& Statement,
+		const FString& Candidate)
+	{
+		if (!MonolithModuleDepReality::IsDependencyCandidateIdentifier(Candidate))
+		{
+			return {};
+		}
+
+		Statement.Reset();
+		Statement.ClearBindings();
+		Statement.SetBindingValueByIndex(1, Candidate);
+
+		TArray<FString> ResolvedModules;
+		while (Statement.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			FString IndexedModuleName;
+			FString IndexedFilePath;
+			FString SymbolKind;
+			Statement.GetColumnValueByIndex(0, IndexedModuleName);
+			Statement.GetColumnValueByIndex(1, IndexedFilePath);
+			Statement.GetColumnValueByIndex(2, SymbolKind);
+			if (!MonolithModuleDepReality::IsDependencyTypeSymbolKind(SymbolKind))
+			{
+				continue;
+			}
+
+			FString OwningModule = IndexedModuleName;
+			FString DerivedModule;
+			FString DerivedModuleDir;
+			if (MonolithModuleDepReality::DeriveModuleFromIndexedSourcePath(
+					IndexedFilePath,
+					IndexedModuleName,
+					DerivedModule,
+					DerivedModuleDir))
+			{
+				OwningModule = MoveTemp(DerivedModule);
+			}
+			if (!OwningModule.IsEmpty())
+			{
+				ResolvedModules.AddUnique(OwningModule);
+			}
+		}
+		return ResolvedModules;
 	}
 }
 
@@ -389,6 +562,34 @@ FMonolithActionResult FModuleDepRealityAdapter::HandleAuditModuleDepReality(cons
 {
 	ensure(IsInGameThread());
 
+	FString ParamError;
+	FString ScanRoot;
+	int32 Limit = 50;
+	FString CursorIn;
+	if (!MonolithParamUtils::GetOptionalStringParam(
+			Params,
+			TEXT("scan_root"),
+			ScanRoot,
+			ParamError)
+		|| !MonolithParamUtils::GetOptionalClampedIntParam(
+			Params,
+			TEXT("limit"),
+			Limit,
+			ParamError,
+			50,
+			1,
+			200)
+		|| !MonolithParamUtils::GetOptionalStringParam(
+			Params,
+			TEXT("cursor"),
+			CursorIn,
+			ParamError))
+	{
+		return FMonolithActionResult::Error(
+			ParamError,
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FSQLiteDatabase* DB = GetRawDB();
 	if (!DB)
 	{
@@ -396,27 +597,6 @@ FMonolithActionResult FModuleDepRealityAdapter::HandleAuditModuleDepReality(cons
 			TEXT("EngineSource.db not available. Run source.trigger_reindex to bootstrap."));
 	}
 
-	FString ScanRoot;
-	if (Params->HasField(TEXT("scan_root")) && !Params->TryGetStringField(TEXT("scan_root"), ScanRoot))
-	{
-		return FMonolithActionResult::Error(TEXT("`scan_root` must be a string."), FMonolithJsonUtils::ErrInvalidParams);
-	}
-
-	double LimitDouble = 50.0;
-	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitDouble))
-	{
-		return FMonolithActionResult::Error(TEXT("`limit` must be a number."), FMonolithJsonUtils::ErrInvalidParams);
-	}
-	const int32 ReqLimit = static_cast<int32>(LimitDouble);
-
-	FString CursorIn;
-	if (Params->HasField(TEXT("cursor")) && !Params->TryGetStringField(TEXT("cursor"), CursorIn))
-	{
-		return FMonolithActionResult::Error(TEXT("`cursor` must be a string."), FMonolithJsonUtils::ErrInvalidParams);
-	}
-
-	constexpr int32 HARD_CAP = 200;
-	const int32 Limit = FMath::Clamp(ReqLimit, 1, HARD_CAP);
 	const uint32 FilterHash = HashCombine(GetTypeHash(ScanRoot), GetTypeHash(Limit));
 
 	int32 Page = 0;
@@ -507,11 +687,11 @@ FMonolithActionResult FModuleDepRealityAdapter::HandleAuditModuleDepReality(cons
 	// Phase 2 code-quality item 4 (statement reuse).
 	FSQLitePreparedStatement SymStmt;
 	if (!SymStmt.Create(*DB, TEXT(
-		"SELECT m.name FROM symbols s "
+		"SELECT m.name,COALESCE(f.path,''),s.kind FROM symbols s "
 		"JOIN files f ON f.id = s.file_id "
 		"JOIN modules m ON m.id = f.module_id "
 		"WHERE s.name = ? "
-		"GROUP BY m.name;")))
+		"GROUP BY m.name,f.path,s.kind;")))
 	{
 		return FMonolithActionResult::Error(
 			TEXT("Symbol-resolution query prepare failed (symbols / files / modules tables absent?)."));
@@ -559,18 +739,9 @@ FMonolithActionResult FModuleDepRealityAdapter::HandleAuditModuleDepReality(cons
 					if (SeenInFile.Contains(Candidate)) { continue; }
 					SeenInFile.Add(Candidate);
 
-					// Resolve to a module via the symbols table.
-					SymStmt.Reset();
-					SymStmt.ClearBindings();
-					SymStmt.SetBindingValueByIndex(1, Candidate);
-
-					TArray<FString> ResolvedModules;
-					while (SymStmt.Step() == ESQLitePreparedStatementStepResult::Row)
-					{
-						FString ModName;
-						SymStmt.GetColumnValueByIndex(0, ModName);
-						if (!ModName.IsEmpty()) { ResolvedModules.AddUnique(ModName); }
-					}
+					// Resolve to a module via type declarations in the symbols table.
+					const TArray<FString> ResolvedModules =
+						ResolveDependencyTypeModules(SymStmt, Candidate);
 
 					if (ResolvedModules.Num() == 0)
 					{
@@ -666,6 +837,41 @@ FMonolithActionResult FModuleDepRealityAdapter::HandleSuggestBuildCsDeps(const T
 {
 	ensure(IsInGameThread());
 
+	FString ParamError;
+	FString FilePath;
+	TArray<FString> ExplicitSymbols;
+	if (!MonolithParamUtils::GetOptionalStringParam(
+			Params,
+			TEXT("file_path"),
+			FilePath,
+			ParamError)
+		|| !MonolithParamUtils::GetOptionalStringArrayParam(
+			Params,
+			TEXT("symbols"),
+			ExplicitSymbols,
+			ParamError))
+	{
+		return FMonolithActionResult::Error(
+			ParamError,
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+	for (int32 SymbolIndex = 0; SymbolIndex < ExplicitSymbols.Num(); ++SymbolIndex)
+	{
+		ExplicitSymbols[SymbolIndex].TrimStartAndEndInline();
+		if (ExplicitSymbols[SymbolIndex].IsEmpty())
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("Parameter 'symbols[%d]' must be a non-empty string"), SymbolIndex),
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
+	if (FilePath.IsEmpty() && ExplicitSymbols.IsEmpty())
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Provide `file_path` and/or a non-empty `symbols` array."),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	// Resolve the FMonolithSourceDatabase wrapper (NOT the raw handle yet) so we can
 	// hold its lock for the duration of the borrow per the GetRawHandle contract
 	// (MonolithSourceDatabase.h:116-120). The raw handle is fetched under the lock
@@ -675,31 +881,6 @@ FMonolithActionResult FModuleDepRealityAdapter::HandleSuggestBuildCsDeps(const T
 	{
 		return FMonolithActionResult::Error(
 			TEXT("EngineSource.db not available. Run source.trigger_reindex to bootstrap."));
-	}
-
-	FString FilePath;
-	if (Params->HasField(TEXT("file_path")) && !Params->TryGetStringField(TEXT("file_path"), FilePath))
-	{
-		return FMonolithActionResult::Error(TEXT("`file_path` must be a string."), FMonolithJsonUtils::ErrInvalidParams);
-	}
-
-	// Optional explicit symbol list.
-	TArray<FString> ExplicitSymbols;
-	{
-		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
-		if (Params->TryGetArrayField(TEXT("symbols"), Arr) && Arr)
-		{
-			for (const TSharedPtr<FJsonValue>& V : *Arr)
-			{
-				FString S;
-				if (V.IsValid() && V->TryGetString(S) && !S.IsEmpty()) { ExplicitSymbols.Add(S); }
-			}
-		}
-	}
-
-	if (FilePath.IsEmpty() && ExplicitSymbols.Num() == 0)
-	{
-		return FMonolithActionResult::Error(TEXT("Provide `file_path` and/or a non-empty `symbols` array."));
 	}
 
 	// ----------------------------------------------------------------
@@ -718,7 +899,10 @@ FMonolithActionResult FModuleDepRealityAdapter::HandleSuggestBuildCsDeps(const T
 			AbsFile = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / FilePath);
 		}
 
-		if (!DeriveDeclaringModule(AbsFile, DeclaringModule, ModuleDir))
+		if (!MonolithModuleDepReality::DeriveModuleFromSourcePath(
+				AbsFile,
+				DeclaringModule,
+				ModuleDir))
 		{
 			return FMonolithActionResult::Error(FString::Printf(
 				TEXT("Could not derive a declaring module from '%s' (expected a Source/<Module>/ path)."), *FilePath));
@@ -809,11 +993,11 @@ FMonolithActionResult FModuleDepRealityAdapter::HandleSuggestBuildCsDeps(const T
 
 		FSQLitePreparedStatement SymStmt;
 		if (!SymStmt.Create(*DB, TEXT(
-			"SELECT m.name FROM symbols s "
+			"SELECT m.name,COALESCE(f.path,''),s.kind FROM symbols s "
 			"JOIN files f ON f.id = s.file_id "
 			"JOIN modules m ON m.id = f.module_id "
 			"WHERE s.name = ? "
-			"GROUP BY m.name;")))
+			"GROUP BY m.name,f.path,s.kind;")))
 		{
 			bStmtPrepareFailed = true;
 		}
@@ -821,17 +1005,8 @@ FMonolithActionResult FModuleDepRealityAdapter::HandleSuggestBuildCsDeps(const T
 		{
 			for (const FString& Cand : Candidates)
 			{
-				SymStmt.Reset();
-				SymStmt.ClearBindings();
-				SymStmt.SetBindingValueByIndex(1, Cand);
-
-				TArray<FString> ResolvedModules;
-				while (SymStmt.Step() == ESQLitePreparedStatementStepResult::Row)
-				{
-					FString ModName;
-					SymStmt.GetColumnValueByIndex(0, ModName);
-					if (!ModName.IsEmpty()) { ResolvedModules.AddUnique(ModName); }
-				}
+				const TArray<FString> ResolvedModules =
+					ResolveDependencyTypeModules(SymStmt, Cand);
 
 				if (ResolvedModules.Num() != 1) { continue; } // unknown or ambiguous — skip
 

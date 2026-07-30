@@ -399,6 +399,87 @@ bool FMonolithUIReflectionMarginObjectTest::RunTest(const FString& /*Parameters*
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithUIReflectionStrictStructParsingTest,
+    "MonolithUI.Reflection.StrictStructParsing",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIReflectionStrictStructParsingTest::RunTest(const FString& /*Parameters*/)
+{
+    UBorder* Border = MakeScratchBorder();
+    UImage* Image = MakeScratchImage();
+    if (!TestNotNull(TEXT("strict-parser Border created"), Border)
+        || !TestNotNull(TEXT("strict-parser Image created"), Image))
+    {
+        return false;
+    }
+
+    FUIReflectionHelper Helper = MakeSubsystemHelper();
+    const FUIReflectionApplyResult ValidMargin = Helper.Apply(
+        Border,
+        TEXT("Padding"),
+        MakeShared<FJsonValueString>(TEXT("1,2,3,4")));
+    TestTrue(
+        FString::Printf(
+            TEXT("exact four-component Margin string succeeds: %s/%s"),
+            *ValidMargin.FailureReason,
+            *ValidMargin.Detail),
+        ValidMargin.bSuccess);
+    TestTrue(
+        TEXT("exact Margin components reach the widget"),
+        Border->GetPadding() == FMargin(1.0f, 2.0f, 3.0f, 4.0f));
+
+    const FMargin AcceptedPadding = Border->GetPadding();
+    const TArray<FString> InvalidMargins = {
+        TEXT("1,2,3,4,5"),
+        TEXT("1,,2,3,4"),
+        TEXT("1,2,not-a-number,4"),
+        TEXT("[1,2,3,4,5]"),
+        TEXT("{\"left\":1,\"top\":2,\"right\":3}"),
+        TEXT("{\"left\":1,\"top\":2,\"right\":3,\"bottom\":\"4\"}")
+    };
+    for (const FString& InvalidMargin : InvalidMargins)
+    {
+        const FUIReflectionApplyResult InvalidResult = Helper.Apply(
+            Border,
+            TEXT("Padding"),
+            MakeShared<FJsonValueString>(InvalidMargin));
+        TestFalse(
+            *FString::Printf(
+                TEXT("malformed Margin '%s' is rejected"),
+                *InvalidMargin),
+            InvalidResult.bSuccess);
+        TestEqual(
+            *FString::Printf(
+                TEXT("malformed Margin '%s' reports ParseFailed"),
+                *InvalidMargin),
+            InvalidResult.FailureReason,
+            FString(TEXT("ParseFailed")));
+        TestTrue(
+            *FString::Printf(
+                TEXT("malformed Margin '%s' leaves the property unchanged"),
+                *InvalidMargin),
+            Border->GetPadding() == AcceptedPadding);
+    }
+
+    const FLinearColor AcceptedColor(0.1f, 0.2f, 0.3f, 0.4f);
+    Image->SetColorAndOpacity(AcceptedColor);
+    const FUIReflectionApplyResult InvalidColor = Helper.Apply(
+        Image,
+        TEXT("ColorAndOpacity"),
+        MakeShared<FJsonValueString>(TEXT("#XYZW")));
+    TestFalse(TEXT("malformed hex color is rejected"), InvalidColor.bSuccess);
+    TestEqual(
+        TEXT("malformed hex color reports ParseFailed"),
+        InvalidColor.FailureReason,
+        FString(TEXT("ParseFailed")));
+    TestTrue(
+        TEXT("malformed hex color does not substitute white"),
+        Image->GetColorAndOpacity().Equals(AcceptedColor));
+
+    return true;
+}
+
 /**
  * MonolithUI.Reflection.NullRootRejected
  *

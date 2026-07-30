@@ -18,6 +18,19 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "GameplayTagContainer.h"
+#include "Components/Button.h"
+#include "Components/CheckBox.h"
+#include "Components/ComboBoxString.h"
+#include "Components/EditableText.h"
+#include "Components/EditableTextBox.h"
+#include "Components/Image.h"
+#include "Components/InputKeySelector.h"
+#include "Components/ListView.h"
+#include "Components/ProgressBar.h"
+#include "Components/RichTextBlock.h"
+#include "Components/Slider.h"
+#include "Components/Spacer.h"
+#include "Components/TextBlock.h"
 #include "Interfaces/IPluginManager.h"
 #include "Modules/ModuleManager.h"
 #include "UObject/UObjectIterator.h"
@@ -2259,10 +2272,18 @@ void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
 
     Registry.RegisterAction(
         TEXT("ui"), TEXT("list_widget_types"),
-        TEXT("List all available widget class types that can be added"),
+        TEXT("List every currently registered native UWidget type that can be addressed by Monolith UI authoring. "
+             "The live reflection-backed UI type registry is authoritative, so optional plugin widgets such as "
+             "CommonUI types are included when their modules are loaded. Results are sorted by token and expose "
+             "class/module/container metadata; stale registry entries fail closed instead of being silently omitted."),
         FMonolithActionHandler::CreateStatic(&HandleListWidgetTypes),
         FParamSchemaBuilder()
-            .Optional(TEXT("filter"), TEXT("string"), TEXT("Filter by category: panel, leaf, input, display, layout"))
+            .Optional(TEXT("filter"), TEXT("string"),
+                TEXT("Exact category filter: panel, leaf, input, display, layout, or data. Omit for all categories."))
+            .Enum(TEXT("filter"),
+                { TEXT("panel"), TEXT("leaf"), TEXT("input"), TEXT("display"), TEXT("layout"), TEXT("data") })
+            .Optional(TEXT("module_filter"), TEXT("string"),
+                TEXT("Case-insensitive substring filter for the native script module, e.g. CommonUI or UMG."))
             .Build()
     );
 
@@ -4434,66 +4455,179 @@ FMonolithActionResult FMonolithUIActions::HandleCompileWidget(const TSharedPtr<F
 // --- list_widget_types ---
 FMonolithActionResult FMonolithUIActions::HandleListWidgetTypes(const TSharedPtr<FJsonObject>& Params)
 {
-    FString Filter = MonolithUIInternal::GetOptionalString(Params, TEXT("filter"));
+    FString Filter = MonolithUIInternal::GetOptionalString(Params, TEXT("filter")).TrimStartAndEnd().ToLower();
+    const FString ModuleFilter =
+        MonolithUIInternal::GetOptionalString(Params, TEXT("module_filter")).TrimStartAndEnd();
+    static const TSet<FString> ValidFilters = {
+        TEXT("panel"),
+        TEXT("leaf"),
+        TEXT("input"),
+        TEXT("display"),
+        TEXT("layout"),
+        TEXT("data"),
+    };
+    if (!Filter.IsEmpty() && !ValidFilters.Contains(Filter))
+    {
+        return FMonolithActionResult::Error(
+            FString::Printf(
+                TEXT("filter must be one of: panel, leaf, input, display, layout, data (received '%s')"),
+                *Filter),
+            -32602);
+    }
 
     struct FWidgetTypeInfo
     {
         FString Name;
         FString Category;
-        bool bIsPanel;
+        FString ClassPath;
+        FString Module;
+        FString ContainerKind;
+        FString SlotClassPath;
+        int32 MaxChildren = 0;
+        bool bIsPanel = false;
     };
 
-    TArray<FWidgetTypeInfo> Types = {
-        // Panels
-        {TEXT("CanvasPanel"),       TEXT("panel"), true},
-        {TEXT("VerticalBox"),       TEXT("panel"), true},
-        {TEXT("HorizontalBox"),     TEXT("panel"), true},
-        {TEXT("Overlay"),           TEXT("panel"), true},
-        {TEXT("ScrollBox"),         TEXT("panel"), true},
-        {TEXT("SizeBox"),           TEXT("panel"), true},
-        {TEXT("ScaleBox"),          TEXT("panel"), true},
-        {TEXT("Border"),            TEXT("panel"), true},
-        {TEXT("WrapBox"),           TEXT("panel"), true},
-        {TEXT("UniformGridPanel"),  TEXT("panel"), true},
-        {TEXT("GridPanel"),         TEXT("panel"), true},
-        {TEXT("WidgetSwitcher"),    TEXT("panel"), true},
-        {TEXT("BackgroundBlur"),    TEXT("panel"), true},
-        {TEXT("NamedSlot"),         TEXT("panel"), true},
-        // Display
-        {TEXT("TextBlock"),         TEXT("display"), false},
-        {TEXT("RichTextBlock"),     TEXT("display"), false},
-        {TEXT("Image"),             TEXT("display"), false},
-        {TEXT("ProgressBar"),       TEXT("display"), false},
-        {TEXT("Spacer"),            TEXT("layout"), false},
-        // Input
-        {TEXT("Button"),            TEXT("input"), true},
-        {TEXT("CheckBox"),          TEXT("input"), false},
-        {TEXT("Slider"),            TEXT("input"), false},
-        {TEXT("EditableText"),      TEXT("input"), false},
-        {TEXT("EditableTextBox"),   TEXT("input"), false},
-        {TEXT("ComboBoxString"),    TEXT("input"), false},
-        {TEXT("InputKeySelector"),  TEXT("input"), false},
-        // Data
-        {TEXT("ListView"),          TEXT("data"), true},
-        {TEXT("TileView"),          TEXT("data"), true},
+    UMonolithUIRegistrySubsystem* RegistrySubsystem = UMonolithUIRegistrySubsystem::Get();
+    if (!RegistrySubsystem)
+    {
+        return FMonolithActionResult::Error(
+            TEXT("UMonolithUIRegistrySubsystem is unavailable; widget type discovery requires an initialized editor registry"),
+            -32603);
+    }
+
+    auto GetCategory = [](const UClass* WidgetClass, const EUIContainerKind ContainerKind) -> FString
+    {
+        check(WidgetClass);
+
+        // Classify by stable engine contracts rather than a hand-maintained list
+        // of concrete widget names. Optional plugin subclasses (including
+        // CommonUI) therefore inherit the same discovery category.
+        if (WidgetClass->IsChildOf(UListView::StaticClass()))
+        {
+            return TEXT("data");
+        }
+        if (WidgetClass->IsChildOf(UButton::StaticClass())
+            || WidgetClass->IsChildOf(UCheckBox::StaticClass())
+            || WidgetClass->IsChildOf(USlider::StaticClass())
+            || WidgetClass->IsChildOf(UEditableText::StaticClass())
+            || WidgetClass->IsChildOf(UEditableTextBox::StaticClass())
+            || WidgetClass->IsChildOf(UComboBoxString::StaticClass())
+            || WidgetClass->IsChildOf(UInputKeySelector::StaticClass()))
+        {
+            return TEXT("input");
+        }
+        if (WidgetClass->IsChildOf(UTextBlock::StaticClass())
+            || WidgetClass->IsChildOf(URichTextBlock::StaticClass())
+            || WidgetClass->IsChildOf(UImage::StaticClass())
+            || WidgetClass->IsChildOf(UProgressBar::StaticClass()))
+        {
+            return TEXT("display");
+        }
+        if (WidgetClass->IsChildOf(USpacer::StaticClass()))
+        {
+            return TEXT("layout");
+        }
+        return ContainerKind == EUIContainerKind::Leaf ? TEXT("leaf") : TEXT("panel");
     };
+
+    auto GetContainerKind = [](const EUIContainerKind Kind) -> FString
+    {
+        switch (Kind)
+        {
+        case EUIContainerKind::Content:
+            return TEXT("content");
+        case EUIContainerKind::Panel:
+            return TEXT("panel");
+        case EUIContainerKind::Leaf:
+        default:
+            return TEXT("leaf");
+        }
+    };
+
+    const FUITypeRegistry& TypeRegistry = RegistrySubsystem->GetTypeRegistry();
+    TArray<FString> StaleTokens;
+    TArray<FWidgetTypeInfo> Types;
+    Types.Reserve(TypeRegistry.Num());
+    for (const FUITypeRegistryEntry& Entry : TypeRegistry.GetAll())
+    {
+        UClass* WidgetClass = Entry.WidgetClass.Get();
+        if (!WidgetClass)
+        {
+            StaleTokens.Add(Entry.Token.ToString());
+            continue;
+        }
+
+        FWidgetTypeInfo& Type = Types.AddDefaulted_GetRef();
+        Type.Name = Entry.Token.ToString();
+        Type.Category = GetCategory(WidgetClass, Entry.ContainerKind);
+        Type.ClassPath = WidgetClass->GetPathName();
+        Type.Module = FPackageName::GetShortName(WidgetClass->GetOutermost()->GetName());
+        Type.ContainerKind = GetContainerKind(Entry.ContainerKind);
+        Type.MaxChildren = Entry.MaxChildren;
+        Type.bIsPanel = Entry.ContainerKind != EUIContainerKind::Leaf;
+        if (UClass* SlotClass = Entry.SlotClass.Get())
+        {
+            Type.SlotClassPath = SlotClass->GetPathName();
+        }
+    }
+
+    if (!StaleTokens.IsEmpty())
+    {
+        StaleTokens.Sort();
+        return FMonolithActionResult::Error(
+            FString::Printf(
+                TEXT("UI type registry contains %d stale class entries (%s); rescan the registry after module reload before discovery"),
+                StaleTokens.Num(),
+                *FString::Join(StaleTokens, TEXT(", "))),
+            -32603);
+    }
+
+    Types.Sort([](const FWidgetTypeInfo& A, const FWidgetTypeInfo& B)
+    {
+        return A.Name < B.Name;
+    });
 
     TArray<TSharedPtr<FJsonValue>> ResultArray;
     ResultArray.Reserve(Types.Num());
     for (const auto& T : Types)
     {
-        if (!Filter.IsEmpty() && T.Category != Filter) continue;
+        if (!Filter.IsEmpty() && T.Category != Filter)
+        {
+            continue;
+        }
+        if (!ModuleFilter.IsEmpty()
+            && !T.Module.Contains(ModuleFilter, ESearchCase::IgnoreCase))
+        {
+            continue;
+        }
 
         TSharedPtr<FJsonObject> TypeObj = MakeShared<FJsonObject>();
         TypeObj->SetStringField(TEXT("name"), T.Name);
         TypeObj->SetStringField(TEXT("category"), T.Category);
+        TypeObj->SetStringField(TEXT("class_path"), T.ClassPath);
+        TypeObj->SetStringField(TEXT("module"), T.Module);
+        TypeObj->SetStringField(TEXT("container_kind"), T.ContainerKind);
+        TypeObj->SetNumberField(TEXT("max_children"), T.MaxChildren);
         TypeObj->SetBoolField(TEXT("is_panel"), T.bIsPanel);
+        if (!T.SlotClassPath.IsEmpty())
+        {
+            TypeObj->SetStringField(TEXT("slot_class"), T.SlotClassPath);
+        }
         ResultArray.Add(MakeShared<FJsonValueObject>(TypeObj));
     }
 
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
     Result->SetArrayField(TEXT("widget_types"), ResultArray);
     Result->SetNumberField(TEXT("count"), ResultArray.Num());
+    Result->SetNumberField(TEXT("total_registered"), Types.Num());
+    if (!Filter.IsEmpty())
+    {
+        Result->SetStringField(TEXT("filter"), Filter);
+    }
+    if (!ModuleFilter.IsEmpty())
+    {
+        Result->SetStringField(TEXT("module_filter"), ModuleFilter);
+    }
     return FMonolithActionResult::Success(Result);
 }
 

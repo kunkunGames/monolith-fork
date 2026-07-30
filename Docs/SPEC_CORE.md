@@ -528,11 +528,21 @@ This folder is both the working copy and the git repo (`git@github.com:tumourlov
    ```powershell
    powershell -ExecutionPolicy Bypass -File Scripts/make_release.ps1 -Version "X.Y.Z"
    ```
-6. **Publish:** Create a GitHub Release with the new tag and attach the generated ZIP assets (`../../Monolith-vX.Y.Z.zip`, `../../Monolith-vX.Y.Z-UE5.7.zip`, and `../../Monolith-vX.Y.Z-UE5.8.zip`).
+6. **Stage a draft release:** Create the tag/release as a draft and upload all three generated ZIP assets while it is still invisible to `/releases/latest`.
    ```bash
-   gh release create vX.Y.Z "../../Monolith-vX.Y.Z.zip" "../../Monolith-vX.Y.Z-UE5.7.zip" "../../Monolith-vX.Y.Z-UE5.8.zip" --title "Monolith vX.Y.Z" --notes-file release_notes.md
+   gh release create vX.Y.Z "../../Monolith-vX.Y.Z.zip" "../../Monolith-vX.Y.Z-UE5.7.zip" "../../Monolith-vX.Y.Z-UE5.8.zip" --draft --title "Monolith vX.Y.Z" --notes-file release_notes.md
    ```
-   **Crucial:** You must copy the exact SHA256 marker lines printed by the release script into the release notes body before publishing. Per-engine assets use `Monolith-SHA256-v2-UE5.7: <hash>` / `Monolith-SHA256-v2-UE5.8: <hash>`, and the script also prints legacy `Monolith-SHA256-v2: <hash>` for compatibility. If the matching platform/engine marker is missing, the auto-updater aborts the installation (the "warn and proceed" fallback only applies to legacy assets).
+   **Crucial:** Copy the exact SHA256 marker lines printed by the release script into `release_notes.md` before creating the draft. Per-engine assets use `Monolith-SHA256-v2-UE5.7: <hash>` / `Monolith-SHA256-v2-UE5.8: <hash>`, and the script also prints legacy `Monolith-SHA256-v2: <hash>` for compatibility.
+7. **Gate the complete draft:** Verify that the release is still a draft, has exactly the three expected non-empty uploaded assets, carries only the three v2 markers, and that every marker matches its local ZIP.
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File Scripts/verify_release_body.ps1 -Version "X.Y.Z"
+   ```
+   Any non-zero exit is ship-blocking. Fix the draft body/assets and rerun; never publish around this gate.
+8. **Publish the verified draft:** Flip only the already-verified draft live.
+   ```bash
+   gh release edit vX.Y.Z --draft=false
+   ```
+   Do not use an immediate non-draft `gh release create`: it exposes a partial-asset window to deployed updaters.
 
 **Important:** Release zips MUST include pre-compiled DLLs (`Binaries/Win64/*.dll`) so Blueprint-only users can use the plugin without rebuilding. The `make_release.ps1` script builds these cleanly (with optional dependencies disabled), packages them into the zip, and sets `"Installed": true` in the zip's `.uplugin` to suppress rebuild prompts. The local dev copy keeps `"Installed": false`.
 
@@ -827,6 +837,8 @@ Distinct from §14's domain-specific `detail_level` knob, every MCP action in th
 **Warnings channel.** When `_fields` + `_omit` are both non-empty, the post-filter appends a free-text entry to the same `warnings[]` array that K3 unknown-param soft-warns and Survivor D AssetPath rewrites already populate. See §JSON-RPC error catalogue note at §2 — the channel's semantic scope now covers three sources.
 
 **MCP wire engagement (fix landed `f7c5b57`, 2026-05-27).** Claude Code's MCP client serialises array-valued top-level arguments as JSON-encoded STRINGS (e.g. `_fields:"[\"count\"]"` rather than `_fields:["count"]`). `MonolithHttpServer.cpp:691-701` already special-cases this quirk for the `params` key; `MonolithJsonUtils::ReadStringArrayParam` now mirrors the same fallback — native `TryGetArrayField` FIRST (back-compat with automation tests and offline CLI callers), then `TryGetStringField` + `FJsonSerializer::Deserialize` validating `EJson::Array` before populating Out. The `_compact_json` bool read carries a parallel `TryGetStringField` + `FCString::ToBool` fallback. A `UE_LOG(LogMonolith, Verbose, ...)` line fires inside the recovery branches only, making future serialization-shape regressions observable without spamming default verbosity. Live-verified via `monolith_status({_fields:["version","total_actions"]})` returning exactly those two keys.
+
+**Action payload type boundary (2026-07-28).** The universal response-shaping wire compatibility above does not apply to registered action parameters. `FMonolithToolRegistry::ExecuteAction` preserves each incoming JSON kind and runs typed schema validation before handler dispatch; it never converts a JSON string containing `[...]` or `{...}` into an action parameter declared as `array` or `object`. Such input returns the structured `invalid_param` schema error, including `validation_errors`, without invoking the handler or mutating the payload. Callers must send the native JSON shape advertised by `monolith_discover(..., mode="schema")`.
 
 ### 14.2 Schema-Tagged Param Kinds (`EMonolithParamKind`, Phase 1.0, 2026-05-27)
 

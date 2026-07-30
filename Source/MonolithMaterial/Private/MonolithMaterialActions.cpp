@@ -45,6 +45,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "UObject/UnrealType.h"
+#include "UObject/SoftObjectPath.h"
 #include "MaterialShared.h"
 #include "RHIShaderPlatform.h"
 #include "Misc/Base64.h"
@@ -135,6 +136,31 @@ static bool GetRequiredStringParamAllowEmpty(const TSharedPtr<FJsonObject>& Para
 		OutValue.TrimStartAndEndInline();
 	}
 	return true;
+}
+
+static bool HasDiskBackedAssetRegistryEntry(const FString& PackagePath)
+{
+	const FString AssetName = FPackageName::GetLongPackageAssetName(PackagePath);
+	if (AssetName.IsEmpty())
+	{
+		return false;
+	}
+
+	const FSoftObjectPath ObjectPath(FString::Printf(TEXT("%s.%s"), *PackagePath, *AssetName));
+	return FAssetRegistryModule::GetRegistry().GetAssetByObjectPath(
+		ObjectPath,
+		/*bIncludeOnlyOnDiskAssets=*/true,
+		/*bSkipARFilteredAssets=*/true).IsValid();
+}
+
+static FMonolithActionResult MakeUnindexedAssetCollisionError(
+	const FString& AssetPath,
+	const UObject& ExistingObject)
+{
+	return FMonolithActionResult::Error(FString::Printf(
+		TEXT("Asset creation collision at '%s': object '%s' already exists in the destination package but is absent from disk-backed Asset Registry data. Save or refresh the asset registry, or choose another path."),
+		*AssetPath,
+		*ExistingObject.GetPathName()));
 }
 
 // ============================================================================
@@ -2975,55 +3001,40 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterial(const TSharedPtr<
 
 	// Parse optional properties
 	FString BlendModeStr = TEXT("Opaque");
-	Params->TryGetStringField(TEXT("blend_mode"), BlendModeStr);
 	FString ShadingModelStr = TEXT("DefaultLit");
-	Params->TryGetStringField(TEXT("shading_model"), ShadingModelStr);
 	FString DomainStr = TEXT("Surface");
-	Params->TryGetStringField(TEXT("material_domain"), DomainStr);
 	bool bTwoSided = false;
-	Params->TryGetBoolField(TEXT("two_sided"), bTwoSided);
-
-	// Extract package path and asset name from the asset path
-	FString PackagePath, AssetName;
-	int32 LastSlash;
-	if (AssetPath.FindLastChar('/', LastSlash))
+	FString ParamError;
+	if (!MonolithParamUtils::GetOptionalStringParam(
+			Params,
+			TEXT("blend_mode"),
+			BlendModeStr,
+			ParamError,
+			BlendModeStr)
+		|| !MonolithParamUtils::GetOptionalStringParam(
+			Params,
+			TEXT("shading_model"),
+			ShadingModelStr,
+			ParamError,
+			ShadingModelStr)
+		|| !MonolithParamUtils::GetOptionalStringParam(
+			Params,
+			TEXT("material_domain"),
+			DomainStr,
+			ParamError,
+			DomainStr)
+		|| !MonolithParamUtils::GetOptionalBoolParam(
+			Params,
+			TEXT("two_sided"),
+			bTwoSided,
+			ParamError,
+			false))
 	{
-		PackagePath = AssetPath.Left(LastSlash);
-		AssetName = AssetPath.Mid(LastSlash + 1);
-	}
-	else
-	{
-		return FMonolithActionResult::Error(TEXT("Invalid asset path — must contain at least one '/' (e.g. /Game/Materials/M_Name)"));
-	}
-
-	if (AssetName.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("Asset name is empty"));
-	}
-
-	// Check if asset already exists without emitting LoadAsset errors for the expected missing-asset path.
-	if (UEditorAssetLibrary::DoesAssetExist(AssetPath))
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
-	}
-
-	// Create package and material
-	UPackage* Pkg = CreatePackage(*AssetPath);
-	if (!Pkg)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at '%s'"), *AssetPath));
-	}
-	// DoesAssetExist above is an Asset-Registry query only; FullyLoad is the authoritative
-	// on-disk check (no-op when nothing is on disk) so an unindexed .uasset is merged, not clobbered.
-	Pkg->FullyLoad();
-
-	UMaterial* NewMat = NewObject<UMaterial>(Pkg, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
-	if (!NewMat)
-	{
-		return FMonolithActionResult::Error(TEXT("Failed to create UMaterial object"));
+		return FMonolithActionResult::Error(
+			ParamError,
+			FMonolithJsonUtils::ErrInvalidParams);
 	}
 
-	// Set material properties
 	FString EnumError;
 	EMaterialDomain Domain;
 	if (!ParseEnum<EMaterialDomain>(DomainStr, Domain, EnumError))
@@ -3040,6 +3051,51 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterial(const TSharedPtr<
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("shading_model: %s"), *EnumError));
 	}
+
+	// Extract package path and asset name from the asset path
+	FString AssetName;
+	int32 LastSlash;
+	if (AssetPath.FindLastChar('/', LastSlash))
+	{
+		AssetName = AssetPath.Mid(LastSlash + 1);
+	}
+	else
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid asset path — must contain at least one '/' (e.g. /Game/Materials/M_Name)"));
+	}
+
+	if (AssetName.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Asset name is empty"));
+	}
+
+	// Check persisted registry data without conflating it with a loaded, unsaved object.
+	if (HasDiskBackedAssetRegistryEntry(AssetPath))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
+	}
+
+	// Create package and material
+	UPackage* Pkg = CreatePackage(*AssetPath);
+	if (!Pkg)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at '%s'"), *AssetPath));
+	}
+	// FullyLoad catches stale/unindexed on-disk packages; FindObject also catches
+	// loaded unsaved objects. Creation never mutates or replaces either collision.
+	Pkg->FullyLoad();
+	if (UObject* ExistingObject = FindObject<UObject>(Pkg, *AssetName))
+	{
+		return MakeUnindexedAssetCollisionError(AssetPath, *ExistingObject);
+	}
+
+	UMaterial* NewMat = NewObject<UMaterial>(Pkg, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
+	if (!NewMat)
+	{
+		return FMonolithActionResult::Error(TEXT("Failed to create UMaterial object"));
+	}
+
+	// Set material properties after every fallible parameter and collision check.
 	NewMat->MaterialDomain = Domain;
 	NewMat->BlendMode = BlendMode;
 	NewMat->SetShadingModel(ShadingModel);
@@ -3105,8 +3161,8 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load parent material at '%s'"), *ParentPath));
 	}
 
-	// Check if asset already exists
-	if (UEditorAssetLibrary::DoesAssetExist(AssetPath))
+	// Check persisted registry data without conflating it with a loaded, unsaved object.
+	if (HasDiskBackedAssetRegistryEntry(AssetPath))
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
 	}
@@ -3126,8 +3182,13 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 	{
 		return FMonolithActionResult::Error(TEXT("Failed to create package"));
 	}
-	// Registry-only DoesAssetExist above; FullyLoad is the authoritative on-disk check.
+	// FullyLoad catches stale/unindexed on-disk packages; FindObject also catches
+	// loaded unsaved objects.
 	Pkg->FullyLoad();
+	if (UObject* ExistingObject = FindObject<UObject>(Pkg, *AssetName))
+	{
+		return MakeUnindexedAssetCollisionError(AssetPath, *ExistingObject);
+	}
 
 	UMaterialInstanceConstant* MIC = NewObject<UMaterialInstanceConstant>(Pkg, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
 	if (!MIC)
@@ -4894,110 +4955,213 @@ FMonolithActionResult FMonolithMaterialActions::GetExpressionConnections(const T
 
 FMonolithActionResult FMonolithMaterialActions::MoveExpression(const TSharedPtr<FJsonObject>& Params)
 {
-	// Build a list of move operations
 	struct FMoveOp
 	{
 		FString Name;
-		int32 X;
-		int32 Y;
+		int32 X = 0;
+		int32 Y = 0;
 	};
+
+	const auto ReadOptionalCoordinate = [](
+		const TSharedPtr<FJsonObject>& Object,
+		const FString& PrimaryKey,
+		const FString& AliasKey,
+		const FString& Context,
+		int32& OutValue) -> FString
+	{
+		OutValue = 0;
+		const bool bHasPrimary = Object.IsValid() && Object->HasField(PrimaryKey);
+		const bool bHasAlias = Object.IsValid() && !AliasKey.IsEmpty() && Object->HasField(AliasKey);
+		if (bHasPrimary && bHasAlias)
+		{
+			return FString::Printf(
+				TEXT("Parameter '%s' cannot contain both '%s' and '%s'"),
+				*Context,
+				*PrimaryKey,
+				*AliasKey);
+		}
+		if (!bHasPrimary && !bHasAlias)
+		{
+			return FString();
+		}
+
+		const FString FieldKey = bHasPrimary ? PrimaryKey : AliasKey;
+		const FString QualifiedKey = Context.IsEmpty()
+			? FieldKey
+			: FString::Printf(TEXT("%s.%s"), *Context, *FieldKey);
+		const TSharedPtr<FJsonValue> Field = Object->TryGetField(FieldKey);
+		double RawValue = 0.0;
+		if (!Field.IsValid()
+			|| Field->Type != EJson::Number
+			|| !Field->TryGetNumber(RawValue)
+			|| !FMath::IsFinite(RawValue)
+			|| RawValue != FMath::TruncToDouble(RawValue)
+			|| RawValue < static_cast<double>(TNumericLimits<int32>::Min())
+			|| RawValue > static_cast<double>(TNumericLimits<int32>::Max()))
+		{
+			return FString::Printf(
+				TEXT("Parameter '%s' must be a finite 32-bit integer"),
+				*QualifiedKey);
+		}
+
+		OutValue = static_cast<int32>(RawValue);
+		return FString();
+	};
+
 	TArray<FMoveOp> MoveOps;
 	bool bRelative = false;
-	Params->TryGetBoolField(TEXT("relative"), bRelative);
-
-	const TArray<TSharedPtr<FJsonValue>>* ExpressionsArr = nullptr;
-	// Handle Claude Code JSON string serialization quirk — array may arrive as string
-	TSharedPtr<FJsonValue> ExpressionsField = Params->TryGetField(TEXT("expressions"));
-	TArray<TSharedPtr<FJsonValue>> ParsedArray;
-	if (ExpressionsField.IsValid())
+	FString ParamError;
+	if (!MonolithParamUtils::GetOptionalBoolParam(
+			Params,
+			TEXT("relative"),
+			bRelative,
+			ParamError,
+			false))
 	{
-		if (ExpressionsField->Type == EJson::Array)
-		{
-			ExpressionsArr = &ExpressionsField->AsArray();
-		}
-		else if (ExpressionsField->Type == EJson::String)
-		{
-			TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ExpressionsField->AsString());
-			TSharedPtr<FJsonValue> Parsed;
-			if (FJsonSerializer::Deserialize(Reader, Parsed) && Parsed.IsValid() && Parsed->Type == EJson::Array)
-			{
-				ParsedArray = Parsed->AsArray();
-				ExpressionsArr = &ParsedArray;
-			}
-		}
+		return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
 	}
-	if (ExpressionsArr && ExpressionsArr->Num() > 0)
+
+	const bool bHasExpressions = Params.IsValid() && Params->HasField(TEXT("expressions"));
+	const bool bHasExpressionName = Params.IsValid() && Params->HasField(TEXT("expression_name"));
+	if (bHasExpressions == bHasExpressionName)
 	{
-		for (const TSharedPtr<FJsonValue>& Val : *ExpressionsArr)
+		return FMonolithActionResult::Error(
+			TEXT("Provide exactly one of 'expression_name' or 'expressions'"),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	if (bHasExpressions)
+	{
+		const TSharedPtr<FJsonValue> ExpressionsField = Params->TryGetField(TEXT("expressions"));
+		if (!ExpressionsField.IsValid() || ExpressionsField->Type != EJson::Array)
 		{
+			return FMonolithActionResult::Error(
+				TEXT("Parameter 'expressions' must be a JSON array"),
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>& Expressions = ExpressionsField->AsArray();
+		if (Expressions.IsEmpty())
+		{
+			return FMonolithActionResult::Error(
+				TEXT("Parameter 'expressions' must contain at least one move operation"),
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
+
+		TSet<FName> SeenNames;
+		MoveOps.Reserve(Expressions.Num());
+		for (int32 Index = 0; Index < Expressions.Num(); ++Index)
+		{
+			const FString Context = FString::Printf(TEXT("expressions[%d]"), Index);
+			const TSharedPtr<FJsonValue>& Value = Expressions[Index];
 			const TSharedPtr<FJsonObject>* ObjPtr = nullptr;
-			if (Val && Val->TryGetObject(ObjPtr) && ObjPtr)
+			if (!Value.IsValid()
+				|| Value->Type != EJson::Object
+				|| !Value->TryGetObject(ObjPtr)
+				|| !ObjPtr
+				|| !ObjPtr->IsValid())
 			{
-				FMoveOp Op;
-				if (!(*ObjPtr)->TryGetStringField(TEXT("name"), Op.Name))
-				{
-					return FMonolithActionResult::Error(TEXT("Parameter 'name' must be a valid string for each expression in 'expressions' array"), FMonolithJsonUtils::ErrInvalidParams);
-				}
-
-				// Accept both "x"/"y" and "pos_x"/"pos_y"
-				double XVal = 0.0;
-				if ((*ObjPtr)->HasField(TEXT("x")))
-				{
-					if (!(*ObjPtr)->TryGetNumberField(TEXT("x"), XVal)) return FMonolithActionResult::Error(TEXT("Parameter 'x' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
-				}
-				else if ((*ObjPtr)->HasField(TEXT("pos_x")))
-				{
-					if (!(*ObjPtr)->TryGetNumberField(TEXT("pos_x"), XVal)) return FMonolithActionResult::Error(TEXT("Parameter 'pos_x' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
-				}
-				Op.X = static_cast<int32>(XVal);
-
-				double YVal = 0.0;
-				if ((*ObjPtr)->HasField(TEXT("y")))
-				{
-					if (!(*ObjPtr)->TryGetNumberField(TEXT("y"), YVal)) return FMonolithActionResult::Error(TEXT("Parameter 'y' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
-				}
-				else if ((*ObjPtr)->HasField(TEXT("pos_y")))
-				{
-					if (!(*ObjPtr)->TryGetNumberField(TEXT("pos_y"), YVal)) return FMonolithActionResult::Error(TEXT("Parameter 'pos_y' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
-				}
-				Op.Y = static_cast<int32>(YVal);
-
-				MoveOps.Add(MoveTemp(Op));
+				return FMonolithActionResult::Error(
+					FString::Printf(TEXT("Parameter '%s' must be a JSON object"), *Context),
+					FMonolithJsonUtils::ErrInvalidParams);
 			}
-		}
-	}
-	else if (Params->HasField(TEXT("expression_name")))
-	{
-		FMoveOp Op;
-		if (!Params->TryGetStringField(TEXT("expression_name"), Op.Name))
-		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'expression_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
-		}
 
-		double XVal = 0.0;
-		if (Params->HasField(TEXT("pos_x")) && !Params->TryGetNumberField(TEXT("pos_x"), XVal))
-		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'pos_x' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
-		}
-		Op.X = static_cast<int32>(XVal);
+			FMoveOp Op;
+			const TSharedPtr<FJsonValue> NameField = (*ObjPtr)->TryGetField(TEXT("name"));
+			if (!NameField.IsValid()
+				|| NameField->Type != EJson::String
+				|| !NameField->TryGetString(Op.Name))
+			{
+				return FMonolithActionResult::Error(
+					FString::Printf(TEXT("Parameter '%s.name' must be a non-empty string"), *Context),
+					FMonolithJsonUtils::ErrInvalidParams);
+			}
+			Op.Name.TrimStartAndEndInline();
+			if (Op.Name.IsEmpty())
+			{
+				return FMonolithActionResult::Error(
+					FString::Printf(TEXT("Parameter '%s.name' must be a non-empty string"), *Context),
+					FMonolithJsonUtils::ErrInvalidParams);
+			}
 
-		double YVal = 0.0;
-		if (Params->HasField(TEXT("pos_y")) && !Params->TryGetNumberField(TEXT("pos_y"), YVal))
-		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'pos_y' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
-		}
-		Op.Y = static_cast<int32>(YVal);
+			const FName ExpressionName(*Op.Name);
+			if (SeenNames.Contains(ExpressionName))
+			{
+				return FMonolithActionResult::Error(
+					FString::Printf(
+						TEXT("Parameter '%s.name' duplicates expression '%s'"),
+						*Context,
+						*Op.Name),
+					FMonolithJsonUtils::ErrInvalidParams);
+			}
+			SeenNames.Add(ExpressionName);
 
-		MoveOps.Add(MoveTemp(Op));
+			if (FString CoordinateError = ReadOptionalCoordinate(
+					*ObjPtr,
+					TEXT("x"),
+					TEXT("pos_x"),
+					Context,
+					Op.X);
+				!CoordinateError.IsEmpty())
+			{
+				return FMonolithActionResult::Error(
+					CoordinateError,
+					FMonolithJsonUtils::ErrInvalidParams);
+			}
+			if (FString CoordinateError = ReadOptionalCoordinate(
+					*ObjPtr,
+					TEXT("y"),
+					TEXT("pos_y"),
+					Context,
+					Op.Y);
+				!CoordinateError.IsEmpty())
+			{
+				return FMonolithActionResult::Error(
+					CoordinateError,
+					FMonolithJsonUtils::ErrInvalidParams);
+			}
+
+			MoveOps.Add(MoveTemp(Op));
+		}
 	}
 	else
 	{
-		return FMonolithActionResult::Error(TEXT("Must provide either 'expression_name' or 'expressions' array"));
-	}
+		FMoveOp Op;
+		if (!MonolithParamUtils::GetRequiredStringParam(
+				Params,
+				TEXT("expression_name"),
+				Op.Name,
+				ParamError))
+		{
+			return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
+		}
 
-	if (MoveOps.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("No move operations specified"));
+		if (FString CoordinateError = ReadOptionalCoordinate(
+				Params,
+				TEXT("pos_x"),
+				FString(),
+				FString(),
+				Op.X);
+			!CoordinateError.IsEmpty())
+		{
+			return FMonolithActionResult::Error(
+				CoordinateError,
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (FString CoordinateError = ReadOptionalCoordinate(
+				Params,
+				TEXT("pos_y"),
+				FString(),
+				FString(),
+				Op.Y);
+			!CoordinateError.IsEmpty())
+		{
+			return FMonolithActionResult::Error(
+				CoordinateError,
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
+
+		MoveOps.Add(MoveTemp(Op));
 	}
 
 	FString AssetPath;
@@ -5012,7 +5176,11 @@ FMonolithActionResult FMonolithMaterialActions::MoveExpression(const TSharedPtr<
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load base material at '%s'"), *AssetPath));
 	}
-	// Build name -> expression lookup
+	if (!GEditor)
+	{
+		return FMonolithActionResult::Error(TEXT("Editor transaction context is unavailable"));
+	}
+
 	TMap<FString, UMaterialExpression*> NameToExpr;
 	for (const TObjectPtr<UMaterialExpression>& Expr : Mat->GetExpressions())
 	{
@@ -5022,41 +5190,78 @@ FMonolithActionResult FMonolithMaterialActions::MoveExpression(const TSharedPtr<
 		}
 	}
 
-	GEditor->BeginTransaction(FText::FromString(TEXT("MoveExpression")));
-	Mat->Modify();
-
-	TArray<TSharedPtr<FJsonValue>> MovedArray;
-	TArray<FString> NotFound;
-
+	struct FResolvedMove
+	{
+		FString Name;
+		UMaterialExpression* Expression = nullptr;
+		int32 X = 0;
+		int32 Y = 0;
+	};
+	TArray<FResolvedMove> ResolvedMoves;
+	ResolvedMoves.Reserve(MoveOps.Num());
+	TArray<FString> MissingNames;
 	for (const FMoveOp& Op : MoveOps)
 	{
 		UMaterialExpression** FoundPtr = NameToExpr.Find(Op.Name);
 		if (!FoundPtr || !*FoundPtr)
 		{
-			NotFound.Add(Op.Name);
+			MissingNames.Add(Op.Name);
 			continue;
 		}
 
-		UMaterialExpression* Expr = *FoundPtr;
-		if (bRelative)
+		UMaterialExpression* Expression = *FoundPtr;
+		const int64 TargetX = bRelative
+			? static_cast<int64>(Expression->MaterialExpressionEditorX) + static_cast<int64>(Op.X)
+			: static_cast<int64>(Op.X);
+		const int64 TargetY = bRelative
+			? static_cast<int64>(Expression->MaterialExpressionEditorY) + static_cast<int64>(Op.Y)
+			: static_cast<int64>(Op.Y);
+		if (TargetX < static_cast<int64>(TNumericLimits<int32>::Min())
+			|| TargetX > static_cast<int64>(TNumericLimits<int32>::Max())
+			|| TargetY < static_cast<int64>(TNumericLimits<int32>::Min())
+			|| TargetY > static_cast<int64>(TNumericLimits<int32>::Max()))
 		{
-			Expr->MaterialExpressionEditorX += Op.X;
-			Expr->MaterialExpressionEditorY += Op.Y;
-		}
-		else
-		{
-			Expr->MaterialExpressionEditorX = Op.X;
-			Expr->MaterialExpressionEditorY = Op.Y;
+			return FMonolithActionResult::Error(
+				FString::Printf(
+					TEXT("Move for expression '%s' would exceed the 32-bit editor coordinate range"),
+					*Op.Name),
+				FMonolithJsonUtils::ErrInvalidParams);
 		}
 
+		FResolvedMove& Resolved = ResolvedMoves.AddDefaulted_GetRef();
+		Resolved.Name = Op.Name;
+		Resolved.Expression = Expression;
+		Resolved.X = static_cast<int32>(TargetX);
+		Resolved.Y = static_cast<int32>(TargetY);
+	}
+
+	if (!MissingNames.IsEmpty())
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(
+				TEXT("Move aborted before mutation because material expressions were not found: %s"),
+				*FString::Join(MissingNames, TEXT(", "))));
+	}
+
+	GEditor->BeginTransaction(FText::FromString(TEXT("MoveExpression")));
+	Mat->Modify();
+	Mat->PreEditChange(nullptr);
+
+	TArray<TSharedPtr<FJsonValue>> MovedArray;
+	MovedArray.Reserve(ResolvedMoves.Num());
+	for (const FResolvedMove& Resolved : ResolvedMoves)
+	{
+		Resolved.Expression->Modify();
+		Resolved.Expression->MaterialExpressionEditorX = Resolved.X;
+		Resolved.Expression->MaterialExpressionEditorY = Resolved.Y;
+
 		auto MovedJson = MakeShared<FJsonObject>();
-		MovedJson->SetStringField(TEXT("name"), Op.Name);
-		MovedJson->SetNumberField(TEXT("x"), Expr->MaterialExpressionEditorX);
-		MovedJson->SetNumberField(TEXT("y"), Expr->MaterialExpressionEditorY);
+		MovedJson->SetStringField(TEXT("name"), Resolved.Name);
+		MovedJson->SetNumberField(TEXT("x"), Resolved.X);
+		MovedJson->SetNumberField(TEXT("y"), Resolved.Y);
 		MovedArray.Add(MakeShared<FJsonValueObject>(MovedJson));
 	}
 
-	Mat->PreEditChange(nullptr);
 	Mat->PostEditChange();
 	GEditor->EndTransaction();
 
@@ -5064,13 +5269,6 @@ FMonolithActionResult FMonolithMaterialActions::MoveExpression(const TSharedPtr<
 	ResultJson->SetStringField(TEXT("asset_path"), AssetPath);
 	ResultJson->SetNumberField(TEXT("moved_count"), MovedArray.Num());
 	ResultJson->SetArrayField(TEXT("moved"), MovedArray);
-	if (NotFound.Num() > 0)
-	{
-		TArray<TSharedPtr<FJsonValue>> NotFoundArr;
-		NotFoundArr.Reserve(NotFound.Num());
-		for (const FString& Name : NotFound) NotFoundArr.Add(MakeShared<FJsonValueString>(Name));
-		ResultJson->SetArrayField(TEXT("not_found"), NotFoundArr);
-	}
 
 	return FMonolithActionResult::Success(ResultJson);
 }
@@ -8309,15 +8507,45 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialFunction(const TSh
 		return FMonolithActionResult::Error(TEXT("Asset name is empty"));
 	}
 
-	// Check if asset already exists
-	if (UEditorAssetLibrary::DoesAssetExist(AssetPath))
+	// Check persisted registry data without conflating it with a loaded, unsaved object.
+	if (HasDiskBackedAssetRegistryEntry(AssetPath))
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
 	}
 
-	// Resolve function class from type param
+	// Preflight every fallible optional field before package/object creation.
 	FString FuncType = TEXT("MaterialFunction");
-	Params->TryGetStringField(TEXT("type"), FuncType);
+	FString Description;
+	bool bExposeToLibrary = true;
+	TArray<FString> LibraryCategories;
+	FString ParamError;
+	if (!MonolithParamUtils::GetOptionalStringParam(
+			Params,
+			TEXT("type"),
+			FuncType,
+			ParamError,
+			FuncType)
+		|| !MonolithParamUtils::GetOptionalStringParam(
+			Params,
+			TEXT("description"),
+			Description,
+			ParamError)
+		|| !MonolithParamUtils::GetOptionalBoolParam(
+			Params,
+			TEXT("expose_to_library"),
+			bExposeToLibrary,
+			ParamError,
+			true)
+		|| !MonolithParamUtils::GetOptionalStringArrayParam(
+			Params,
+			TEXT("library_categories"),
+			LibraryCategories,
+			ParamError))
+	{
+		return FMonolithActionResult::Error(
+			ParamError,
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UClass* FuncClass = UMaterialFunction::StaticClass();
 	if (FuncType == TEXT("MaterialLayer"))
@@ -8339,8 +8567,13 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialFunction(const TSh
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at '%s'"), *AssetPath));
 	}
-	// Registry-only DoesAssetExist above; FullyLoad is the authoritative on-disk check.
+	// FullyLoad catches stale/unindexed on-disk packages; FindObject also catches
+	// loaded unsaved objects.
 	Pkg->FullyLoad();
+	if (UObject* ExistingObject = FindObject<UObject>(Pkg, *AssetName))
+	{
+		return MakeUnindexedAssetCollisionError(AssetPath, *ExistingObject);
+	}
 
 	UMaterialFunction* NewFunc = Cast<UMaterialFunction>(NewObject<UObject>(Pkg, FuncClass, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional));
 	if (!NewFunc)
@@ -8348,33 +8581,15 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialFunction(const TSh
 		return FMonolithActionResult::Error(TEXT("Failed to create UMaterialFunction object"));
 	}
 
-	// Set optional properties
-	if (Params->HasField(TEXT("description")))
-	{
-		FString DescStr;
-		if (!Params->TryGetStringField(TEXT("description"), DescStr))
-		{
-			return FMonolithActionResult::Error(TEXT("'description' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
-		}
-		NewFunc->Description = DescStr;
-	}
-
-	bool bExposeToLibrary = true;
-	Params->TryGetBoolField(TEXT("expose_to_library"), bExposeToLibrary);
+	// Apply the already-validated optional properties.
+	NewFunc->Description = Description;
 	NewFunc->bExposeToLibrary = bExposeToLibrary;
 
 	// LibraryCategories was renamed to LibraryCategoriesText (TArray<FString> → TArray<FText>) in UE 5.x
-	const TArray<TSharedPtr<FJsonValue>>* CategoriesArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("library_categories"), CategoriesArray))
+	NewFunc->LibraryCategoriesText.Empty();
+	for (const FString& Category : LibraryCategories)
 	{
-		NewFunc->LibraryCategoriesText.Empty();
-		for (const TSharedPtr<FJsonValue>& CatVal : *CategoriesArray)
-		{
-			if (CatVal.IsValid() && CatVal->Type == EJson::String)
-			{
-				NewFunc->LibraryCategoriesText.Add(FText::FromString(CatVal->AsString()));
-			}
-		}
+		NewFunc->LibraryCategoriesText.Add(FText::FromString(Category));
 	}
 
 	// Register with asset registry
@@ -9259,6 +9474,44 @@ FMonolithActionResult FMonolithMaterialActions::SetFunctionMetadata(const TShare
 		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
 	}
 
+	const bool bHasDescription = Params->HasField(TEXT("description"));
+	const bool bHasExposeToLibrary = Params->HasField(TEXT("expose_to_library"));
+	const bool bHasLibraryCategories = Params->HasField(TEXT("library_categories"));
+	if (!bHasDescription && !bHasExposeToLibrary && !bHasLibraryCategories)
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Provide at least one of 'description', 'expose_to_library', or 'library_categories'"),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FString DescriptionValue;
+	bool bExposeValue = false;
+	TArray<FString> LibraryCategories;
+	FString ParamError;
+	if ((bHasDescription
+			&& !MonolithParamUtils::GetOptionalStringParam(
+				Params,
+				TEXT("description"),
+				DescriptionValue,
+				ParamError))
+		|| (bHasExposeToLibrary
+			&& !MonolithParamUtils::GetOptionalBoolParam(
+				Params,
+				TEXT("expose_to_library"),
+				bExposeValue,
+				ParamError))
+		|| (bHasLibraryCategories
+			&& !MonolithParamUtils::GetOptionalStringArrayParam(
+				Params,
+				TEXT("library_categories"),
+				LibraryCategories,
+				ParamError)))
+	{
+		return FMonolithActionResult::Error(
+			ParamError,
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
 	{
@@ -9275,31 +9528,24 @@ FMonolithActionResult FMonolithMaterialActions::SetFunctionMetadata(const TShare
 
 	TArray<FString> UpdatedFields;
 
-	FString DescriptionValue;
-	if (Params->TryGetStringField(TEXT("description"), DescriptionValue))
+	if (bHasDescription)
 	{
 		MatFunc->Description = DescriptionValue;
 		UpdatedFields.Add(TEXT("description"));
 	}
 
-	bool bExposeValue;
-	if (Params->TryGetBoolField(TEXT("expose_to_library"), bExposeValue))
+	if (bHasExposeToLibrary)
 	{
 		MatFunc->bExposeToLibrary = bExposeValue;
 		UpdatedFields.Add(TEXT("expose_to_library"));
 	}
 
-	const TArray<TSharedPtr<FJsonValue>>* CategoriesArray;
-	if (Params->TryGetArrayField(TEXT("library_categories"), CategoriesArray))
+	if (bHasLibraryCategories)
 	{
 		MatFunc->LibraryCategoriesText.Empty();
-		for (const TSharedPtr<FJsonValue>& CatVal : *CategoriesArray)
+		for (const FString& Category : LibraryCategories)
 		{
-			FString CatStr;
-			if (CatVal.IsValid() && CatVal->TryGetString(CatStr))
-			{
-				MatFunc->LibraryCategoriesText.Add(FText::FromString(CatStr));
-			}
+			MatFunc->LibraryCategoriesText.Add(FText::FromString(Category));
 		}
 		UpdatedFields.Add(TEXT("library_categories"));
 	}
@@ -9458,52 +9704,24 @@ FMonolithActionResult FMonolithMaterialActions::DeleteFunctionExpression(const T
 // Wave 7 — Batch & Advanced
 // ============================================================================
 
-// Helper: Parse an array field that may arrive as a JSON string (Claude Code quirk)
-static bool ParseJsonArrayField(const TSharedPtr<FJsonObject>& Params, const FString& FieldName,
-	TArray<TSharedPtr<FJsonValue>>& OutArray, FString& OutError)
+// Batch asset paths have one canonical wire format: a native JSON string array.
+static bool GetRequiredStringArrayField(
+	const TSharedPtr<FJsonObject>& Params,
+	const FString& FieldName,
+	TArray<FString>& OutValues,
+	FString& OutError)
 {
-	TSharedPtr<FJsonValue> Field = Params->TryGetField(FieldName);
-	if (!Field.IsValid())
+	if (!Params.IsValid() || !Params->HasField(FieldName))
 	{
 		OutError = FString::Printf(TEXT("Missing required field '%s'"), *FieldName);
 		return false;
 	}
 
-	if (Field->Type == EJson::Array)
-	{
-		OutArray = Field->AsArray();
-		return true;
-	}
-
-	// Claude Code JSON string serialization quirk — array may arrive as string
-	if (Field->Type == EJson::String)
-	{
-		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Field->AsString());
-		TSharedPtr<FJsonValue> Parsed;
-		if (FJsonSerializer::Deserialize(Reader, Parsed) && Parsed.IsValid() && Parsed->Type == EJson::Array)
-		{
-			OutArray = Parsed->AsArray();
-			return true;
-		}
-	}
-
-	OutError = FString::Printf(TEXT("'%s' must be a JSON array"), *FieldName);
-	return false;
-}
-
-// Helper: Extract string array from parsed JSON values
-static TArray<FString> JsonArrayToStringArray(const TArray<TSharedPtr<FJsonValue>>& JsonArray)
-{
-	TArray<FString> Result;
-	Result.Reserve(JsonArray.Num());
-	for (const TSharedPtr<FJsonValue>& Val : JsonArray)
-	{
-		if (Val.IsValid())
-		{
-			Result.Add(Val->AsString());
-		}
-	}
-	return Result;
+	return MonolithParamUtils::GetOptionalStringArrayParam(
+		Params,
+		FieldName,
+		OutValues,
+		OutError);
 }
 
 // ============================================================================
@@ -9514,15 +9732,15 @@ static TArray<FString> JsonArrayToStringArray(const TArray<TSharedPtr<FJsonValue
 
 FMonolithActionResult FMonolithMaterialActions::BatchSetMaterialProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	// Parse asset_paths array
-	TArray<TSharedPtr<FJsonValue>> PathsJsonArray;
+	TArray<FString> AssetPaths;
 	FString ParseError;
-	if (!ParseJsonArrayField(Params, TEXT("asset_paths"), PathsJsonArray, ParseError))
+	if (!GetRequiredStringArrayField(Params, TEXT("asset_paths"), AssetPaths, ParseError))
 	{
-		return FMonolithActionResult::Error(ParseError);
+		return FMonolithActionResult::Error(
+			ParseError,
+			FMonolithJsonUtils::ErrInvalidParams);
 	}
 
-	TArray<FString> AssetPaths = JsonArrayToStringArray(PathsJsonArray);
 	if (AssetPaths.Num() == 0)
 	{
 		return FMonolithActionResult::Error(TEXT("asset_paths array is empty"));
@@ -9756,15 +9974,15 @@ FMonolithActionResult FMonolithMaterialActions::BatchSetMaterialProperty(const T
 
 FMonolithActionResult FMonolithMaterialActions::BatchRecompile(const TSharedPtr<FJsonObject>& Params)
 {
-	// Parse asset_paths array
-	TArray<TSharedPtr<FJsonValue>> PathsJsonArray;
+	TArray<FString> AssetPaths;
 	FString ParseError;
-	if (!ParseJsonArrayField(Params, TEXT("asset_paths"), PathsJsonArray, ParseError))
+	if (!GetRequiredStringArrayField(Params, TEXT("asset_paths"), AssetPaths, ParseError))
 	{
-		return FMonolithActionResult::Error(ParseError);
+		return FMonolithActionResult::Error(
+			ParseError,
+			FMonolithJsonUtils::ErrInvalidParams);
 	}
 
-	TArray<FString> AssetPaths = JsonArrayToStringArray(PathsJsonArray);
 	if (AssetPaths.Num() == 0)
 	{
 		return FMonolithActionResult::Error(TEXT("asset_paths array is empty"));
@@ -10246,20 +10464,71 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 
 	// ---- Parse optional params ----
 	FString BlendModeStr = TEXT("Opaque");
-	Params->TryGetStringField(TEXT("blend_mode"), BlendModeStr);
 	FString ShadingModelStr = TEXT("DefaultLit");
-	Params->TryGetStringField(TEXT("shading_model"), ShadingModelStr);
 	FString DomainStr = TEXT("Surface");
-	Params->TryGetStringField(TEXT("material_domain"), DomainStr);
 	bool bTwoSided = false;
-	Params->TryGetBoolField(TEXT("two_sided"), bTwoSided);
 	int32 MaxTextureSize = 2048;
-	double MaxTextureSize_Val;
-	if (Params->TryGetNumberField(TEXT("max_texture_size"), MaxTextureSize_Val)) MaxTextureSize = static_cast<int32>(MaxTextureSize_Val);
 	bool bOpacityFromAlpha = false;
-	Params->TryGetBoolField(TEXT("opacity_from_alpha"), bOpacityFromAlpha);
 	bool bReplaceExisting = false;
-	Params->TryGetBoolField(TEXT("replace_existing"), bReplaceExisting);
+	FString ParamError;
+	if (!MonolithParamUtils::GetOptionalStringParam(
+			Params,
+			TEXT("blend_mode"),
+			BlendModeStr,
+			ParamError,
+			BlendModeStr)
+		|| !MonolithParamUtils::GetOptionalStringParam(
+			Params,
+			TEXT("shading_model"),
+			ShadingModelStr,
+			ParamError,
+			ShadingModelStr)
+		|| !MonolithParamUtils::GetOptionalStringParam(
+			Params,
+			TEXT("material_domain"),
+			DomainStr,
+			ParamError,
+			DomainStr)
+		|| !MonolithParamUtils::GetOptionalBoolParam(
+			Params,
+			TEXT("two_sided"),
+			bTwoSided,
+			ParamError,
+			false)
+		|| !MonolithParamUtils::GetOptionalBoolParam(
+			Params,
+			TEXT("opacity_from_alpha"),
+			bOpacityFromAlpha,
+			ParamError,
+			false)
+		|| !MonolithParamUtils::GetOptionalBoolParam(
+			Params,
+			TEXT("replace_existing"),
+			bReplaceExisting,
+			ParamError,
+			false))
+	{
+		return FMonolithActionResult::Error(
+			ParamError,
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+	if (const TSharedPtr<FJsonValue> MaxTextureSizeValue = Params->TryGetField(TEXT("max_texture_size"));
+		MaxTextureSizeValue.IsValid())
+	{
+		double RawMaxTextureSize = 0.0;
+		if (MaxTextureSizeValue->Type != EJson::Number
+			|| !MaxTextureSizeValue->TryGetNumber(RawMaxTextureSize)
+			|| !FMath::IsFinite(RawMaxTextureSize)
+			|| RawMaxTextureSize != FMath::TruncToDouble(RawMaxTextureSize)
+			|| RawMaxTextureSize < 0.0
+			|| RawMaxTextureSize > static_cast<double>(TNumericLimits<int32>::Max()))
+		{
+			return FMonolithActionResult::Error(
+				TEXT("Parameter 'max_texture_size' must be a non-negative 32-bit integer"),
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
+		MaxTextureSize = static_cast<int32>(RawMaxTextureSize);
+	}
 
 	// Reject unmountable/malformed destinations before any registry lookup, texture import
 	// or CreatePackage (CreatePackage asserts on inputs such as "//Game/..."). Runs BEFORE
@@ -10312,12 +10581,33 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 		return FMonolithActionResult::Error(FString::Printf(TEXT("texture_folder: %s"), *TextureFolderError));
 	}
 
-	// Non-destructive collision check runs BEFORE Phase 1 so a doomed create fails without
-	// inspecting or importing any source file. The DESTRUCTIVE delete stays in Phase 2 —
-	// an import failure must never destroy the caller's existing material.
-	if (!bReplaceExisting && UEditorAssetLibrary::DoesAssetExist(MaterialPath))
+	// Classify every collision before Phase 1 so a doomed create fails without
+	// inspecting or importing any source file. Asset Registry disk data is the
+	// only replaceable authority; stale disk packages and loaded unsaved objects
+	// are explicit errors rather than alternate existence fallbacks.
+	const bool bHasDiskBackedMaterial = HasDiskBackedAssetRegistryEntry(MaterialPath);
+	if (bHasDiskBackedMaterial && !bReplaceExisting)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Material already exists at '%s'. Set replace_existing: true to overwrite."), *MaterialPath));
+	}
+	if (!bHasDiskBackedMaterial)
+	{
+		FString ExistingPackageFilename;
+		if (FPackageName::DoesPackageExist(MaterialPath, &ExistingPackageFilename))
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Asset creation collision at '%s': package file '%s' exists on disk but is absent from disk-backed Asset Registry data. Refresh the asset registry or choose another path."),
+				*MaterialPath,
+				*ExistingPackageFilename));
+		}
+
+		if (UPackage* ExistingPackage = FindPackage(nullptr, *MaterialPath))
+		{
+			if (UObject* ExistingObject = FindObject<UObject>(ExistingPackage, *MaterialAssetName))
+			{
+				return MakeUnindexedAssetCollisionError(MaterialPath, *ExistingObject);
+			}
+		}
 	}
 
 	// Parse enums up front so a bad option fails before any texture import
@@ -10357,8 +10647,15 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 
 	for (const auto& MapEntry : FMonolithJsonUtils::GetFields(MapsObj))
 	{
-		if (!MapEntry.Value.IsValid() || MapEntry.Value->Type != EJson::String) continue;
 		FString MapType = FMonolithJsonUtils::FieldKeyToString(MapEntry.Key).ToLower();
+		if (!MapEntry.Value.IsValid() || MapEntry.Value->Type != EJson::String)
+		{
+			auto ErrJson = MakeShared<FJsonObject>();
+			ErrJson->SetStringField(TEXT("map"), MapType);
+			ErrJson->SetStringField(TEXT("error"), TEXT("Disk path must be a string"));
+			TextureErrors.Add(MakeShared<FJsonValueObject>(ErrJson));
+			continue;
+		}
 		FString DiskPath = MapEntry.Value->AsString();
 
 		if (DiskPath.IsEmpty())
@@ -10426,9 +10723,14 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 	// DESTRUCTIVE: deliberately runs AFTER Phase 1 so a failed import cannot destroy the
 	// caller's existing material. The non-destructive !bReplaceExisting case already
 	// early-returned before Phase 1.
-	if (bReplaceExisting && UEditorAssetLibrary::DoesAssetExist(MaterialPath))
+	if (bReplaceExisting && bHasDiskBackedMaterial)
 	{
-		UEditorAssetLibrary::DeleteAsset(MaterialPath);
+		if (!UEditorAssetLibrary::DeleteAsset(MaterialPath))
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Failed to delete the existing disk-backed material at '%s'"),
+				*MaterialPath));
+		}
 	}
 
 	// Create package and material
@@ -10442,9 +10744,14 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at '%s'"), *MaterialPath));
 	}
-	// The DoesAssetExist probes above are registry-only; FullyLoad is the authoritative
-	// on-disk check. No-op after a successful DeleteAsset, merges an unindexed .uasset otherwise.
+	// FullyLoad catches stale/unindexed on-disk packages; FindObject also catches
+	// loaded unsaved objects. A replacement deletes only a disk-backed registry
+	// entry, so an unindexed object is rejected rather than mutated or deleted.
 	Pkg->FullyLoad();
+	if (UObject* ExistingObject = FindObject<UObject>(Pkg, *MaterialAssetName))
+	{
+		return MakeUnindexedAssetCollisionError(MaterialPath, *ExistingObject);
+	}
 
 	UMaterial* NewMat = NewObject<UMaterial>(Pkg, FName(*MaterialAssetName), RF_Public | RF_Standalone | RF_Transactional);
 	if (!NewMat)
@@ -10623,8 +10930,8 @@ FMonolithActionResult FMonolithMaterialActions::CreateFunctionInstance(const TSh
 		return FMonolithActionResult::Error(PathError);
 	}
 
-	// Check if asset already exists
-	if (UEditorAssetLibrary::DoesAssetExist(AssetPath))
+	// Check persisted registry data without conflating it with a loaded, unsaved object.
+	if (HasDiskBackedAssetRegistryEntry(AssetPath))
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
 	}
@@ -10651,8 +10958,13 @@ FMonolithActionResult FMonolithMaterialActions::CreateFunctionInstance(const TSh
 	{
 		return FMonolithActionResult::Error(TEXT("Failed to create package"));
 	}
-	// Registry-only DoesAssetExist above; FullyLoad is the authoritative on-disk check.
+	// FullyLoad catches stale/unindexed on-disk packages; FindObject also catches
+	// loaded unsaved objects.
 	Pkg->FullyLoad();
+	if (UObject* ExistingObject = FindObject<UObject>(Pkg, *AssetName))
+	{
+		return MakeUnindexedAssetCollisionError(AssetPath, *ExistingObject);
+	}
 
 	// Determine correct instance class based on parent's usage
 	EMaterialFunctionUsage Usage = ParentFunc->GetMaterialFunctionUsage();

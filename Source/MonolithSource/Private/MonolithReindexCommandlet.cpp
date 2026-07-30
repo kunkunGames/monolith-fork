@@ -114,12 +114,12 @@ int32 UMonolithReindexCommandlet::Main(const FString& Params)
 	int32 ResultFiles = 0, ResultSymbols = 0, ResultErrors = 0;
 	bool bCompleted = false;
 	bool bCompletionSucceeded = false;
-	Indexer.OnComplete.AddLambda([&](int32 Files, int32 Symbols, int32 Errors, bool bSucceeded)
+	Indexer.OnComplete.AddLambda([&](const FSourceIndexCompletion& Completion)
 	{
-		ResultFiles = Files;
-		ResultSymbols = Symbols;
-		ResultErrors = Errors;
-		bCompletionSucceeded = bSucceeded;
+		ResultFiles = Completion.FilesProcessed;
+		ResultSymbols = Completion.SymbolsExtracted;
+		ResultErrors = Completion.Errors;
+		bCompletionSucceeded = Completion.bSucceeded;
 		bCompleted = true;
 	});
 	Indexer.OnProgress.AddLambda([](const FString& ModuleName, int32 Cur, int32 Total, int32 Files, int32 Syms)

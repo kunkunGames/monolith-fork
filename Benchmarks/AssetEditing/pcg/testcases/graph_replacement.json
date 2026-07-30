@@ -1,0 +1,377 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "pcg",
+  "asset_type_slug": "pcg",
+  "edit_domain": "graph_replacement",
+  "route_edit_domain": "graph_replacement",
+  "module_id": "asset_authoring.pcg.graph_replacement",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.pcg.graph_replacement",
+    "edit": "asset_operation.edit.pcg.graph_replacement",
+    "save": "asset_operation.save.pcg.graph_replacement",
+    "readback_verify": "asset_operation.readback_verify.pcg.graph_replacement"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-551"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-551",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "pcg",
+      "edit_domain": "graph_replacement",
+      "blueprint_type": "",
+      "workflow": "pcg_graph_replacement_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "create_pcg_graph",
+        "add_pcg_node",
+        "set_pcg_node_params",
+        "connect_pcg_nodes",
+        "replace_pcg_graph_contents",
+        "save_asset",
+        "get_pcg_graph_info",
+        "validate_pcg_graph"
+      ],
+      "description": "Author a stable donor graph, normalize an existing target from an empty baseline, dry-run and confirm complete donor-owned graph replacement while preserving target identity, reload, then prove an identical replacement is an unchanged no-op"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-551",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "create_pcg_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchReplaceSource",
+            "existing_policy": "return_existing",
+            "save": true
+          },
+          "expect": {
+            "$.class": "PCGGraph",
+            "$.existing_policy": "return_existing"
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "create_pcg_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchReplaceBaseline",
+            "existing_policy": "return_existing",
+            "save": true
+          },
+          "expect": {
+            "$.class": "PCGGraph",
+            "$.existing_policy": "return_existing"
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "create_pcg_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchReplaceTarget",
+            "existing_policy": "return_existing",
+            "save": true
+          },
+          "expect": {
+            "$.class": "PCGGraph",
+            "$.existing_policy": "return_existing"
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "add_pcg_node",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchReplaceSource",
+            "node_type": "PCGAddTagSettings",
+            "node_title": "Bench_ReplacementNode",
+            "position": [
+              320,
+              0
+            ],
+            "existing_policy": "return_existing",
+            "save": true
+          },
+          "expect": {
+            "$.node_title": "Bench_ReplacementNode",
+            "$.settings_class": "PCGAddTagSettings",
+            "$.existing_policy": "return_existing"
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "set_pcg_node_params",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchReplaceSource",
+            "node_id": "Bench_ReplacementNode",
+            "properties": {
+              "TagsToAdd": "Monolith.Benchmark.Replacement"
+            },
+            "dry_run": false,
+            "save": true
+          },
+          "expect": {
+            "$.status": "updated",
+            "$.dry_run": false,
+            "$.settings_class": "PCGAddTagSettings"
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "connect_pcg_nodes",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchReplaceSource",
+            "source_node": "__input__",
+            "source_pin": "In",
+            "target_node": "Bench_ReplacementNode",
+            "target_pin": "In",
+            "save": true
+          },
+          "expect": {
+            "$.source_pin": "In",
+            "$.target_pin": "In"
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "connect_pcg_nodes",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchReplaceSource",
+            "source_node": "Bench_ReplacementNode",
+            "source_pin": "Out",
+            "target_node": "__output__",
+            "target_pin": "Out",
+            "save": true
+          },
+          "expect": {
+            "$.source_pin": "Out",
+            "$.target_pin": "Out"
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "replace_pcg_graph_contents",
+            "source_asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchReplaceBaseline",
+            "target_asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchReplaceTarget",
+            "dry_run": false,
+            "confirm": true,
+            "save": true,
+            "node_limit": 100,
+            "edge_limit": 100
+          },
+          "expect": {
+            "$.dry_run": false,
+            "$.confirmed": true,
+            "$.target_identity_preserved": true,
+            "$.persistent_properties_verified": true,
+            "$.target_after_element_node_count": 0,
+            "$.target_after_edge_count": 0
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "replace_pcg_graph_contents",
+            "source_asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchReplaceSource",
+            "target_asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchReplaceTarget",
+            "dry_run": true,
+            "confirm": false,
+            "save": true,
+            "node_limit": 100,
+            "edge_limit": 100
+          },
+          "expect": {
+            "$.status": "would_replace",
+            "$.changed": true,
+            "$.dry_run": true,
+            "$.confirmed": false,
+            "$.target_identity_preserved": true,
+            "$.persistent_properties_verified": true,
+            "$.source_element_node_count": 1,
+            "$.source_edge_count": 2,
+            "$.target_before_element_node_count": 0,
+            "$.target_before_edge_count": 0,
+            "$.target_after_element_node_count": 1,
+            "$.target_after_edge_count": 2,
+            "$.saved": false
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "replace_pcg_graph_contents",
+            "source_asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchReplaceSource",
+            "target_asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchReplaceTarget",
+            "dry_run": false,
+            "confirm": true,
+            "save": true,
+            "node_limit": 100,
+            "edge_limit": 100
+          },
+          "expect": {
+            "$.status": "replaced",
+            "$.changed": true,
+            "$.dry_run": false,
+            "$.confirmed": true,
+            "$.target_identity_preserved": true,
+            "$.persistent_properties_verified": true,
+            "$.source_element_node_count": 1,
+            "$.source_edge_count": 2,
+            "$.target_after_element_node_count": 1,
+            "$.target_after_edge_count": 2,
+            "$.saved": true
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchReplaceTarget",
+            "verify_reload": true
+          },
+          "expect": {
+            "$.success": true,
+            "$.saved": true,
+            "$.dirty_after_save": false,
+            "$.exists_on_disk": true,
+            "$.verify_reload": true,
+            "$.reloaded": true
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "replace_pcg_graph_contents",
+            "source_asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchReplaceSource",
+            "target_asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchReplaceTarget",
+            "dry_run": true,
+            "confirm": false,
+            "save": true,
+            "node_limit": 100,
+            "edge_limit": 100
+          },
+          "expect": {
+            "$.status": "unchanged",
+            "$.changed": false,
+            "$.dry_run": true,
+            "$.confirmed": false,
+            "$.target_identity_preserved": true,
+            "$.persistent_properties_verified": true,
+            "$.source_element_node_count": 1,
+            "$.source_edge_count": 2,
+            "$.target_after_element_node_count": 1,
+            "$.target_after_edge_count": 2,
+            "$.saved": false
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "get_pcg_graph_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchReplaceTarget",
+            "include_settings": true,
+            "settings_fields": [
+              "TagsToAdd"
+            ]
+          },
+          "expect": {
+            "$.class": "PCGGraph",
+            "$.dirty": false,
+            "$.element_node_count": 1,
+            "$.edge_count": 2,
+            "$.nodes[2].settings.TagsToAdd": "Monolith.Benchmark.Replacement"
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "validate_pcg_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchReplaceTarget",
+            "require_output_connection": true,
+            "require_no_isolated_nodes": true
+          },
+          "expect": {
+            "$.valid": true,
+            "$.output_connected": true,
+            "$.element_node_count": 1,
+            "$.edge_count": 2,
+            "$.error_count": 0
+          }
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "graph_replacement",
+      "blueprint_type": "",
+      "domain": "pcg",
+      "workflow": "pcg_graph_replacement_roundtrip",
+      "description": "Author a stable donor graph, normalize an existing target from an empty baseline, dry-run and confirm complete donor-owned graph replacement while preserving target identity, reload, then prove an identical replacement is an unchanged no-op",
+      "reference_context": [
+        "source: Engine/Plugins/PCG/Source/PCG/Public/PCGGraph.h",
+        "source: Plugins/Monolith/Source/MonolithPCG/Private/MonolithPCGGraphAuthoringActions.cpp",
+        "skill_ref: Plugins/Monolith/Skills/unreal-pcg/references/verification-recipes.md"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "create_pcg_graph",
+          "add_pcg_node",
+          "set_pcg_node_params",
+          "connect_pcg_nodes",
+          "replace_pcg_graph_contents",
+          "save_asset",
+          "get_pcg_graph_info",
+          "validate_pcg_graph"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

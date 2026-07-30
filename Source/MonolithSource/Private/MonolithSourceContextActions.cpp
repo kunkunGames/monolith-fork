@@ -677,19 +677,38 @@ FMonolithActionResult FMonolithSourceContextActions::HandleStartIndexing(const T
 		{
 			if (bFull)
 			{
-				Source->TriggerReindex();
-				Started.Add(MakeShared<FJsonValueString>(TEXT("source: full index")));
+				if (Source->TriggerReindex())
+				{
+					Started.Add(MakeShared<FJsonValueString>(TEXT("source: full index")));
+				}
+				else
+				{
+					const FMonolithSourceDatabaseStatus Status =
+						Source->GetDatabaseStatus();
+					Skipped.Add(MakeShared<FJsonValueString>(
+						FString::Printf(
+							TEXT("source: full index rejected at %s"),
+							Status.LastFailureStage.IsEmpty()
+								? TEXT("request")
+								: *Status.LastFailureStage)));
+				}
 			}
 			else
 			{
-				Source->TriggerProjectReindex();
-				if (Source->IsIndexing())
+				if (Source->TriggerProjectReindex())
 				{
 					Started.Add(MakeShared<FJsonValueString>(TEXT("source: project index")));
 				}
 				else
 				{
-					Skipped.Add(MakeShared<FJsonValueString>(TEXT("source: project index unavailable; run full source.trigger_reindex first")));
+					const FMonolithSourceDatabaseStatus Status =
+						Source->GetDatabaseStatus();
+					Skipped.Add(MakeShared<FJsonValueString>(
+						FString::Printf(
+							TEXT("source: project index rejected at %s; run full source.trigger_reindex when the database is missing"),
+							Status.LastFailureStage.IsEmpty()
+								? TEXT("request")
+								: *Status.LastFailureStage)));
 				}
 			}
 		}

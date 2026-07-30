@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-07-17T10:24:39.993026+00:00",
+  "generated_at": "2026-07-30T14:45:42.791281+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "ea3c428db9e0fdb056ad50f6e36fce5a1d12383eef5b97982b9e371308a10165",
+  "source_task_sha256": "48ef08cb65bfcafb3877e48e05e619a364028a6523e31c8419d99f65d776057b",
   "module_storage": "module_shard",
   "shard_id": "lifecycle",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/lifecycle.json",
-  "task_count": 579,
+  "task_count": 588,
   "module_count": 3,
   "routing_axes": [
     "category",
@@ -50,7 +50,7 @@
       ],
       "track": "lifecycle",
       "title": "Lifecycle phase: create_save",
-      "task_count": 266,
+      "task_count": 275,
       "filters": {
         "lifecycle_phase": [
           "create_save"
@@ -228,7 +228,7 @@
           "create_save"
         ]
       },
-      "task_count": 266,
+      "task_count": 275,
       "task_ids": [
         "BEB-279",
         "BEB-280",
@@ -495,7 +495,16 @@
         "BEB-544",
         "BEB-545",
         "BEB-546",
-        "BEB-547"
+        "BEB-547",
+        "BEB-548",
+        "BEB-549",
+        "BEB-550",
+        "BEB-551",
+        "BEB-552",
+        "BEB-553",
+        "BEB-554",
+        "BEB-555",
+        "BEB-556"
       ],
       "task_refs": [
         {
@@ -8833,6 +8842,304 @@
             "validate_pcg_graph"
           ],
           "description": "Create or reuse a saved PCGGraph, idempotently author one Add Tags node and two edges, update native settings, then read back and validate the graph without delete/reset"
+        },
+        {
+          "id": "BEB-548",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "pcg",
+          "edit_domain": "graph_mutation",
+          "blueprint_type": "",
+          "workflow": "pcg_graph_mutation_cleanup_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "create_pcg_graph",
+            "add_pcg_node",
+            "connect_pcg_nodes",
+            "disconnect_pcg_nodes",
+            "remove_pcg_node",
+            "save_asset",
+            "get_pcg_graph_info",
+            "validate_pcg_graph"
+          ],
+          "description": "Create or reuse an isolated PCGGraph, author one connected node, disconnect an exact edge idempotently, remove the node and its remaining edge, then prove the saved graph is structurally clean and rerunnable"
+        },
+        {
+          "id": "BEB-549",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "pcg",
+          "edit_domain": "graph_user_parameters",
+          "blueprint_type": "",
+          "workflow": "pcg_graph_user_parameter_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "create_pcg_graph",
+            "set_pcg_graph_user_parameters",
+            "save_asset"
+          ],
+          "description": "Create or reuse an isolated PCGGraph, normalize two typed scalar user parameters, prove alternate defaults through dry-run/apply/reload/no-op, remove both atomically, and leave a saved empty parameter schema for deterministic reruns"
+        },
+        {
+          "id": "BEB-550",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "pcg",
+          "edit_domain": "subgraph_assignment",
+          "blueprint_type": "",
+          "workflow": "pcg_subgraph_assignment_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "create_pcg_graph",
+            "add_pcg_node",
+            "set_pcg_subgraph",
+            "save_asset"
+          ],
+          "description": "Create a parent and two child PCGGraphs, author one stable subgraph node, normalize it to child A, dry-run and commit child B, reload, then prove child B is an exact unchanged assignment without generic reflected-property writes"
+        },
+        {
+          "id": "BEB-551",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "pcg",
+          "edit_domain": "graph_replacement",
+          "blueprint_type": "",
+          "workflow": "pcg_graph_replacement_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "create_pcg_graph",
+            "add_pcg_node",
+            "set_pcg_node_params",
+            "connect_pcg_nodes",
+            "replace_pcg_graph_contents",
+            "save_asset",
+            "get_pcg_graph_info",
+            "validate_pcg_graph"
+          ],
+          "description": "Author a stable donor graph, normalize an existing target from an empty baseline, dry-run and confirm complete donor-owned graph replacement while preserving target identity, reload, then prove an identical replacement is an unchanged no-op"
+        },
+        {
+          "id": "BEB-552",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "pcg",
+          "edit_domain": "surface_discovery",
+          "blueprint_type": "",
+          "workflow": "pcg_surface_discovery_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "create_pcg_graph",
+            "save_asset",
+            "get_status",
+            "list_graph_assets",
+            "get_graph_asset",
+            "list_pcg_node_types"
+          ],
+          "description": "Create and reload one isolated graph, then prove live PCG capability status, bounded AssetRegistry discovery, exact single-asset metadata, and concrete node-type/property discovery against the same editor connection"
+        },
+        {
+          "id": "BEB-553",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "registry_layout_accessibility",
+          "blueprint_type": "",
+          "workflow": "ui_registry_layout_accessibility_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_widget_blueprint",
+            "add_widget",
+            "set_text",
+            "compile_widget",
+            "save_asset",
+            "list_widget_types",
+            "dump_property_allowlist",
+            "describe_widget_type_schema",
+            "list_widget_property_enums",
+            "list_widget_events",
+            "get_widget_bindings",
+            "audit_accessibility",
+            "audit_widget_layout",
+            "measure_widget_layout",
+            "compute_widget_uispec_fingerprint",
+            "get_widget_tree"
+          ],
+          "description": "Create and reload a deterministic CanvasPanel Widget Blueprint, then prove reflection-backed UMG/CommonUI type discovery, type/property/event/binding schemas, accessibility lint, layout audit/measurement, and canonical UISpec fingerprinting"
+        },
+        {
+          "id": "BEB-554",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "commonui_content_framework",
+          "blueprint_type": "",
+          "workflow": "ui_commonui_content_framework_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_widget_blueprint",
+            "add_widget",
+            "set_text",
+            "compile_widget",
+            "save_asset",
+            "configure_numeric_text",
+            "configure_rotator",
+            "configure_animated_switcher",
+            "setup_common_list_view",
+            "create_widget_carousel",
+            "create_hardware_visibility_border",
+            "create_lazy_image",
+            "create_load_guard",
+            "get_widget_tree",
+            "describe_widget_type_schema",
+            "get_common_framework_status",
+            "describe_common_widget_blueprint",
+            "describe_common_messaging_flow",
+            "validate_common_dialog_contract",
+            "list_platform_input_tables",
+            "inspect_assets_batch"
+          ],
+          "description": "Create and reload CommonUI numeric text, rotator, animated switcher, list, carousel, hardware visibility, lazy-image, and load-guard widgets, then inspect Common framework and messaging contracts"
+        },
+        {
+          "id": "BEB-555",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "uispec_diff_patch",
+          "blueprint_type": "",
+          "workflow": "ui_uispec_diff_patch_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "build_ui_from_spec",
+            "apply_ui_spec_patch",
+            "save_asset",
+            "dump_ui_spec_schema",
+            "get_widget_tree",
+            "dump_ui_spec",
+            "diff_ui_spec",
+            "compute_widget_uispec_fingerprint"
+          ],
+          "description": "Build a Widget Blueprint from canonical UISpec, plan and apply a confirm-gated owner-action text patch, reload the package, and prove the desired spec converges with a required diff"
+        },
+        {
+          "id": "BEB-556",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "animation_inspection_delta_binding",
+          "blueprint_type": "",
+          "workflow": "ui_animation_inspection_delta_binding_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_widget_blueprint",
+            "add_widget",
+            "set_text",
+            "create_animation_v2",
+            "apply_animation_delta",
+            "remap_animation_binding",
+            "save_asset",
+            "get_animation_overview",
+            "get_animation_timeline",
+            "get_animation_time_slice",
+            "get_animation_details",
+            "get_widget_tree",
+            "inspect_asset"
+          ],
+          "description": "Create and reload a UMG float animation, plan/apply one delta key, remap its binding GUID to a resident replacement widget, then prove overview, timeline, sampled values, and full track readback"
         }
       ],
       "groups": {
@@ -9103,7 +9410,16 @@
             "BEB-544",
             "BEB-545",
             "BEB-546",
-            "BEB-547"
+            "BEB-547",
+            "BEB-548",
+            "BEB-549",
+            "BEB-550",
+            "BEB-551",
+            "BEB-552",
+            "BEB-553",
+            "BEB-554",
+            "BEB-555",
+            "BEB-556"
           ]
         },
         "by_domain": {
@@ -9382,7 +9698,12 @@
             "BEB-542"
           ],
           "pcg": [
-            "BEB-547"
+            "BEB-547",
+            "BEB-548",
+            "BEB-549",
+            "BEB-550",
+            "BEB-551",
+            "BEB-552"
           ],
           "project": [
             "BEB-436",
@@ -9408,7 +9729,11 @@
             "BEB-494",
             "BEB-523",
             "BEB-524",
-            "BEB-531"
+            "BEB-531",
+            "BEB-553",
+            "BEB-554",
+            "BEB-555",
+            "BEB-556"
           ],
           "worldgen": [
             "BEB-353",
@@ -9446,6 +9771,9 @@
           ],
           "animation_core": [
             "BEB-314"
+          ],
+          "animation_inspection_delta_binding": [
+            "BEB-556"
           ],
           "animation_sequence_events": [
             "BEB-318"
@@ -9563,6 +9891,9 @@
           ],
           "commonui_container_navigation": [
             "BEB-453"
+          ],
+          "commonui_content_framework": [
+            "BEB-554"
           ],
           "commonui_input_action_datatable": [
             "BEB-345"
@@ -9719,6 +10050,15 @@
           ],
           "graph_authoring": [
             "BEB-547"
+          ],
+          "graph_mutation": [
+            "BEB-548"
+          ],
+          "graph_replacement": [
+            "BEB-551"
+          ],
+          "graph_user_parameters": [
+            "BEB-549"
           ],
           "handle_boolean_remesh_material_ids": [
             "BEB-462"
@@ -10014,6 +10354,9 @@
           "ramp_connector_static_mesh": [
             "BEB-489"
           ],
+          "registry_layout_accessibility": [
+            "BEB-553"
+          ],
           "retarget_chain_lifecycle": [
             "BEB-320"
           ],
@@ -10146,8 +10489,14 @@
           "stringtable_registry_list": [
             "BEB-538"
           ],
+          "subgraph_assignment": [
+            "BEB-550"
+          ],
           "submix_hierarchy": [
             "BEB-365"
+          ],
+          "surface_discovery": [
+            "BEB-552"
           ],
           "svg_source_boundary": [
             "BEB-385"
@@ -10184,6 +10533,9 @@
           ],
           "typed_validation": [
             "BEB-541"
+          ],
+          "uispec_diff_patch": [
+            "BEB-555"
           ],
           "unique_name_validation": [
             "BEB-539"
@@ -10489,7 +10841,16 @@
             "BEB-544",
             "BEB-545",
             "BEB-546",
-            "BEB-547"
+            "BEB-547",
+            "BEB-548",
+            "BEB-549",
+            "BEB-550",
+            "BEB-551",
+            "BEB-552",
+            "BEB-553",
+            "BEB-554",
+            "BEB-555",
+            "BEB-556"
           ]
         },
         "by_asset_operation": {
@@ -10759,7 +11120,16 @@
             "BEB-544",
             "BEB-545",
             "BEB-546",
-            "BEB-547"
+            "BEB-547",
+            "BEB-548",
+            "BEB-549",
+            "BEB-550",
+            "BEB-551",
+            "BEB-552",
+            "BEB-553",
+            "BEB-554",
+            "BEB-555",
+            "BEB-556"
           ],
           "edit": [
             "BEB-279",
@@ -11027,7 +11397,16 @@
             "BEB-544",
             "BEB-545",
             "BEB-546",
-            "BEB-547"
+            "BEB-547",
+            "BEB-548",
+            "BEB-549",
+            "BEB-550",
+            "BEB-551",
+            "BEB-552",
+            "BEB-553",
+            "BEB-554",
+            "BEB-555",
+            "BEB-556"
           ],
           "readback_verify": [
             "BEB-279",
@@ -11295,7 +11674,16 @@
             "BEB-544",
             "BEB-545",
             "BEB-546",
-            "BEB-547"
+            "BEB-547",
+            "BEB-548",
+            "BEB-549",
+            "BEB-550",
+            "BEB-551",
+            "BEB-552",
+            "BEB-553",
+            "BEB-554",
+            "BEB-555",
+            "BEB-556"
           ],
           "save": [
             "BEB-279",
@@ -11563,7 +11951,16 @@
             "BEB-544",
             "BEB-545",
             "BEB-546",
-            "BEB-547"
+            "BEB-547",
+            "BEB-548",
+            "BEB-549",
+            "BEB-550",
+            "BEB-551",
+            "BEB-552",
+            "BEB-553",
+            "BEB-554",
+            "BEB-555",
+            "BEB-556"
           ]
         }
       },
@@ -11871,15 +12268,6 @@
         "BEB-277",
         "BEB-278",
         "BEB-429",
-        "BEB-548",
-        "BEB-549",
-        "BEB-550",
-        "BEB-551",
-        "BEB-552",
-        "BEB-553",
-        "BEB-554",
-        "BEB-555",
-        "BEB-556",
         "BEB-557",
         "BEB-558",
         "BEB-559",
@@ -11902,7 +12290,16 @@
         "BEB-576",
         "BEB-577",
         "BEB-578",
-        "BEB-579"
+        "BEB-579",
+        "BEB-580",
+        "BEB-581",
+        "BEB-582",
+        "BEB-583",
+        "BEB-584",
+        "BEB-585",
+        "BEB-586",
+        "BEB-587",
+        "BEB-588"
       ],
       "task_refs": [
         {
@@ -17879,7 +18276,7 @@
           "description": "Spawn bare rootless Actors, confirm create_blueprint_prefab rejects them by name instead of crashing the editor, and confirm no prefab asset was written"
         },
         {
-          "id": "BEB-548",
+          "id": "BEB-557",
           "category": "negative_compile",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -17907,7 +18304,7 @@
           "description": "Deliberately break a scratch blueprint function signature with an invalid struct type and require a reported compile error"
         },
         {
-          "id": "BEB-549",
+          "id": "BEB-558",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -17927,7 +18324,7 @@
           "description": "get_graph_data on non-existent asset"
         },
         {
-          "id": "BEB-550",
+          "id": "BEB-559",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -17947,7 +18344,7 @@
           "description": "compile_blueprint on non-existent asset"
         },
         {
-          "id": "BEB-551",
+          "id": "BEB-560",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -17967,7 +18364,7 @@
           "description": "get_variables on non-existent asset"
         },
         {
-          "id": "BEB-552",
+          "id": "BEB-561",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -17987,7 +18384,7 @@
           "description": "list_graphs on non-existent asset"
         },
         {
-          "id": "BEB-553",
+          "id": "BEB-562",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18007,7 +18404,7 @@
           "description": "connect_pins with invalid node IDs"
         },
         {
-          "id": "BEB-554",
+          "id": "BEB-563",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18028,7 +18425,7 @@
           "description": "remove non-existent variable"
         },
         {
-          "id": "BEB-555",
+          "id": "BEB-564",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18049,7 +18446,7 @@
           "description": "rename non-existent function"
         },
         {
-          "id": "BEB-556",
+          "id": "BEB-565",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18070,7 +18467,7 @@
           "description": "remove non-existent component"
         },
         {
-          "id": "BEB-557",
+          "id": "BEB-566",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18091,7 +18488,7 @@
           "description": "set property on non-existent component"
         },
         {
-          "id": "BEB-558",
+          "id": "BEB-567",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18112,7 +18509,7 @@
           "description": "add_component with invalid component class"
         },
         {
-          "id": "BEB-559",
+          "id": "BEB-568",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18133,7 +18530,7 @@
           "description": "set default on non-existent Widget variable"
         },
         {
-          "id": "BEB-560",
+          "id": "BEB-569",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18154,7 +18551,7 @@
           "description": "set params on non-existent Interface function"
         },
         {
-          "id": "BEB-561",
+          "id": "BEB-570",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18174,7 +18571,7 @@
           "description": "get signature for non-existent Interface function"
         },
         {
-          "id": "BEB-562",
+          "id": "BEB-571",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18195,7 +18592,7 @@
           "description": "set non-existent CDO property"
         },
         {
-          "id": "BEB-563",
+          "id": "BEB-572",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18216,7 +18613,7 @@
           "description": "duplicate non-existent function graph"
         },
         {
-          "id": "BEB-564",
+          "id": "BEB-573",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18237,7 +18634,7 @@
           "description": "add_node with invalid function name"
         },
         {
-          "id": "BEB-565",
+          "id": "BEB-574",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18259,7 +18656,7 @@
           "description": "create_blueprint on an already-existing asset path (precondition: already exists)"
         },
         {
-          "id": "BEB-566",
+          "id": "BEB-575",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18280,7 +18677,7 @@
           "description": "add_variable with an unknown/invalid type token"
         },
         {
-          "id": "BEB-567",
+          "id": "BEB-576",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18301,7 +18698,7 @@
           "description": "reparent_blueprint to a non-existent parent class"
         },
         {
-          "id": "BEB-568",
+          "id": "BEB-577",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18322,7 +18719,7 @@
           "description": "add_node with an unknown node_type token"
         },
         {
-          "id": "BEB-569",
+          "id": "BEB-578",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18344,7 +18741,7 @@
           "description": "add_variable must reject a duplicate member variable name"
         },
         {
-          "id": "BEB-570",
+          "id": "BEB-579",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18366,7 +18763,7 @@
           "description": "add_function must reject a duplicate function name"
         },
         {
-          "id": "BEB-571",
+          "id": "BEB-580",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18388,7 +18785,7 @@
           "description": "add_component must reject a duplicate component name (regression: silent suffix bug)"
         },
         {
-          "id": "BEB-572",
+          "id": "BEB-581",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18409,7 +18806,7 @@
           "description": "add_event_node must reject a duplicate custom event name"
         },
         {
-          "id": "BEB-573",
+          "id": "BEB-582",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18431,7 +18828,7 @@
           "description": "add_event_dispatcher must reject a duplicate dispatcher name"
         },
         {
-          "id": "BEB-574",
+          "id": "BEB-583",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18454,7 +18851,7 @@
           "description": "add_local_variable must reject a duplicate local variable name (regression: silent duplicate bug)"
         },
         {
-          "id": "BEB-575",
+          "id": "BEB-584",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18476,7 +18873,7 @@
           "description": "Widget add_variable must reject duplicate display-state variable names"
         },
         {
-          "id": "BEB-576",
+          "id": "BEB-585",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18498,7 +18895,7 @@
           "description": "AnimInstance add_function must reject duplicate update helper names"
         },
         {
-          "id": "BEB-577",
+          "id": "BEB-586",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18520,7 +18917,7 @@
           "description": "GameplayAbility add_event_dispatcher must reject duplicate commit signals"
         },
         {
-          "id": "BEB-578",
+          "id": "BEB-587",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18542,7 +18939,7 @@
           "description": "Character add_component must reject duplicate helper component names"
         },
         {
-          "id": "BEB-579",
+          "id": "BEB-588",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18570,17 +18967,17 @@
             "BEB-429"
           ],
           "duplicate_reject": [
-            "BEB-569",
-            "BEB-570",
-            "BEB-571",
-            "BEB-572",
-            "BEB-573",
-            "BEB-574",
-            "BEB-575",
-            "BEB-576",
-            "BEB-577",
             "BEB-578",
-            "BEB-579"
+            "BEB-579",
+            "BEB-580",
+            "BEB-581",
+            "BEB-582",
+            "BEB-583",
+            "BEB-584",
+            "BEB-585",
+            "BEB-586",
+            "BEB-587",
+            "BEB-588"
           ],
           "edit_execute": [
             "BEB-166",
@@ -18747,15 +19144,6 @@
             "BEB-154"
           ],
           "error_path": [
-            "BEB-549",
-            "BEB-550",
-            "BEB-551",
-            "BEB-552",
-            "BEB-553",
-            "BEB-554",
-            "BEB-555",
-            "BEB-556",
-            "BEB-557",
             "BEB-558",
             "BEB-559",
             "BEB-560",
@@ -18766,7 +19154,16 @@
             "BEB-565",
             "BEB-566",
             "BEB-567",
-            "BEB-568"
+            "BEB-568",
+            "BEB-569",
+            "BEB-570",
+            "BEB-571",
+            "BEB-572",
+            "BEB-573",
+            "BEB-574",
+            "BEB-575",
+            "BEB-576",
+            "BEB-577"
           ],
           "graph_read": [
             "BEB-022",
@@ -18806,7 +19203,7 @@
             "BEB-056"
           ],
           "negative_compile": [
-            "BEB-548"
+            "BEB-557"
           ],
           "read_schema": [
             "BEB-085",
@@ -18932,7 +19329,7 @@
             "BEB-258",
             "BEB-259",
             "BEB-260",
-            "BEB-577"
+            "BEB-586"
           ],
           "animation": [
             "BEB-004",
@@ -18965,7 +19362,7 @@
             "BEB-253",
             "BEB-254",
             "BEB-255",
-            "BEB-576"
+            "BEB-585"
           ],
           "component": [
             "BEB-006",
@@ -19060,14 +19457,14 @@
             "BEB-276",
             "BEB-277",
             "BEB-278",
-            "BEB-548",
-            "BEB-569",
-            "BEB-570",
-            "BEB-571",
-            "BEB-572",
-            "BEB-573",
-            "BEB-574",
-            "BEB-578"
+            "BEB-557",
+            "BEB-578",
+            "BEB-579",
+            "BEB-580",
+            "BEB-581",
+            "BEB-582",
+            "BEB-583",
+            "BEB-587"
           ],
           "general": [
             "BEB-085",
@@ -19140,15 +19537,6 @@
             "BEB-152",
             "BEB-153",
             "BEB-154",
-            "BEB-549",
-            "BEB-550",
-            "BEB-551",
-            "BEB-552",
-            "BEB-553",
-            "BEB-554",
-            "BEB-555",
-            "BEB-556",
-            "BEB-557",
             "BEB-558",
             "BEB-559",
             "BEB-560",
@@ -19159,7 +19547,16 @@
             "BEB-565",
             "BEB-566",
             "BEB-567",
-            "BEB-568"
+            "BEB-568",
+            "BEB-569",
+            "BEB-570",
+            "BEB-571",
+            "BEB-572",
+            "BEB-573",
+            "BEB-574",
+            "BEB-575",
+            "BEB-576",
+            "BEB-577"
           ],
           "interface": [
             "BEB-007",
@@ -19190,7 +19587,7 @@
             "BEB-268",
             "BEB-269",
             "BEB-270",
-            "BEB-579"
+            "BEB-588"
           ],
           "level_instance": [
             "BEB-429"
@@ -19226,7 +19623,7 @@
             "BEB-248",
             "BEB-249",
             "BEB-250",
-            "BEB-575"
+            "BEB-584"
           ]
         },
         "by_edit_domain": {
@@ -19262,7 +19659,7 @@
             "BEB-225",
             "BEB-234",
             "BEB-235",
-            "BEB-548"
+            "BEB-557"
           ],
           "component": [
             "BEB-134",
@@ -19279,8 +19676,8 @@
             "BEB-272",
             "BEB-273",
             "BEB-276",
-            "BEB-571",
-            "BEB-578"
+            "BEB-580",
+            "BEB-587"
           ],
           "event": [
             "BEB-143",
@@ -19294,8 +19691,8 @@
             "BEB-222",
             "BEB-259",
             "BEB-265",
-            "BEB-573",
-            "BEB-577"
+            "BEB-582",
+            "BEB-586"
           ],
           "function": [
             "BEB-115",
@@ -19345,11 +19742,11 @@
             "BEB-269",
             "BEB-270",
             "BEB-275",
-            "BEB-570",
-            "BEB-572",
-            "BEB-574",
-            "BEB-576",
-            "BEB-579"
+            "BEB-579",
+            "BEB-581",
+            "BEB-583",
+            "BEB-585",
+            "BEB-588"
           ],
           "general": [
             "BEB-001",
@@ -19459,15 +19856,6 @@
             "BEB-105",
             "BEB-106",
             "BEB-107",
-            "BEB-549",
-            "BEB-550",
-            "BEB-551",
-            "BEB-552",
-            "BEB-553",
-            "BEB-554",
-            "BEB-555",
-            "BEB-556",
-            "BEB-557",
             "BEB-558",
             "BEB-559",
             "BEB-560",
@@ -19478,7 +19866,16 @@
             "BEB-565",
             "BEB-566",
             "BEB-567",
-            "BEB-568"
+            "BEB-568",
+            "BEB-569",
+            "BEB-570",
+            "BEB-571",
+            "BEB-572",
+            "BEB-573",
+            "BEB-574",
+            "BEB-575",
+            "BEB-576",
+            "BEB-577"
           ],
           "node": [
             "BEB-108",
@@ -19558,8 +19955,8 @@
             "BEB-261",
             "BEB-262",
             "BEB-274",
-            "BEB-569",
-            "BEB-575"
+            "BEB-578",
+            "BEB-584"
           ]
         },
         "by_blueprint_type": {
@@ -19600,13 +19997,13 @@
             "BEB-276",
             "BEB-277",
             "BEB-278",
-            "BEB-548",
-            "BEB-569",
-            "BEB-570",
-            "BEB-571",
-            "BEB-572",
-            "BEB-573",
-            "BEB-574"
+            "BEB-557",
+            "BEB-578",
+            "BEB-579",
+            "BEB-580",
+            "BEB-581",
+            "BEB-582",
+            "BEB-583"
           ],
           "ActorComponent": [
             "BEB-006",
@@ -19669,7 +20066,7 @@
             "BEB-253",
             "BEB-254",
             "BEB-255",
-            "BEB-576"
+            "BEB-585"
           ],
           "Character": [
             "BEB-002",
@@ -19698,7 +20095,7 @@
             "BEB-185",
             "BEB-237",
             "BEB-243",
-            "BEB-578"
+            "BEB-587"
           ],
           "GameplayAbility": [
             "BEB-005",
@@ -19731,7 +20128,7 @@
             "BEB-258",
             "BEB-259",
             "BEB-260",
-            "BEB-577"
+            "BEB-586"
           ],
           "Interface": [
             "BEB-007",
@@ -19762,7 +20159,7 @@
             "BEB-268",
             "BEB-269",
             "BEB-270",
-            "BEB-579"
+            "BEB-588"
           ],
           "Widget": [
             "BEB-003",
@@ -19795,7 +20192,7 @@
             "BEB-248",
             "BEB-249",
             "BEB-250",
-            "BEB-575"
+            "BEB-584"
           ],
           "general": [
             "BEB-085",
@@ -19869,15 +20266,6 @@
             "BEB-153",
             "BEB-154",
             "BEB-429",
-            "BEB-549",
-            "BEB-550",
-            "BEB-551",
-            "BEB-552",
-            "BEB-553",
-            "BEB-554",
-            "BEB-555",
-            "BEB-556",
-            "BEB-557",
             "BEB-558",
             "BEB-559",
             "BEB-560",
@@ -19888,15 +20276,24 @@
             "BEB-565",
             "BEB-566",
             "BEB-567",
-            "BEB-568"
+            "BEB-568",
+            "BEB-569",
+            "BEB-570",
+            "BEB-571",
+            "BEB-572",
+            "BEB-573",
+            "BEB-574",
+            "BEB-575",
+            "BEB-576",
+            "BEB-577"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
             "BEB-146",
             "BEB-154",
-            "BEB-548",
-            "BEB-565"
+            "BEB-557",
+            "BEB-574"
           ],
           "edit": [
             "BEB-108",
@@ -20039,31 +20436,31 @@
             "BEB-276",
             "BEB-277",
             "BEB-278",
-            "BEB-548",
-            "BEB-554",
-            "BEB-555",
-            "BEB-556",
             "BEB-557",
-            "BEB-558",
-            "BEB-559",
-            "BEB-560",
-            "BEB-562",
             "BEB-563",
             "BEB-564",
+            "BEB-565",
             "BEB-566",
             "BEB-567",
             "BEB-568",
             "BEB-569",
-            "BEB-570",
             "BEB-571",
             "BEB-572",
             "BEB-573",
-            "BEB-574",
             "BEB-575",
             "BEB-576",
             "BEB-577",
             "BEB-578",
-            "BEB-579"
+            "BEB-579",
+            "BEB-580",
+            "BEB-581",
+            "BEB-582",
+            "BEB-583",
+            "BEB-584",
+            "BEB-585",
+            "BEB-586",
+            "BEB-587",
+            "BEB-588"
           ],
           "readback_verify": [
             "BEB-001",
@@ -20345,15 +20742,6 @@
             "BEB-277",
             "BEB-278",
             "BEB-429",
-            "BEB-548",
-            "BEB-549",
-            "BEB-550",
-            "BEB-551",
-            "BEB-552",
-            "BEB-553",
-            "BEB-554",
-            "BEB-555",
-            "BEB-556",
             "BEB-557",
             "BEB-558",
             "BEB-559",
@@ -20376,14 +20764,23 @@
             "BEB-576",
             "BEB-577",
             "BEB-578",
-            "BEB-579"
+            "BEB-579",
+            "BEB-580",
+            "BEB-581",
+            "BEB-582",
+            "BEB-583",
+            "BEB-584",
+            "BEB-585",
+            "BEB-586",
+            "BEB-587",
+            "BEB-588"
           ],
           "save": [
             "BEB-140",
             "BEB-148",
             "BEB-235",
-            "BEB-548",
-            "BEB-565"
+            "BEB-557",
+            "BEB-574"
           ]
         }
       },

@@ -2,14 +2,14 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-07-17T10:24:39.993026+00:00",
+  "generated_at": "2026-07-30T14:45:42.791281+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "ea3c428db9e0fdb056ad50f6e36fce5a1d12383eef5b97982b9e371308a10165",
+  "source_task_sha256": "48ef08cb65bfcafb3877e48e05e619a364028a6523e31c8419d99f65d776057b",
   "module_storage": "module_shard",
   "shard_id": "asset_authoring.ui",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/ui.json",
-  "task_count": 579,
-  "module_count": 20,
+  "task_count": 588,
+  "module_count": 24,
   "routing_axes": [
     "category",
     "domain",
@@ -30,7 +30,7 @@
       ],
       "track": "asset_authoring",
       "title": "Asset authoring: ui",
-      "task_count": 19,
+      "task_count": 23,
       "filters": {
         "category": [
           "asset_authoring"
@@ -43,16 +43,20 @@
       "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/ui.json",
       "parent_module_id": "category.asset_authoring",
       "child_module_ids": [
+        "asset_authoring.ui.animation_inspection_delta_binding",
         "asset_authoring.ui.box_shadow_mid",
         "asset_authoring.ui.commonui_action_widget_binding",
         "asset_authoring.ui.commonui_container_navigation",
+        "asset_authoring.ui.commonui_content_framework",
         "asset_authoring.ui.commonui_input_action_datatable",
         "asset_authoring.ui.commonui_pause_menu_focus",
         "asset_authoring.ui.commonui_style_assets",
         "asset_authoring.ui.commonui_styled_button",
         "asset_authoring.ui.commonui_text_block",
         "asset_authoring.ui.list_view_binding",
+        "asset_authoring.ui.registry_layout_accessibility",
         "asset_authoring.ui.settings_notification_templates",
+        "asset_authoring.ui.uispec_diff_patch",
         "asset_authoring.ui.widget_animation_advanced_events",
         "asset_authoring.ui.widget_animation_remove",
         "asset_authoring.ui.widget_animation_v2",
@@ -63,6 +67,33 @@
         "asset_authoring.ui.widget_templates",
         "asset_authoring.ui.widget_tree_maintenance"
       ]
+    },
+    {
+      "module_id": "asset_authoring.ui.animation_inspection_delta_binding",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "ui",
+        "animation_inspection_delta_binding"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: ui/animation_inspection_delta_binding",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "animation_inspection_delta_binding"
+        ]
+      },
+      "module_shard_id": "asset_authoring.ui",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/ui.json",
+      "parent_module_id": "asset_authoring.ui",
+      "child_module_ids": []
     },
     {
       "module_id": "asset_authoring.ui.box_shadow_mid",
@@ -138,6 +169,33 @@
         ],
         "edit_domain": [
           "commonui_container_navigation"
+        ]
+      },
+      "module_shard_id": "asset_authoring.ui",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/ui.json",
+      "parent_module_id": "asset_authoring.ui",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.ui.commonui_content_framework",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "ui",
+        "commonui_content_framework"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: ui/commonui_content_framework",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "commonui_content_framework"
         ]
       },
       "module_shard_id": "asset_authoring.ui",
@@ -308,6 +366,33 @@
       "child_module_ids": []
     },
     {
+      "module_id": "asset_authoring.ui.registry_layout_accessibility",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "ui",
+        "registry_layout_accessibility"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: ui/registry_layout_accessibility",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "registry_layout_accessibility"
+        ]
+      },
+      "module_shard_id": "asset_authoring.ui",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/ui.json",
+      "parent_module_id": "asset_authoring.ui",
+      "child_module_ids": []
+    },
+    {
       "module_id": "asset_authoring.ui.settings_notification_templates",
       "route": [
         "AssetEditing",
@@ -327,6 +412,33 @@
         ],
         "edit_domain": [
           "settings_notification_templates"
+        ]
+      },
+      "module_shard_id": "asset_authoring.ui",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/ui.json",
+      "parent_module_id": "asset_authoring.ui",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.ui.uispec_diff_patch",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "ui",
+        "uispec_diff_patch"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: ui/uispec_diff_patch",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "uispec_diff_patch"
         ]
       },
       "module_shard_id": "asset_authoring.ui",
@@ -600,7 +712,7 @@
           "ui"
         ]
       },
-      "task_count": 19,
+      "task_count": 23,
       "task_ids": [
         "BEB-312",
         "BEB-313",
@@ -620,7 +732,11 @@
         "BEB-494",
         "BEB-523",
         "BEB-524",
-        "BEB-531"
+        "BEB-531",
+        "BEB-553",
+        "BEB-554",
+        "BEB-555",
+        "BEB-556"
       ],
       "task_refs": [
         {
@@ -1258,10 +1374,167 @@
             "inspect_assets_batch"
           ],
           "description": "Create saved UMG settings-panel and notification-toast template Widget Blueprints, then read both widget trees back"
+        },
+        {
+          "id": "BEB-553",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "registry_layout_accessibility",
+          "blueprint_type": "",
+          "workflow": "ui_registry_layout_accessibility_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_widget_blueprint",
+            "add_widget",
+            "set_text",
+            "compile_widget",
+            "save_asset",
+            "list_widget_types",
+            "dump_property_allowlist",
+            "describe_widget_type_schema",
+            "list_widget_property_enums",
+            "list_widget_events",
+            "get_widget_bindings",
+            "audit_accessibility",
+            "audit_widget_layout",
+            "measure_widget_layout",
+            "compute_widget_uispec_fingerprint",
+            "get_widget_tree"
+          ],
+          "description": "Create and reload a deterministic CanvasPanel Widget Blueprint, then prove reflection-backed UMG/CommonUI type discovery, type/property/event/binding schemas, accessibility lint, layout audit/measurement, and canonical UISpec fingerprinting"
+        },
+        {
+          "id": "BEB-554",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "commonui_content_framework",
+          "blueprint_type": "",
+          "workflow": "ui_commonui_content_framework_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_widget_blueprint",
+            "add_widget",
+            "set_text",
+            "compile_widget",
+            "save_asset",
+            "configure_numeric_text",
+            "configure_rotator",
+            "configure_animated_switcher",
+            "setup_common_list_view",
+            "create_widget_carousel",
+            "create_hardware_visibility_border",
+            "create_lazy_image",
+            "create_load_guard",
+            "get_widget_tree",
+            "describe_widget_type_schema",
+            "get_common_framework_status",
+            "describe_common_widget_blueprint",
+            "describe_common_messaging_flow",
+            "validate_common_dialog_contract",
+            "list_platform_input_tables",
+            "inspect_assets_batch"
+          ],
+          "description": "Create and reload CommonUI numeric text, rotator, animated switcher, list, carousel, hardware visibility, lazy-image, and load-guard widgets, then inspect Common framework and messaging contracts"
+        },
+        {
+          "id": "BEB-555",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "uispec_diff_patch",
+          "blueprint_type": "",
+          "workflow": "ui_uispec_diff_patch_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "build_ui_from_spec",
+            "apply_ui_spec_patch",
+            "save_asset",
+            "dump_ui_spec_schema",
+            "get_widget_tree",
+            "dump_ui_spec",
+            "diff_ui_spec",
+            "compute_widget_uispec_fingerprint"
+          ],
+          "description": "Build a Widget Blueprint from canonical UISpec, plan and apply a confirm-gated owner-action text patch, reload the package, and prove the desired spec converges with a required diff"
+        },
+        {
+          "id": "BEB-556",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "animation_inspection_delta_binding",
+          "blueprint_type": "",
+          "workflow": "ui_animation_inspection_delta_binding_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_widget_blueprint",
+            "add_widget",
+            "set_text",
+            "create_animation_v2",
+            "apply_animation_delta",
+            "remap_animation_binding",
+            "save_asset",
+            "get_animation_overview",
+            "get_animation_timeline",
+            "get_animation_time_slice",
+            "get_animation_details",
+            "get_widget_tree",
+            "inspect_asset"
+          ],
+          "description": "Create and reload a UMG float animation, plan/apply one delta key, remap its binding GUID to a resident replacement widget, then prove overview, timeline, sampled values, and full track readback"
         }
       ],
       "groups": {
         "by_edit_domain": {
+          "animation_inspection_delta_binding": [
+            "BEB-556"
+          ],
           "box_shadow_mid": [
             "BEB-523"
           ],
@@ -1270,6 +1543,9 @@
           ],
           "commonui_container_navigation": [
             "BEB-453"
+          ],
+          "commonui_content_framework": [
+            "BEB-554"
           ],
           "commonui_input_action_datatable": [
             "BEB-345"
@@ -1289,8 +1565,14 @@
           "list_view_binding": [
             "BEB-459"
           ],
+          "registry_layout_accessibility": [
+            "BEB-553"
+          ],
           "settings_notification_templates": [
             "BEB-531"
+          ],
+          "uispec_diff_patch": [
+            "BEB-555"
           ],
           "widget_animation_advanced_events": [
             "BEB-351"
@@ -1340,7 +1622,11 @@
             "BEB-494",
             "BEB-523",
             "BEB-524",
-            "BEB-531"
+            "BEB-531",
+            "BEB-553",
+            "BEB-554",
+            "BEB-555",
+            "BEB-556"
           ]
         },
         "by_lifecycle_phase": {
@@ -1363,7 +1649,11 @@
             "BEB-494",
             "BEB-523",
             "BEB-524",
-            "BEB-531"
+            "BEB-531",
+            "BEB-553",
+            "BEB-554",
+            "BEB-555",
+            "BEB-556"
           ]
         },
         "by_asset_operation": {
@@ -1386,7 +1676,11 @@
             "BEB-494",
             "BEB-523",
             "BEB-524",
-            "BEB-531"
+            "BEB-531",
+            "BEB-553",
+            "BEB-554",
+            "BEB-555",
+            "BEB-556"
           ],
           "edit": [
             "BEB-312",
@@ -1407,7 +1701,11 @@
             "BEB-494",
             "BEB-523",
             "BEB-524",
-            "BEB-531"
+            "BEB-531",
+            "BEB-553",
+            "BEB-554",
+            "BEB-555",
+            "BEB-556"
           ],
           "readback_verify": [
             "BEB-312",
@@ -1428,7 +1726,11 @@
             "BEB-494",
             "BEB-523",
             "BEB-524",
-            "BEB-531"
+            "BEB-531",
+            "BEB-553",
+            "BEB-554",
+            "BEB-555",
+            "BEB-556"
           ],
           "save": [
             "BEB-312",
@@ -1449,22 +1751,30 @@
             "BEB-494",
             "BEB-523",
             "BEB-524",
-            "BEB-531"
+            "BEB-531",
+            "BEB-553",
+            "BEB-554",
+            "BEB-555",
+            "BEB-556"
           ]
         }
       },
       "parent_module_id": "category.asset_authoring",
       "child_module_ids": [
+        "asset_authoring.ui.animation_inspection_delta_binding",
         "asset_authoring.ui.box_shadow_mid",
         "asset_authoring.ui.commonui_action_widget_binding",
         "asset_authoring.ui.commonui_container_navigation",
+        "asset_authoring.ui.commonui_content_framework",
         "asset_authoring.ui.commonui_input_action_datatable",
         "asset_authoring.ui.commonui_pause_menu_focus",
         "asset_authoring.ui.commonui_style_assets",
         "asset_authoring.ui.commonui_styled_button",
         "asset_authoring.ui.commonui_text_block",
         "asset_authoring.ui.list_view_binding",
+        "asset_authoring.ui.registry_layout_accessibility",
         "asset_authoring.ui.settings_notification_templates",
+        "asset_authoring.ui.uispec_diff_patch",
         "asset_authoring.ui.widget_animation_advanced_events",
         "asset_authoring.ui.widget_animation_remove",
         "asset_authoring.ui.widget_animation_v2",
@@ -1475,6 +1785,105 @@
         "asset_authoring.ui.widget_templates",
         "asset_authoring.ui.widget_tree_maintenance"
       ],
+      "module_shard_id": "asset_authoring.ui",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/ui.json"
+    },
+    "asset_authoring.ui.animation_inspection_delta_binding": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.ui.animation_inspection_delta_binding",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "ui",
+        "animation_inspection_delta_binding"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: ui/animation_inspection_delta_binding",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "animation_inspection_delta_binding"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-556"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-556",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "animation_inspection_delta_binding",
+          "blueprint_type": "",
+          "workflow": "ui_animation_inspection_delta_binding_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_widget_blueprint",
+            "add_widget",
+            "set_text",
+            "create_animation_v2",
+            "apply_animation_delta",
+            "remap_animation_binding",
+            "save_asset",
+            "get_animation_overview",
+            "get_animation_timeline",
+            "get_animation_time_slice",
+            "get_animation_details",
+            "get_widget_tree",
+            "inspect_asset"
+          ],
+          "description": "Create and reload a UMG float animation, plan/apply one delta key, remap its binding GUID to a resident replacement widget, then prove overview, timeline, sampled values, and full track readback"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-556"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-556"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-556"
+          ],
+          "edit": [
+            "BEB-556"
+          ],
+          "readback_verify": [
+            "BEB-556"
+          ],
+          "save": [
+            "BEB-556"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.ui",
+      "child_module_ids": [],
       "module_shard_id": "asset_authoring.ui",
       "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/ui.json"
     },
@@ -1765,6 +2174,113 @@
           ],
           "save": [
             "BEB-453"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.ui",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.ui",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/ui.json"
+    },
+    "asset_authoring.ui.commonui_content_framework": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.ui.commonui_content_framework",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "ui",
+        "commonui_content_framework"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: ui/commonui_content_framework",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "commonui_content_framework"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-554"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-554",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "commonui_content_framework",
+          "blueprint_type": "",
+          "workflow": "ui_commonui_content_framework_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_widget_blueprint",
+            "add_widget",
+            "set_text",
+            "compile_widget",
+            "save_asset",
+            "configure_numeric_text",
+            "configure_rotator",
+            "configure_animated_switcher",
+            "setup_common_list_view",
+            "create_widget_carousel",
+            "create_hardware_visibility_border",
+            "create_lazy_image",
+            "create_load_guard",
+            "get_widget_tree",
+            "describe_widget_type_schema",
+            "get_common_framework_status",
+            "describe_common_widget_blueprint",
+            "describe_common_messaging_flow",
+            "validate_common_dialog_contract",
+            "list_platform_input_tables",
+            "inspect_assets_batch"
+          ],
+          "description": "Create and reload CommonUI numeric text, rotator, animated switcher, list, carousel, hardware visibility, lazy-image, and load-guard widgets, then inspect Common framework and messaging contracts"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-554"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-554"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-554"
+          ],
+          "edit": [
+            "BEB-554"
+          ],
+          "readback_verify": [
+            "BEB-554"
+          ],
+          "save": [
+            "BEB-554"
           ]
         }
       },
@@ -2343,6 +2859,108 @@
       "module_shard_id": "asset_authoring.ui",
       "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/ui.json"
     },
+    "asset_authoring.ui.registry_layout_accessibility": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.ui.registry_layout_accessibility",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "ui",
+        "registry_layout_accessibility"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: ui/registry_layout_accessibility",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "registry_layout_accessibility"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-553"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-553",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "registry_layout_accessibility",
+          "blueprint_type": "",
+          "workflow": "ui_registry_layout_accessibility_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_widget_blueprint",
+            "add_widget",
+            "set_text",
+            "compile_widget",
+            "save_asset",
+            "list_widget_types",
+            "dump_property_allowlist",
+            "describe_widget_type_schema",
+            "list_widget_property_enums",
+            "list_widget_events",
+            "get_widget_bindings",
+            "audit_accessibility",
+            "audit_widget_layout",
+            "measure_widget_layout",
+            "compute_widget_uispec_fingerprint",
+            "get_widget_tree"
+          ],
+          "description": "Create and reload a deterministic CanvasPanel Widget Blueprint, then prove reflection-backed UMG/CommonUI type discovery, type/property/event/binding schemas, accessibility lint, layout audit/measurement, and canonical UISpec fingerprinting"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-553"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-553"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-553"
+          ],
+          "edit": [
+            "BEB-553"
+          ],
+          "readback_verify": [
+            "BEB-553"
+          ],
+          "save": [
+            "BEB-553"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.ui",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.ui",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/ui.json"
+    },
     "asset_authoring.ui.settings_notification_templates": {
       "schema_version": 1,
       "benchmark": "AssetEditing",
@@ -2426,6 +3044,100 @@
           ],
           "save": [
             "BEB-531"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.ui",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.ui",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/ui.json"
+    },
+    "asset_authoring.ui.uispec_diff_patch": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.ui.uispec_diff_patch",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "ui",
+        "uispec_diff_patch"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: ui/uispec_diff_patch",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "uispec_diff_patch"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-555"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-555",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "uispec_diff_patch",
+          "blueprint_type": "",
+          "workflow": "ui_uispec_diff_patch_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "build_ui_from_spec",
+            "apply_ui_spec_patch",
+            "save_asset",
+            "dump_ui_spec_schema",
+            "get_widget_tree",
+            "dump_ui_spec",
+            "diff_ui_spec",
+            "compute_widget_uispec_fingerprint"
+          ],
+          "description": "Build a Widget Blueprint from canonical UISpec, plan and apply a confirm-gated owner-action text patch, reload the package, and prove the desired spec converges with a required diff"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-555"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-555"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-555"
+          ],
+          "edit": [
+            "BEB-555"
+          ],
+          "readback_verify": [
+            "BEB-555"
+          ],
+          "save": [
+            "BEB-555"
           ]
         }
       },

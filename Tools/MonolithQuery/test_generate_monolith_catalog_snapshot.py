@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
 from pathlib import Path
+import stat
 import subprocess
 import sys
 import tempfile
@@ -91,6 +94,35 @@ void RegisterFixture(FMonolithToolRegistry& Registry)
                 text=True,
             )
             self.assertEqual(0, generated.returncode, generated.stderr)
+            generated_payload = json.loads(output.read_text(encoding="utf-8"))
+            canonical_text = json.dumps(
+                generated_payload,
+                indent=2,
+                sort_keys=True,
+            ) + "\n"
+            self.assertEqual(
+                canonical_text.replace("\n", os.linesep).encode("utf-8"),
+                output.read_bytes(),
+            )
+
+            output.chmod(stat.S_IREAD)
+            try:
+                unchanged = subprocess.run(
+                    [
+                        sys.executable,
+                        str(MODULE_PATH),
+                        "--root",
+                        str(root),
+                        "--out",
+                        str(output),
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(0, unchanged.returncode, unchanged.stderr)
+                self.assertIn("catalog snapshot current", unchanged.stdout)
+            finally:
+                output.chmod(stat.S_IWRITE | stat.S_IREAD)
 
             source.write_text(
                 "// line-only implementation comment\n" + registration,

@@ -2,7 +2,9 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithUIActions.h"
+#include "MonolithUICommon.h"
 #include "MonolithUISlotActions.h"
+#include "Registry/MonolithUIRegistrySubsystem.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithUIRenameWidgetAcceptsAliasTest, "Monolith.Registry.UI.RenameWidgetAcceptsAlias", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
@@ -110,6 +112,159 @@ bool FMonolithUISetSlotPropertyBoxSizeSchemaTest::RunTest(const FString& Paramet
 	double Minimum = -1.0;
 	TestTrue(TEXT("fill_weight minimum exists"), (*FillWeightParam)->TryGetNumberField(TEXT("minimum"), Minimum));
 	TestTrue(TEXT("fill_weight minimum is zero"), FMath::IsNearlyZero(Minimum));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithUIListWidgetTypesUsesLiveRegistryTest,
+	"Monolith.Registry.UI.ListWidgetTypesUsesLiveRegistry",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIListWidgetTypesUsesLiveRegistryTest::RunTest(const FString& Parameters)
+{
+	UMonolithUIRegistrySubsystem* RegistrySubsystem = UMonolithUIRegistrySubsystem::Get();
+	if (!TestNotNull(TEXT("UI registry subsystem is initialized"), RegistrySubsystem))
+	{
+		return false;
+	}
+	RegistrySubsystem->RescanWidgetTypes();
+	TestNotNull(
+		TEXT("core short token resolves through the live registry"),
+		MonolithUI::WidgetClassFromName(TEXT("TextBlock")));
+	TestNotNull(
+		TEXT("exact native class path remains supported"),
+		MonolithUI::WidgetClassFromName(TEXT("/Script/UMG.TextBlock")));
+	TestNull(
+		TEXT("unknown bare token fails closed"),
+		MonolithUI::WidgetClassFromName(TEXT("DefinitelyNotAWidgetType")));
+#if WITH_COMMONUI
+	TestNotNull(
+		TEXT("CommonUI short token resolves through the live registry"),
+		MonolithUI::WidgetClassFromName(TEXT("CommonNumericTextBlock")));
+#endif
+
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	FMonolithUIActions::RegisterActions(Registry);
+
+	const FMonolithActionResult AllResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("list_widget_types"), MakeShared<FJsonObject>());
+	if (!TestTrue(TEXT("unfiltered registry discovery succeeds"), AllResult.bSuccess && AllResult.Result.IsValid()))
+	{
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> InvalidFilterParams = MakeShared<FJsonObject>();
+	InvalidFilterParams->SetStringField(TEXT("filter"), TEXT("definitely-not-a-category"));
+	const FMonolithActionResult InvalidFilterResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("list_widget_types"), InvalidFilterParams);
+	TestFalse(TEXT("unknown category filters fail closed"), InvalidFilterResult.bSuccess);
+
+	const TArray<TSharedPtr<FJsonValue>>* AllRows = nullptr;
+	if (!TestTrue(
+			TEXT("unfiltered discovery returns widget_types"),
+			AllResult.Result->TryGetArrayField(TEXT("widget_types"), AllRows) && AllRows))
+	{
+		return false;
+	}
+	TestEqual(
+		TEXT("unfiltered count matches the live type registry"),
+		AllRows->Num(),
+		RegistrySubsystem->GetTypeRegistry().Num());
+	TestEqual(
+		TEXT("total_registered matches the live type registry"),
+		static_cast<int32>(AllResult.Result->GetNumberField(TEXT("total_registered"))),
+		RegistrySubsystem->GetTypeRegistry().Num());
+
+	TSet<FString> SeenTokens;
+	FString PreviousToken;
+	bool bFoundTextBlock = false;
+#if WITH_COMMONUI
+	bool bFoundCommonNumericText = false;
+#endif
+	for (const TSharedPtr<FJsonValue>& RowValue : *AllRows)
+	{
+		const TSharedPtr<FJsonObject> Row = RowValue.IsValid() ? RowValue->AsObject() : nullptr;
+		if (!TestTrue(TEXT("widget type row is an object"), Row.IsValid()))
+		{
+			return false;
+		}
+
+		const FString Token = Row->GetStringField(TEXT("name"));
+		TestFalse(TEXT("widget type tokens are unique"), SeenTokens.Contains(Token));
+		SeenTokens.Add(Token);
+		if (!PreviousToken.IsEmpty())
+		{
+			TestTrue(TEXT("widget type rows are token-sorted"), PreviousToken < Token);
+		}
+		PreviousToken = Token;
+
+		TestTrue(TEXT("widget type row exposes class_path"), Row->HasTypedField<EJson::String>(TEXT("class_path")));
+		TestTrue(TEXT("widget type row exposes module"), Row->HasTypedField<EJson::String>(TEXT("module")));
+		TestTrue(TEXT("widget type row exposes container_kind"), Row->HasTypedField<EJson::String>(TEXT("container_kind")));
+		TestTrue(TEXT("widget type row exposes max_children"), Row->HasTypedField<EJson::Number>(TEXT("max_children")));
+
+		if (Token == TEXT("TextBlock"))
+		{
+			bFoundTextBlock = true;
+			TestEqual(TEXT("TextBlock is a display widget"), Row->GetStringField(TEXT("category")), TEXT("display"));
+			TestEqual(TEXT("TextBlock belongs to UMG"), Row->GetStringField(TEXT("module")), TEXT("UMG"));
+		}
+#if WITH_COMMONUI
+		if (Token == TEXT("CommonNumericTextBlock"))
+		{
+			bFoundCommonNumericText = true;
+			TestEqual(
+				TEXT("CommonNumericTextBlock inherits the display category"),
+				Row->GetStringField(TEXT("category")),
+				TEXT("display"));
+			TestEqual(
+				TEXT("CommonNumericTextBlock reports its owning module"),
+				Row->GetStringField(TEXT("module")),
+				TEXT("CommonUI"));
+		}
+#endif
+	}
+	TestTrue(TEXT("core UMG TextBlock is discoverable"), bFoundTextBlock);
+#if WITH_COMMONUI
+	TestTrue(TEXT("loaded CommonUI types are discoverable"), bFoundCommonNumericText);
+#endif
+
+	TSharedPtr<FJsonObject> CommonDisplayParams = MakeShared<FJsonObject>();
+	CommonDisplayParams->SetStringField(TEXT("filter"), TEXT("DISPLAY"));
+	CommonDisplayParams->SetStringField(TEXT("module_filter"), TEXT("commonui"));
+	const FMonolithActionResult CommonDisplayResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("list_widget_types"), CommonDisplayParams);
+	if (!TestTrue(
+		TEXT("case-insensitive CommonUI display filter succeeds"),
+		CommonDisplayResult.bSuccess && CommonDisplayResult.Result.IsValid()))
+	{
+		return false;
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* CommonDisplayRows = nullptr;
+	if (!TestTrue(
+		TEXT("CommonUI display filter returns widget_types"),
+		CommonDisplayResult.Result->TryGetArrayField(TEXT("widget_types"), CommonDisplayRows)
+			&& CommonDisplayRows))
+	{
+		return false;
+	}
+#if WITH_COMMONUI
+	TestTrue(TEXT("CommonUI display filter is non-empty"), CommonDisplayRows->Num() > 0);
+#endif
+	for (const TSharedPtr<FJsonValue>& RowValue : *CommonDisplayRows)
+	{
+		const TSharedPtr<FJsonObject> Row = RowValue.IsValid() ? RowValue->AsObject() : nullptr;
+		if (!TestTrue(TEXT("filtered widget type row is an object"), Row.IsValid()))
+		{
+			return false;
+		}
+		TestEqual(TEXT("category filter is exact"), Row->GetStringField(TEXT("category")), TEXT("display"));
+		TestTrue(
+			TEXT("module filter is case-insensitive"),
+			Row->GetStringField(TEXT("module")).Contains(TEXT("commonui"), ESearchCase::IgnoreCase));
+	}
 
 	return true;
 }

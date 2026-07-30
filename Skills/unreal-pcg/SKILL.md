@@ -229,4 +229,4 @@ Run `remap_graph_references` with `dry_run=true`, inspect every candidate and ta
 - Graph mutations run the same bounded structural validator before persistence. This pre-save check is the commit boundary; a late validator is intentionally not used because it could report failure after the package file had already changed.
 - Use `pin_limit` and `response_item_limit` when inspecting large or project-defined settings graphs. Check `response_truncated`, per-node pin truncation flags, and returned counts before assuming a response is complete.
 - `remap_graph_references` is a migration surface, not a substitute for typed node/settings editing.
-- Graph user-parameter **schema** creation/deletion is not part of this surface. Component graph-instance override editing is supported; confirm the live catalog before assuming any newer schema-authoring action exists.
+- Author graph user-parameter schema/default additions, updates, type changes, and removals only through `set_pcg_graph_user_parameters`; component graph-instance overrides remain a separate `set_component_user_parameters` contract. Confirm both actions in the live catalog after a rebuild or reconnect.

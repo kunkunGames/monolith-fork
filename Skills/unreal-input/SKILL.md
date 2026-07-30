@@ -36,10 +36,10 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `list_input_actions` | `path?` `include_details?=false` | List Enhanced Input UInputAction assets |
 | `get_input_mapping_context` | `asset_path*` | Inspect an Enhanced Input UInputMappingContext asset |
 | `list_input_mapping_contexts` | `path?` `include_details?=false` | List Enhanced Input UInputMappingContext assets |
-| `validate_input_mappings` | `context_paths?` `path?` | Validate IMCs for missing actions and duplicate key conflicts |
+| `validate_input_mappings` | `context_paths?` `path?` `fail_on_unbound?=false` | Validate missing actions and exact duplicate mappings; report legal shared keys and unbound rows separately |
 | `[w] create_input_action` | `asset_path*` `value_type?=Boolean` (Boolean/Axis1D/Axis2D/Axis3D) `description?` `consume_input?=true` `trigger_when_paused?=false` `accumulation?` (TakeHighestAbsoluteValue/Cumulative) `overwrite?=false` `save?=true` | Create or update a UInputAction asset |
 | `[w] set_input_action_properties` | `asset_path*` `value_type?` (Boolean/Axis1D/Axis2D/Axis3D) `description?` `consume_input?` `consume_legacy_mappings?` `trigger_when_paused?` `reserve_all_mappings?` `accumulation?` (TakeHighestAbsoluteValue/Cumulative) `save?=true` | Update common UInputAction properties |
-| `[w] create_input_mapping_context` | `asset_path*` `description?` `overwrite?=false` `save?=true` | Create or update a UInputMappingContext asset |
+| `[w] create_input_mapping_context` | `asset_path*` `description?` `registration_tracking_mode?=Untracked|CountRegistrations` `overwrite?=false` `save?=true` | Create or update a UInputMappingContext asset and its ownership policy |
 | `[w] add_input_mapping` | `context_path*` `action_path*` `key*` `save?=true` | Add a key mapping to an Input Mapping Context |
 | `[w] remove_input_mapping` | `context_path*` `action_path*` `key*` `save?=true` | Remove a key mapping from an Input Mapping Context |
 
@@ -75,4 +75,5 @@ input_query({ action: "validate_input_mappings", params: {
 
 - This reference is generated from the live `RegisterAction` surface. If an action is missing or renamed, re-run `monolith_discover({ namespace: "input" })` — the catalog is the source of truth.
 - Pass `mode: "schema"` to `monolith_discover` for required/optional params and types (value type, modifiers, triggers, key) before calling an action.
-- `validate_input_mappings` flags missing actions and duplicate key conflicts within an IMC; run it after a batch of `add_input_mapping` edits.
+- `validate_input_mappings` flags missing actions and exact duplicate semantic rows within an IMC. Distinct actions may legally share a key and are reported under `shared_keys`, not as conflicts. `None`/invalid-key rows are reported under `unbound_rows`; pass `fail_on_unbound=true` only when the project contract requires every row to have a concrete key.
+- Use `registration_tracking_mode="CountRegistrations"` when more than one runtime system may install the same IMC. Each installer must call `AddMappingContext` once for its own lifetime and match it with one `RemoveMappingContext`; merely observing that the context is already present does not acquire ownership.

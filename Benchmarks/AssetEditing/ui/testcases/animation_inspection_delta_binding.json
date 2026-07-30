@@ -1,0 +1,490 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ui",
+  "asset_type_slug": "ui",
+  "edit_domain": "animation_inspection_delta_binding",
+  "route_edit_domain": "animation_inspection_delta_binding",
+  "module_id": "asset_authoring.ui.animation_inspection_delta_binding",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ui.animation_inspection_delta_binding",
+    "edit": "asset_operation.edit.ui.animation_inspection_delta_binding",
+    "save": "asset_operation.save.ui.animation_inspection_delta_binding",
+    "readback_verify": "asset_operation.readback_verify.ui.animation_inspection_delta_binding"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-556"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-556",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "animation_inspection_delta_binding",
+      "blueprint_type": "",
+      "workflow": "ui_animation_inspection_delta_binding_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_widget_blueprint",
+        "add_widget",
+        "set_text",
+        "create_animation_v2",
+        "apply_animation_delta",
+        "remap_animation_binding",
+        "save_asset",
+        "get_animation_overview",
+        "get_animation_timeline",
+        "get_animation_time_slice",
+        "get_animation_details",
+        "get_widget_tree",
+        "inspect_asset"
+      ],
+      "description": "Create and reload a UMG float animation, plan/apply one delta key, remap its binding GUID to a resident replacement widget, then prove overview, timeline, sampled values, and full track readback"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-556",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchAnimationInspect"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_widget_blueprint",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchAnimationInspect",
+            "root_widget": "CanvasPanel"
+          },
+          "contains": [
+            "WBP_BenchAnimationInspect",
+            "CanvasPanel"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchAnimationInspect",
+            "widget_class": "TextBlock",
+            "widget_name": "BenchAnimSource",
+            "anchor_preset": "top_left",
+            "position": {
+              "x": 80,
+              "y": 80
+            },
+            "size": {
+              "x": 320,
+              "y": 72
+            },
+            "compile": false
+          },
+          "contains": [
+            "BenchAnimSource",
+            "TextBlock"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "set_text",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchAnimationInspect",
+            "widget_name": "BenchAnimSource",
+            "text": "Animation source",
+            "font_size": 24,
+            "compile": false
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchAnimationInspect",
+            "widget_class": "TextBlock",
+            "widget_name": "BenchAnimTarget",
+            "anchor_preset": "top_left",
+            "position": {
+              "x": 80,
+              "y": 184
+            },
+            "size": {
+              "x": 320,
+              "y": 72
+            },
+            "compile": false
+          },
+          "contains": [
+            "BenchAnimTarget",
+            "TextBlock"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "set_text",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchAnimationInspect",
+            "widget_name": "BenchAnimTarget",
+            "text": "Animation target",
+            "font_size": 24,
+            "compile": false
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_animation_v2",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchAnimationInspect",
+            "animation_name": "BenchInspectFade",
+            "duration_sec": 1.0,
+            "tracks": [
+              {
+                "widget_name": "BenchAnimSource",
+                "property": "RenderOpacity",
+                "keys": [
+                  {
+                    "time": 0.0,
+                    "value": 0.0,
+                    "interp": "linear"
+                  },
+                  {
+                    "time": 1.0,
+                    "value": 1.0,
+                    "interp": "linear"
+                  }
+                ]
+              }
+            ],
+            "compile_once": true
+          },
+          "contains": [
+            "BenchInspectFade",
+            "BenchAnimSource"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "apply_animation_delta",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchAnimationInspect",
+            "animation_name": "BenchInspectFade",
+            "operations": [
+              {
+                "op": "upsert_float_key",
+                "widget_name": "BenchAnimSource",
+                "property_path": "RenderOpacity",
+                "time": 0.5,
+                "value": 0.4,
+                "interp": "linear"
+              }
+            ],
+            "dry_run": true,
+            "confirm": false,
+            "compile": true,
+            "read_back": true
+          },
+          "expect": {
+            "$.dry_run": true,
+            "$.mutated": false,
+            "$.operations_applied": 0,
+            "$.keys_inserted": 0
+          },
+          "contains": [
+            "BenchInspectFade",
+            "upsert_float_key",
+            "RenderOpacity",
+            "BenchAnimSource"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "apply_animation_delta",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchAnimationInspect",
+            "animation_name": "BenchInspectFade",
+            "operations": [
+              {
+                "op": "upsert_float_key",
+                "widget_name": "BenchAnimSource",
+                "property_path": "RenderOpacity",
+                "time": 0.5,
+                "value": 0.4,
+                "interp": "linear"
+              }
+            ],
+            "dry_run": false,
+            "confirm": true,
+            "compile": true,
+            "read_back": true
+          },
+          "expect": {
+            "$.dry_run": false,
+            "$.confirmed": true,
+            "$.mutated": true,
+            "$.operations_applied": 1,
+            "$.keys_inserted": 1
+          },
+          "contains": [
+            "BenchInspectFade",
+            "RenderOpacity",
+            "BenchAnimSource"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "remap_animation_binding",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchAnimationInspect",
+            "animation_name": "BenchInspectFade",
+            "from_widget_name": "BenchAnimSource",
+            "to_widget_name": "BenchAnimTarget",
+            "dry_run": true,
+            "confirm": false,
+            "compile": true,
+            "read_back": true
+          },
+          "expect": {
+            "$.dry_run": true,
+            "$.mutated": false,
+            "$.source_binding_found": true,
+            "$.target_binding_found": false,
+            "$.would_change": true
+          },
+          "contains": [
+            "binding_guid",
+            "BenchAnimSource",
+            "BenchAnimTarget"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "remap_animation_binding",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchAnimationInspect",
+            "animation_name": "BenchInspectFade",
+            "from_widget_name": "BenchAnimSource",
+            "to_widget_name": "BenchAnimTarget",
+            "dry_run": false,
+            "confirm": true,
+            "compile": true,
+            "read_back": true
+          },
+          "expect": {
+            "$.dry_run": false,
+            "$.confirmed": true,
+            "$.mutated": true,
+            "$.compiled": true,
+            "$.compile_succeeded": true
+          },
+          "contains": [
+            "binding_guid",
+            "BenchAnimSource",
+            "BenchAnimTarget"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchAnimationInspect",
+            "verify_reload": true
+          },
+          "expect": {
+            "$.success": true,
+            "$.saved": true,
+            "$.dirty_after_save": false,
+            "$.exists_on_disk": true,
+            "$.verify_reload": true,
+            "$.reloaded": true
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_animation_overview",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchAnimationInspect",
+            "animation_name": "BenchInspectFade",
+            "include_all": false
+          },
+          "contains": [
+            "BenchInspectFade",
+            "BenchAnimTarget",
+            "RenderOpacity",
+            "key_count",
+            "3"
+          ],
+          "not_contains": [
+            "BenchAnimSource"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_animation_timeline",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchAnimationInspect",
+            "animation_name": "BenchInspectFade",
+            "widget_name": "BenchAnimTarget",
+            "property_path": "RenderOpacity",
+            "include_events": true,
+            "max_rows": 100
+          },
+          "contains": [
+            "BenchAnimTarget",
+            "RenderOpacity",
+            "0.5",
+            "0.4",
+            "3"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_animation_time_slice",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchAnimationInspect",
+            "animation_name": "BenchInspectFade",
+            "times": [
+              0.0,
+              0.5,
+              1.0
+            ],
+            "widget_name": "BenchAnimTarget",
+            "property_path": "RenderOpacity",
+            "event_tolerance_frames": 0
+          },
+          "contains": [
+            "BenchAnimTarget",
+            "RenderOpacity",
+            "0.4",
+            "sample"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_animation_details",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchAnimationInspect",
+            "animation_name": "BenchInspectFade"
+          },
+          "contains": [
+            "BenchAnimTarget",
+            "MovieSceneFloatTrack",
+            "keyframe_count",
+            "3"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchAnimationInspect"
+          },
+          "contains": [
+            "BenchAnimSource",
+            "Animation source",
+            "BenchAnimTarget",
+            "Animation target"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchAnimationInspect"
+          },
+          "contains": [
+            "WBP_BenchAnimationInspect",
+            "WidgetBlueprint"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "animation_inspection_delta_binding",
+      "blueprint_type": "",
+      "domain": "ui",
+      "workflow": "ui_animation_inspection_delta_binding_roundtrip",
+      "description": "Create and reload a UMG float animation, plan/apply one delta key, remap its binding GUID to a resident replacement widget, then prove overview, timeline, sampled values, and full track readback",
+      "reference_context": [
+        "source: Plugins/Monolith/Source/MonolithUI/Private/MonolithUIAnimationActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithUI/Private/Actions/Hoisted/AnimationCoreActions.cpp",
+        "source: Engine/Source/Runtime/UMG/Public/Animation/WidgetAnimation.h",
+        "skill_ref: Plugins/Monolith/Skills/unreal-ui/SKILL.md"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_widget_blueprint",
+          "add_widget",
+          "set_text",
+          "create_animation_v2",
+          "apply_animation_delta",
+          "remap_animation_binding",
+          "save_asset",
+          "get_animation_overview",
+          "get_animation_timeline",
+          "get_animation_time_slice",
+          "get_animation_details",
+          "get_widget_tree",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

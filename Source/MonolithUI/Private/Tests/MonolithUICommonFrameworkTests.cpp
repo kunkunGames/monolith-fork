@@ -2,10 +2,21 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "CoreMinimal.h"
+#include "Components/Button.h"
+#include "Components/VerticalBox.h"
+#include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphNode.h"
+#include "EdGraph/EdGraphPin.h"
+#include "EdGraphSchema_K2.h"
+#include "K2Node_FunctionResult.h"
+#include "K2Node_VariableGet.h"
 #include "Misc/AutomationTest.h"
 
 #include "MonolithToolRegistry.h"
 #include "MonolithUIActions.h"
+#include "MonolithUIFrontendFocusUtils.h"
+#include "WidgetBlueprint.h"
+#include "Blueprint/WidgetTree.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FMonolithUICommonFrameworkStatusTest,
@@ -191,6 +202,214 @@ bool FMonolithUICommonFrameworkRegistrationTest::RunTest(const FString& /*Parame
     const FMonolithActionResult BadScreens = FMonolithUIActions::HandleValidateFrontendMenuFlow(BadScreensParams);
     TestFalse(TEXT("validate_frontend_menu_flow rejects non-array screens"), BadScreens.bSuccess);
     TestTrue(TEXT("bad screens error is clear"), BadScreens.ErrorMessage.Contains(TEXT("screens")));
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithUIFrontendFocusResolutionTest,
+    "Monolith.UI.CommonFramework.FrontendFocusResolution",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIFrontendFocusResolutionTest::RunTest(const FString& /*Parameters*/)
+{
+    UWidgetBlueprint* WidgetBlueprint = NewObject<UWidgetBlueprint>(GetTransientPackage());
+    TestNotNull(TEXT("transient Widget Blueprint created"), WidgetBlueprint);
+    if (!WidgetBlueprint)
+    {
+        return false;
+    }
+
+    WidgetBlueprint->WidgetTree = NewObject<UWidgetTree>(WidgetBlueprint);
+    UVerticalBox* RootWidget = NewObject<UVerticalBox>(WidgetBlueprint->WidgetTree, TEXT("Root"));
+    UButton* FocusWidget = NewObject<UButton>(WidgetBlueprint->WidgetTree, TEXT("LyraListView"));
+    UButton* AlternateFocusWidget = NewObject<UButton>(WidgetBlueprint->WidgetTree, TEXT("AlternateFocus"));
+    RootWidget->AddChildToVerticalBox(FocusWidget);
+    RootWidget->AddChildToVerticalBox(AlternateFocusWidget);
+    WidgetBlueprint->WidgetTree->RootWidget = RootWidget;
+
+    UEdGraph* FocusGraph = NewObject<UEdGraph>(WidgetBlueprint, TEXT("BP_GetDesiredFocusTarget"));
+    WidgetBlueprint->FunctionGraphs.Add(FocusGraph);
+
+    UEdGraphNode* DecoyNode = NewObject<UEdGraphNode>(FocusGraph);
+    UK2Node_FunctionResult* ReturnNode = NewObject<UK2Node_FunctionResult>(FocusGraph);
+    UK2Node_VariableGet* VariableGet = NewObject<UK2Node_VariableGet>(FocusGraph);
+    VariableGet->VariableReference.SetSelfMember(FName(TEXT("LyraListView")));
+    FocusGraph->Nodes.Add(DecoyNode);
+    FocusGraph->Nodes.Add(ReturnNode);
+    FocusGraph->Nodes.Add(VariableGet);
+
+    DecoyNode->CreatePin(
+        EGPD_Input,
+        UEdGraphSchema_K2::PC_Object,
+        UWidget::StaticClass(),
+        TEXT("ReturnValue"));
+    UEdGraphPin* ReturnPin = ReturnNode->CreatePin(
+        EGPD_Input,
+        UEdGraphSchema_K2::PC_Object,
+        UWidget::StaticClass(),
+        TEXT("ReturnValue"));
+    UEdGraphPin* WidgetPin = VariableGet->CreatePin(
+        EGPD_Output,
+        UEdGraphSchema_K2::PC_Object,
+        UWidget::StaticClass(),
+        TEXT("LyraListView"));
+    WidgetPin->MakeLinkTo(ReturnPin);
+
+    const MonolithUIFrontendFlowInternal::FDesiredFocusResolution ConnectedResolution =
+        MonolithUIFrontendFlowInternal::ResolveDesiredFocusWidget(WidgetBlueprint);
+    TestEqual(TEXT("connected Blueprint override resolves widget"), ConnectedResolution.WidgetName, FName(TEXT("LyraListView")));
+    TestEqual(TEXT("connected Blueprint override reports source"), ConnectedResolution.Source, FString(TEXT("blueprint_override")));
+    TestTrue(TEXT("connected Blueprint override is detected"), ConnectedResolution.bOverrideGraphPresent);
+
+    UEdGraphPin* NonValuePin = VariableGet->CreatePin(
+        EGPD_Output,
+        UEdGraphSchema_K2::PC_Object,
+        UWidget::StaticClass(),
+        TEXT("NonValuePin"));
+    WidgetPin->BreakLinkTo(ReturnPin);
+    NonValuePin->MakeLinkTo(ReturnPin);
+    const MonolithUIFrontendFlowInternal::FDesiredFocusResolution NonValuePinResolution =
+        MonolithUIFrontendFlowInternal::ResolveDesiredFocusWidget(WidgetBlueprint);
+    TestTrue(TEXT("non-value output on a variable getter fails closed"), NonValuePinResolution.WidgetName.IsNone());
+    TestEqual(
+        TEXT("non-value output reports unsupported return"),
+        NonValuePinResolution.Source,
+        FString(TEXT("blueprint_override_unsupported_return")));
+    NonValuePin->BreakLinkTo(ReturnPin);
+    WidgetPin->MakeLinkTo(ReturnPin);
+
+    UEdGraphPin* UnsupportedOutputPin = DecoyNode->CreatePin(
+        EGPD_Output,
+        UEdGraphSchema_K2::PC_Object,
+        UWidget::StaticClass(),
+        TEXT("LyraListView"));
+    WidgetPin->BreakLinkTo(ReturnPin);
+    UnsupportedOutputPin->MakeLinkTo(ReturnPin);
+    const MonolithUIFrontendFlowInternal::FDesiredFocusResolution UnsupportedResolution =
+        MonolithUIFrontendFlowInternal::ResolveDesiredFocusWidget(WidgetBlueprint);
+    TestTrue(TEXT("ordinary graph node return fails closed"), UnsupportedResolution.WidgetName.IsNone());
+    TestEqual(
+        TEXT("ordinary graph node reports unsupported return"),
+        UnsupportedResolution.Source,
+        FString(TEXT("blueprint_override_unsupported_return")));
+    UnsupportedOutputPin->BreakLinkTo(ReturnPin);
+    WidgetPin->MakeLinkTo(ReturnPin);
+
+    UK2Node_VariableGet* MissingVariableGet = NewObject<UK2Node_VariableGet>(FocusGraph);
+    MissingVariableGet->VariableReference.SetSelfMember(FName(TEXT("MissingWidget")));
+    FocusGraph->Nodes.Add(MissingVariableGet);
+    UEdGraphPin* MissingWidgetPin = MissingVariableGet->CreatePin(
+        EGPD_Output,
+        UEdGraphSchema_K2::PC_Object,
+        UWidget::StaticClass(),
+        TEXT("MissingWidget"));
+    WidgetPin->BreakLinkTo(ReturnPin);
+    MissingWidgetPin->MakeLinkTo(ReturnPin);
+    const MonolithUIFrontendFlowInternal::FDesiredFocusResolution MissingWidgetResolution =
+        MonolithUIFrontendFlowInternal::ResolveDesiredFocusWidget(WidgetBlueprint);
+    TestTrue(TEXT("missing widget variable fails closed"), MissingWidgetResolution.WidgetName.IsNone());
+    TestEqual(
+        TEXT("missing widget variable reports missing widget"),
+        MissingWidgetResolution.Source,
+        FString(TEXT("blueprint_override_widget_missing")));
+    MissingWidgetPin->BreakLinkTo(ReturnPin);
+    FocusGraph->Nodes.Remove(MissingVariableGet);
+    WidgetPin->MakeLinkTo(ReturnPin);
+
+    UK2Node_FunctionResult* MatchingReturnNode = NewObject<UK2Node_FunctionResult>(FocusGraph);
+    UK2Node_VariableGet* MatchingVariableGet = NewObject<UK2Node_VariableGet>(FocusGraph);
+    MatchingVariableGet->VariableReference.SetSelfMember(FName(TEXT("LyraListView")));
+    FocusGraph->Nodes.Add(MatchingReturnNode);
+    FocusGraph->Nodes.Add(MatchingVariableGet);
+    UEdGraphPin* MatchingReturnPin = MatchingReturnNode->CreatePin(
+        EGPD_Input,
+        UEdGraphSchema_K2::PC_Object,
+        UWidget::StaticClass(),
+        TEXT("ReturnValue"));
+    UEdGraphPin* MatchingWidgetPin = MatchingVariableGet->CreatePin(
+        EGPD_Output,
+        UEdGraphSchema_K2::PC_Object,
+        UWidget::StaticClass(),
+        TEXT("LyraListView"));
+    MatchingWidgetPin->MakeLinkTo(MatchingReturnPin);
+    const MonolithUIFrontendFlowInternal::FDesiredFocusResolution MatchingReturnsResolution =
+        MonolithUIFrontendFlowInternal::ResolveDesiredFocusWidget(WidgetBlueprint);
+    TestEqual(
+        TEXT("matching Blueprint return nodes resolve the shared widget"),
+        MatchingReturnsResolution.WidgetName,
+        FName(TEXT("LyraListView")));
+    TestEqual(
+        TEXT("matching Blueprint return nodes report override source"),
+        MatchingReturnsResolution.Source,
+        FString(TEXT("blueprint_override")));
+    FocusGraph->Nodes.Remove(MatchingReturnNode);
+    FocusGraph->Nodes.Remove(MatchingVariableGet);
+
+    UK2Node_FunctionResult* ConflictingReturnNode = NewObject<UK2Node_FunctionResult>(FocusGraph);
+    UK2Node_VariableGet* AlternateVariableGet = NewObject<UK2Node_VariableGet>(FocusGraph);
+    AlternateVariableGet->VariableReference.SetSelfMember(FName(TEXT("AlternateFocus")));
+    FocusGraph->Nodes.Add(ConflictingReturnNode);
+    FocusGraph->Nodes.Add(AlternateVariableGet);
+    UEdGraphPin* ConflictingReturnPin = ConflictingReturnNode->CreatePin(
+        EGPD_Input,
+        UEdGraphSchema_K2::PC_Object,
+        UWidget::StaticClass(),
+        TEXT("ReturnValue"));
+    UEdGraphPin* AlternateWidgetPin = AlternateVariableGet->CreatePin(
+        EGPD_Output,
+        UEdGraphSchema_K2::PC_Object,
+        UWidget::StaticClass(),
+        TEXT("AlternateFocus"));
+    AlternateWidgetPin->MakeLinkTo(ConflictingReturnPin);
+
+    AlternateWidgetPin->MakeLinkTo(ReturnPin);
+    const MonolithUIFrontendFlowInternal::FDesiredFocusResolution MultiplyLinkedResolution =
+        MonolithUIFrontendFlowInternal::ResolveDesiredFocusWidget(WidgetBlueprint);
+    TestTrue(TEXT("multiply-linked return fails closed"), MultiplyLinkedResolution.WidgetName.IsNone());
+    TestEqual(
+        TEXT("multiply-linked return reports ambiguity"),
+        MultiplyLinkedResolution.Source,
+        FString(TEXT("blueprint_override_ambiguous")));
+    AlternateWidgetPin->BreakLinkTo(ReturnPin);
+
+    const MonolithUIFrontendFlowInternal::FDesiredFocusResolution AmbiguousResolution =
+        MonolithUIFrontendFlowInternal::ResolveDesiredFocusWidget(WidgetBlueprint);
+    TestTrue(TEXT("conflicting Blueprint return nodes fail closed"), AmbiguousResolution.WidgetName.IsNone());
+    TestEqual(TEXT("conflicting Blueprint return nodes report ambiguity"), AmbiguousResolution.Source, FString(TEXT("blueprint_override_ambiguous")));
+    TestTrue(TEXT("conflicting Blueprint return nodes remain detected"), AmbiguousResolution.bOverrideGraphPresent);
+
+    FocusGraph->Nodes.Remove(ConflictingReturnNode);
+    FocusGraph->Nodes.Remove(AlternateVariableGet);
+    ReturnPin->BreakAllPinLinks(false);
+    const MonolithUIFrontendFlowInternal::FDesiredFocusResolution UnconnectedResolution =
+        MonolithUIFrontendFlowInternal::ResolveDesiredFocusWidget(WidgetBlueprint);
+    TestTrue(TEXT("unconnected Blueprint override fails closed"), UnconnectedResolution.WidgetName.IsNone());
+    TestEqual(TEXT("unconnected Blueprint override reports source"), UnconnectedResolution.Source, FString(TEXT("blueprint_override_unconnected")));
+    TestTrue(TEXT("unconnected Blueprint override remains detected"), UnconnectedResolution.bOverrideGraphPresent);
+
+    UWidgetBlueprint* EmptyOverrideBlueprint = NewObject<UWidgetBlueprint>(GetTransientPackage());
+    UEdGraph* EmptyOverrideGraph =
+        NewObject<UEdGraph>(EmptyOverrideBlueprint, TEXT("BP_GetDesiredFocusTarget"));
+    EmptyOverrideBlueprint->FunctionGraphs.Add(EmptyOverrideGraph);
+    const MonolithUIFrontendFlowInternal::FDesiredFocusResolution MissingReturnResolution =
+        MonolithUIFrontendFlowInternal::ResolveDesiredFocusWidget(EmptyOverrideBlueprint);
+    TestTrue(TEXT("override without a function result fails closed"), MissingReturnResolution.WidgetName.IsNone());
+    TestEqual(
+        TEXT("override without a function result reports missing return"),
+        MissingReturnResolution.Source,
+        FString(TEXT("blueprint_override_return_missing")));
+    TestTrue(TEXT("empty override graph remains detected"), MissingReturnResolution.bOverrideGraphPresent);
+
+    UWidgetBlueprint* NoOverrideBlueprint = NewObject<UWidgetBlueprint>(GetTransientPackage());
+    const MonolithUIFrontendFlowInternal::FDesiredFocusResolution NoOverrideResolution =
+        MonolithUIFrontendFlowInternal::ResolveDesiredFocusWidget(NoOverrideBlueprint);
+    TestTrue(TEXT("class-default fallback without generated class resolves none"), NoOverrideResolution.WidgetName.IsNone());
+    TestEqual(
+        TEXT("class-default fallback reports none"),
+        NoOverrideResolution.Source,
+        FString(TEXT("class_default_none")));
+    TestFalse(TEXT("class-default fallback has no override graph"), NoOverrideResolution.bOverrideGraphPresent);
 
     return true;
 }

@@ -259,9 +259,8 @@ def _validate_catalog_bytes(data: bytes) -> tuple[dict[str, object], str]:
 
 
 def _manifest_bytes(manifest: dict[str, object]) -> bytes:
-    return (
-        json.dumps(manifest, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
-    ).encode("utf-8")
+    text = json.dumps(manifest, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
+    return text.replace("\n", os.linesep).encode("utf-8")
 
 
 def _validate_manifest_shape(manifest: dict[str, object]) -> None:

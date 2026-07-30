@@ -58,7 +58,10 @@ SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 MONO_ROOT = SCRIPT_DIR.parent
 
 # Default tool paths (resolved relative to plugin root)
-DEFAULT_EXE_PATH = MONO_ROOT / "Binaries" / "monolith_query.exe"
+DEFAULT_QUERY_BINARIES_ROOT = MONO_ROOT / "Binaries"
+DEFAULT_QUERY_MANIFEST_PATH = (
+    DEFAULT_QUERY_BINARIES_ROOT / "monolith_query.current.json"
+)
 DEFAULT_PY_PATH = MONO_ROOT / "Scripts" / "monolith_offline.py"
 
 # Externalized benchmark definition (gets hosted-static-CI line-count validation
@@ -119,6 +122,67 @@ def _run(cmd: List[str], cwd: pathlib.Path) -> Tuple[int, str, str]:
         errors="replace",
     )
     return proc.returncode, proc.stdout, proc.stderr
+
+
+def resolve_authoritative_query_bundle(
+    mono_root: pathlib.Path = MONO_ROOT,
+) -> Tuple[pathlib.Path, pathlib.Path]:
+    """Validate and resolve the manifest-selected immutable Query executable."""
+    binaries_root = mono_root / "Binaries"
+    manifest_path = binaries_root / "monolith_query.current.json"
+    validator_path = (
+        mono_root
+        / "Tools"
+        / "MonolithQuery"
+        / "publish_query_bundle.py"
+    )
+    if not validator_path.is_file():
+        raise RuntimeError(
+            f"Query bundle validator is missing: {validator_path}"
+        )
+
+    return_code, stdout, stderr = _run(
+        [
+            sys.executable,
+            str(validator_path),
+            "validate",
+            "--binaries-root",
+            str(binaries_root),
+        ],
+        mono_root,
+    )
+    if return_code != 0:
+        detail = (stderr or stdout).strip() or "no validator diagnostic"
+        raise RuntimeError(
+            f"authoritative Query bundle validation failed: {detail}"
+        )
+    try:
+        validation = json.loads(stdout)
+    except (TypeError, ValueError) as error:
+        raise RuntimeError(
+            "authoritative Query bundle validator returned invalid JSON"
+        ) from error
+
+    filename = validation.get("file") if isinstance(validation, dict) else None
+    if (
+        not isinstance(filename, str)
+        or pathlib.Path(filename).name != filename
+        or "/" in filename
+        or "\\" in filename
+    ):
+        raise RuntimeError(
+            "authoritative Query bundle validator returned an invalid executable leaf"
+        )
+    executable = binaries_root / filename
+    if not executable.is_file():
+        raise RuntimeError(
+            f"authoritative Query executable is missing: {executable}"
+        )
+    if not manifest_path.is_file():
+        raise RuntimeError(
+            f"authoritative Query manifest is missing: {manifest_path}"
+        )
+    return executable.resolve(), manifest_path.resolve()
 
 
 def run_exe(
@@ -763,6 +827,7 @@ def build_offline_parity_inputs(
     exe_path: pathlib.Path,
     py_path: pathlib.Path,
     mono_root: pathlib.Path = MONO_ROOT,
+    query_manifest_path: Optional[pathlib.Path] = None,
 ) -> Dict[str, Any]:
     """Fingerprint only databases read by the declared parity namespaces.
 
@@ -777,6 +842,11 @@ def build_offline_parity_inputs(
             "runner": pathlib.Path(__file__).resolve(),
             "offline_exe": exe_path,
             "offline_python": py_path,
+            "query_manifest": (
+                query_manifest_path
+                if query_manifest_path is not None
+                else mono_root / "Binaries" / "monolith_query.current.json"
+            ),
         },
         database_paths=OFFLINE_PARITY_DATABASES,
         plugin_root=mono_root,
@@ -1016,14 +1086,35 @@ def build_per_action_row(r: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    exe_path = pathlib.Path(args.exe_path).resolve() if args.exe_path else DEFAULT_EXE_PATH
-    py_path = pathlib.Path(args.py_path).resolve() if args.py_path else DEFAULT_PY_PATH
     output_dir = pathlib.Path(args.output_dir).resolve()
     label = args.label
     ignore_cursor_bytes = args.ignore_cursor_bytes
 
     output_dir.mkdir(parents=True, exist_ok=True)
     clear_run_outputs(output_dir)
+
+    query_manifest_path = DEFAULT_QUERY_MANIFEST_PATH
+    if args.exe_path:
+        exe_path = pathlib.Path(args.exe_path).resolve()
+    else:
+        try:
+            exe_path, query_manifest_path = (
+                resolve_authoritative_query_bundle(MONO_ROOT)
+            )
+        except RuntimeError as error:
+            failure = {
+                "benchmark": "OfflineParity",
+                "label": label,
+                "created_at": utc_now(),
+                "run_valid": False,
+                "failure_kind": "query_bundle_invalid",
+                "error": str(error),
+            }
+            write_json(output_dir / "run_failure.json", failure)
+            print(f"[ERROR] {error}", file=sys.stderr)
+            return 2
+
+    py_path = pathlib.Path(args.py_path).resolve() if args.py_path else DEFAULT_PY_PATH
 
     exe_missing = not exe_path.exists()
     py_missing = not py_path.exists()
@@ -1073,7 +1164,12 @@ def cmd_run(args: argparse.Namespace) -> int:
         chain = discover_chain_inputs(exe_path, MONO_ROOT)
     else:
         chain = {"uclass": None, "decision_id": None, "risk_path": "Docs/SPEC_CORE.md"}
-    benchmark_inputs = build_offline_parity_inputs(exe_path, py_path, MONO_ROOT)
+    benchmark_inputs = build_offline_parity_inputs(
+        exe_path,
+        py_path,
+        MONO_ROOT,
+        query_manifest_path,
+    )
     print(
         f"Chain inputs: uclass={chain.get('uclass')!r} "
         f"decision_id={chain.get('decision_id')!r} "
@@ -1308,7 +1404,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     run_p.add_argument(
         "--exe-path",
         default=None,
-        help=f"Path to monolith_query.exe (default: Binaries/monolith_query.exe relative to plugin root)",
+        help=(
+            "Comparison-only executable override. By default the benchmark "
+            "validates Binaries/monolith_query.current.json and runs its "
+            "immutable Query executable."
+        ),
     )
     run_p.add_argument(
         "--py-path",

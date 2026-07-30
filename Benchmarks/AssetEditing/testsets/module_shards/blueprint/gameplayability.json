@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-07-17T10:24:39.993026+00:00",
+  "generated_at": "2026-07-30T14:45:42.791281+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "ea3c428db9e0fdb056ad50f6e36fce5a1d12383eef5b97982b9e371308a10165",
+  "source_task_sha256": "48ef08cb65bfcafb3877e48e05e619a364028a6523e31c8419d99f65d776057b",
   "module_storage": "module_shard",
   "shard_id": "blueprint.gameplayability",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/gameplayability.json",
-  "task_count": 579,
+  "task_count": 588,
   "module_count": 8,
   "routing_axes": [
     "category",
@@ -269,7 +269,7 @@
         "BEB-258",
         "BEB-259",
         "BEB-260",
-        "BEB-577"
+        "BEB-586"
       ],
       "task_refs": [
         {
@@ -919,7 +919,7 @@
           "description": "Add PrintString node to GameplayAbility EventGraph for activation logging"
         },
         {
-          "id": "BEB-577",
+          "id": "BEB-586",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -944,7 +944,7 @@
       "groups": {
         "by_category": {
           "duplicate_reject": [
-            "BEB-577"
+            "BEB-586"
           ],
           "edit_execute": [
             "BEB-206",
@@ -995,7 +995,7 @@
           "event": [
             "BEB-212",
             "BEB-259",
-            "BEB-577"
+            "BEB-586"
           ],
           "function": [
             "BEB-161",
@@ -1050,7 +1050,7 @@
             "BEB-258",
             "BEB-259",
             "BEB-260",
-            "BEB-577"
+            "BEB-586"
           ],
           "read_only": [
             "BEB-005",
@@ -1087,7 +1087,7 @@
             "BEB-258",
             "BEB-259",
             "BEB-260",
-            "BEB-577"
+            "BEB-586"
           ],
           "readback_verify": [
             "BEB-005",
@@ -1120,7 +1120,7 @@
             "BEB-258",
             "BEB-259",
             "BEB-260",
-            "BEB-577"
+            "BEB-586"
           ]
         }
       },
@@ -1257,7 +1257,7 @@
       "task_ids": [
         "BEB-212",
         "BEB-259",
-        "BEB-577"
+        "BEB-586"
       ],
       "task_refs": [
         {
@@ -1309,7 +1309,7 @@
           "description": "Add BenchAbilityOnCommitted event dispatcher to GameplayAbility"
         },
         {
-          "id": "BEB-577",
+          "id": "BEB-586",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -1334,7 +1334,7 @@
       "groups": {
         "by_category": {
           "duplicate_reject": [
-            "BEB-577"
+            "BEB-586"
           ],
           "edit_execute": [
             "BEB-212",
@@ -1345,19 +1345,19 @@
           "edit": [
             "BEB-212",
             "BEB-259",
-            "BEB-577"
+            "BEB-586"
           ]
         },
         "by_asset_operation": {
           "edit": [
             "BEB-212",
             "BEB-259",
-            "BEB-577"
+            "BEB-586"
           ],
           "readback_verify": [
             "BEB-212",
             "BEB-259",
-            "BEB-577"
+            "BEB-586"
           ]
         }
       },

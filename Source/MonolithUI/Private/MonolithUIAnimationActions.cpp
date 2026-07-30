@@ -1,4 +1,4 @@
-// MonolithUIAnimationActions.cpp
+﻿// MonolithUIAnimationActions.cpp
 #include "MonolithUIAnimationActions.h"
 #include "MonolithUIInternal.h"
 #include "MonolithParamSchema.h"
@@ -1545,6 +1545,39 @@ void FMonolithUIAnimationActions::RegisterActions(FMonolithToolRegistry& Registr
     );
 
     Registry.RegisterAction(
+        TEXT("ui"), TEXT("remap_animation_binding"),
+        TEXT("Confirm-gated remap of one existing UWidgetAnimation binding from a removed or replaced widget name to a resident WidgetTree target while preserving its binding GUID, MovieScene tracks, sections, and keys. Slot-widget bindings are rejected. Dry-run is the default; writes require dry_run=false and confirm=true."),
+        FMonolithActionHandler::CreateStatic(&HandleRemapAnimationBinding),
+        FParamSchemaBuilder()
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
+            .Required(TEXT("animation_name"), TEXT("string"), TEXT("Name/display label of the existing UWidgetAnimation"))
+            .Required(TEXT("from_widget_name"), TEXT("string"), TEXT("Current widget name stored in the animation binding; the widget may already be absent from the WidgetTree"))
+            .Required(TEXT("to_widget_name"), TEXT("string"), TEXT("Resident replacement widget name in the WidgetTree"))
+            .Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Plan only; default true. Set false with confirm=true to mutate."), TEXT("true"))
+            .Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true when dry_run=false."), TEXT("false"))
+            .Optional(TEXT("compile"), TEXT("boolean"), TEXT("Compile the Widget Blueprint after an applied mutation (default true)."), TEXT("true"))
+            .Optional(TEXT("read_back"), TEXT("boolean"), TEXT("Include post-plan/post-write animation overview read-back (default true)."), TEXT("true"))
+            .Build()
+    );
+
+    Registry.RegisterAction(
+        TEXT("ui"), TEXT("remove_animation_binding"),
+        TEXT("Confirm-gated removal of one stale UWidgetAnimation binding and its exact MovieScene possessable, tracks, sections, and keys. The widget must be absent from the WidgetTree by default. Slot-widget bindings, ambiguous binding identities, and orphaned possessables fail closed. Dry-run is the default; writes require dry_run=false, confirm=true, and confirm_delete=true."),
+        FMonolithActionHandler::CreateStatic(&HandleRemoveAnimationBinding),
+        FParamSchemaBuilder()
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
+            .Required(TEXT("animation_name"), TEXT("string"), TEXT("Name/display label of the existing UWidgetAnimation"))
+            .Required(TEXT("widget_name"), TEXT("string"), TEXT("Exact stale widget name stored in the animation binding"))
+            .Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Plan only; default true. Set false with both confirmation flags to mutate."), TEXT("true"))
+            .Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true when dry_run=false."), TEXT("false"))
+            .Optional(TEXT("confirm_delete"), TEXT("boolean"), TEXT("Required true when dry_run=false because the MovieScene tracks and keys are deleted."), TEXT("false"))
+            .Optional(TEXT("require_widget_missing"), TEXT("boolean"), TEXT("Reject a binding whose widget is still resident in the WidgetTree (default true)."), TEXT("true"))
+            .Optional(TEXT("compile"), TEXT("boolean"), TEXT("Compile the Widget Blueprint after an applied mutation (default true)."), TEXT("true"))
+            .Optional(TEXT("read_back"), TEXT("boolean"), TEXT("Include post-plan/post-write animation overview read-back (default true)."), TEXT("true"))
+            .Build()
+    );
+
+    Registry.RegisterAction(
         TEXT("ui"), TEXT("create_animation"),
         TEXT("[DEPRECATED -- use ui::create_animation_v2 instead] Create a new UWidgetAnimation with tracks and keyframes on a Widget Blueprint. Scheduled for removal one major release out (Phase L marker, 2026-04-26). Response payload is tagged {deprecated: true, use_action: \"ui::create_animation_v2\"}; the v2 surface supports multi-track + cubic / weighted-tangent interpolation that v1 cannot express."),
         FMonolithActionHandler::CreateStatic(&HandleCreateAnimation),
@@ -1597,6 +1630,14 @@ void FMonolithUIAnimationActions::RegisterActions(FMonolithToolRegistry& Registr
         { TEXT("UMG animation delta"), TEXT("MovieScene float key merge"), TEXT("animation key delete"), TEXT("confirm-gated animation edit"), TEXT("RenderTransform component key"), TEXT("ColorAndOpacity component key") },
         { TEXT("animation_append_widget_tracks"), TEXT("animation_append_time_slice"), TEXT("animation_delete_widget_keys"), TEXT("set_property_keys") },
         { TEXT("add or update a RenderOpacity key without resetting existing keys"), TEXT("patch RenderTransform.Translation.X with property=transform component=tx"), TEXT("delete one exact-frame ColorAndOpacity.A key with confirm_delete=true") });
+    FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ui"), TEXT("remap_animation_binding"),
+        { TEXT("UMG animation binding remap"), TEXT("replace animated widget"), TEXT("repair missing animation widget"), TEXT("preserve MovieScene binding GUID") },
+        { TEXT("replace_animation_widget_binding"), TEXT("rename_animation_binding_target"), TEXT("repair_stale_widget_animation_binding") },
+        { TEXT("remap a stale AnimBoundBotsBorder binding to TagChaseBotSetup without recreating OnActivated"), TEXT("replace an animation widget target while preserving tracks and keys") });
+    FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ui"), TEXT("remove_animation_binding"),
+        { TEXT("UMG stale animation binding removal"), TEXT("delete missing widget animation track"), TEXT("remove orphaned widget animation binding"), TEXT("confirm-gated MovieScene possessable delete") },
+        { TEXT("delete_animation_widget_binding"), TEXT("remove_stale_widget_animation_binding"), TEXT("delete_missing_widget_track") },
+        { TEXT("remove a stale QuickplayButton binding after that widget was retired"), TEXT("delete one absent widget binding and all of its MovieScene tracks with confirm_delete=true") });
 }
 
 // --- list_animations ---
@@ -1643,6 +1684,554 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleListAnimations(const TS
     Result->SetStringField(TEXT("asset_path"), AssetPath);
     Result->SetArrayField(TEXT("animations"), AnimArray);
     Result->SetNumberField(TEXT("count"), AnimArray.Num());
+    return FMonolithActionResult::Success(Result);
+}
+
+// --- remap_animation_binding ---
+FMonolithActionResult FMonolithUIAnimationActions::HandleRemapAnimationBinding(
+    const TSharedPtr<FJsonObject>& Params)
+{
+    FMonolithActionResult Err;
+    FString AssetPath;
+    if (!MonolithUIInternal::TryGetRequiredString(
+            Params, TEXT("asset_path"), AssetPath, Err))
+    {
+        return Err;
+    }
+
+    FString AnimationName;
+    if (!MonolithUIInternal::TryGetRequiredString(
+            Params, TEXT("animation_name"), AnimationName, Err))
+    {
+        return Err;
+    }
+
+    FString FromWidgetName;
+    if (!MonolithUIInternal::TryGetRequiredString(
+            Params, TEXT("from_widget_name"), FromWidgetName, Err))
+    {
+        return Err;
+    }
+
+    FString ToWidgetName;
+    if (!MonolithUIInternal::TryGetRequiredString(
+            Params, TEXT("to_widget_name"), ToWidgetName, Err))
+    {
+        return Err;
+    }
+
+    if (FromWidgetName == ToWidgetName)
+    {
+        return FMonolithActionResult::Error(
+            TEXT("from_widget_name and to_widget_name must be different"),
+            -32602);
+    }
+
+    const bool bDryRun =
+        MonolithUIInternal::GetOptionalBool(Params, TEXT("dry_run"), true);
+    const bool bConfirm =
+        MonolithUIInternal::GetOptionalBool(Params, TEXT("confirm"), false);
+    const bool bCompile =
+        MonolithUIInternal::GetOptionalBool(Params, TEXT("compile"), true);
+    const bool bReadBack =
+        MonolithUIInternal::GetOptionalBool(Params, TEXT("read_back"), true);
+
+    if (!bDryRun && !bConfirm)
+    {
+        return FMonolithActionResult::Error(
+            TEXT("remap_animation_binding writes require dry_run=false and confirm=true"),
+            -32602);
+    }
+
+    UWidgetBlueprint* WBP =
+        MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
+    if (!WBP)
+    {
+        return Err;
+    }
+
+    UWidgetAnimation* Animation =
+        FindAnimationForRead(WBP, AnimationName);
+    if (!Animation)
+    {
+        return FMonolithActionResult::Error(
+            FString::Printf(
+                TEXT("Animation '%s' not found on '%s'"),
+                *AnimationName,
+                *AssetPath),
+            -32603);
+    }
+
+    UMovieScene* MovieScene = Animation->GetMovieScene();
+    if (!MovieScene)
+    {
+        return FMonolithActionResult::Error(
+            TEXT("Animation has no MovieScene"),
+            -32603);
+    }
+
+    if (!WBP->WidgetTree)
+    {
+        return FMonolithActionResult::Error(
+            TEXT("Widget Blueprint has no WidgetTree"),
+            -32603);
+    }
+
+    UWidget* TargetWidget =
+        WBP->WidgetTree->FindWidget(FName(*ToWidgetName));
+    if (!TargetWidget)
+    {
+        return FMonolithActionResult::Error(
+            FString::Printf(
+                TEXT("to_widget_name '%s' is not resident in '%s'"),
+                *ToWidgetName,
+                *AssetPath),
+            -32602);
+    }
+
+    const FName FromName(*FromWidgetName);
+    const FName ToName(*ToWidgetName);
+    FWidgetAnimationBinding* SourceBinding = nullptr;
+    FWidgetAnimationBinding* ExistingTargetBinding = nullptr;
+    int32 SourceBindingCount = 0;
+    int32 TargetBindingCount = 0;
+
+    for (FWidgetAnimationBinding& Binding : Animation->AnimationBindings)
+    {
+        if (Binding.WidgetName == FromName)
+        {
+            SourceBinding = &Binding;
+            ++SourceBindingCount;
+        }
+        if (Binding.WidgetName == ToName)
+        {
+            ExistingTargetBinding = &Binding;
+            ++TargetBindingCount;
+        }
+    }
+
+    if (SourceBindingCount > 1 || TargetBindingCount > 1)
+    {
+        return FMonolithActionResult::Error(
+            FString::Printf(
+                TEXT("Animation binding names must be unique: from=%s count=%d to=%s count=%d"),
+                *FromWidgetName,
+                SourceBindingCount,
+                *ToWidgetName,
+                TargetBindingCount),
+            -32603);
+    }
+
+    if (SourceBinding && ExistingTargetBinding)
+    {
+        return FMonolithActionResult::Error(
+            FString::Printf(
+                TEXT("Animation already contains distinct bindings for both '%s' and '%s'; binding merge is not supported"),
+                *FromWidgetName,
+                *ToWidgetName),
+            -32602);
+    }
+
+    FWidgetAnimationBinding* BindingToRemap =
+        SourceBinding ? SourceBinding : ExistingTargetBinding;
+    if (!BindingToRemap)
+    {
+        return FMonolithActionResult::Error(
+            FString::Printf(
+                TEXT("Animation '%s' contains no binding for '%s' or already-remapped target '%s'"),
+                *AnimationName,
+                *FromWidgetName,
+                *ToWidgetName),
+            -32603);
+    }
+
+    if (!BindingToRemap->SlotWidgetName.IsNone())
+    {
+        return FMonolithActionResult::Error(
+            FString::Printf(
+                TEXT("Animation binding '%s' targets slot widget '%s'; slot-widget remapping is not supported"),
+                *BindingToRemap->WidgetName.ToString(),
+                *BindingToRemap->SlotWidgetName.ToString()),
+            -32602);
+    }
+
+    FMovieScenePossessable* Possessable =
+        MovieScene->FindPossessable(BindingToRemap->AnimationGuid);
+    if (!Possessable)
+    {
+        return FMonolithActionResult::Error(
+            FString::Printf(
+                TEXT("Animation binding '%s' has no possessable for GUID %s"),
+                *BindingToRemap->WidgetName.ToString(),
+                *BindingToRemap->AnimationGuid.ToString(
+                    EGuidFormats::DigitsWithHyphensLower)),
+            -32603);
+    }
+
+    const bool bTargetIsRootWidget =
+        WBP->WidgetTree->RootWidget == TargetWidget;
+    bool bPossessedClassDiffers = false;
+#if WITH_EDITORONLY_DATA
+    bPossessedClassDiffers =
+        Possessable->GetLoadedPossessedObjectClass() != TargetWidget->GetClass();
+#endif
+    const bool bWouldChange =
+        BindingToRemap->WidgetName != ToName
+        || BindingToRemap->bIsRootWidget != bTargetIsRootWidget
+        || Possessable->GetName() != ToWidgetName
+        || bPossessedClassDiffers;
+    const bool bAlreadyRemapped =
+        SourceBinding == nullptr && ExistingTargetBinding != nullptr;
+
+    bool bMutated = false;
+    bool bCompiled = false;
+    if (!bDryRun && bWouldChange)
+    {
+        WBP->Modify();
+        Animation->Modify();
+        MovieScene->Modify();
+
+        BindingToRemap->WidgetName = ToName;
+        BindingToRemap->bIsRootWidget = bTargetIsRootWidget;
+        Possessable->SetName(ToWidgetName);
+#if WITH_EDITORONLY_DATA
+        Possessable->SetPossessedObjectClass(TargetWidget->GetClass());
+#endif
+
+        FBlueprintEditorUtils::MarkBlueprintAsModified(WBP);
+        WBP->MarkPackageDirty();
+        bMutated = true;
+        if (bCompile)
+        {
+            FKismetEditorUtilities::CompileBlueprint(WBP);
+            bCompiled = true;
+        }
+    }
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetStringField(
+        TEXT("schema_version"),
+        TEXT("ui_animation_binding_remap.v1"));
+    Result->SetStringField(TEXT("asset_path"), AssetPath);
+    Result->SetStringField(
+        TEXT("animation_name"),
+        GetAnimationReadableName(Animation));
+    Result->SetStringField(
+        TEXT("owner_action"),
+        TEXT("ui.remap_animation_binding"));
+    Result->SetStringField(TEXT("from_widget_name"), FromWidgetName);
+    Result->SetStringField(TEXT("to_widget_name"), ToWidgetName);
+    Result->SetStringField(
+        TEXT("binding_guid"),
+        BindingToRemap->AnimationGuid.ToString(
+            EGuidFormats::DigitsWithHyphensLower));
+    Result->SetBoolField(TEXT("dry_run"), bDryRun);
+    Result->SetBoolField(TEXT("confirmed"), bConfirm);
+    Result->SetBoolField(TEXT("source_binding_found"), SourceBinding != nullptr);
+    Result->SetBoolField(
+        TEXT("target_binding_found"),
+        ExistingTargetBinding != nullptr);
+    Result->SetBoolField(TEXT("already_remapped"), bAlreadyRemapped);
+    Result->SetBoolField(TEXT("would_change"), bWouldChange);
+    Result->SetBoolField(TEXT("mutated"), bMutated);
+    Result->SetBoolField(TEXT("compiled"), bCompiled);
+    Result->SetBoolField(
+        TEXT("compile_succeeded"),
+        !bCompiled || WBP->Status != BS_Error);
+    if (bReadBack)
+    {
+        Result->SetObjectField(
+            TEXT("read_back_overview"),
+            MakeAnimationOverview(WBP, Animation));
+    }
+    return FMonolithActionResult::Success(Result);
+}
+
+// --- remove_animation_binding ---
+FMonolithActionResult FMonolithUIAnimationActions::HandleRemoveAnimationBinding(
+    const TSharedPtr<FJsonObject>& Params)
+{
+    FMonolithActionResult Err;
+    FString AssetPath;
+    if (!MonolithUIInternal::TryGetRequiredString(
+            Params, TEXT("asset_path"), AssetPath, Err))
+    {
+        return Err;
+    }
+
+    FString AnimationName;
+    if (!MonolithUIInternal::TryGetRequiredString(
+            Params, TEXT("animation_name"), AnimationName, Err))
+    {
+        return Err;
+    }
+
+    FString WidgetName;
+    if (!MonolithUIInternal::TryGetRequiredString(
+            Params, TEXT("widget_name"), WidgetName, Err))
+    {
+        return Err;
+    }
+
+    const bool bDryRun =
+        MonolithUIInternal::GetOptionalBool(Params, TEXT("dry_run"), true);
+    const bool bConfirm =
+        MonolithUIInternal::GetOptionalBool(Params, TEXT("confirm"), false);
+    const bool bConfirmDelete =
+        MonolithUIInternal::GetOptionalBool(
+            Params, TEXT("confirm_delete"), false);
+    const bool bRequireWidgetMissing =
+        MonolithUIInternal::GetOptionalBool(
+            Params, TEXT("require_widget_missing"), true);
+    const bool bCompile =
+        MonolithUIInternal::GetOptionalBool(Params, TEXT("compile"), true);
+    const bool bReadBack =
+        MonolithUIInternal::GetOptionalBool(
+            Params, TEXT("read_back"), true);
+
+    if (!bDryRun && (!bConfirm || !bConfirmDelete))
+    {
+        return FMonolithActionResult::Error(
+            TEXT("remove_animation_binding writes require dry_run=false, confirm=true, and confirm_delete=true"),
+            -32602);
+    }
+
+    UWidgetBlueprint* WBP =
+        MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
+    if (!WBP)
+    {
+        return Err;
+    }
+
+    UWidgetAnimation* Animation =
+        FindAnimationForRead(WBP, AnimationName);
+    if (!Animation)
+    {
+        return FMonolithActionResult::Error(
+            FString::Printf(
+                TEXT("Animation '%s' not found on '%s'"),
+                *AnimationName,
+                *AssetPath),
+            -32603);
+    }
+
+    UMovieScene* MovieScene = Animation->GetMovieScene();
+    if (!MovieScene)
+    {
+        return FMonolithActionResult::Error(
+            TEXT("Animation has no MovieScene"),
+            -32603);
+    }
+
+    if (!WBP->WidgetTree)
+    {
+        return FMonolithActionResult::Error(
+            TEXT("Widget Blueprint has no WidgetTree"),
+            -32603);
+    }
+
+    const FName WidgetFName(*WidgetName);
+    UWidget* ResidentWidget = WBP->WidgetTree->FindWidget(WidgetFName);
+    if (bRequireWidgetMissing && ResidentWidget)
+    {
+        return FMonolithActionResult::Error(
+            FString::Printf(
+                TEXT("widget_name '%s' is still resident in '%s'; remove it from the WidgetTree first or explicitly set require_widget_missing=false"),
+                *WidgetName,
+                *AssetPath),
+            -32602);
+    }
+
+    int32 MatchingBindingIndex = INDEX_NONE;
+    int32 MatchingBindingCount = 0;
+    for (int32 Index = 0; Index < Animation->AnimationBindings.Num(); ++Index)
+    {
+        if (Animation->AnimationBindings[Index].WidgetName == WidgetFName)
+        {
+            MatchingBindingIndex = Index;
+            ++MatchingBindingCount;
+        }
+    }
+
+    if (MatchingBindingCount > 1)
+    {
+        return FMonolithActionResult::Error(
+            FString::Printf(
+                TEXT("Animation '%s' contains %d bindings for widget '%s'; removal requires one exact binding"),
+                *AnimationName,
+                MatchingBindingCount,
+                *WidgetName),
+            -32603);
+    }
+
+    int32 NamedPossessableCount = 0;
+    for (int32 Index = 0; Index < MovieScene->GetPossessableCount(); ++Index)
+    {
+        if (MovieScene->GetPossessable(Index).GetName() == WidgetName)
+        {
+            ++NamedPossessableCount;
+        }
+    }
+
+    if (MatchingBindingCount == 0 && NamedPossessableCount > 0)
+    {
+        return FMonolithActionResult::Error(
+            FString::Printf(
+                TEXT("Animation '%s' has no FWidgetAnimationBinding for '%s' but retains %d named MovieScene possessable(s); orphan repair is ambiguous"),
+                *AnimationName,
+                *WidgetName,
+                NamedPossessableCount),
+            -32603);
+    }
+
+    FGuid BindingGuid;
+    int32 TrackCount = 0;
+    bool bBindingFound = MatchingBindingCount == 1;
+    if (bBindingFound)
+    {
+        const FWidgetAnimationBinding& Binding =
+            Animation->AnimationBindings[MatchingBindingIndex];
+        if (!Binding.SlotWidgetName.IsNone())
+        {
+            return FMonolithActionResult::Error(
+                FString::Printf(
+                    TEXT("Animation binding '%s' targets slot widget '%s'; slot-widget removal is not supported"),
+                    *Binding.WidgetName.ToString(),
+                    *Binding.SlotWidgetName.ToString()),
+                -32602);
+        }
+
+        BindingGuid = Binding.AnimationGuid;
+        int32 GuidBindingCount = 0;
+        for (const FWidgetAnimationBinding& Candidate :
+             Animation->AnimationBindings)
+        {
+            GuidBindingCount +=
+                Candidate.AnimationGuid == BindingGuid ? 1 : 0;
+        }
+        if (GuidBindingCount != 1)
+        {
+            return FMonolithActionResult::Error(
+                FString::Printf(
+                    TEXT("Animation binding GUID %s is referenced %d times; removal requires one exact binding identity"),
+                    *BindingGuid.ToString(
+                        EGuidFormats::DigitsWithHyphensLower),
+                    GuidBindingCount),
+                -32603);
+        }
+
+        FMovieScenePossessable* Possessable =
+            MovieScene->FindPossessable(BindingGuid);
+        if (!Possessable)
+        {
+            return FMonolithActionResult::Error(
+                FString::Printf(
+                    TEXT("Animation binding '%s' has no possessable for GUID %s"),
+                    *WidgetName,
+                    *BindingGuid.ToString(
+                        EGuidFormats::DigitsWithHyphensLower)),
+                -32603);
+        }
+        if (Possessable->GetName() != WidgetName
+            || NamedPossessableCount != 1)
+        {
+            return FMonolithActionResult::Error(
+                FString::Printf(
+                    TEXT("Animation binding '%s' does not resolve to one exact same-named MovieScene possessable (bound_name='%s', named_count=%d)"),
+                    *WidgetName,
+                    *Possessable->GetName(),
+                    NamedPossessableCount),
+                -32603);
+        }
+
+        const FMovieSceneBinding* MovieSceneBinding =
+            static_cast<const UMovieScene*>(MovieScene)->FindBinding(
+                BindingGuid);
+        if (!MovieSceneBinding)
+        {
+            return FMonolithActionResult::Error(
+                FString::Printf(
+                    TEXT("Animation binding '%s' has no MovieScene object binding for GUID %s"),
+                    *WidgetName,
+                    *BindingGuid.ToString(
+                        EGuidFormats::DigitsWithHyphensLower)),
+                -32603);
+        }
+        TrackCount = MovieSceneBinding->GetTracks().Num();
+    }
+
+    const bool bAlreadyRemoved = !bBindingFound;
+    const bool bWouldChange = bBindingFound;
+    bool bMutated = false;
+    bool bCompiled = false;
+    if (!bDryRun && bWouldChange)
+    {
+        WBP->Modify();
+        Animation->Modify();
+        MovieScene->Modify();
+
+        if (!MovieScene->RemovePossessable(BindingGuid))
+        {
+            return FMonolithActionResult::Error(
+                FString::Printf(
+                    TEXT("Failed to remove MovieScene possessable %s for widget '%s'"),
+                    *BindingGuid.ToString(
+                        EGuidFormats::DigitsWithHyphensLower),
+                    *WidgetName),
+                -32603);
+        }
+        Animation->UnbindPossessableObjects(BindingGuid);
+
+        FBlueprintEditorUtils::MarkBlueprintAsModified(WBP);
+        WBP->MarkPackageDirty();
+        bMutated = true;
+        if (bCompile)
+        {
+            FKismetEditorUtilities::CompileBlueprint(WBP);
+            bCompiled = true;
+        }
+    }
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetStringField(
+        TEXT("schema_version"),
+        TEXT("ui_animation_binding_remove.v1"));
+    Result->SetStringField(TEXT("asset_path"), AssetPath);
+    Result->SetStringField(
+        TEXT("animation_name"),
+        GetAnimationReadableName(Animation));
+    Result->SetStringField(
+        TEXT("owner_action"),
+        TEXT("ui.remove_animation_binding"));
+    Result->SetStringField(TEXT("widget_name"), WidgetName);
+    Result->SetStringField(
+        TEXT("binding_guid"),
+        BindingGuid.IsValid()
+            ? BindingGuid.ToString(
+                EGuidFormats::DigitsWithHyphensLower)
+            : FString());
+    Result->SetBoolField(TEXT("dry_run"), bDryRun);
+    Result->SetBoolField(TEXT("confirmed"), bConfirm);
+    Result->SetBoolField(TEXT("delete_confirmed"), bConfirmDelete);
+    Result->SetBoolField(
+        TEXT("require_widget_missing"),
+        bRequireWidgetMissing);
+    Result->SetBoolField(TEXT("widget_resident"), ResidentWidget != nullptr);
+    Result->SetBoolField(TEXT("binding_found"), bBindingFound);
+    Result->SetNumberField(TEXT("track_count"), TrackCount);
+    Result->SetBoolField(TEXT("already_removed"), bAlreadyRemoved);
+    Result->SetBoolField(TEXT("would_change"), bWouldChange);
+    Result->SetBoolField(TEXT("mutated"), bMutated);
+    Result->SetBoolField(TEXT("compiled"), bCompiled);
+    Result->SetBoolField(
+        TEXT("compile_succeeded"),
+        !bCompiled || WBP->Status != BS_Error);
+    if (bReadBack)
+    {
+        Result->SetObjectField(
+            TEXT("read_back_overview"),
+            MakeAnimationOverview(WBP, Animation));
+    }
     return FMonolithActionResult::Success(Result);
 }
 

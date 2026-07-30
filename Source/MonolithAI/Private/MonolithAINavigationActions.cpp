@@ -1,4 +1,5 @@
 ﻿#include "MonolithAINavigationActions.h"
+#include "MonolithAINavigationPackageUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
@@ -22,6 +23,7 @@
 #include "Engine/SCS_Node.h"
 #include "EngineUtils.h"
 #include "Editor.h"
+#include "Misc/PackageName.h"
 #include "ScopedTransaction.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
@@ -34,6 +36,29 @@
 // ============================================================
 //  Helpers
 // ============================================================
+
+FString MonolithAINavigationPackages::ResolveSaveFilename(const UPackage* Package)
+{
+	if (!Package)
+	{
+		return FString();
+	}
+
+	const FString& PackageExtension = Package->ContainsMap()
+		? FPackageName::GetMapPackageExtension()
+		: FPackageName::GetAssetPackageExtension();
+
+	FString PackageFilename;
+	if (!FPackageName::TryConvertLongPackageNameToFilename(
+		Package->GetName(),
+		PackageFilename,
+		PackageExtension))
+	{
+		return FString();
+	}
+
+	return PackageFilename;
+}
 
 UWorld* FMonolithAINavigationActions::GetNavWorld()
 {
@@ -2270,16 +2295,29 @@ FMonolithActionResult FMonolithAINavigationActions::HandleRebuildNavigation(cons
 					continue;
 				}
 
-				const FString PackageFilename = FPackageName::LongPackageNameToFilename(
-					PackageName, FPackageName::GetAssetPackageExtension());
+				auto PkgObj = MakeShared<FJsonObject>();
+				PkgObj->SetStringField(TEXT("package"), PackageName);
+				PkgObj->SetBoolField(TEXT("is_map"), Pkg->ContainsMap());
+
+				const FString PackageFilename =
+					MonolithAINavigationPackages::ResolveSaveFilename(Pkg);
+				if (PackageFilename.IsEmpty())
+				{
+					PkgObj->SetBoolField(TEXT("saved"), false);
+					PkgObj->SetStringField(
+						TEXT("error"),
+						TEXT("Could not resolve the canonical package filename"));
+					SavedPackages.Add(MakeShared<FJsonValueObject>(PkgObj));
+					FailedCount++;
+					continue;
+				}
+				PkgObj->SetStringField(TEXT("disk_path"), PackageFilename);
 
 				FSavePackageArgs SaveArgs;
 				SaveArgs.TopLevelFlags = RF_NoFlags;
 				SaveArgs.SaveFlags = SAVE_NoError;
 				const bool bSaved = UPackage::SavePackage(Pkg, nullptr, *PackageFilename, SaveArgs);
 
-				auto PkgObj = MakeShared<FJsonObject>();
-				PkgObj->SetStringField(TEXT("package"), PackageName);
 				PkgObj->SetBoolField(TEXT("saved"), bSaved);
 				SavedPackages.Add(MakeShared<FJsonValueObject>(PkgObj));
 

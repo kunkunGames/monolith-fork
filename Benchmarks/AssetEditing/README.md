@@ -6,7 +6,7 @@ Measures Monolith MCP asset editing capability across Blueprint graph/class/comp
 
 | File | Purpose |
 |------|---------|
-| `tasks.jsonl` | 579 benchmark tasks across 11 categories |
+| `tasks.jsonl` | 588 benchmark tasks across 11 categories |
 | `manifest.json` | Benchmark metadata, score formula, weights, category counts |
 | `asset_types.json` | Generated AssetType support matrix and links to per-type directories |
 | `[AssetType]\README.md` | Generated summary for one asset type/domain, including supported operations and test cases |
@@ -69,9 +69,9 @@ directory contains `README.md`, `index.json`, `tasks.jsonl`, and `testcases\*.js
 | `mesh` | 21 | 21 | 21 | 21 | 21 | 21 | `Benchmarks/AssetEditing/mesh` |
 | `modelgen` | 2 | 2 | 2 | 2 | 2 | 2 | `Benchmarks/AssetEditing/modelgen` |
 | `niagara` | 29 | 29 | 29 | 29 | 29 | 29 | `Benchmarks/AssetEditing/niagara` |
-| `pcg` | 1 | 1 | 1 | 1 | 1 | 1 | `Benchmarks/AssetEditing/pcg` |
+| `pcg` | 6 | 6 | 6 | 6 | 6 | 6 | `Benchmarks/AssetEditing/pcg` |
 | `project` | 3 | 3 | 3 | 3 | 3 | 3 | `Benchmarks/AssetEditing/project` |
-| `ui` | 19 | 19 | 19 | 19 | 19 | 19 | `Benchmarks/AssetEditing/ui` |
+| `ui` | 23 | 23 | 23 | 23 | 23 | 23 | `Benchmarks/AssetEditing/ui` |
 | `worldgen` | 9 | 9 | 9 | 9 | 9 | 9 | `Benchmarks/AssetEditing/worldgen` |
 
 ## Task Categories
@@ -231,7 +231,7 @@ directory contains `README.md`, `index.json`, `tasks.jsonl`, and `testcases\*.js
 | `edit_schema` | 47 | `monolith_discover` | Schema has `planning_signals` + `skill` AND no isError (strict) |
 | `workflow_execute` | 11 | `blueprint_query` | Executed multi-step chains run, compile clean, and read back their end state |
 | `edit_execute` | 113 | `blueprint_query` | Edit call succeeds AND its mutation is observable via read-back; creates run delete-first so the read-back proves THIS run; includes UMG, AnimBP, GAS, ActorComponent, Interface, component/property value, exec- and data-pin wiring, pin literals, and delete round-trips |
-| `asset_authoring` | 269 | mixed owner namespaces | Cross-domain UE assets are created or routed to asset edit workflows through owning namespaces, then saved where persistable and inspected/read back |
+| `asset_authoring` | 278 | mixed owner namespaces | Cross-domain UE assets are created or routed to asset edit workflows through owning namespaces, then saved where persistable and inspected/read back |
 | `error_path` | 20 | `blueprint_query` | Server returns a structured `isError` whose message references the **offending identifier** (transport crash = fail; generic-only error = fail) |
 | `duplicate_reject` | 11 | `blueprint_query` | First call CLEANLY creates the entity (delete-reset each run) AND a second identical `add_*` call returns a duplicate-specific `isError` |
 | `negative_compile` | 1 | `blueprint_query` | A deliberately broken scratch Blueprint function signature must be REPORTED as a real compile failure (`error_count>0`); a transport/isError/clean envelope = fail |
@@ -332,9 +332,9 @@ python Scripts\asset_editing_benchmark.py generate `
 <!-- asset-editing-generated-summary:start -->
 | Generated corpus metric | Count |
 |---|---:|
-| Canonical tasks | 579 |
-| Asset-authoring tasks | 269 |
-| Routable test-set modules | 1824 |
+| Canonical tasks | 588 |
+| Asset-authoring tasks | 278 |
+| Routable test-set modules | 1878 |
 | Module shard files | 39 |
 <!-- asset-editing-generated-summary:end -->
 
@@ -343,6 +343,8 @@ python Scripts\asset_editing_benchmark.py generate `
 `testsets/modules.json`, and `testsets/module_shards/` for routable subsets. The module manifest
 and the generated summary above are synchronized from the same tasks, asset-type index, and test-set
 index, so a routed subset can load a small module payload without parsing the full route tree.
+Generation is Perforce-safe: expected outputs whose canonical UTF-8 content is unchanged are not
+rewritten, and cleanup deletes only JSON paths no longer present in the generated contract.
 
 ## Select Test Sets
 

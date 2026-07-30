@@ -3,10 +3,10 @@
   "description": "Measures Unreal asset editing capability: Blueprint graph/class/component fixture edits plus high-ROI cross-domain asset creation, edit, save/read-back workflows, schema discovery, graceful input-specific error handling, duplicate-name rejection, negative compile reporting, and explicit fixture lifecycle preflight",
   "primary_score": "asset_editing_score",
   "expected_namespace": "blueprint-plus-asset-authoring",
-  "generated_at": "2026-07-17T10:24:40.937223+00:00",
-  "task_count": 579,
+  "generated_at": "2026-07-30T14:45:44.317036+00:00",
+  "task_count": 588,
   "category_counts": {
-    "asset_authoring": 269,
+    "asset_authoring": 278,
     "duplicate_reject": 11,
     "edit_execute": 113,
     "edit_schema": 47,
@@ -67,7 +67,7 @@
   "base_edit_execute_tasks_per_type": 10,
   "additional_edit_execute_tasks": 43,
   "additional_edit_execute_specs": 28,
-  "asset_authoring_tasks": 269,
+  "asset_authoring_tasks": 278,
   "edit_execute_tasks_per_type": {
     "Actor": 20,
     "ActorComponent": 16,
@@ -108,7 +108,7 @@
   "testset_module_storage": "split_shards",
   "testset_module_shard_dir": "Benchmarks/AssetEditing/testsets/module_shards",
   "testset_module_shard_count": 39,
-  "testset_module_count": 1824,
+  "testset_module_count": 1878,
   "testset_routing_axes": [
     "category",
     "domain",
@@ -529,16 +529,16 @@
       "asset_type": "pcg",
       "asset_type_slug": "pcg",
       "module_id": "asset_authoring.pcg",
-      "task_count": 1,
-      "edit_domain_count": 1,
+      "task_count": 6,
+      "edit_domain_count": 6,
       "operation_counts": {
-        "creation_or_import": 1,
-        "edit": 1,
-        "save": 1,
-        "readback_verify": 1
+        "creation_or_import": 6,
+        "edit": 6,
+        "save": 6,
+        "readback_verify": 6
       },
       "lifecycle_counts": {
-        "create_save": 1
+        "create_save": 6
       },
       "directory": "Benchmarks/AssetEditing/pcg",
       "index_file": "Benchmarks/AssetEditing/pcg/index.json",
@@ -569,16 +569,16 @@
       "asset_type": "ui",
       "asset_type_slug": "ui",
       "module_id": "asset_authoring.ui",
-      "task_count": 19,
-      "edit_domain_count": 19,
+      "task_count": 23,
+      "edit_domain_count": 23,
       "operation_counts": {
-        "creation_or_import": 19,
-        "edit": 19,
-        "save": 19,
-        "readback_verify": 19
+        "creation_or_import": 23,
+        "edit": 23,
+        "save": 23,
+        "readback_verify": 23
       },
       "lifecycle_counts": {
-        "create_save": 19
+        "create_save": 23
       },
       "directory": "Benchmarks/AssetEditing/ui",
       "index_file": "Benchmarks/AssetEditing/ui/index.json",

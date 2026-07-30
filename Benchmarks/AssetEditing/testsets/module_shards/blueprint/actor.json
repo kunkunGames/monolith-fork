@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-07-17T10:24:39.993026+00:00",
+  "generated_at": "2026-07-30T14:45:42.791281+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "ea3c428db9e0fdb056ad50f6e36fce5a1d12383eef5b97982b9e371308a10165",
+  "source_task_sha256": "48ef08cb65bfcafb3877e48e05e619a364028a6523e31c8419d99f65d776057b",
   "module_storage": "module_shard",
   "shard_id": "blueprint.actor",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actor.json",
-  "task_count": 579,
+  "task_count": 588,
   "module_count": 9,
   "routing_axes": [
     "category",
@@ -300,13 +300,13 @@
         "BEB-276",
         "BEB-277",
         "BEB-278",
-        "BEB-548",
-        "BEB-569",
-        "BEB-570",
-        "BEB-571",
-        "BEB-572",
-        "BEB-573",
-        "BEB-574"
+        "BEB-557",
+        "BEB-578",
+        "BEB-579",
+        "BEB-580",
+        "BEB-581",
+        "BEB-582",
+        "BEB-583"
       ],
       "task_refs": [
         {
@@ -1107,7 +1107,7 @@
           "description": "Set a PrintString InString pin literal and read it back"
         },
         {
-          "id": "BEB-548",
+          "id": "BEB-557",
           "category": "negative_compile",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -1135,7 +1135,7 @@
           "description": "Deliberately break a scratch blueprint function signature with an invalid struct type and require a reported compile error"
         },
         {
-          "id": "BEB-569",
+          "id": "BEB-578",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -1157,7 +1157,7 @@
           "description": "add_variable must reject a duplicate member variable name"
         },
         {
-          "id": "BEB-570",
+          "id": "BEB-579",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -1179,7 +1179,7 @@
           "description": "add_function must reject a duplicate function name"
         },
         {
-          "id": "BEB-571",
+          "id": "BEB-580",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -1201,7 +1201,7 @@
           "description": "add_component must reject a duplicate component name (regression: silent suffix bug)"
         },
         {
-          "id": "BEB-572",
+          "id": "BEB-581",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -1222,7 +1222,7 @@
           "description": "add_event_node must reject a duplicate custom event name"
         },
         {
-          "id": "BEB-573",
+          "id": "BEB-582",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -1244,7 +1244,7 @@
           "description": "add_event_dispatcher must reject a duplicate dispatcher name"
         },
         {
-          "id": "BEB-574",
+          "id": "BEB-583",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -1270,12 +1270,12 @@
       "groups": {
         "by_category": {
           "duplicate_reject": [
-            "BEB-569",
-            "BEB-570",
-            "BEB-571",
-            "BEB-572",
-            "BEB-573",
-            "BEB-574"
+            "BEB-578",
+            "BEB-579",
+            "BEB-580",
+            "BEB-581",
+            "BEB-582",
+            "BEB-583"
           ],
           "edit_execute": [
             "BEB-166",
@@ -1307,7 +1307,7 @@
             "BEB-044"
           ],
           "negative_compile": [
-            "BEB-548"
+            "BEB-557"
           ],
           "type_discovery": [
             "BEB-001",
@@ -1330,7 +1330,7 @@
         "by_edit_domain": {
           "compilation": [
             "BEB-175",
-            "BEB-548"
+            "BEB-557"
           ],
           "component": [
             "BEB-164",
@@ -1339,20 +1339,20 @@
             "BEB-272",
             "BEB-273",
             "BEB-276",
-            "BEB-571"
+            "BEB-580"
           ],
           "event": [
             "BEB-172",
-            "BEB-573"
+            "BEB-582"
           ],
           "function": [
             "BEB-155",
             "BEB-167",
             "BEB-168",
             "BEB-275",
-            "BEB-570",
-            "BEB-572",
-            "BEB-574"
+            "BEB-579",
+            "BEB-581",
+            "BEB-583"
           ],
           "general": [
             "BEB-001",
@@ -1385,12 +1385,12 @@
             "BEB-170",
             "BEB-173",
             "BEB-274",
-            "BEB-569"
+            "BEB-578"
           ]
         },
         "by_operation_semantics": {
           "create_save": [
-            "BEB-548"
+            "BEB-557"
           ],
           "edit": [
             "BEB-155",
@@ -1414,12 +1414,12 @@
             "BEB-276",
             "BEB-277",
             "BEB-278",
-            "BEB-569",
-            "BEB-570",
-            "BEB-571",
-            "BEB-572",
-            "BEB-573",
-            "BEB-574"
+            "BEB-578",
+            "BEB-579",
+            "BEB-580",
+            "BEB-581",
+            "BEB-582",
+            "BEB-583"
           ],
           "read_only": [
             "BEB-001",
@@ -1441,7 +1441,7 @@
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-548"
+            "BEB-557"
           ],
           "edit": [
             "BEB-155",
@@ -1465,13 +1465,13 @@
             "BEB-276",
             "BEB-277",
             "BEB-278",
-            "BEB-548",
-            "BEB-569",
-            "BEB-570",
-            "BEB-571",
-            "BEB-572",
-            "BEB-573",
-            "BEB-574"
+            "BEB-557",
+            "BEB-578",
+            "BEB-579",
+            "BEB-580",
+            "BEB-581",
+            "BEB-582",
+            "BEB-583"
           ],
           "readback_verify": [
             "BEB-001",
@@ -1510,16 +1510,16 @@
             "BEB-276",
             "BEB-277",
             "BEB-278",
-            "BEB-548",
-            "BEB-569",
-            "BEB-570",
-            "BEB-571",
-            "BEB-572",
-            "BEB-573",
-            "BEB-574"
+            "BEB-557",
+            "BEB-578",
+            "BEB-579",
+            "BEB-580",
+            "BEB-581",
+            "BEB-582",
+            "BEB-583"
           ],
           "save": [
-            "BEB-548"
+            "BEB-557"
           ]
         }
       },
@@ -1562,7 +1562,7 @@
       "task_count": 2,
       "task_ids": [
         "BEB-175",
-        "BEB-548"
+        "BEB-557"
       ],
       "task_refs": [
         {
@@ -1586,7 +1586,7 @@
           "description": "Compile Actor blueprint"
         },
         {
-          "id": "BEB-548",
+          "id": "BEB-557",
           "category": "negative_compile",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -1620,12 +1620,12 @@
             "BEB-175"
           ],
           "negative_compile": [
-            "BEB-548"
+            "BEB-557"
           ]
         },
         "by_operation_semantics": {
           "create_save": [
-            "BEB-548"
+            "BEB-557"
           ],
           "read_only": [
             "BEB-175"
@@ -1633,17 +1633,17 @@
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-548"
+            "BEB-557"
           ],
           "edit": [
-            "BEB-548"
+            "BEB-557"
           ],
           "readback_verify": [
             "BEB-175",
-            "BEB-548"
+            "BEB-557"
           ],
           "save": [
-            "BEB-548"
+            "BEB-557"
           ]
         }
       },
@@ -1682,7 +1682,7 @@
         "BEB-272",
         "BEB-273",
         "BEB-276",
-        "BEB-571"
+        "BEB-580"
       ],
       "task_refs": [
         {
@@ -1827,7 +1827,7 @@
           "description": "Add then remove a component; get_components must no longer list it"
         },
         {
-          "id": "BEB-571",
+          "id": "BEB-580",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -1852,7 +1852,7 @@
       "groups": {
         "by_category": {
           "duplicate_reject": [
-            "BEB-571"
+            "BEB-580"
           ],
           "edit_execute": [
             "BEB-171",
@@ -1873,7 +1873,7 @@
             "BEB-272",
             "BEB-273",
             "BEB-276",
-            "BEB-571"
+            "BEB-580"
           ]
         },
         "by_asset_operation": {
@@ -1884,7 +1884,7 @@
             "BEB-272",
             "BEB-273",
             "BEB-276",
-            "BEB-571"
+            "BEB-580"
           ],
           "readback_verify": [
             "BEB-164",
@@ -1893,7 +1893,7 @@
             "BEB-272",
             "BEB-273",
             "BEB-276",
-            "BEB-571"
+            "BEB-580"
           ]
         }
       },
@@ -1927,7 +1927,7 @@
       "task_count": 2,
       "task_ids": [
         "BEB-172",
-        "BEB-573"
+        "BEB-582"
       ],
       "task_refs": [
         {
@@ -1955,7 +1955,7 @@
           "description": "Add BenchActorOnDied event dispatcher to Actor"
         },
         {
-          "id": "BEB-573",
+          "id": "BEB-582",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -1980,7 +1980,7 @@
       "groups": {
         "by_category": {
           "duplicate_reject": [
-            "BEB-573"
+            "BEB-582"
           ],
           "edit_execute": [
             "BEB-172"
@@ -1989,17 +1989,17 @@
         "by_operation_semantics": {
           "edit": [
             "BEB-172",
-            "BEB-573"
+            "BEB-582"
           ]
         },
         "by_asset_operation": {
           "edit": [
             "BEB-172",
-            "BEB-573"
+            "BEB-582"
           ],
           "readback_verify": [
             "BEB-172",
-            "BEB-573"
+            "BEB-582"
           ]
         }
       },
@@ -2036,9 +2036,9 @@
         "BEB-167",
         "BEB-168",
         "BEB-275",
-        "BEB-570",
-        "BEB-572",
-        "BEB-574"
+        "BEB-579",
+        "BEB-581",
+        "BEB-583"
       ],
       "task_refs": [
         {
@@ -2138,7 +2138,7 @@
           "description": "Add then remove a function; get_functions must no longer list it"
         },
         {
-          "id": "BEB-570",
+          "id": "BEB-579",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -2160,7 +2160,7 @@
           "description": "add_function must reject a duplicate function name"
         },
         {
-          "id": "BEB-572",
+          "id": "BEB-581",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -2181,7 +2181,7 @@
           "description": "add_event_node must reject a duplicate custom event name"
         },
         {
-          "id": "BEB-574",
+          "id": "BEB-583",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -2207,9 +2207,9 @@
       "groups": {
         "by_category": {
           "duplicate_reject": [
-            "BEB-570",
-            "BEB-572",
-            "BEB-574"
+            "BEB-579",
+            "BEB-581",
+            "BEB-583"
           ],
           "edit_execute": [
             "BEB-167",
@@ -2226,9 +2226,9 @@
             "BEB-167",
             "BEB-168",
             "BEB-275",
-            "BEB-570",
-            "BEB-572",
-            "BEB-574"
+            "BEB-579",
+            "BEB-581",
+            "BEB-583"
           ]
         },
         "by_asset_operation": {
@@ -2237,18 +2237,18 @@
             "BEB-167",
             "BEB-168",
             "BEB-275",
-            "BEB-570",
-            "BEB-572",
-            "BEB-574"
+            "BEB-579",
+            "BEB-581",
+            "BEB-583"
           ],
           "readback_verify": [
             "BEB-155",
             "BEB-167",
             "BEB-168",
             "BEB-275",
-            "BEB-570",
-            "BEB-572",
-            "BEB-574"
+            "BEB-579",
+            "BEB-581",
+            "BEB-583"
           ]
         }
       },
@@ -2943,7 +2943,7 @@
         "BEB-170",
         "BEB-173",
         "BEB-274",
-        "BEB-569"
+        "BEB-578"
       ],
       "task_refs": [
         {
@@ -3041,7 +3041,7 @@
           "description": "Add then remove a variable; get_variables must no longer list it"
         },
         {
-          "id": "BEB-569",
+          "id": "BEB-578",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -3066,7 +3066,7 @@
       "groups": {
         "by_category": {
           "duplicate_reject": [
-            "BEB-569"
+            "BEB-578"
           ],
           "edit_execute": [
             "BEB-169",
@@ -3081,7 +3081,7 @@
             "BEB-170",
             "BEB-173",
             "BEB-274",
-            "BEB-569"
+            "BEB-578"
           ]
         },
         "by_asset_operation": {
@@ -3090,14 +3090,14 @@
             "BEB-170",
             "BEB-173",
             "BEB-274",
-            "BEB-569"
+            "BEB-578"
           ],
           "readback_verify": [
             "BEB-169",
             "BEB-170",
             "BEB-173",
             "BEB-274",
-            "BEB-569"
+            "BEB-578"
           ]
         }
       },

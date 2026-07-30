@@ -36,7 +36,7 @@ bool FMonolithGameFeaturesStatusTest::RunTest(const FString& Parameters)
 			TestTrue(TEXT("AvailableWhenEnabled field exists"), Result.Result->TryGetArrayField(TEXT("available_when_enabled"), AvailableWhenEnabled));
 			if (Actions)
 			{
-				TestEqual(TEXT("Default actions include status and eight instanced-action writers"), Actions->Num(), 9);
+				TestEqual(TEXT("Default actions include status and nine instanced-action writers"), Actions->Num(), 10);
 			}
 			if (AvailableWhenEnabled)
 			{
@@ -66,6 +66,32 @@ bool FMonolithGameFeaturesStatusTest::RunTest(const FString& Parameters)
 		FMonolithActionResult Result = FMonolithGameFeatureActions::AddActionSetInputMapping(MakeShared<FJsonObject>());
 		TestFalse(TEXT("AddActionSetInputMapping rejects missing action_set_path"), Result.bSuccess);
 		TestEqual(TEXT("AddActionSetInputMapping missing param code"), Result.ErrorCode, -32602);
+	}
+
+	{
+		FMonolithActionResult Result = FMonolithGameFeatureActions::AddActionSetComponents(MakeShared<FJsonObject>());
+		TestFalse(TEXT("AddActionSetComponents rejects missing action_set_path"), Result.bSuccess);
+		TestEqual(TEXT("AddActionSetComponents missing param code"), Result.ErrorCode, -32602);
+
+		const TSharedPtr<FJsonObject> Schema = FMonolithGameFeatureActions::AddActionSetComponentsSchema();
+		const TSharedPtr<FJsonObject>* ActionSetPathParam = nullptr;
+		const TSharedPtr<FJsonObject>* ActorClassParam = nullptr;
+		const TSharedPtr<FJsonObject>* ComponentClassParam = nullptr;
+		TestTrue(TEXT("AddActionSetComponents schema requires action_set_path"),
+			Schema.IsValid()
+				&& Schema->TryGetObjectField(TEXT("action_set_path"), ActionSetPathParam)
+				&& ActionSetPathParam
+				&& (*ActionSetPathParam)->GetBoolField(TEXT("required")));
+		TestTrue(TEXT("AddActionSetComponents schema requires actor_class"),
+			Schema.IsValid()
+				&& Schema->TryGetObjectField(TEXT("actor_class"), ActorClassParam)
+				&& ActorClassParam
+				&& (*ActorClassParam)->GetBoolField(TEXT("required")));
+		TestTrue(TEXT("AddActionSetComponents schema requires component_class"),
+			Schema.IsValid()
+				&& Schema->TryGetObjectField(TEXT("component_class"), ComponentClassParam)
+				&& ComponentClassParam
+				&& (*ComponentClassParam)->GetBoolField(TEXT("required")));
 	}
 
 	{

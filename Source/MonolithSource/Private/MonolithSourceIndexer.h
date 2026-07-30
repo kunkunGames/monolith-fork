@@ -9,9 +9,18 @@ DECLARE_MULTICAST_DELEGATE_FiveParams(FOnSourceIndexProgress,
 	const FString& /* ModuleName */, int32 /* Current */, int32 /* Total */,
 	int32 /* FilesProcessed */, int32 /* SymbolsExtracted */);
 
-DECLARE_MULTICAST_DELEGATE_FourParams(FOnSourceIndexComplete,
-	int32 /* FilesProcessed */, int32 /* SymbolsExtracted */, int32 /* Errors */,
-	bool /* bSucceeded */);
+struct FSourceIndexCompletion
+{
+	int32 FilesProcessed = 0;
+	int32 SymbolsExtracted = 0;
+	int32 Errors = 0;
+	bool bSucceeded = false;
+	FString FailureStage;
+	FString FailureDetail;
+};
+
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnSourceIndexComplete,
+	const FSourceIndexCompletion& /* Completion */);
 
 struct FSourceIndexDiagnostics
 {
@@ -108,4 +117,6 @@ private:
 	TAtomic<int32> TotalFilesProcessed{0};
 	TAtomic<int32> TotalSymbolsExtracted{0};
 	TAtomic<int32> TotalErrors{0};
+	FString FailureStage;
+	FString FailureDetail;
 };

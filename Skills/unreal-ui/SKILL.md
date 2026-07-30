@@ -1,4 +1,4 @@
----
+﻿---
 name: unreal-ui
 description: Use when authoring runtime Unreal UMG UI via Monolith MCP (ui namespace) — Widget Blueprints, HUDs, menus, settings/save panels, widget tree/slots/anchors, styling, animations, data binding, CommonUI, accessibility, and ViewModel-boundary UI. For actor/component Blueprint graphs use unreal-blueprints; for editor Slate / Editor Utility Widgets use unreal-slate; the GAS attribute feeding a health bar is authored in unreal-gas then bound here; for string-table/FText UI text use unreal-localization; for font/Texture2D ingest use unreal-asset. Triggers on UI, UMG, widget, Widget Blueprint, WBP, HUD, health bar, make a health bar, menu, pause menu, settings panel, save game, button, list view, anchor, brush, font, dialog, loading screen, inventory grid, CommonUI, accessibility, ViewModel.
 ---
@@ -140,8 +140,10 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `get_animation_overview` | `asset_path*`, `animation_name?`, `include_all=false` | Read-only compact inventory for UWidgetAnimation timing, MovieScene bindings/tracks, key counts, event summaries, and delegate binding rows. External MCP names such as `animation_overview` are search aliases only, not registered actions. |
 | `get_animation_timeline` | `asset_path*`, `animation_name*`, `widget_name?`, `property_path?`, `include_events=true`, `max_rows=1000` | Read-only sorted property-key and event-key rows for animation QA and round-trip evidence. |
 | `get_animation_time_slice` | `asset_path*`, `animation_name*`, `time?`, `times?`, `widget_name?`, `property_path?`, `event_tolerance_frames=0` | Read-only sampled float-track values at one or more times, plus exact-frame event matches. |
-| **Animation delta (1)** | | |
+| **Animation guarded mutation (3)** | | |
 | `[w] apply_animation_delta` | `asset_path*`, `animation_name*`, `operations*` (array of {op:upsert_float_key/delete_float_key, widget_name? or binding_guid?, property_path/property, time, value?}), `dry_run=true`, `confirm=false`, `confirm_delete=false`, `compile=true`, `read_back=true` | Confirm-gated scalar float-key merge/upsert/delete on existing animations. Use `create_animation_v2` for new/full animation authoring; external Sequencer write names are search aliases only. |
+| `[w] remap_animation_binding` | `asset_path*`, `animation_name*`, `from_widget_name*`, `to_widget_name*`, `dry_run=true`, `confirm=false`, `compile=true`, `read_back=true` | Remap one stale/removed widget animation binding to an exact resident WidgetTree target while preserving the binding GUID and every MovieScene track/section/key. Dry-run first; writes require confirmation. Slot-widget bindings and source/target binding collisions fail closed. |
+| `[w] remove_animation_binding` | `asset_path*`, `animation_name*`, `widget_name*`, `dry_run=true`, `confirm=false`, `confirm_delete=false`, `require_widget_missing=true`, `compile=true`, `read_back=true` | Delete one exact absent-widget animation binding together with its same-GUID MovieScene possessable/tracks/keys. Dry-run first; writes require both confirmation flags. Resident widgets, slot bindings, duplicate identities, and orphaned possessables fail closed. |
 | **Data Binding (4)** | | |
 | `list_widget_events` | `asset_path*`, `widget_name?` | Bindable events |
 | `list_widget_properties` | `asset_path*`, `widget_name*` | Settable properties with types |

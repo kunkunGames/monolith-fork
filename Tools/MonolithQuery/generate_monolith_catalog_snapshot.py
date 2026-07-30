@@ -410,6 +410,24 @@ def catalog_contract(snapshot: dict) -> dict:
     return contract
 
 
+def write_catalog_if_changed(path: Path, snapshot: dict) -> bool:
+    """Publish platform-native text only when the semantic catalog changed."""
+
+    if path.is_file():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            pass
+        else:
+            if catalog_contract(existing) == catalog_contract(snapshot):
+                return False
+
+    content = json.dumps(snapshot, indent=2, sort_keys=True) + "\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return True
+
+
 def clean_text(value: str) -> str:
     value = value.replace('\\"', '"')
     value = value.replace("\\n", " ")
@@ -859,13 +877,9 @@ def main() -> int:
         print(f"catalog snapshot current: {len(actions)} actions")
         return 0
 
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(
-        json.dumps(snapshot, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
-    print(f"wrote {args.out} ({len(actions)} actions)")
+    changed = write_catalog_if_changed(args.out, snapshot)
+    status = "wrote" if changed else "catalog snapshot current"
+    print(f"{status}: {args.out} ({len(actions)} actions)")
     return 0
 
 

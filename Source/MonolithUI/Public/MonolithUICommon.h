@@ -84,9 +84,11 @@ namespace MonolithUI
 
     /**
      * Map a short widget-class token (e.g. "VerticalBox", "TextBlock") or a
-     * fully qualified class path to a UClass*. Falls back to FindFirstObject
-     * when the short name is not in the curated table. Returns nullptr if the
-     * class cannot be resolved.
+     * fully qualified class path to a UClass*. Short tokens resolve exclusively
+     * through the live reflection-backed UI type registry; exact `/Script/...`
+     * and `/Game/..._C` paths load an explicit UWidget subclass. Unknown bare
+     * names fail closed rather than resolving an arbitrary same-named UObject
+     * class.
      */
     MONOLITHUI_API UClass* WidgetClassFromName(const FString& ClassName);
 

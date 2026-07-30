@@ -178,26 +178,35 @@ uint32 FMonolithSourceIndexer::Run()
 {
 	bIsRunning = true;
 	bool bRunSucceeded = false;
+	FailureStage.Reset();
+	FailureDetail.Reset();
 	ON_SCOPE_EXIT
 	{
 		bIsRunning = false;
 
-		const int32 Files = TotalFilesProcessed.Load();
-		const int32 Symbols = TotalSymbolsExtracted.Load();
-		const int32 Errors = TotalErrors.Load();
+		FSourceIndexCompletion Completion;
+		Completion.FilesProcessed = TotalFilesProcessed.Load();
+		Completion.SymbolsExtracted = TotalSymbolsExtracted.Load();
+		Completion.Errors = TotalErrors.Load();
+		Completion.bSucceeded = bRunSucceeded;
+		Completion.FailureStage = FailureStage;
+		Completion.FailureDetail = FailureDetail;
 
-		UE_LOG(LogMonolithSource, Log, TEXT("Indexer complete: %d files, %d symbols, %d errors"), Files, Symbols, Errors);
+		UE_LOG(LogMonolithSource, Log, TEXT("Indexer complete: %d files, %d symbols, %d errors"),
+			Completion.FilesProcessed, Completion.SymbolsExtracted, Completion.Errors);
 		if (DuplicateFileVisitsSkipped > 0)
 		{
 			UE_LOG(LogMonolithSource, Log,
 				TEXT("Indexer skipped %d duplicate file visits across overlapping module roots"),
 				DuplicateFileVisitsSkipped);
 		}
-		OnComplete.Broadcast(Files, Symbols, Errors, bRunSucceeded);
+		OnComplete.Broadcast(Completion);
 	};
 
-	const auto FailRun = [this]() -> uint32
+	const auto FailRun = [this](const TCHAR* Stage, const FString& Detail) -> uint32
 	{
+		FailureStage = Stage;
+		FailureDetail = Detail;
 		TotalErrors++;
 		return 1;
 	};
@@ -219,7 +228,7 @@ uint32 FMonolithSourceIndexer::Run()
 	if (!bOpenedForWriting && !bCleanBuild)
 	{
 		UE_LOG(LogMonolithSource, Error, TEXT("Indexer: Failed to open DB for writing: %s"), *DbPath);
-		return FailRun();
+		return FailRun(TEXT("open_database"), DB.GetLastError());
 	}
 
 	if (bCleanBuild)
@@ -227,7 +236,7 @@ uint32 FMonolithSourceIndexer::Run()
 		if (!DB.ResetDatabase())
 		{
 			UE_LOG(LogMonolithSource, Error, TEXT("Indexer: Failed to reset/recreate DB for clean source reindex: %s"), *DbPath);
-			return FailRun();
+			return FailRun(TEXT("reset_database"), DB.GetLastError());
 		}
 	}
 	else
@@ -235,7 +244,7 @@ uint32 FMonolithSourceIndexer::Run()
 		if (!DB.CreateTablesIfNeeded())
 		{
 			UE_LOG(LogMonolithSource, Error, TEXT("Indexer: Failed to create/verify DB schema before source reindex: %s"), *DbPath);
-			return FailRun();
+			return FailRun(TEXT("verify_schema"), DB.GetLastError());
 		}
 	}
 
@@ -251,7 +260,10 @@ uint32 FMonolithSourceIndexer::Run()
 		{
 			if (!IndexModule(EngineModules[i], DB))
 			{
-				return FailRun();
+				return FailRun(
+					TEXT("index_engine_module"),
+					FString::Printf(TEXT("Failed while indexing engine module '%s': %s"),
+						*EngineModules[i].Name, *DB.GetLastError()));
 			}
 			OnProgress.Broadcast(EngineModules[i].Name, i + 1, EngineModules.Num(),
 				TotalFilesProcessed.Load(), TotalSymbolsExtracted.Load());
@@ -271,7 +283,7 @@ uint32 FMonolithSourceIndexer::Run()
 			if (PrunedFiles < 0)
 			{
 				UE_LOG(LogMonolithSource, Error, TEXT("Indexer: Failed to prune project source rows before scoped source reindex"));
-				return FailRun();
+				return FailRun(TEXT("prune_project_rows"), DB.GetLastError());
 			}
 			UE_LOG(LogMonolithSource, Log, TEXT("Indexer: Loading existing symbols for incremental indexing..."));
 			DB.LoadExistingSymbols(SymbolNameToId, ClassNameToId, SymbolSpans, ClassSpans);
@@ -286,7 +298,10 @@ uint32 FMonolithSourceIndexer::Run()
 		{
 			if (!IndexModule(ProjectModules[i], DB))
 			{
-				return FailRun();
+				return FailRun(
+					TEXT("index_project_module"),
+					FString::Printf(TEXT("Failed while indexing project module '%s': %s"),
+						*ProjectModules[i].Name, *DB.GetLastError()));
 			}
 			OnProgress.Broadcast(ProjectModules[i].Name, i + 1, ProjectModules.Num(),
 				TotalFilesProcessed.Load(), TotalSymbolsExtracted.Load());
@@ -298,7 +313,7 @@ uint32 FMonolithSourceIndexer::Run()
 	{
 		if (!Finalize(DB))
 		{
-			return FailRun();
+			return FailRun(TEXT("finalize_index"), DB.GetLastError());
 		}
 		if (!bCleanBuild && bIndexProjectSource)
 		{
@@ -317,7 +332,7 @@ uint32 FMonolithSourceIndexer::Run()
 				UE_LOG(LogMonolithSource, Error,
 					TEXT("Indexer: scoped source CRG refresh failed; project source indexing cannot complete: %s"),
 					*Summary);
-				return FailRun();
+				return FailRun(TEXT("refresh_project_crg"), Summary);
 			}
 
 			if (RefreshMode == TEXT("full_required"))
@@ -335,7 +350,7 @@ uint32 FMonolithSourceIndexer::Run()
 					UE_LOG(LogMonolithSource, Error,
 						TEXT("Indexer: source CRG projection bootstrap failed; project source indexing cannot complete: %s"),
 						*FullSummary);
-					return FailRun();
+					return FailRun(TEXT("bootstrap_source_crg"), FullSummary);
 				}
 				UE_LOG(LogMonolithSource, Log,
 					TEXT("Indexer: source CRG projection tables were absent; completed one required full bootstrap: %s"),
@@ -350,11 +365,15 @@ uint32 FMonolithSourceIndexer::Run()
 	else
 	{
 		UE_LOG(LogMonolithSource, Warning, TEXT("Indexer: indexing cancelled before finalization"));
+		FailureStage = TEXT("cancelled");
+		FailureDetail = TEXT("Indexing was cancelled before finalization.");
 		return 1;
 	}
 	if (bShouldStop)
 	{
 		UE_LOG(LogMonolithSource, Warning, TEXT("Indexer: indexing cancelled during finalization"));
+		FailureStage = TEXT("cancelled");
+		FailureDetail = TEXT("Indexing was cancelled during finalization.");
 		return 1;
 	}
 

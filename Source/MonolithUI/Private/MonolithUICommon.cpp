@@ -3,8 +3,9 @@
 
 #include "MonolithAssetUtils.h"
 #include "MonolithToolRegistry.h"
+#include "Registry/MonolithUIRegistrySubsystem.h"
 
-// UMG widget classes — required for the WidgetClassFromName curated table.
+// UMG widget classes used by the shared parsing and widget helpers below.
 #include "Blueprint/WidgetTree.h"
 #include "Components/BackgroundBlur.h"
 #include "Components/Border.h"
@@ -199,46 +200,41 @@ namespace MonolithUI
 
     UClass* WidgetClassFromName(const FString& ClassName)
     {
-        static TMap<FString, UClass*> ClassMap;
-        if (ClassMap.Num() == 0)
+        const FString NormalizedName = ClassName.TrimStartAndEnd();
+        if (NormalizedName.IsEmpty())
         {
-            ClassMap.Add(TEXT("CanvasPanel"),       UCanvasPanel::StaticClass());
-            ClassMap.Add(TEXT("VerticalBox"),       UVerticalBox::StaticClass());
-            ClassMap.Add(TEXT("HorizontalBox"),     UHorizontalBox::StaticClass());
-            ClassMap.Add(TEXT("Overlay"),           UOverlay::StaticClass());
-            ClassMap.Add(TEXT("ScrollBox"),         UScrollBox::StaticClass());
-            ClassMap.Add(TEXT("SizeBox"),           USizeBox::StaticClass());
-            ClassMap.Add(TEXT("ScaleBox"),          UScaleBox::StaticClass());
-            ClassMap.Add(TEXT("Border"),            UBorder::StaticClass());
-            ClassMap.Add(TEXT("WrapBox"),           UWrapBox::StaticClass());
-            ClassMap.Add(TEXT("UniformGridPanel"),  UUniformGridPanel::StaticClass());
-            ClassMap.Add(TEXT("GridPanel"),         UGridPanel::StaticClass());
-            ClassMap.Add(TEXT("WidgetSwitcher"),    UWidgetSwitcher::StaticClass());
-            ClassMap.Add(TEXT("BackgroundBlur"),    UBackgroundBlur::StaticClass());
-            ClassMap.Add(TEXT("NamedSlot"),         UNamedSlot::StaticClass());
-            ClassMap.Add(TEXT("TextBlock"),         UTextBlock::StaticClass());
-            ClassMap.Add(TEXT("RichTextBlock"),     URichTextBlock::StaticClass());
-            ClassMap.Add(TEXT("Image"),             UImage::StaticClass());
-            ClassMap.Add(TEXT("Button"),            UButton::StaticClass());
-            ClassMap.Add(TEXT("CheckBox"),          UCheckBox::StaticClass());
-            ClassMap.Add(TEXT("ProgressBar"),       UProgressBar::StaticClass());
-            ClassMap.Add(TEXT("Slider"),            USlider::StaticClass());
-            ClassMap.Add(TEXT("Spacer"),            USpacer::StaticClass());
-            ClassMap.Add(TEXT("EditableText"),      UEditableText::StaticClass());
-            ClassMap.Add(TEXT("EditableTextBox"),   UEditableTextBox::StaticClass());
-            ClassMap.Add(TEXT("ComboBoxString"),    UComboBoxString::StaticClass());
-            ClassMap.Add(TEXT("InputKeySelector"),  UInputKeySelector::StaticClass());
-            ClassMap.Add(TEXT("ListView"),          UListView::StaticClass());
-            ClassMap.Add(TEXT("TileView"),          UTileView::StaticClass());
+            return nullptr;
         }
 
-        if (UClass** Found = ClassMap.Find(ClassName))
+        // Short tokens are owned by the same reflection-backed registry that
+        // powers list_widget_types and the UISpec builder. This keeps optional
+        // plugin widgets discoverable and resolvable without a second,
+        // hand-maintained class table.
+        if (UMonolithUIRegistrySubsystem* RegistrySubsystem = UMonolithUIRegistrySubsystem::Get())
         {
-            return *Found;
+            if (const FUITypeRegistryEntry* Entry =
+                    RegistrySubsystem->GetTypeRegistry().FindByToken(FName(*NormalizedName)))
+            {
+                return Entry->WidgetClass.Get();
+            }
         }
 
-        // Fall back to FindFirstObject for fully qualified class paths.
-        return FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
+        // Exact native or Blueprint-generated class paths remain a deliberate
+        // escape hatch for project-specific widget subclasses. Bare names that
+        // are absent from the registry fail closed instead of resolving an
+        // arbitrary same-named UObject class.
+        if (NormalizedName.StartsWith(TEXT("/")))
+        {
+            return StaticLoadClass(
+                UWidget::StaticClass(),
+                nullptr,
+                NormalizedName,
+                FStringView(),
+                LOAD_None,
+                nullptr);
+        }
+
+        return nullptr;
     }
 
     FAnchors GetAnchorPreset(const FString& PresetName)

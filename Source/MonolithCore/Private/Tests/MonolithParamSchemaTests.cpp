@@ -896,6 +896,71 @@ bool FMonolithActionFailureValidationErrorsStructuredTest::RunTest(const FString
 	return bOk;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithStringEncodedComplexParamsRejectedTest,
+	"Monolith.ParamValidation.StringEncodedComplexParamsRejected",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithStringEncodedComplexParamsRejectedTest::RunTest(const FString& Parameters)
+{
+	FMonolithScopedTestNamespace Scope(TEXT("strict_complex_types"));
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	Registry.RegisterAction(
+		TEXT("strict_complex_types"),
+		TEXT("consume"),
+		TEXT("Accepts native JSON complex values only."),
+		FMonolithActionHandler::CreateStatic(&MonolithFindScoringNoop),
+		FParamSchemaBuilder()
+			.Required(TEXT("items"), TEXT("array"), TEXT("Native JSON array"))
+			.Required(TEXT("config"), TEXT("object"), TEXT("Native JSON object"))
+			.Build());
+
+	TSharedPtr<FJsonObject> EncodedParams = MakeShared<FJsonObject>();
+	EncodedParams->SetStringField(TEXT("items"), TEXT("[{\"name\":\"Example\"}]"));
+	EncodedParams->SetStringField(TEXT("config"), TEXT("{\"enabled\":true}"));
+	const FMonolithActionResult EncodedResult =
+		Registry.ExecuteAction(TEXT("strict_complex_types"), TEXT("consume"), EncodedParams);
+
+	bool bOk = true;
+	bOk &= TestFalse(TEXT("String-encoded array/object params are rejected before dispatch"), EncodedResult.bSuccess);
+	bOk &= TestTrue(TEXT("Encoded-param error data exists"), EncodedResult.ErrorData.IsValid());
+	if (EncodedResult.ErrorData.IsValid())
+	{
+		bOk &= TestEqual(
+			TEXT("Encoded-param failure stage is schema"),
+			EncodedResult.ErrorData->GetStringField(TEXT("failure_stage")),
+			TEXT("schema"));
+		bOk &= TestEqual(
+			TEXT("Encoded-param failure cause is invalid param"),
+			EncodedResult.ErrorData->GetStringField(TEXT("failure_cause")),
+			TEXT("invalid_param"));
+		const TArray<TSharedPtr<FJsonValue>>* ValidationErrors = nullptr;
+		bOk &= TestTrue(
+			TEXT("Both encoded complex params produce validation errors"),
+			EncodedResult.ErrorData->TryGetArrayField(TEXT("validation_errors"), ValidationErrors)
+				&& ValidationErrors
+				&& ValidationErrors->Num() == 2);
+	}
+	bOk &= TestTrue(
+		TEXT("Rejected array input retains its original JSON type"),
+		EncodedParams->TryGetField(TEXT("items")).IsValid()
+			&& EncodedParams->TryGetField(TEXT("items"))->Type == EJson::String);
+	bOk &= TestTrue(
+		TEXT("Rejected object input retains its original JSON type"),
+		EncodedParams->TryGetField(TEXT("config")).IsValid()
+			&& EncodedParams->TryGetField(TEXT("config"))->Type == EJson::String);
+
+	TSharedPtr<FJsonObject> NativeParams = MakeShared<FJsonObject>();
+	NativeParams->SetArrayField(
+		TEXT("items"),
+		{MakeShared<FJsonValueObject>(MakeShared<FJsonObject>())});
+	NativeParams->SetObjectField(TEXT("config"), MakeShared<FJsonObject>());
+	const FMonolithActionResult NativeResult =
+		Registry.ExecuteAction(TEXT("strict_complex_types"), TEXT("consume"), NativeParams);
+	bOk &= TestTrue(TEXT("Native JSON array/object params still dispatch"), NativeResult.bSuccess);
+
+	return bOk;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithFindWeightedScoringTest,
 	"Monolith.Core.FindWeightedScoring",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

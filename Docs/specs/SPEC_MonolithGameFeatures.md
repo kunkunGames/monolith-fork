@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.14.11
+**Version:** 0.14.12
 **Owner module:** MonolithGameFeatures
 **Namespace:** `gamefeatures`
 **Status:** Implemented expanded instanced-action authoring slice
@@ -37,7 +37,7 @@ using `IPluginManager`, `AssetRegistry`, and bounded reflection.
 
 | Class | Responsibility |
 |-------|----------------|
-| `FMonolithGameFeaturesModule` | Registers `gamefeatures.get_status` plus eight guarded writer actions unconditionally, and registers the detailed inspection actions only when `bEnableGameFeatureActions=true`. |
+| `FMonolithGameFeaturesModule` | Registers `gamefeatures.get_status` plus nine guarded writer actions unconditionally, and registers the detailed inspection actions only when `bEnableGameFeatureActions=true`. |
 | `FMonolithGameFeatureActions` | Implements Game Feature status, plugin inventory, GameFeatureData lookup/summary, reflected action-class discovery, ActionSet summaries, validation handlers, and guarded instanced-action authoring. |
 
 | Dependency | Purpose |
@@ -55,7 +55,7 @@ using `IPluginManager`, `AssetRegistry`, and bounded reflection.
 
 | Area | Current behavior |
 |------|----------------------|
-| Settings | `gamefeatures.get_status`, `add_action_set_input_mapping`, `set_primary_asset_scan`, `add_game_feature_data_input_mapping`, `add_game_feature_data_widgets`, `add_game_feature_data_components`, `add_game_feature_data_gameplay_cue_paths`, `add_game_feature_data_abilities`, and `remove_game_feature_data_action` are always registered. `bEnableGameFeatureActions=false` gates the six detailed inspection actions on editor restart. `bAllowGameFeaturePluginCreation=false` is reserved and reported by status only. |
+| Settings | `gamefeatures.get_status`, `add_action_set_input_mapping`, `add_action_set_components`, `set_primary_asset_scan`, `add_game_feature_data_input_mapping`, `add_game_feature_data_widgets`, `add_game_feature_data_components`, `add_game_feature_data_gameplay_cue_paths`, `add_game_feature_data_abilities`, and `remove_game_feature_data_action` are always registered. `bEnableGameFeatureActions=false` gates the six detailed inspection actions on editor restart. `bAllowGameFeaturePluginCreation=false` is reserved and reported by status only. |
 | Discovery | `gamefeatures.get_status` reports flags, module availability, plugin-root scan paths, registered actions, and actions available after opt-in. |
 | Plugin inventory | `gamefeatures.list_plugins` returns bounded GameFeature-style plugin descriptors that declare an enabled `GameFeatures` dependency, with project `Plugins/GameFeatures` path and descriptor metadata treated as diagnostic hints. |
 | Data asset lookup | `gamefeatures.find_game_feature_data` resolves by plugin name or asset path using AssetRegistry metadata, without loading assets. |
@@ -64,6 +64,7 @@ using `IPluginManager`, `AssetRegistry`, and bounded reflection.
 | ActionSet summary | `gamefeatures.describe_action_set` loads an existing ActionSet-style asset and summarizes its instanced `Actions` array with bounded reflected property values. |
 | Validation | `gamefeatures.validate_plugin` checks descriptor presence, enabled `GameFeatures` dependency, content root, likely GameFeatureData asset, and creation gate state. |
 | ActionSet input mapping | `gamefeatures.add_action_set_input_mapping` loads an existing asset with an instanced `Actions` array, creates or reuses a compatible action class, adds one `InputMappings` entry idempotently, optionally removes null `Actions`, and saves the package when `save=true`. |
+| ActionSet components | `gamefeatures.add_action_set_components` loads an existing asset with an instanced `Actions` array, creates or reuses an AddComponents action, and idempotently adds or updates one actor/component request with explicit client/server/flag metadata. |
 | GameFeatureData primary asset scan | `gamefeatures.set_primary_asset_scan` creates or updates one `PrimaryAssetTypesToScan` entry on an existing `UGameFeatureData` asset, with class/path validation and dry-run support. |
 | GameFeatureData input mapping | `gamefeatures.add_game_feature_data_input_mapping` creates or reuses an AddInputContextMapping-style action directly on `UGameFeatureData` and adds one mapping entry idempotently. |
 | GameFeatureData widgets | `gamefeatures.add_game_feature_data_widgets` creates or reuses an AddWidgets-style action directly on `UGameFeatureData` and adds layout/widget class plus GameplayTag entries idempotently. |
@@ -86,6 +87,7 @@ using `IPluginManager`, `AssetRegistry`, and bounded reflection.
 | `list_action_classes` | optional `limit`, `module`, `name_contains`, `include_abstract`, `editable_only`, `include_default_values`, `property_limit`, `max_value_chars` | `{classes[], count, returned_count, limit, truncated}` |
 | `describe_action_set` | `action_set_path`, optional `action_limit`, `include_action_properties`, `editable_only`, `include_values`, `property_limit`, `max_value_chars` | `{asset_path, class, action_count, actions[], actions_truncated}` |
 | `add_action_set_input_mapping` | `action_set_path`, `mapping_context_path`, optional `action_class_path`, `priority`, `action_name`, `remove_null_actions`, `save`, `dry_run` | `{created_action, added_mapping, updated_priority, removed_null_actions, actions_before, actions_after, input_mappings_before, input_mappings_after, saved, changed}` |
+| `add_action_set_components` | `action_set_path`, `actor_class`, `component_class`, optional `action_class_path`, `action_name`, `client_component`, `server_component`, `addition_flags`, `remove_null_actions`, `save`, `dry_run` | `{created_action, added_component, updated_component, components_before, components_after, saved, changed}` |
 | `set_primary_asset_scan` | `game_feature_data_path`, `primary_asset_type`, optional `asset_base_class`, `has_blueprint_classes`, `is_editor_only`, `directories`, `specific_assets`, `save`, `dry_run` | `{created_entry, updated_entry, entry_before?, entry_after, saved, changed}` |
 | `add_game_feature_data_input_mapping` | `game_feature_data_path`, `mapping_context_path`, optional `action_class_path`, `priority`, `action_name`, `remove_null_actions`, `save`, `dry_run` | `{created_action, added_mapping, updated_priority, removed_null_actions, actions_before, actions_after, input_mappings_before, input_mappings_after, saved, changed}` |
 | `add_game_feature_data_widgets` | `game_feature_data_path`, optional `layouts[]`, `widgets[]`, property-name overrides, `action_class_path`, `action_name`, `remove_null_actions`, `save`, `dry_run` | `{created_action, layouts_added, layouts_updated, widgets_added, widgets_updated, entries[], saved, changed}` |
@@ -117,8 +119,8 @@ Default `gamefeatures.get_status` with detailed inspection disabled:
   "gamefeatures_module_loaded": false,
   "plugin_count": 1,
   "scan_roots": ["<project>/Plugins/GameFeatures"],
-  "registered_actions": ["get_status", "add_action_set_input_mapping", "set_primary_asset_scan", "add_game_feature_data_input_mapping", "add_game_feature_data_widgets", "add_game_feature_data_components", "add_game_feature_data_gameplay_cue_paths", "add_game_feature_data_abilities", "remove_game_feature_data_action"],
-  "write_actions": ["add_action_set_input_mapping", "set_primary_asset_scan", "add_game_feature_data_input_mapping", "add_game_feature_data_widgets", "add_game_feature_data_components", "add_game_feature_data_gameplay_cue_paths", "add_game_feature_data_abilities", "remove_game_feature_data_action"],
+  "registered_actions": ["get_status", "add_action_set_input_mapping", "add_action_set_components", "set_primary_asset_scan", "add_game_feature_data_input_mapping", "add_game_feature_data_widgets", "add_game_feature_data_components", "add_game_feature_data_gameplay_cue_paths", "add_game_feature_data_abilities", "remove_game_feature_data_action"],
+  "write_actions": ["add_action_set_input_mapping", "add_action_set_components", "set_primary_asset_scan", "add_game_feature_data_input_mapping", "add_game_feature_data_widgets", "add_game_feature_data_components", "add_game_feature_data_gameplay_cue_paths", "add_game_feature_data_abilities", "remove_game_feature_data_action"],
   "available_when_enabled": ["list_plugins", "find_game_feature_data", "describe_game_feature_data", "list_action_classes", "describe_action_set", "validate_plugin"]
 }
 ```
@@ -205,7 +207,7 @@ Focused tests should cover:
 
 | Case | Expected result |
 |------|-----------------|
-| Disabled setting | `gamefeatures.get_status` plus eight writer actions are registered after restart when `bEnableGameFeatureActions=false`; the six detailed inspection actions are absent. |
+| Disabled setting | `gamefeatures.get_status` plus nine writer actions are registered after restart when `bEnableGameFeatureActions=false`; the six detailed inspection actions are absent. |
 | Empty project | Status and list actions succeed with `count=0`. |
 | Descriptor fixture | A descriptor with enabled `GameFeatures` plugin dependency is discovered and redacted; `Plugins/GameFeatures` path fallback is only a hint. |
 | AssetRegistry fixture | GameFeatureData candidates are found by class/path metadata without loading assets. |

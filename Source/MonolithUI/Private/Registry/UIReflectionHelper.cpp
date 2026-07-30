@@ -38,47 +38,88 @@ namespace
     // JSON shape probes
     // ------------------------------------------------------------------
 
-    // True if Value is a JSON array of at least MinNum numbers.
-    bool IsNumericArray(const TSharedPtr<FJsonValue>& Value, int32 MinNum)
+    bool TryReadFiniteNumber(const TSharedPtr<FJsonValue>& Value, double& Out)
     {
+        if (!Value.IsValid() || Value->Type != EJson::Number)
+        {
+            return false;
+        }
+        Out = Value->AsNumber();
+        return FMath::IsFinite(Out);
+    }
+
+    bool TryConvertFiniteFloat(const double In, float& Out)
+    {
+        if (!FMath::IsFinite(In)
+            || In < -static_cast<double>(TNumericLimits<float>::Max())
+            || In > static_cast<double>(TNumericLimits<float>::Max()))
+        {
+            return false;
+        }
+        Out = static_cast<float>(In);
+        return FMath::IsFinite(Out);
+    }
+
+    // Reads an exact-size numeric array. Extra components are rejected rather
+    // than silently ignored, and every component must be finite.
+    bool TryReadNumericArray(
+        const TSharedPtr<FJsonValue>& Value,
+        int32 MinNum,
+        int32 MaxNum,
+        TArray<double>& Out)
+    {
+        Out.Reset();
         if (!Value.IsValid() || Value->Type != EJson::Array)
         {
             return false;
         }
         const TArray<TSharedPtr<FJsonValue>>& Arr = Value->AsArray();
-        if (Arr.Num() < MinNum)
+        if (Arr.Num() < MinNum || Arr.Num() > MaxNum)
         {
             return false;
         }
-        for (int32 i = 0; i < MinNum; ++i)
+        Out.Reserve(Arr.Num());
+        for (const TSharedPtr<FJsonValue>& Item : Arr)
         {
-            if (!Arr[i].IsValid() || Arr[i]->Type != EJson::Number)
+            double Number = 0.0;
+            if (!TryReadFiniteNumber(Item, Number))
             {
                 return false;
             }
+            Out.Add(Number);
         }
         return true;
     }
 
-    // Read array slot as double, defaulted if out of range / non-number.
-    double ArrayNum(const TArray<TSharedPtr<FJsonValue>>& Arr, int32 Idx, double Default)
+    bool TryReadRequiredFiniteField(
+        const TSharedPtr<FJsonObject>& Object,
+        const TCHAR* FieldName,
+        double& Out)
     {
-        if (!Arr.IsValidIndex(Idx) || !Arr[Idx].IsValid() || Arr[Idx]->Type != EJson::Number)
+        if (!Object.IsValid())
         {
-            return Default;
+            return false;
         }
-        return Arr[Idx]->AsNumber();
+        return TryReadFiniteNumber(Object->TryGetField(FieldName), Out);
     }
 
-    // Read object field as double with default.
-    double ObjNum(const TSharedPtr<FJsonObject>& Obj, const TCHAR* Field, double Default)
+    bool TryReadOptionalFiniteField(
+        const TSharedPtr<FJsonObject>& Object,
+        const TCHAR* FieldName,
+        double DefaultValue,
+        double& Out)
     {
-        double Out = Default;
-        if (Obj.IsValid())
+        if (!Object.IsValid())
         {
-            Obj->TryGetNumberField(Field, Out);
+            return false;
         }
-        return Out;
+        const TSharedPtr<FJsonValue> Value = Object->TryGetField(FieldName);
+        if (!Value.IsValid())
+        {
+            Out = DefaultValue;
+            return true;
+        }
+        return TryReadFiniteNumber(Value, Out);
     }
 
     // True if Text is a number we are willing to coerce.
@@ -142,16 +183,18 @@ namespace
         // Bare numeric text -> JSON number (feeds Margin's uniform-scalar path).
         if (IsStrictNumericText(S))
         {
-            return MakeShared<FJsonValueNumber>(FCString::Atod(*S));
+            const double Number = FCString::Atod(*S);
+            if (FMath::IsFinite(Number))
+            {
+                return MakeShared<FJsonValueNumber>(Number);
+            }
         }
 
         return Value;
     }
 
-    // Split "a,b,c,..." text into the first MinNum doubles. Mirrors the inline
-    // comma handling in ParseVector2D; non-numeric parts fail rather than
-    // silently writing zeros.
-    bool ParseCommaNumbers(const FString& Text, int32 MinNum, TArray<double>& Out)
+    // Split "a,b,c,..." text into exactly ExpectedNum finite doubles.
+    bool ParseCommaNumbers(const FString& Text, int32 ExpectedNum, TArray<double>& Out)
     {
         Out.Reset();
 
@@ -160,18 +203,23 @@ namespace
         // "1,,2,3,4" would arrive as the 4-element (1,2,3,4) and pass the count check
         // below. Keep the empties so a malformed list is rejected, not renumbered.
         Text.ParseIntoArray(Parts, TEXT(","), /*bInCullEmpty=*/false);
-        if (Parts.Num() < MinNum)
+        if (Parts.Num() != ExpectedNum)
         {
             return false;
         }
-        for (int32 i = 0; i < MinNum; ++i)
+        for (int32 i = 0; i < ExpectedNum; ++i)
         {
             const FString Part = Parts[i].TrimStartAndEnd();
             if (!IsStrictNumericText(Part))
             {
                 return false;
             }
-            Out.Add(FCString::Atod(*Part));
+            const double Number = FCString::Atod(*Part);
+            if (!FMath::IsFinite(Number))
+            {
+                return false;
+            }
+            Out.Add(Number);
         }
         return true;
     }
@@ -187,26 +235,30 @@ namespace
 
         if (Value->Type == EJson::Array)
         {
-            if (!IsNumericArray(Value, 2)) return false;
-            const auto& Arr = Value->AsArray();
-            Out = FVector2D(ArrayNum(Arr, 0, 0.0), ArrayNum(Arr, 1, 0.0));
+            TArray<double> Components;
+            if (!TryReadNumericArray(Value, 2, 2, Components)) return false;
+            Out = FVector2D(Components[0], Components[1]);
             return true;
         }
         if (Value->Type == EJson::Object)
         {
             const TSharedPtr<FJsonObject> Obj = Value->AsObject();
-            Out = FVector2D(ObjNum(Obj, TEXT("x"), 0.0), ObjNum(Obj, TEXT("y"), 0.0));
+            double X = 0.0;
+            double Y = 0.0;
+            if (!TryReadRequiredFiniteField(Obj, TEXT("x"), X)
+                || !TryReadRequiredFiniteField(Obj, TEXT("y"), Y))
+            {
+                return false;
+            }
+            Out = FVector2D(X, Y);
             return true;
         }
         if (Value->Type == EJson::String)
         {
-            FString S = Value->AsString();
-            TArray<FString> Parts;
-            S.ParseIntoArray(Parts, TEXT(","));
-            if (Parts.Num() >= 2)
+            TArray<double> Components;
+            if (ParseCommaNumbers(Value->AsString(), 2, Components))
             {
-                Out = FVector2D(FCString::Atod(*Parts[0].TrimStartAndEnd()),
-                                FCString::Atod(*Parts[1].TrimStartAndEnd()));
+                Out = FVector2D(Components[0], Components[1]);
                 return true;
             }
         }
@@ -214,8 +266,8 @@ namespace
     }
 
     // FLinearColor — "#RRGGBBAA" OR array[r,g,b,a] OR object{r,g,b,a}.
-    // TryParseColor keeps hex strings in byte-linear space; ParseColor is the
-    // legacy fallback for malformed shapes that still start with '#'.
+    // TryParseColor keeps hex strings in byte-linear space and rejects malformed
+    // input; reflection must never fall back to an unrelated default color.
     bool ParseLinearColor(const TSharedPtr<FJsonValue>& Value, FLinearColor& Out)
     {
         if (!Value.IsValid()) return false;
@@ -228,35 +280,57 @@ namespace
                 Out = Parsed;
                 return true;
             }
-            // Fall back to legacy ParseColor (degamma path) for # forms only —
-            // it returns White silently on garbage so we wrap it explicitly.
-            const FString S = Value->AsString().TrimStartAndEnd();
-            if (S.StartsWith(TEXT("#")))
-            {
-                Out = MonolithUI::ParseColor(S);
-                return true;
-            }
             return false;
         }
         if (Value->Type == EJson::Array)
         {
-            if (!IsNumericArray(Value, 3)) return false;
-            const auto& Arr = Value->AsArray();
+            TArray<double> Components;
+            if (!TryReadNumericArray(Value, 3, 4, Components)) return false;
+            float R = 0.0f;
+            float G = 0.0f;
+            float B = 0.0f;
+            float A = 1.0f;
+            if (!TryConvertFiniteFloat(Components[0], R)
+                || !TryConvertFiniteFloat(Components[1], G)
+                || !TryConvertFiniteFloat(Components[2], B)
+                || (Components.Num() == 4
+                    && !TryConvertFiniteFloat(Components[3], A)))
+            {
+                return false;
+            }
             Out = FLinearColor(
-                (float)ArrayNum(Arr, 0, 0.0),
-                (float)ArrayNum(Arr, 1, 0.0),
-                (float)ArrayNum(Arr, 2, 0.0),
-                (float)ArrayNum(Arr, 3, 1.0));
+                R,
+                G,
+                B,
+                A);
             return true;
         }
         if (Value->Type == EJson::Object)
         {
             const TSharedPtr<FJsonObject> Obj = Value->AsObject();
-            Out = FLinearColor(
-                (float)ObjNum(Obj, TEXT("r"), 0.0),
-                (float)ObjNum(Obj, TEXT("g"), 0.0),
-                (float)ObjNum(Obj, TEXT("b"), 0.0),
-                (float)ObjNum(Obj, TEXT("a"), 1.0));
+            double R = 0.0;
+            double G = 0.0;
+            double B = 0.0;
+            double A = 1.0;
+            if (!TryReadRequiredFiniteField(Obj, TEXT("r"), R)
+                || !TryReadRequiredFiniteField(Obj, TEXT("g"), G)
+                || !TryReadRequiredFiniteField(Obj, TEXT("b"), B)
+                || !TryReadOptionalFiniteField(Obj, TEXT("a"), 1.0, A))
+            {
+                return false;
+            }
+            float FloatR = 0.0f;
+            float FloatG = 0.0f;
+            float FloatB = 0.0f;
+            float FloatA = 1.0f;
+            if (!TryConvertFiniteFloat(R, FloatR)
+                || !TryConvertFiniteFloat(G, FloatG)
+                || !TryConvertFiniteFloat(B, FloatB)
+                || !TryConvertFiniteFloat(A, FloatA))
+            {
+                return false;
+            }
+            Out = FLinearColor(FloatR, FloatG, FloatB, FloatA);
             return true;
         }
         return false;
@@ -272,29 +346,65 @@ namespace
 
         if (Value->Type == EJson::Number)
         {
-            const float V = (float)Value->AsNumber();
+            double Number = 0.0;
+            if (!TryReadFiniteNumber(Value, Number)) return false;
+            float V = 0.0f;
+            if (!TryConvertFiniteFloat(Number, V)) return false;
             Out = FMargin(V);
             return true;
         }
         if (Value->Type == EJson::Array)
         {
-            if (!IsNumericArray(Value, 4)) return false;
-            const auto& Arr = Value->AsArray();
+            TArray<double> Components;
+            if (!TryReadNumericArray(Value, 4, 4, Components)) return false;
+            float Left = 0.0f;
+            float Top = 0.0f;
+            float Right = 0.0f;
+            float Bottom = 0.0f;
+            if (!TryConvertFiniteFloat(Components[0], Left)
+                || !TryConvertFiniteFloat(Components[1], Top)
+                || !TryConvertFiniteFloat(Components[2], Right)
+                || !TryConvertFiniteFloat(Components[3], Bottom))
+            {
+                return false;
+            }
             Out = FMargin(
-                (float)ArrayNum(Arr, 0, 0.0),
-                (float)ArrayNum(Arr, 1, 0.0),
-                (float)ArrayNum(Arr, 2, 0.0),
-                (float)ArrayNum(Arr, 3, 0.0));
+                Left,
+                Top,
+                Right,
+                Bottom);
             return true;
         }
         if (Value->Type == EJson::Object)
         {
             const TSharedPtr<FJsonObject> Obj = Value->AsObject();
+            double Left = 0.0;
+            double Top = 0.0;
+            double Right = 0.0;
+            double Bottom = 0.0;
+            if (!TryReadRequiredFiniteField(Obj, TEXT("left"), Left)
+                || !TryReadRequiredFiniteField(Obj, TEXT("top"), Top)
+                || !TryReadRequiredFiniteField(Obj, TEXT("right"), Right)
+                || !TryReadRequiredFiniteField(Obj, TEXT("bottom"), Bottom))
+            {
+                return false;
+            }
+            float FloatLeft = 0.0f;
+            float FloatTop = 0.0f;
+            float FloatRight = 0.0f;
+            float FloatBottom = 0.0f;
+            if (!TryConvertFiniteFloat(Left, FloatLeft)
+                || !TryConvertFiniteFloat(Top, FloatTop)
+                || !TryConvertFiniteFloat(Right, FloatRight)
+                || !TryConvertFiniteFloat(Bottom, FloatBottom))
+            {
+                return false;
+            }
             Out = FMargin(
-                (float)ObjNum(Obj, TEXT("left"),   0.0),
-                (float)ObjNum(Obj, TEXT("top"),    0.0),
-                (float)ObjNum(Obj, TEXT("right"),  0.0),
-                (float)ObjNum(Obj, TEXT("bottom"), 0.0));
+                FloatLeft,
+                FloatTop,
+                FloatRight,
+                FloatBottom);
             return true;
         }
         if (Value->Type == EJson::String)
@@ -304,11 +414,22 @@ namespace
             TArray<double> Nums;
             if (ParseCommaNumbers(Value->AsString(), 4, Nums))
             {
+                float Left = 0.0f;
+                float Top = 0.0f;
+                float Right = 0.0f;
+                float Bottom = 0.0f;
+                if (!TryConvertFiniteFloat(Nums[0], Left)
+                    || !TryConvertFiniteFloat(Nums[1], Top)
+                    || !TryConvertFiniteFloat(Nums[2], Right)
+                    || !TryConvertFiniteFloat(Nums[3], Bottom))
+                {
+                    return false;
+                }
                 Out = FMargin(
-                    (float)Nums[0],
-                    (float)Nums[1],
-                    (float)Nums[2],
-                    (float)Nums[3]);
+                    Left,
+                    Top,
+                    Right,
+                    Bottom);
                 return true;
             }
         }
@@ -325,23 +446,30 @@ namespace
 
         if (Value->Type == EJson::Array)
         {
-            if (!IsNumericArray(Value, 4)) return false;
-            const auto& Arr = Value->AsArray();
+            TArray<double> Components;
+            if (!TryReadNumericArray(Value, 4, 4, Components)) return false;
             Out = FVector4(
-                ArrayNum(Arr, 0, 0.0),
-                ArrayNum(Arr, 1, 0.0),
-                ArrayNum(Arr, 2, 0.0),
-                ArrayNum(Arr, 3, 0.0));
+                Components[0],
+                Components[1],
+                Components[2],
+                Components[3]);
             return true;
         }
         if (Value->Type == EJson::Object)
         {
             const TSharedPtr<FJsonObject> Obj = Value->AsObject();
-            Out = FVector4(
-                ObjNum(Obj, TEXT("x"), 0.0),
-                ObjNum(Obj, TEXT("y"), 0.0),
-                ObjNum(Obj, TEXT("z"), 0.0),
-                ObjNum(Obj, TEXT("w"), 0.0));
+            double X = 0.0;
+            double Y = 0.0;
+            double Z = 0.0;
+            double W = 0.0;
+            if (!TryReadRequiredFiniteField(Obj, TEXT("x"), X)
+                || !TryReadRequiredFiniteField(Obj, TEXT("y"), Y)
+                || !TryReadRequiredFiniteField(Obj, TEXT("z"), Z)
+                || !TryReadRequiredFiniteField(Obj, TEXT("w"), W))
+            {
+                return false;
+            }
+            Out = FVector4(X, Y, Z, W);
             return true;
         }
         if (Value->Type == EJson::String)

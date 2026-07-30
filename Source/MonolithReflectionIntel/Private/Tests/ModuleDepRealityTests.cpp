@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+﻿// SPDX-License-Identifier: MIT
 // Plan: Plugins/Monolith/Docs/plans/2026-05-28-reflection-intelligence.md (Phase 2 — v0.17.0).
 //
 // ModuleDepRealityTests — Phase 2 §12 test 5 (module-dep reality audit).
@@ -22,6 +22,7 @@
 #include "Internationalization/Regex.h"
 #include "Interfaces/IPluginManager.h"
 #include "MonolithToolRegistry.h"
+#include "SourceAudit/ModuleDepRealityUtils.h"
 #include "HAL/PlatformFileManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -142,17 +143,41 @@ bool FModuleDepSuggestBuildCsDepsForwardTest::RunTest(const FString& /*Parameter
 	TestTrue(TEXT("source.suggest_build_cs_deps registered"),
 		Reg.HasAction(TEXT("source"), TEXT("suggest_build_cs_deps")));
 
-	// Path-first declaring-module derivation contract (LAST `/Source/` wins).
-	auto DeriveModule = [](const FString& InPath) -> FString
+	auto DeriveModule = [this](const FString& InPath) -> FString
 	{
-		FString Norm = InPath;
-		Norm.ReplaceInline(TEXT("\\"), TEXT("/"));
-		const int32 SrcIdx = Norm.Find(TEXT("/Source/"), ESearchCase::IgnoreCase, ESearchDir::FromEnd);
-		if (SrcIdx == INDEX_NONE) { return FString(); }
-		FString Rest = Norm.Mid(SrcIdx + 8);
-		int32 NextSlash = INDEX_NONE;
-		if (!Rest.FindChar(TEXT('/'), NextSlash)) { return FString(); }
-		return Rest.Left(NextSlash);
+		FString ModuleName;
+		FString ModuleDir;
+		const bool bDerived =
+			MonolithModuleDepReality::DeriveModuleFromSourcePath(
+				InPath,
+				ModuleName,
+				ModuleDir);
+		if (!bDerived)
+		{
+			TestTrue(
+				*FString::Printf(TEXT("Expected module path to derive: %s"), *InPath),
+				false);
+		}
+		return ModuleName;
+	};
+	auto DeriveIndexedModule =
+		[this](const FString& InPath, const FString& IndexedModuleName) -> FString
+	{
+		FString ModuleName;
+		FString ModuleDir;
+		const bool bDerived =
+			MonolithModuleDepReality::DeriveModuleFromIndexedSourcePath(
+				InPath,
+				IndexedModuleName,
+				ModuleName,
+				ModuleDir);
+		if (!bDerived)
+		{
+			TestTrue(
+				*FString::Printf(TEXT("Expected indexed module path to derive: %s"), *InPath),
+				false);
+		}
+		return ModuleName;
 	};
 
 	TestEqual(TEXT("Source/<Module>/ derivation"),
@@ -162,8 +187,94 @@ bool FModuleDepSuggestBuildCsDepsForwardTest::RunTest(const FString& /*Parameter
 		FString(TEXT("FooRuntime")));
 	TestEqual(TEXT("backslash path normalised"),
 		DeriveModule(TEXT("C:\\Proj\\Source\\WinMod\\X.h")), FString(TEXT("WinMod")));
-	TestTrue(TEXT("no /Source/ -> empty"),
-		DeriveModule(TEXT("D:/Proj/Content/Foo.uasset")).IsEmpty());
+	TestEqual(TEXT("relative Source/<Module>/ derivation"),
+		DeriveModule(TEXT("Source/RelativeMod/Private/Thing.cpp")),
+		FString(TEXT("RelativeMod")));
+	TestEqual(TEXT("project module literally named Runtime is not an engine category"),
+		DeriveModule(TEXT("D:/Proj/Source/Runtime/Private/Thing.cpp")),
+		FString(TEXT("Runtime")));
+	TestEqual(TEXT("relative module literally named Editor is not an engine category"),
+		DeriveModule(TEXT("Source/Editor/Public/Thing.h")),
+		FString(TEXT("Editor")));
+	TestEqual(TEXT("relative indexed engine runtime path uses module segment"),
+		DeriveIndexedModule(
+			TEXT("Source/Runtime/GameplayTags/Classes/GameplayTagContainer.h"),
+			TEXT("GameplayTags")),
+		FString(TEXT("GameplayTags")));
+	TestEqual(TEXT("Engine-relative indexed runtime path uses module segment"),
+		DeriveIndexedModule(
+			TEXT("Engine/Source/Runtime/GameplayTags/Classes/GameplayTagContainer.h"),
+			TEXT("GameplayTags")),
+		FString(TEXT("GameplayTags")));
+	TestEqual(TEXT("relative indexed engine editor path uses module segment"),
+		DeriveIndexedModule(
+			TEXT("Source/Editor/UnrealEd/Public/Editor.h"),
+			TEXT("UnrealEd")),
+		FString(TEXT("UnrealEd")));
+	TestEqual(TEXT("indexed project module named Runtime remains direct"),
+		DeriveIndexedModule(
+			TEXT("Source/Runtime/Private/Thing.cpp"),
+			TEXT("Runtime")),
+		FString(TEXT("Runtime")));
+	const FString EngineCoreHeader =
+		FPaths::ConvertRelativePathToFull(
+			FPaths::EngineDir()
+			/ TEXT("Source/Runtime/Core/Public/CoreMinimal.h"));
+	TestEqual(TEXT("engine source category skips to module"),
+		DeriveModule(EngineCoreHeader),
+		FString(TEXT("Core")));
+	TestEqual(TEXT("engine plugin uses direct module segment"),
+		DeriveModule(TEXT("D:/Engine/Engine/Plugins/Foo/Source/FooRuntime/Public/Foo.h")),
+		FString(TEXT("FooRuntime")));
+
+	FString NoModuleName;
+	FString NoModuleDir;
+	TestFalse(
+		TEXT("path outside Source is rejected"),
+		MonolithModuleDepReality::DeriveModuleFromSourcePath(
+			TEXT("D:/Proj/Content/Foo.uasset"),
+			NoModuleName,
+			NoModuleDir));
+
+	TestTrue(
+		TEXT("class is a dependency type kind"),
+		MonolithModuleDepReality::IsDependencyTypeSymbolKind(TEXT("class")));
+	TestTrue(
+		TEXT("struct is a dependency type kind"),
+		MonolithModuleDepReality::IsDependencyTypeSymbolKind(TEXT("struct")));
+	TestTrue(
+		TEXT("enum is a dependency type kind"),
+		MonolithModuleDepReality::IsDependencyTypeSymbolKind(TEXT("enum")));
+	TestTrue(
+		TEXT("union is a dependency type kind"),
+		MonolithModuleDepReality::IsDependencyTypeSymbolKind(TEXT("union")));
+	TestTrue(
+		TEXT("typedef is a dependency type kind"),
+		MonolithModuleDepReality::IsDependencyTypeSymbolKind(TEXT("typedef")));
+	TestTrue(
+		TEXT("type alias is a dependency type kind"),
+		MonolithModuleDepReality::IsDependencyTypeSymbolKind(TEXT("type_alias")));
+	TestTrue(
+		TEXT("dependency type kind comparison is case-insensitive"),
+		MonolithModuleDepReality::IsDependencyTypeSymbolKind(TEXT("STRUCT")));
+	TestFalse(
+		TEXT("function is not a dependency type kind"),
+		MonolithModuleDepReality::IsDependencyTypeSymbolKind(TEXT("function")));
+	TestFalse(
+		TEXT("macro is not a dependency type kind"),
+		MonolithModuleDepReality::IsDependencyTypeSymbolKind(TEXT("macro")));
+	TestFalse(
+		TEXT("UPROPERTY macro is not a dependency candidate"),
+		MonolithModuleDepReality::IsDependencyCandidateIdentifier(TEXT("UPROPERTY")));
+	TestFalse(
+		TEXT("UCLASS macro is not a dependency candidate"),
+		MonolithModuleDepReality::IsDependencyCandidateIdentifier(TEXT("UCLASS")));
+	TestTrue(
+		TEXT("reflected UObject type remains a dependency candidate"),
+		MonolithModuleDepReality::IsDependencyCandidateIdentifier(TEXT("UObject")));
+	TestTrue(
+		TEXT("reflected FAssetData struct remains a dependency candidate"),
+		MonolithModuleDepReality::IsDependencyCandidateIdentifier(TEXT("FAssetData")));
 
 	return true;
 }
@@ -224,6 +335,14 @@ bool FModuleDepRealityParamGuardTest::RunTest(const FString& /*Parameters*/)
 
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("limit"), 10.5); // malformed, schema requires an integer
+		const FMonolithActionResult Result = Reg.ExecuteAction(TEXT("source"), TEXT("audit_module_dep_reality"), Params);
+		TestFalse(TEXT("audit_module_dep_reality rejects fractional limit"), Result.bSuccess);
+		TestTrue(TEXT("fractional-limit error names limit"), Result.ErrorMessage.Contains(TEXT("limit")));
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetNumberField(TEXT("cursor"), 123.0); // malformed, should be string
 		const FMonolithActionResult Result = Reg.ExecuteAction(TEXT("source"), TEXT("audit_module_dep_reality"), Params);
 		TestFalse(TEXT("audit_module_dep_reality rejects malformed cursor"), Result.bSuccess);
@@ -237,6 +356,27 @@ bool FModuleDepRealityParamGuardTest::RunTest(const FString& /*Parameters*/)
 		const FMonolithActionResult Result = Reg.ExecuteAction(TEXT("source"), TEXT("suggest_build_cs_deps"), Params);
 		TestFalse(TEXT("suggest_build_cs_deps rejects malformed file_path"), Result.bSuccess);
 		TestTrue(TEXT("suggest_build_cs_deps names file_path in error"), Result.ErrorMessage.Contains(TEXT("file_path")));
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> Symbols;
+		Symbols.Add(MakeShared<FJsonValueString>(TEXT("UObject")));
+		Symbols.Add(MakeShared<FJsonValueNumber>(123.0));
+		Params->SetArrayField(TEXT("symbols"), Symbols);
+		const FMonolithActionResult Result = Reg.ExecuteAction(TEXT("source"), TEXT("suggest_build_cs_deps"), Params);
+		TestFalse(TEXT("suggest_build_cs_deps rejects non-string symbol elements"), Result.bSuccess);
+		TestTrue(TEXT("symbol-element error identifies symbols[1]"), Result.ErrorMessage.Contains(TEXT("symbols[1]")));
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> Symbols;
+		Symbols.Add(MakeShared<FJsonValueString>(TEXT("   ")));
+		Params->SetArrayField(TEXT("symbols"), Symbols);
+		const FMonolithActionResult Result = Reg.ExecuteAction(TEXT("source"), TEXT("suggest_build_cs_deps"), Params);
+		TestFalse(TEXT("suggest_build_cs_deps rejects empty symbol elements"), Result.bSuccess);
+		TestTrue(TEXT("empty-symbol error identifies symbols[0]"), Result.ErrorMessage.Contains(TEXT("symbols[0]")));
 	}
 
 	return true;

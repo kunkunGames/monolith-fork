@@ -1,4 +1,4 @@
-#include "MonolithToolRegistry.h"
+﻿#include "MonolithToolRegistry.h"
 #include "../Public/MonolithFuzzyMatch.h"
 #include "MonolithFuzzyMatch.h"
 #include "MonolithHashUtils.h"
@@ -1768,54 +1768,6 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 	if (ActionInfo.ParamSchema.IsValid())
 	{
 		SetPhaseMs(TEXT("alias_ms"), AliasStartSeconds);
-	}
-
-	// K4 — string-encoded complex-param recovery. Some MCP clients (Claude
-	// Code among them) serialize array/object argument values to JSON-encoded
-	// strings. batch_execute has long carried a local string-parse fallback for
-	// its `operations` param ("Claude Code quirk"); every other array/object
-	// param silently arrived as a string and failed its handler's typed field
-	// lookup ("<param> array is required" with the value right there). Recover
-	// centrally: when the schema declares array/object and the incoming value
-	// is a string that parses as that JSON kind, replace it with the parsed
-	// value. Strings that don't parse pass through untouched, so a legitimate
-	// string value can never be corrupted.
-	if (ActionInfo.ParamSchema.IsValid())
-	{
-		for (const auto& SchemaPair : ActionInfo.ParamSchema->Values)
-		{
-			const TSharedPtr<FJsonObject>* ParamDefPtr = nullptr;
-			if (!SchemaPair.Value->TryGetObject(ParamDefPtr) || !ParamDefPtr) continue;
-
-			FString DeclaredType;
-			(*ParamDefPtr)->TryGetStringField(TEXT("type"), DeclaredType);
-			const bool bWantsArray  = DeclaredType == TEXT("array");
-			const bool bWantsObject = DeclaredType == TEXT("object");
-			if (!bWantsArray && !bWantsObject) continue;
-
-			const FString KeyStr = MonolithKeyToString(SchemaPair.Key);
-			FString StrVal;
-			if (!EffectiveParams->TryGetStringField(KeyStr, StrVal) || StrVal.IsEmpty()) continue;
-
-			if (bWantsArray)
-			{
-				TArray<TSharedPtr<FJsonValue>> ParsedArr;
-				TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(StrVal);
-				if (FJsonSerializer::Deserialize(Reader, ParsedArr))
-				{
-					EffectiveParams->SetArrayField(KeyStr, ParsedArr);
-				}
-			}
-			else
-			{
-				TSharedPtr<FJsonObject> ParsedObj;
-				TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(StrVal);
-				if (FJsonSerializer::Deserialize(Reader, ParsedObj) && ParsedObj.IsValid())
-				{
-					EffectiveParams->SetObjectField(KeyStr, ParsedObj);
-				}
-			}
-		}
 	}
 
 	// Validate required params from schema before dispatching.

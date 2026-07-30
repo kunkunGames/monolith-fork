@@ -4,7 +4,7 @@
   "generated_by": "asset_editing_benchmark.py",
   "description": "Human-browsable AssetEditing slices grouped by asset type/domain. The root tasks.jsonl remains the canonical full-suite stream, and testsets remain the route loader.",
   "asset_type_count": 24,
-  "asset_authoring_task_count": 269,
+  "asset_authoring_task_count": 278,
   "asset_types": [
     {
       "asset_type": "ai",
@@ -413,16 +413,16 @@
       "asset_type": "pcg",
       "asset_type_slug": "pcg",
       "module_id": "asset_authoring.pcg",
-      "task_count": 1,
-      "edit_domain_count": 1,
+      "task_count": 6,
+      "edit_domain_count": 6,
       "operation_counts": {
-        "creation_or_import": 1,
-        "edit": 1,
-        "save": 1,
-        "readback_verify": 1
+        "creation_or_import": 6,
+        "edit": 6,
+        "save": 6,
+        "readback_verify": 6
       },
       "lifecycle_counts": {
-        "create_save": 1
+        "create_save": 6
       },
       "directory": "Benchmarks/AssetEditing/pcg",
       "index_file": "Benchmarks/AssetEditing/pcg/index.json",
@@ -453,16 +453,16 @@
       "asset_type": "ui",
       "asset_type_slug": "ui",
       "module_id": "asset_authoring.ui",
-      "task_count": 19,
-      "edit_domain_count": 19,
+      "task_count": 23,
+      "edit_domain_count": 23,
       "operation_counts": {
-        "creation_or_import": 19,
-        "edit": 19,
-        "save": 19,
-        "readback_verify": 19
+        "creation_or_import": 23,
+        "edit": 23,
+        "save": 23,
+        "readback_verify": 23
       },
       "lifecycle_counts": {
-        "create_save": 19
+        "create_save": 23
       },
       "directory": "Benchmarks/AssetEditing/ui",
       "index_file": "Benchmarks/AssetEditing/ui/index.json",

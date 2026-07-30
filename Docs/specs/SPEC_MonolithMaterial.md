@@ -33,13 +33,14 @@
 | `get_material_parameters` | List all parameter types (scalar, vector, texture, static switch) with values. Works on UMaterial and UMaterialInstanceConstant |
 | `get_compilation_stats` | Sampler count, texture estimates, UV scalars, blend mode, expression count, vertex/pixel shader instruction counts (`num_vertex_shader_instructions`, `num_pixel_shader_instructions` via `UMaterialEditingLibrary::GetStatistics`) |
 
-**Write Actions (17)**
+**Write Actions (18)**
 | Action | Description |
 |--------|-------------|
-| `create_material` | Create new UMaterial at path with configurable defaults (blend mode, shading model, material domain) |
-| `create_material_instance` | Create UMaterialInstanceConstant from parent material with optional parameter overrides |
+| `create_material` | Create a new UMaterial with configurable defaults. Optional strings/bools and enum names are type/value checked before package creation; malformed values fail without leaving a package/object behind |
+| `create_material_instance` | Create UMaterialInstanceConstant from parent material with optional parameter overrides. Creation rejects a same-name object loaded from disk but missing from the Asset Registry instead of reusing it |
 | `set_material_property` | Set material properties (blend_mode, shading_model, two_sided, etc.) via UMaterialEditingLibrary |
 | `build_material_graph` | Build entire graph from JSON spec in single undo transaction (4 phases: standard nodes, Custom HLSL, wires, output properties). Expression-valued UObject properties are deferred and remapped through destination node IDs, and material-function call pins are refreshed before wire restoration. The spec must be passed as `{ "graph_spec": { "nodes": [...], "connections": [...], ... } }` — not as a bare object |
+| `move_expression` | Move one expression with `expression_name`/`pos_x`/`pos_y`, or an exact JSON `expressions` array of `{name,x,y}` objects. Coordinates must be finite 32-bit integers; canonical/alias coordinate pairs cannot be mixed. Batch requests preflight duplicate names, target existence, and relative-coordinate overflow before opening a transaction, so any invalid operation leaves every expression unchanged |
 | `disconnect_expression` | Disconnect inputs or outputs on a named expression (supports expr→expr and expr→material property; supports targeted single-connection disconnection via optional `input_name`/`output_name` params) |
 | `delete_expression` | Delete expression node by name from material graph |
 | `create_custom_hlsl_node` | Create Custom HLSL expression with inputs, outputs, and code |
@@ -57,11 +58,11 @@
 **Material Function Actions (7)**
 | Action | Description |
 |--------|-------------|
-| `create_material_function` | Create a MaterialFunction asset; `type` also supports MaterialLayer and MaterialLayerBlend |
+| `create_material_function` | Create a MaterialFunction asset; `type` also supports MaterialLayer and MaterialLayerBlend. Creation rejects unindexed same-name object collisions |
 | `build_function_graph` | Build a material function graph from JSON spec |
 | `get_function_info` | Read material function inputs, outputs, description, categories, and expressions |
 | `export_function_graph` | Full graph export of a material function — nodes, connections, properties, inputs, outputs, static switch details |
-| `set_function_metadata` | Update material function description, categories, and library exposure settings |
+| `set_function_metadata` | Update material function description, categories, and library exposure settings. At least one writable field is required, and all supplied fields are type-checked before the asset is loaded or dirtied |
 | `delete_function_expression` | Remove expression(s) from a material function graph |
 | `update_material_function` | Recompile a material function and cascade changes to all referencing materials/instances |
 
@@ -69,6 +70,12 @@
 | Action | Change |
 |--------|--------|
 | `create_material_function` | Added `type` parameter — supports `MaterialLayer` and `MaterialLayerBlend` in addition to standard material functions |
+
+### Creation Safety Contract
+
+Every material/function creation path first queries Asset Registry disk-gathered data with `bIncludeOnlyOnDiskAssets=true`, because `UEditorAssetLibrary::DoesAssetExist` also synthesizes results from loaded unsaved objects. A same-name in-memory object or stale/unindexed on-disk package causes an explicit failure. Creation never relies on `NewObject` name reuse to mutate or replace that object. PBR creation classifies those collisions before importing source textures; replacement deletes only a disk-backed registry entry, checks the delete result, and rejects an unindexed disk package or loaded object rather than deleting it. `create_material` and `create_pbr_material_from_disk` validate optional string/bool types, enum values, and integral texture-size input before package creation or texture import. `create_material_function` likewise preflights its type, description, exposure flag, and complete category array before mutation. Malformed requests therefore leave no partial asset state. A PBR `maps` entry with a non-string disk path is surfaced in `texture_errors` instead of being silently dropped.
+
+Complex material parameters have one canonical wire format. `batch_set_material_property` and `batch_recompile` require `asset_paths` as a native JSON string array; string-encoded JSON and mixed-type arrays fail before asset loading or transaction creation. `set_function_metadata` rejects empty updates and validates `description`, `expose_to_library`, and every `library_categories` entry before loading the target, so an invalid request cannot dirty a package or partially apply metadata.
 
 ### Bulk Fill & Describe Surface (2026-05-11)
 

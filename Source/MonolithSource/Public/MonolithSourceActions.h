@@ -172,6 +172,7 @@ private:
 
 	// Helpers
 	static FMonolithSourceDatabase* GetDB();
+	static FMonolithActionResult MakeDatabaseUnavailableError();
 	static FString ShortPath(const FString& FullPath);
 
 	/** Resolve the owning module name (+ Build.cs note) for a symbol via the source DB (files->modules join). */

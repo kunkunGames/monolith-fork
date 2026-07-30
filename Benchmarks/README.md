@@ -38,6 +38,13 @@ verifies it and rejects drift. Missing `Saved/...` diagnostics for pending suite
 remain zero-credit gaps and are reported, rather than making hosted static CI
 depend on ignored local artifacts.
 
+Tracked bundle text (`bundle_manifest.json`, `summary.json`, JSONL results, and
+JSON sidecars) uses SHA-256 over UTF-8 bytes after CRLF and lone CR are
+canonicalized to LF. This is the sole portability normalization: it prevents
+Git/P4 client line-ending policy from invalidating identical evidence. Database
+and executable inputs remain exact raw-byte hashes; a changed binary can never
+pass through text normalization.
+
 `--check` is the full local/operator mode. It additionally requires every
 fingerprinted database and referenced pending diagnostic to exist, and rejects
 source-input mtime drift as well as size/content drift. `--write` uses this full

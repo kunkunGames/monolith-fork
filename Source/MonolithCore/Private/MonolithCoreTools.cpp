@@ -1,4 +1,4 @@
-#include "MonolithCoreTools.h"
+﻿#include "MonolithCoreTools.h"
 #include "MonolithAsyncJobRegistry.h"
 #include "MonolithParamUtils.h"
 #include "MonolithGuideTool.h"
@@ -249,7 +249,8 @@ static bool IsKnownLongRunningAction(const FMonolithActionInfo& ActionInfo)
 {
 	const FString ActionId = ActionInfo.Namespace + TEXT(".") + ActionInfo.Action;
 	return ActionId == TEXT("monolith.reindex")
-		|| ActionId == TEXT("ai.rebuild_zone_graph");
+		|| ActionId == TEXT("ai.rebuild_zone_graph")
+		|| ActionId == TEXT("localization.run_target_pipeline");
 }
 
 static void AddActionPolicyFields(TSharedPtr<FJsonObject>& ActionObj, const FMonolithActionInfo& ActionInfo)

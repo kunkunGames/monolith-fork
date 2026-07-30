@@ -1,7 +1,13 @@
 #include "CoreMinimal.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetRegistry/IAssetRegistry.h"
+#include "EditorAssetLibrary.h"
 #include "Misc/AutomationTest.h"
 #include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
+#include "Materials/Material.h"
+#include "UObject/Package.h"
+#include "UObject/SoftObjectPath.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -39,6 +45,311 @@ bool FMonolithMaterialSecurityPathTest::RunTest(const FString& Parameters)
 		}
 	}
 
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithMaterialCreateStrictParamsTest,
+	"Monolith.ParamGuard.Material.CreateMaterialStrictParams",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithMaterialCreateStrictParamsTest::RunTest(const FString& Parameters)
+{
+	struct FInvalidParamCase
+	{
+		const TCHAR* Label;
+		TFunction<void(const TSharedPtr<FJsonObject>&)> AddInvalidParam;
+	};
+
+	const TArray<FInvalidParamCase> Cases = {
+		{
+			TEXT("two_sided string"),
+			[](const TSharedPtr<FJsonObject>& Payload)
+			{
+				Payload->SetStringField(TEXT("two_sided"), TEXT("true"));
+			}
+		},
+		{
+			TEXT("unknown material_domain"),
+			[](const TSharedPtr<FJsonObject>& Payload)
+			{
+				Payload->SetStringField(TEXT("material_domain"), TEXT("NotARealDomain"));
+			}
+		}
+	};
+
+	for (const FInvalidParamCase& TestCase : Cases)
+	{
+		const FString AssetPath = FString::Printf(
+			TEXT("/Game/Tests/Monolith/Material/M_InvalidCreate_%s"),
+			*FGuid::NewGuid().ToString(EGuidFormats::Digits));
+		TestNull(
+			*FString::Printf(TEXT("%s starts without a package"), TestCase.Label),
+			FindPackage(nullptr, *AssetPath));
+
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("asset_path"), AssetPath);
+		TestCase.AddInvalidParam(Payload);
+
+		const FMonolithActionResult Result =
+			FMonolithToolRegistry::Get().ExecuteAction(TEXT("material"), TEXT("create_material"), Payload);
+
+		TestFalse(
+			*FString::Printf(TEXT("%s is rejected"), TestCase.Label),
+			Result.bSuccess);
+		TestFalse(
+			*FString::Printf(TEXT("%s returns an explicit error"), TestCase.Label),
+			Result.ErrorMessage.IsEmpty());
+		TestNull(
+			*FString::Printf(TEXT("%s is rejected before package creation"), TestCase.Label),
+			FindPackage(nullptr, *AssetPath));
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithMaterialCreatePbrStrictParamsTest,
+	"Monolith.ParamGuard.Material.CreatePbrMaterialStrictParams",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithMaterialCreatePbrStrictParamsTest::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = FString::Printf(
+		TEXT("/Game/Tests/Monolith/Material/M_InvalidPbrCreate_%s"),
+		*FGuid::NewGuid().ToString(EGuidFormats::Digits));
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("material_path"), AssetPath);
+	Payload->SetStringField(TEXT("texture_folder"), TEXT("/Game/Tests/Monolith/Material/Textures"));
+	TSharedPtr<FJsonObject> Maps = MakeShared<FJsonObject>();
+	Maps->SetStringField(TEXT("basecolor"), TEXT("Z:/does/not/need/to/exist.png"));
+	Payload->SetObjectField(TEXT("maps"), Maps);
+	Payload->SetStringField(TEXT("two_sided"), TEXT("true"));
+
+	const FMonolithActionResult WrongBool =
+		FMonolithToolRegistry::Get().ExecuteAction(
+			TEXT("material"),
+			TEXT("create_pbr_material_from_disk"),
+			Payload);
+	TestFalse(TEXT("PBR create rejects string two_sided"), WrongBool.bSuccess);
+	TestTrue(TEXT("PBR bool error names two_sided"), WrongBool.ErrorMessage.Contains(TEXT("two_sided")));
+	TestNull(TEXT("PBR bool rejection creates no material package"), FindPackage(nullptr, *AssetPath));
+
+	Payload->RemoveField(TEXT("two_sided"));
+	Payload->SetNumberField(TEXT("max_texture_size"), 2048.5);
+	const FMonolithActionResult FractionalSize =
+		FMonolithToolRegistry::Get().ExecuteAction(
+			TEXT("material"),
+			TEXT("create_pbr_material_from_disk"),
+			Payload);
+	TestFalse(TEXT("PBR create rejects fractional max_texture_size"), FractionalSize.bSuccess);
+	TestTrue(
+		TEXT("PBR integer error names max_texture_size"),
+		FractionalSize.ErrorMessage.Contains(TEXT("max_texture_size")));
+	TestNull(TEXT("PBR integer rejection creates no material package"), FindPackage(nullptr, *AssetPath));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithMaterialCreateFunctionStrictParamsTest,
+	"Monolith.ParamGuard.Material.CreateMaterialFunctionStrictParams",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithMaterialCreateFunctionStrictParamsTest::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = FString::Printf(
+		TEXT("/Game/Tests/Monolith/Material/MF_InvalidCreate_%s"),
+		*FGuid::NewGuid().ToString(EGuidFormats::Digits));
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("asset_path"), AssetPath);
+	Payload->SetStringField(TEXT("expose_to_library"), TEXT("true"));
+
+	const FMonolithActionResult WrongBool =
+		FMonolithToolRegistry::Get().ExecuteAction(
+			TEXT("material"),
+			TEXT("create_material_function"),
+			Payload);
+	TestFalse(TEXT("function create rejects string expose_to_library"), WrongBool.bSuccess);
+	TestTrue(
+		TEXT("function bool error names expose_to_library"),
+		WrongBool.ErrorMessage.Contains(TEXT("expose_to_library")));
+	TestNull(TEXT("function bool rejection creates no package"), FindPackage(nullptr, *AssetPath));
+
+	Payload->RemoveField(TEXT("expose_to_library"));
+	Payload->SetNumberField(TEXT("description"), 42.0);
+	const FMonolithActionResult WrongDescription =
+		FMonolithToolRegistry::Get().ExecuteAction(
+			TEXT("material"),
+			TEXT("create_material_function"),
+			Payload);
+	TestFalse(TEXT("function create rejects non-string description"), WrongDescription.bSuccess);
+	TestTrue(
+		TEXT("function description error names description"),
+		WrongDescription.ErrorMessage.Contains(TEXT("description")));
+	TestNull(TEXT("function description rejection creates no package"), FindPackage(nullptr, *AssetPath));
+
+	Payload->RemoveField(TEXT("description"));
+	Payload->SetBoolField(TEXT("type"), true);
+	const FMonolithActionResult WrongTypeValueKind =
+		FMonolithToolRegistry::Get().ExecuteAction(
+			TEXT("material"),
+			TEXT("create_material_function"),
+			Payload);
+	TestFalse(TEXT("function create rejects non-string type"), WrongTypeValueKind.bSuccess);
+	TestTrue(
+		TEXT("function type-kind error names type"),
+		WrongTypeValueKind.ErrorMessage.Contains(TEXT("type")));
+	TestNull(TEXT("function type-kind rejection creates no package"), FindPackage(nullptr, *AssetPath));
+
+	Payload->RemoveField(TEXT("type"));
+	TArray<TSharedPtr<FJsonValue>> Categories;
+	Categories.Add(MakeShared<FJsonValueString>(TEXT("Library")));
+	Categories.Add(MakeShared<FJsonValueNumber>(123.0));
+	Payload->SetArrayField(TEXT("library_categories"), Categories);
+	const FMonolithActionResult WrongCategory =
+		FMonolithToolRegistry::Get().ExecuteAction(
+			TEXT("material"),
+			TEXT("create_material_function"),
+			Payload);
+	TestFalse(TEXT("function create rejects non-string category"), WrongCategory.bSuccess);
+	TestTrue(
+		TEXT("function category error names library_categories[1]"),
+		WrongCategory.ErrorMessage.Contains(TEXT("library_categories[1]")));
+	TestNull(TEXT("function category rejection creates no package"), FindPackage(nullptr, *AssetPath));
+
+	Payload->RemoveField(TEXT("library_categories"));
+	Payload->SetStringField(TEXT("type"), TEXT("UnknownFunctionType"));
+	const FMonolithActionResult UnknownType =
+		FMonolithToolRegistry::Get().ExecuteAction(
+			TEXT("material"),
+			TEXT("create_material_function"),
+			Payload);
+	TestFalse(TEXT("function create rejects unknown function type"), UnknownType.bSuccess);
+	TestTrue(
+		TEXT("function enum error lists the valid function types"),
+		UnknownType.ErrorMessage.Contains(TEXT("MaterialFunction")) &&
+			UnknownType.ErrorMessage.Contains(TEXT("MaterialLayer")) &&
+			UnknownType.ErrorMessage.Contains(TEXT("MaterialLayerBlend")));
+	TestNull(TEXT("function enum rejection creates no package"), FindPackage(nullptr, *AssetPath));
+
+	Payload->RemoveField(TEXT("type"));
+	TArray<TSharedPtr<FJsonValue>> MetadataCategories;
+	MetadataCategories.Add(MakeShared<FJsonValueString>(TEXT("Library")));
+	MetadataCategories.Add(MakeShared<FJsonValueNumber>(123.0));
+	Payload->SetArrayField(TEXT("library_categories"), MetadataCategories);
+	const FMonolithActionResult WrongMetadataCategory =
+		FMonolithToolRegistry::Get().ExecuteAction(
+			TEXT("material"),
+			TEXT("set_function_metadata"),
+			Payload);
+	TestFalse(TEXT("function metadata rejects non-string category"), WrongMetadataCategory.bSuccess);
+	TestTrue(
+		TEXT("function metadata category error names library_categories[1]"),
+		WrongMetadataCategory.ErrorMessage.Contains(TEXT("library_categories[1]")));
+	TestNull(TEXT("function metadata category rejection loads no package"), FindPackage(nullptr, *AssetPath));
+
+	Payload->RemoveField(TEXT("library_categories"));
+	const FMonolithActionResult EmptyMetadataUpdate =
+		FMonolithToolRegistry::Get().ExecuteAction(
+			TEXT("material"),
+			TEXT("set_function_metadata"),
+			Payload);
+	TestFalse(TEXT("function metadata rejects an empty update"), EmptyMetadataUpdate.bSuccess);
+	TestTrue(
+		TEXT("empty metadata error lists the writable fields"),
+		EmptyMetadataUpdate.ErrorMessage.Contains(TEXT("description")) &&
+			EmptyMetadataUpdate.ErrorMessage.Contains(TEXT("expose_to_library")) &&
+			EmptyMetadataUpdate.ErrorMessage.Contains(TEXT("library_categories")));
+	TestNull(TEXT("empty metadata rejection loads no package"), FindPackage(nullptr, *AssetPath));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithMaterialCreateUnindexedCollisionTest,
+	"Monolith.Security.Material.CreateMaterialRejectsUnindexedCollision",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithMaterialCreateUnindexedCollisionTest::RunTest(const FString& Parameters)
+{
+	const FString AssetName = FString::Printf(
+		TEXT("M_UnindexedCollision_%s"),
+		*FGuid::NewGuid().ToString(EGuidFormats::Digits));
+	const FString AssetPath = FString::Printf(
+		TEXT("/Game/Tests/Monolith/Material/%s"),
+		*AssetName);
+	UPackage* CollisionPackage = CreatePackage(*AssetPath);
+	if (!TestNotNull(TEXT("unindexed collision package created"), CollisionPackage))
+	{
+		return false;
+	}
+	UMaterial* ExistingMaterial = NewObject<UMaterial>(
+		CollisionPackage,
+		FName(*AssetName),
+		RF_Transient);
+	if (!TestNotNull(TEXT("unindexed collision object created"), ExistingMaterial))
+	{
+		return false;
+	}
+
+	ExistingMaterial->BlendMode = BLEND_Translucent;
+
+	const FSoftObjectPath ObjectPath(FString::Printf(TEXT("%s.%s"), *AssetPath, *AssetName));
+	TestFalse(
+		TEXT("collision fixture has no disk-backed Asset Registry row"),
+		FAssetRegistryModule::GetRegistry().GetAssetByObjectPath(
+			ObjectPath,
+			/*bIncludeOnlyOnDiskAssets=*/true,
+			/*bSkipARFilteredAssets=*/true).IsValid());
+	TestTrue(
+		TEXT("ordinary existence lookup still synthesizes the loaded object"),
+		UEditorAssetLibrary::DoesAssetExist(AssetPath));
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("asset_path"), AssetPath);
+	const FMonolithActionResult Result =
+		FMonolithToolRegistry::Get().ExecuteAction(TEXT("material"), TEXT("create_material"), Payload);
+
+	TestFalse(TEXT("unindexed same-name object is rejected"), Result.bSuccess);
+	TestTrue(
+		TEXT("collision error explains the Asset Registry mismatch"),
+		Result.ErrorMessage.Contains(TEXT("absent from disk-backed Asset Registry data")));
+	TestTrue(
+		TEXT("the pre-existing object remains authoritative"),
+		FindObject<UMaterial>(CollisionPackage, *AssetName) == ExistingMaterial);
+	TestEqual(
+		TEXT("the pre-existing object is not mutated"),
+		ExistingMaterial->BlendMode,
+		BLEND_Translucent);
+
+	TSharedPtr<FJsonObject> PbrMaps = MakeShared<FJsonObject>();
+	PbrMaps->SetStringField(TEXT("basecolor"), TEXT("Z:/missing-before-collision-check.png"));
+	TSharedPtr<FJsonObject> PbrPayload = MakeShared<FJsonObject>();
+	PbrPayload->SetStringField(TEXT("material_path"), AssetPath);
+	PbrPayload->SetStringField(
+		TEXT("texture_folder"),
+		TEXT("/Game/Tests/Monolith/Material/Imported"));
+	PbrPayload->SetObjectField(TEXT("maps"), PbrMaps);
+	const FMonolithActionResult PbrResult =
+		FMonolithToolRegistry::Get().ExecuteAction(
+			TEXT("material"),
+			TEXT("create_pbr_material_from_disk"),
+			PbrPayload);
+	TestFalse(TEXT("PBR create rejects the unindexed same-name object before import"), PbrResult.bSuccess);
+	TestTrue(
+		TEXT("PBR collision error explains the Asset Registry mismatch"),
+		PbrResult.ErrorMessage.Contains(TEXT("absent from disk-backed Asset Registry data")));
+	TestTrue(
+		TEXT("PBR collision rejection preserves the pre-existing object"),
+		FindObject<UMaterial>(CollisionPackage, *AssetName) == ExistingMaterial);
+	TestEqual(
+		TEXT("PBR collision rejection does not mutate the pre-existing object"),
+		ExistingMaterial->BlendMode,
+		BLEND_Translucent);
+
+	ExistingMaterial->MarkAsGarbage();
+	CollisionPackage->MarkAsGarbage();
 	return true;
 }
 

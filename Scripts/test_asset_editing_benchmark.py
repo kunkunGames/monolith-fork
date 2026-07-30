@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import collections
 import json
+import os
 import pathlib
 import re
+import stat
 import sys
 import tempfile
 from typing import Any, Dict, Iterable, List, Set
@@ -52,6 +54,49 @@ def check(name: str, condition: bool, detail: str = "") -> None:
     print(f"[{status}] {name}" + (f" -- {detail}" if detail else ""))
     if not condition:
         _FAILURES.append(name)
+
+
+def test_generator_preserves_expected_read_only_outputs() -> None:
+    with tempfile.TemporaryDirectory(prefix="aeb-generator-") as temp_dir:
+        root = pathlib.Path(temp_dir)
+        expected = root / "testcases" / "expected.json"
+        stale = root / "testcases" / "stale.json"
+        payload = {"generated_by": "asset_editing_benchmark.py", "value": 1}
+        aeb.write_json(expected, payload)
+        aeb.write_json(stale, payload)
+        expected.chmod(stat.S_IREAD)
+        try:
+            changed = aeb.write_json(expected, payload)
+            aeb.remove_stale_generated_json(
+                expected.parent,
+                [expected],
+                recursive=False,
+            )
+            check(
+                "unchanged read-only generated output is not rewritten",
+                changed is False and expected.exists(),
+            )
+            check(
+                "stale generated output is removed without deleting expected output",
+                not stale.exists() and expected.exists(),
+            )
+        finally:
+            expected.chmod(stat.S_IWRITE | stat.S_IREAD)
+
+
+def test_generator_uses_platform_native_line_endings() -> None:
+    with tempfile.TemporaryDirectory(prefix="aeb-generator-newlines-") as temp_dir:
+        output = pathlib.Path(temp_dir) / "generated.json"
+        payload = {"generated_by": "asset_editing_benchmark.py", "values": [1, 2]}
+
+        changed = aeb.write_json(output, payload)
+        canonical_text = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+        expected_bytes = canonical_text.replace("\n", os.linesep).encode("utf-8")
+
+        check(
+            "generated output uses the platform checkout line ending",
+            changed is True and output.read_bytes() == expected_bytes,
+        )
 
 
 def load_json(path: pathlib.Path) -> Dict[str, Any]:
@@ -928,6 +973,370 @@ def test_pcg_asset_authoring_contract(tasks: List[Dict[str, Any]]) -> None:
           == ["asset_authoring.pcg.graph_authoring"],
           f"selected={[row.get('id') for row in selected]} selection={selection}")
 
+    expected_workflows = {
+        "pcg_graph_idempotent_authoring_roundtrip",
+        "pcg_graph_mutation_cleanup_roundtrip",
+        "pcg_graph_user_parameter_roundtrip",
+        "pcg_subgraph_assignment_roundtrip",
+        "pcg_graph_replacement_roundtrip",
+        "pcg_surface_discovery_roundtrip",
+    }
+    pcg_tasks = [row for row in tasks if row.get("domain") == "pcg"]
+    pcg_workflow_counts = collections.Counter(row.get("workflow") for row in pcg_tasks)
+    pcg_by_workflow = {row.get("workflow"): row for row in pcg_tasks}
+    check("PCG asset-authoring suite contains every executable graph workflow once",
+          expected_workflows.issubset(pcg_by_workflow)
+          and all(pcg_workflow_counts[workflow] == 1 for workflow in expected_workflows),
+          f"counts={dict(sorted(pcg_workflow_counts.items(), key=lambda item: str(item[0])))}")
+
+    suite_actions: Set[str] = set()
+    for pcg_task in pcg_tasks:
+        suite_actions.update(task_actions(pcg_task))
+    expanded_actions = {
+        "get_status",
+        "list_graph_assets",
+        "get_graph_asset",
+        "list_pcg_node_types",
+        "disconnect_pcg_nodes",
+        "remove_pcg_node",
+        "set_pcg_graph_user_parameters",
+        "set_pcg_subgraph",
+        "replace_pcg_graph_contents",
+    }
+    check("PCG suite executes the expanded mutation and discovery surface",
+          expanded_actions.issubset(suite_actions),
+          f"missing={sorted(expanded_actions - suite_actions)}")
+
+    expected_scratch_paths = {
+        "pcg_graph_idempotent_authoring_roundtrip": {
+            aeb.ASSET_AUTHORING_PCG_GRAPH,
+        },
+        "pcg_graph_mutation_cleanup_roundtrip": {
+            aeb.ASSET_AUTHORING_PCG_MUTATION_GRAPH,
+        },
+        "pcg_graph_user_parameter_roundtrip": {
+            aeb.ASSET_AUTHORING_PCG_USER_PARAMS_GRAPH,
+        },
+        "pcg_subgraph_assignment_roundtrip": {
+            aeb.ASSET_AUTHORING_PCG_SUBGRAPH_PARENT,
+            aeb.ASSET_AUTHORING_PCG_SUBGRAPH_CHILD_A,
+            aeb.ASSET_AUTHORING_PCG_SUBGRAPH_CHILD_B,
+        },
+        "pcg_graph_replacement_roundtrip": {
+            aeb.ASSET_AUTHORING_PCG_REPLACE_SOURCE,
+            aeb.ASSET_AUTHORING_PCG_REPLACE_BASELINE,
+            aeb.ASSET_AUTHORING_PCG_REPLACE_TARGET,
+        },
+        "pcg_surface_discovery_roundtrip": {
+            aeb.ASSET_AUTHORING_PCG_DISCOVERY_GRAPH,
+        },
+    }
+    observed_scratch_paths: Dict[str, Set[str]] = {}
+    for workflow in expected_workflows:
+        pcg_task = pcg_by_workflow.get(workflow, {})
+        paths: Set[str] = set()
+        for step in pcg_task.get("chain", []) + pcg_task.get("verify", []):
+            args = step.get("args", {}) if isinstance(step, dict) else {}
+            for field in ("asset_path", "source_asset_path", "target_asset_path", "subgraph_asset_path"):
+                path = args.get(field)
+                if isinstance(path, str) and path.startswith(aeb.ASSET_AUTHORING_PCG_ROOT):
+                    paths.add(path.split(".", 1)[0])
+        observed_scratch_paths[workflow] = paths
+    check("PCG workflows own exact non-overlapping scratch graph sets",
+          observed_scratch_paths == expected_scratch_paths
+          and sum(len(paths) for paths in observed_scratch_paths.values())
+          == len(set().union(*observed_scratch_paths.values())),
+          f"observed={observed_scratch_paths}")
+
+    for workflow in sorted(expected_workflows - {"pcg_graph_idempotent_authoring_roundtrip"}):
+        pcg_task = pcg_by_workflow.get(workflow, {})
+        save_reload_steps = [
+            step for step in pcg_task.get("chain", [])
+            if isinstance(step, dict)
+            and step.get("args", {}).get("action") == "save_asset"
+            and step.get("args", {}).get("verify_reload") is True
+            and step.get("expect", {}).get("$.reloaded") is True
+        ]
+        check(f"PCG {workflow} crosses a verified package reload boundary",
+              bool(save_reload_steps),
+              f"save_reload_steps={save_reload_steps}")
+
+    root_selected, root_selection = aeb.select_tasks(
+        aeb.DEFAULT_TASKS,
+        aeb.DEFAULT_TESTSETS,
+        module_ids=["asset_authoring.pcg"],
+    )
+    check("PCG root module selects every generated PCG task",
+          [row.get("id") for row in root_selected] == [row.get("id") for row in pcg_tasks]
+          and root_selection.get("selection_filters", {}).get("module_ids")
+          == ["asset_authoring.pcg"],
+          f"selected={[row.get('id') for row in root_selected]} "
+          f"expected={[row.get('id') for row in pcg_tasks]} selection={root_selection}")
+
+    for workflow in sorted(expected_workflows):
+        pcg_task = pcg_by_workflow.get(workflow)
+        if not pcg_task:
+            continue
+        module_id = f"asset_authoring.pcg.{pcg_task.get('edit_domain')}"
+        leaf_selected, leaf_selection = aeb.select_tasks(
+            aeb.DEFAULT_TASKS,
+            aeb.DEFAULT_TESTSETS,
+            module_ids=[module_id],
+        )
+        check(f"PCG leaf module {module_id} selects only {workflow}",
+              [row.get("id") for row in leaf_selected] == [pcg_task.get("id")]
+              and leaf_selection.get("selection_filters", {}).get("module_ids") == [module_id],
+              f"selected={[row.get('id') for row in leaf_selected]} selection={leaf_selection}")
+
+
+def test_ui_high_usage_asset_authoring_contract(tasks: List[Dict[str, Any]]) -> None:
+    expected_actions_by_workflow = {
+        "ui_registry_layout_accessibility_roundtrip": {
+            "list_widget_types",
+            "dump_property_allowlist",
+            "describe_widget_type_schema",
+            "list_widget_property_enums",
+            "list_widget_events",
+            "get_widget_bindings",
+            "audit_accessibility",
+            "audit_widget_layout",
+            "measure_widget_layout",
+            "compute_widget_uispec_fingerprint",
+        },
+        "ui_commonui_content_framework_roundtrip": {
+            "configure_numeric_text",
+            "configure_rotator",
+            "configure_animated_switcher",
+            "setup_common_list_view",
+            "create_widget_carousel",
+            "create_hardware_visibility_border",
+            "create_lazy_image",
+            "create_load_guard",
+            "get_common_framework_status",
+            "describe_common_widget_blueprint",
+            "describe_common_messaging_flow",
+            "validate_common_dialog_contract",
+            "list_platform_input_tables",
+        },
+        "ui_uispec_diff_patch_roundtrip": {
+            "build_ui_from_spec",
+            "apply_ui_spec_patch",
+            "dump_ui_spec_schema",
+            "dump_ui_spec",
+            "diff_ui_spec",
+            "compute_widget_uispec_fingerprint",
+        },
+        "ui_animation_inspection_delta_binding_roundtrip": {
+            "create_animation_v2",
+            "apply_animation_delta",
+            "remap_animation_binding",
+            "get_animation_overview",
+            "get_animation_timeline",
+            "get_animation_time_slice",
+            "get_animation_details",
+        },
+    }
+    ui_tasks = [row for row in tasks if row.get("domain") == "ui"]
+    workflow_counts = collections.Counter(row.get("workflow") for row in ui_tasks)
+    ui_by_workflow = {row.get("workflow"): row for row in ui_tasks}
+    check(
+        "UI suite contains every high-usage UMG/CommonUI workflow exactly once",
+        set(expected_actions_by_workflow).issubset(ui_by_workflow)
+        and all(workflow_counts[workflow] == 1 for workflow in expected_actions_by_workflow),
+        f"counts={dict(sorted(workflow_counts.items(), key=lambda item: str(item[0])))}",
+    )
+
+    for workflow, required_actions in expected_actions_by_workflow.items():
+        task = ui_by_workflow.get(workflow, {})
+        actions = task_actions(task)
+        check(
+            f"UI workflow {workflow} executes its required action contract",
+            required_actions.issubset(actions),
+            f"missing={sorted(required_actions - actions)}",
+        )
+        check(
+            f"UI workflow {workflow} records source and local skill references",
+            any(
+                isinstance(ref, str) and ref.startswith("source:")
+                for ref in task.get("reference_context", [])
+            )
+            and any(
+                isinstance(ref, str)
+                and ref.startswith("skill_ref: Plugins/Monolith/Skills/unreal-ui/")
+                for ref in task.get("reference_context", [])
+            ),
+            f"reference_context={task.get('reference_context')}",
+        )
+
+        save_reload_steps = [
+            step
+            for step in task.get("chain", [])
+            if isinstance(step, dict)
+            and step.get("args", {}).get("action") == "save_asset"
+            and step.get("args", {}).get("verify_reload") is True
+            and step.get("expect", {}).get("$.reloaded") is True
+        ]
+        check(
+            f"UI workflow {workflow} crosses a verified package reload boundary",
+            bool(save_reload_steps),
+            f"save_reload_steps={save_reload_steps}",
+        )
+
+        module_id = f"asset_authoring.ui.{task.get('edit_domain')}"
+        leaf_selected, leaf_selection = aeb.select_tasks(
+            aeb.DEFAULT_TASKS,
+            aeb.DEFAULT_TESTSETS,
+            module_ids=[module_id],
+        )
+        check(
+            f"UI leaf module {module_id} selects only {workflow}",
+            [row.get("id") for row in leaf_selected] == [task.get("id")]
+            and leaf_selection.get("selection_filters", {}).get("module_ids") == [module_id],
+            f"selected={[row.get('id') for row in leaf_selected]} selection={leaf_selection}",
+        )
+
+    expected_scratch_paths = {
+        "ui_registry_layout_accessibility_roundtrip": {
+            aeb.ASSET_AUTHORING_UI_DISCOVERY,
+        },
+        "ui_commonui_content_framework_roundtrip": {
+            aeb.ASSET_AUTHORING_UI_COMMON_CONTENT,
+            aeb.ASSET_AUTHORING_UI_COMMON_ENTRY,
+        },
+        "ui_uispec_diff_patch_roundtrip": {
+            aeb.ASSET_AUTHORING_UI_SPEC_PATCH,
+        },
+        "ui_animation_inspection_delta_binding_roundtrip": {
+            aeb.ASSET_AUTHORING_UI_ANIMATION,
+        },
+    }
+    observed_scratch_paths: Dict[str, Set[str]] = {}
+    path_fields = ("asset_path", "save_path", "wbp_path")
+    for workflow in expected_actions_by_workflow:
+        task = ui_by_workflow.get(workflow, {})
+        paths: Set[str] = set()
+        for step in task.get("chain", []) + task.get("verify", []):
+            args = step.get("args", {}) if isinstance(step, dict) else {}
+            for field in path_fields:
+                path = args.get(field)
+                if isinstance(path, str) and path.startswith(aeb.ASSET_AUTHORING_UI_ROOT):
+                    paths.add(path.split(".", 1)[0])
+            for path in args.get("asset_paths", []):
+                if isinstance(path, str) and path.startswith(aeb.ASSET_AUTHORING_UI_ROOT):
+                    paths.add(path.split(".", 1)[0])
+            entry_class = args.get("entry_class")
+            if isinstance(entry_class, str) and entry_class.startswith(aeb.ASSET_AUTHORING_UI_ROOT):
+                paths.add(entry_class.split(".", 1)[0])
+        observed_scratch_paths[workflow] = paths
+    check(
+        "UI high-usage workflows own exact non-overlapping scratch asset sets",
+        observed_scratch_paths == expected_scratch_paths
+        and sum(len(paths) for paths in observed_scratch_paths.values())
+        == len(set().union(*observed_scratch_paths.values())),
+        f"observed={observed_scratch_paths}",
+    )
+
+    discovery_task = ui_by_workflow.get("ui_registry_layout_accessibility_roundtrip", {})
+    registry_steps = [
+        step
+        for step in discovery_task.get("verify", [])
+        if step.get("args", {}).get("action") == "list_widget_types"
+    ]
+    check(
+        "UI discovery benchmark proves reflection-backed CommonUI type filtering",
+        len(registry_steps) == 1
+        and registry_steps[0].get("args", {}).get("module_filter") == "CommonUI"
+        and registry_steps[0].get("args", {}).get("filter") == "display"
+        and "CommonNumericTextBlock" in registry_steps[0].get("contains", [])
+        and "total_registered" in registry_steps[0].get("contains", []),
+        f"steps={registry_steps}",
+    )
+
+    guarded_workflows = {
+        "ui_uispec_diff_patch_roundtrip": "apply_ui_spec_patch",
+        "ui_animation_inspection_delta_binding_roundtrip": "apply_animation_delta",
+    }
+    for workflow, action in guarded_workflows.items():
+        task = ui_by_workflow.get(workflow, {})
+        action_steps = [
+            step for step in task.get("chain", [])
+            if step.get("args", {}).get("action") == action
+        ]
+        modes = {
+            (
+                step.get("args", {}).get("dry_run"),
+                step.get("args", {}).get("confirm"),
+            )
+            for step in action_steps
+        }
+        check(
+            f"UI {action} benchmark covers dry-run and explicitly confirmed apply",
+            modes == {(True, False), (False, True)},
+            f"modes={modes}",
+        )
+
+    animation_task = ui_by_workflow.get(
+        "ui_animation_inspection_delta_binding_roundtrip", {}
+    )
+    remap_steps = [
+        step
+        for step in animation_task.get("chain", [])
+        if step.get("args", {}).get("action") == "remap_animation_binding"
+    ]
+    remap_modes = {
+        (
+            step.get("args", {}).get("dry_run"),
+            step.get("args", {}).get("confirm"),
+        )
+        for step in remap_steps
+    }
+    check(
+        "UI animation binding remap covers dry-run and explicitly confirmed apply",
+        remap_modes == {(True, False), (False, True)}
+        and all(
+            step.get("args", {}).get("from_widget_name") == "BenchAnimSource"
+            and step.get("args", {}).get("to_widget_name") == "BenchAnimTarget"
+            for step in remap_steps
+        ),
+        f"steps={remap_steps}",
+    )
+
+    common_task = ui_by_workflow.get("ui_commonui_content_framework_roundtrip", {})
+    advisory_validators = {
+        step.get("args", {}).get("action"): step
+        for step in common_task.get("verify", [])
+        if step.get("args", {}).get("action")
+        in {"describe_common_messaging_flow", "validate_common_dialog_contract"}
+    }
+    check(
+        "project-dependent Common framework validators are explicit advisory evidence",
+        set(advisory_validators)
+        == {"describe_common_messaging_flow", "validate_common_dialog_contract"}
+        and all(step.get("server_ok_only") is True for step in advisory_validators.values())
+        and all(
+            isinstance(step.get("server_ok_reason"), str)
+            and len(step.get("server_ok_reason", "").strip()) >= 20
+            for step in advisory_validators.values()
+        ),
+        f"validators={advisory_validators}",
+    )
+
+    new_suite_actions: Set[str] = set()
+    for workflow in expected_actions_by_workflow:
+        new_suite_actions.update(task_actions(ui_by_workflow.get(workflow, {})))
+    runtime_only_actions = {
+        "set_colorblind_mode",
+        "set_text_scale",
+        "register_tab",
+        "create_button_group",
+        "dump_action_router_state",
+    }
+    check(
+        "asset-authoring UI expansion excludes runtime-only PIE actions",
+        not new_suite_actions.intersection(runtime_only_actions),
+        f"unexpected={sorted(new_suite_actions.intersection(runtime_only_actions))}",
+    )
+
 
 def test_manifest_matches_tasks(tasks: List[Dict[str, Any]], manifest: Dict[str, Any]) -> None:
     check("task_count matches JSONL rows", manifest.get("task_count") == len(tasks),
@@ -963,6 +1372,13 @@ def test_root_readme_generated_summary(tasks: List[Dict[str, Any]], manifest: Di
     check("root README global corpus counts match generated artifacts",
           expected_summary in readme_text,
           f"expected={expected_summary!r}")
+    expected_task_file_row = (
+        f"| `tasks.jsonl` | {counts['canonical_tasks']} benchmark tasks across "
+        f"{len(aeb.WEIGHTS)} categories |"
+    )
+    check("root README file table matches canonical task and category counts",
+          expected_task_file_row in readme_text,
+          f"expected={expected_task_file_row!r}")
     expected_asset_authoring_row = (
         f"| `asset_authoring` | {counts['asset_authoring_tasks']} | mixed owner namespaces |"
     )
@@ -1639,6 +2055,8 @@ def main() -> int:
     tasks = aeb.load_jsonl(aeb.resolve_plugin_path(aeb.DEFAULT_TASKS))
     manifest = load_json(aeb.DEFAULT_MANIFEST)
 
+    test_generator_preserves_expected_read_only_outputs()
+    test_generator_uses_platform_native_line_endings()
     test_manifest_matches_tasks(tasks, manifest)
     test_task_shape(tasks)
     test_transport_failure_gate()
@@ -1655,6 +2073,7 @@ def main() -> int:
     test_structured_expect_scoring()
     test_engine_font_resolver_discovery()
     test_pcg_asset_authoring_contract(tasks)
+    test_ui_high_usage_asset_authoring_contract(tasks)
     test_high_error_recovery_coverage(tasks)
     test_asset_type_and_testset_indexes(tasks, manifest)
     test_root_readme_generated_summary(tasks, manifest)

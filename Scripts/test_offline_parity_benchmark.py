@@ -153,6 +153,83 @@ def test_build_actions_substitutes_tokens_and_skips_missing_chain() -> None:
     check("offline_unsupported flag carried from jsonl", len(ou) >= 1, f"n={len(ou)}")
 
 
+def test_authoritative_query_bundle_resolution_is_manifest_selected() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = pathlib.Path(temp_dir)
+        binaries = root / "Binaries"
+        validator = (
+            root
+            / "Tools"
+            / "MonolithQuery"
+            / "publish_query_bundle.py"
+        )
+        binaries.mkdir(parents=True)
+        validator.parent.mkdir(parents=True)
+        validator.write_text("# unit validator\n", encoding="utf-8")
+        manifest = binaries / "monolith_query.current.json"
+        manifest.write_text("{}\n", encoding="utf-8")
+        immutable = binaries / "monolith_query-0123456789abcdef.exe"
+        immutable.write_bytes(b"immutable-query")
+        mutable_alias = binaries / "monolith_query.exe"
+        mutable_alias.write_bytes(b"stale-alias")
+
+        original_run = opb._run
+        opb._run = lambda command, cwd: (
+            0,
+            json.dumps({"file": immutable.name}),
+            "",
+        )
+        try:
+            resolved_exe, resolved_manifest = (
+                opb.resolve_authoritative_query_bundle(root)
+            )
+        finally:
+            opb._run = original_run
+
+        check(
+            "Query bundle resolver selects immutable executable",
+            resolved_exe == immutable.resolve(),
+            f"resolved={resolved_exe}",
+        )
+        check(
+            "Query bundle resolver retains manifest identity",
+            resolved_manifest == manifest.resolve(),
+            f"manifest={resolved_manifest}",
+        )
+        check(
+            "Query bundle resolver does not select compatibility alias",
+            resolved_exe != mutable_alias.resolve(),
+        )
+
+
+def test_authoritative_query_bundle_resolution_rejects_invalid_leaf() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = pathlib.Path(temp_dir)
+        validator = (
+            root
+            / "Tools"
+            / "MonolithQuery"
+            / "publish_query_bundle.py"
+        )
+        validator.parent.mkdir(parents=True)
+        validator.write_text("# unit validator\n", encoding="utf-8")
+
+        original_run = opb._run
+        opb._run = lambda command, cwd: (
+            0,
+            json.dumps({"file": "../outside.exe"}),
+            "",
+        )
+        rejected = False
+        try:
+            opb.resolve_authoritative_query_bundle(root)
+        except RuntimeError:
+            rejected = True
+        finally:
+            opb._run = original_run
+        check("Query bundle resolver rejects path traversal", rejected)
+
+
 def test_input_fingerprint_tracks_only_declared_database_dependencies() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         root = pathlib.Path(temp_dir)
@@ -161,10 +238,18 @@ def test_input_fingerprint_tracks_only_declared_database_dependencies() -> None:
         (root / "Saved" / "ProjectIndex.db").write_bytes(b"project")
         exe = root / "query.exe"
         py = root / "offline.py"
+        query_manifest = root / "Binaries" / "monolith_query.current.json"
+        query_manifest.parent.mkdir()
         exe.write_bytes(b"query")
         py.write_text("# offline\n", encoding="utf-8")
+        query_manifest.write_text("{}\n", encoding="utf-8")
 
-        inputs = opb.build_offline_parity_inputs(exe, py, root)
+        inputs = opb.build_offline_parity_inputs(
+            exe,
+            py,
+            root,
+            query_manifest,
+        )
 
     database_paths = [row["path"] for row in inputs["database_files"]]
     check(
@@ -181,6 +266,7 @@ def test_input_fingerprint_tracks_only_declared_database_dependencies() -> None:
             "runner",
             "offline_exe",
             "offline_python",
+            "query_manifest",
         },
         f"file_inputs={sorted(inputs['files'])}",
     )

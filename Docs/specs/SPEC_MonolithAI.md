@@ -1,4 +1,4 @@
-# Monolith — MonolithAI Module
+﻿# Monolith — MonolithAI Module
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
@@ -44,8 +44,12 @@ Two navigation actions added for the test/profiling harness workflow (`MonolithA
 
 | Action | Params | Description |
 |--------|--------|-------------|
-| `rebuild_navigation` | `save_after` (bool), `nav_timeout` (seconds) | Rebuild the navigation system with a bounded async-generation wait, optionally saving the level after generation completes. |
+| `rebuild_navigation` | `save_after` (bool), `timeout_seconds` (number, clamped to 1–120) | Rebuild the navigation system with a bounded async-generation wait. When saving is requested, each completed navigation-data package is written with its canonical extension (`.umap` for map packages, `.uasset` for ordinary content); filename resolution failures are explicit per-package failures. |
 | `validate_nav_points` | `points:[{name, location}]`, `pairs` (index references) | Per-point projection onto the navmesh plus per-pair path existence / length check. `pairs` reference points by index into `points`. |
+
+Regression coverage: `Monolith.AI.Navigation.PackageSaveExtension` proves that
+`rebuild_navigation(save_after=true)` cannot shadow an existing map by writing its
+`UWorld` package as a same-name `.uasset`.
 
 ### Phase J fixes touching this module
 

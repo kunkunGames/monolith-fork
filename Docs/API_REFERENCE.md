@@ -1,6 +1,6 @@
 ﻿# Monolith API Reference
 
-**Version:** v0.21.3 · **Last updated:** 2026-07-26
+**Version:** v0.21.3 · **Last updated:** 2026-07-28
 
 **In-tree action total is approximate: current source contains roughly 2126 in-tree `RegisterAction` registrations** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large and build-flag dependent to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `console` namespace adds live `IConsoleManager` registry discovery plus EngineSource.db/FTS5 snapshot search. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
@@ -1412,6 +1412,33 @@ Export a StringTable to CSV under the project directory. Requires dry_run=true o
 | `dry_run` | boolean | optional | Preview without writing. Default: `false` |
 | `confirm` | boolean | optional | Required true for non-dry-run writes. Default: `false` |
 
+### `localization.set_target_text_search_directories`
+
+Set one existing project Localization Dashboard target's Gather Text From Source directories. The action runtime-loads the engine Localization module, rejects a stale live model, persists `DefaultEditor.ini`, and patches only the canonical `SearchDirectoryPaths` rows in the existing `<Target>_Gather.ini`. It never creates a missing config or auto-checks out a file.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `target` | string | **required** | Exact project localization target name |
+| `search_directories` | array | **required** | Unique existing `%LOCENGINEROOT%` or `%LOCPROJECTROOT%` rooted directories; traversal, wildcards, absolute paths, and other roots are rejected |
+| `source_control_policy` | string | **required** | Must be `require_checked_out` |
+| `target_changelist` | integer | **required** | Positive exact numbered changelist that already owns every write file; the default changelist is forbidden |
+| `dry_run` | boolean | optional | ForceUpdate source-control state and return the exact delta, per-file `actual_changelist`, readiness, and blockers without mutation. Default: `false` |
+| `confirm` | boolean | optional | Required true for non-dry-run writes. Confirm requires every write file to be a current, non-conflicted existing edit owned by this client in `target_changelist`, repeats ForceUpdate after acquiring its mutation flag but before snapshots/writes, and audits again after write. Default: `false` |
+
+The handler owns source-control preflight and rollback. Provider-disabled/unavailable, unknown, untracked, added, deleted, ignored, stale, conflicted, other-user, unopened, default-changelist, and changelist-mismatch states produce structured blockers. Dry-run returns transport success with `ready=false`; confirm fails before mutation. Gather-config input must have unique case-insensitive `GatherTextStepN` names, exact target source/destination scope, and one canonical `GatherTextFromSource` section. All non-directory text and line terminators are preserved character-for-character.
+
+### `localization.run_target_pipeline`
+
+Plan or run the selected Gather Text commandlet operations for one existing project target. The child process always runs with source control disabled (`-nop4`, no `-EnableSCC`); callers must pre-open any existing generated output files in the intended changelist.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `target` | string | **required** | Exact project localization target name |
+| `operations` | array | optional | Ordered subset of `gather` and `compile`; gather must precede compile |
+| `timeout_seconds` | integer | optional | Per-operation timeout |
+| `dry_run` | boolean | optional | Return config paths, outputs, readiness, and blockers without launching a child process. Default: `false` |
+| `confirm` | boolean | optional | Required true to launch the asynchronous pipeline. Default: `false` |
+
 ## collection
 
 Content Browser collection CRUD, dynamic query management, and asset association. Backed by the CollectionManager module.
@@ -1543,7 +1570,14 @@ Unreal Engine C++ source code navigation. 1M+ symbols indexed. **13 actions** (1
 | `ref_kind` | string | optional | (`find_references` only) Filter by reference kind |
 | `limit` | integer | optional | Default: `50` |
 
-`source.find_references` returns `match_status=no_symbol`, `count=0`, and `next_actions` when the requested symbol is not indexed. Use `source.search_source` to discover the indexed spelling before retrying.
+`source.find_references` validates the complete request before consulting
+mutable source-index availability. Invalid `symbol`, `ref_kind`, or `limit`
+values therefore return `-32602` with
+`error.data.failure_cause=invalid_param` even while indexing or after a
+database-open failure; an availability condition never masks a caller contract
+error. A well-formed request whose symbol is not indexed returns
+`match_status=no_symbol`, `count=0`, and `next_actions`. Use
+`source.search_source` to discover the indexed spelling before retrying.
 
 ### `source.search_source`
 
@@ -1590,7 +1624,21 @@ Unreal Engine C++ source code navigation. 1M+ symbols indexed. **13 actions** (1
 
 ### `source.trigger_reindex` · `source.trigger_project_reindex`
 
-`trigger_reindex` does a full clean build (engine + shaders + project). `trigger_project_reindex` is incremental (project Source/ + Plugins/ only). Both take *no parameters*, require prior durable activation through the editor-console command `Monolith.StartIndexing`, and never enable it implicitly. Offline `monolith_query.exe source trigger_project_reindex` returns live-only guidance instead of an unknown-action error; actual indexing still requires the editor-backed MCP action.
+`trigger_reindex` does a full clean build (engine + shaders + project). `trigger_project_reindex` is incremental (project Source/ + Plugins/ only). Both take *no parameters*, require prior durable activation through the editor-console command `Monolith.StartIndexing`, and never enable it implicitly. A success response means the subsystem worker actually started; disabled indexing, a missing bootstrap DB for the project-only action, or worker-start failure is a real `-32000` Action error with the rejected stage in `error_data`. Offline `monolith_query.exe source trigger_project_reindex` returns live-only guidance instead of an unknown-action error; actual indexing still requires the editor-backed MCP action.
+
+All live `source` handlers that require `EngineSource.db`, including `source.health`, share one fail-closed unavailability envelope. It distinguishes `indexing`, `reindex_required`, `missing`, `open_failed`, and subsystem-unavailable states. The structured fields are:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `error_data.failure_cause` | string | Stable `source_index_<state>` class, or a trigger-request failure class. |
+| `error_data.database_state` | string | `ready`, `indexing`, `reindex_required`, `missing`, `open_failed`, or `subsystem_unavailable`. |
+| `error_data.database_path` | string | Authoritative configured `EngineSource.db` path. |
+| `error_data.database_exists`, `database_open`, `indexing` | bool | Current file/handle/writer state. |
+| `error_data.requires_successful_reindex` | bool | True when a failed run has latched reads closed. |
+| `error_data.last_index_context`, `last_failure_stage`, `last_failure_detail` | string | Retained run context and the exact failure boundary/detail, such as `prune_project_rows` plus SQLite's corruption error. The first failing prune statement is retained across `ROLLBACK`; rollback's `"not an error"` state never replaces the root detail. |
+| `error_data.last_files_processed`, `last_symbols_extracted`, `last_errors` | integer | Last completion counters. |
+
+Recovery stays explicit: wait when `database_state=indexing`; otherwise follow `related_actions` to `source.trigger_reindex`, then verify with `source.health include_deep_checks=true`. The plugin never silently swaps, deletes, or reopens a partially written DB as a fallback.
 
 ### `source.impact_radius`
 
@@ -1626,6 +1674,8 @@ The response carries the common list-projection contract next to the legacy fiel
 Default `source.health` is a fast shallow check. It validates required tables, schema metadata, journal mode, triggers, and CRG structure without large row-count/parity scans.
 
 The result includes `maintenance_recommendation` with explicit `maintenance_required`, `expensive_maintenance_required`, `reindex_required`, `repair_fts_required`, `repair_crg_cache_required`, `repair_override_edges_required`, `deep_health_ran`, `routine_deep_health_recommended`, and `reason_codes`. When a shallow result is healthy, deep health is reported only as `maintenance_recommendation.optional_diagnostic_actions`, not as a required `next_actions` entry.
+
+If the DB is unavailable before health can run, the action returns the shared structured database envelope documented above. In particular, a failed incremental run preserves the indexer's failure stage and underlying SQLite detail instead of reducing corruption, a missing file, and an active writer to the same “database not available” string.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -1679,12 +1729,22 @@ Token-efficient source review package: seed symbol, risk, impact summary, compac
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `module_filter` | string | optional | Substring match against the **declaring** module's name. Empty scans all. Default: `""` |
-| `include_whitelist` | bool | optional | When `true`, also reports references to whitelisted implicit-dep modules (debug aid). Default: `false` |
-| `limit` | integer | optional | Page size. Hard cap `500`. Default: `100` |
+| `scan_root` | string | optional | Directory that bounds the recursive scan. Relative paths resolve from the project root; the default scans project `Source` and `Plugins`. |
+| `limit` | integer | optional | Page size, clamped to `1..200`. Default: `50`. Fractional and wrong-type values fail before DB access. |
 | `cursor` | string | optional | Opaque base64+JSON cursor from a prior `next_cursor` |
 
-**Returns:** `{ "violations": [ { "declaring_module", "source_path", "source_line", "used_type", "missing_dep" } ], "scanned_modules": N, "scanned_declarations": N, "next_cursor": "<opaque>" }`. Violations are sorted by `(declaring_module, source_path, source_line)`. Multi-argument templates extract only the first argument and typedef aliases aren't chased to the underlying type — both are documented heuristics.
+**Returns:** `{ "violations": [ { "file", "line", "symbol", "expected_module", "currently_listed_modules" } ], "total_estimate": N, "next_cursor": "<opaque>" }`. `next_cursor` is present only when another page exists. Violations are sorted by `(file, line, symbol)`. Multi-argument templates extract only the first argument and typedef aliases aren't chased to the underlying type — both are documented heuristics.
+
+### `source.suggest_build_cs_deps`
+
+Read one `.h`/`.cpp` path and/or an explicit UE type-name list, resolve each used type to its owning module through `EngineSource.db`, and report the required modules missing from the declaring module's on-disk `Build.cs`. The handler validates the complete request before checking DB availability; malformed optional fields never become missing-input or DB errors.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `file_path` | string | one of `file_path`/`symbols` | Source file used both for on-disk symbol extraction and path-first declaring-module resolution. |
+| `symbols` | string array | one of `file_path`/`symbols` | Explicit non-empty UE type names. Any wrong-type or empty element rejects the complete request. |
+
+**Returns:** `{ "declaring_module", "build_cs" | "build_cs_note", "required_modules": [], "missing": [] }`. The action is read-only and live-only because it combines on-disk source/Build.cs reads with `EngineSource.db`.
 
 ---
 

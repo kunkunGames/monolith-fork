@@ -8,14 +8,127 @@
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
+#include "EdGraphSchema_K2.h"
 #include "GameplayTagContainer.h"
+#include "K2Node_FunctionResult.h"
+#include "K2Node_VariableGet.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Misc/PackageName.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithUIFrontendFocusUtils.h"
 #include "MonolithUIInternal.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UnrealType.h"
 #include "WidgetBlueprint.h"
+
+namespace MonolithUIFrontendFlowInternal
+{
+	FDesiredFocusResolution ResolveDesiredFocusWidget(const UWidgetBlueprint* Blueprint)
+	{
+		FDesiredFocusResolution Resolution;
+		if (!Blueprint)
+		{
+			Resolution.Source = TEXT("blueprint_unavailable");
+			return Resolution;
+		}
+
+		static const FName DesiredFocusGraphName(TEXT("BP_GetDesiredFocusTarget"));
+		for (const UEdGraph* Graph : Blueprint->FunctionGraphs)
+		{
+			if (!Graph || Graph->GetFName() != DesiredFocusGraphName)
+			{
+				continue;
+			}
+
+			Resolution.bOverrideGraphPresent = true;
+			Resolution.Source = TEXT("blueprint_override_return_missing");
+			FName ResolvedWidgetName = NAME_None;
+			bool bFoundFunctionResult = false;
+
+			for (const UEdGraphNode* Node : Graph->Nodes)
+			{
+				const UK2Node_FunctionResult* FunctionResult =
+					Cast<UK2Node_FunctionResult>(Node);
+				if (!FunctionResult)
+				{
+					continue;
+				}
+				bFoundFunctionResult = true;
+
+				const UEdGraphPin* ReturnPin =
+					FunctionResult->FindPin(TEXT("ReturnValue"), EGPD_Input);
+				if (!ReturnPin)
+				{
+					return Resolution;
+				}
+
+				if (ReturnPin->LinkedTo.Num() != 1 || !ReturnPin->LinkedTo[0])
+				{
+					Resolution.Source = ReturnPin->LinkedTo.IsEmpty()
+						? TEXT("blueprint_override_unconnected")
+						: TEXT("blueprint_override_ambiguous");
+					return Resolution;
+				}
+
+				const UEdGraphPin* LinkedPin = ReturnPin->LinkedTo[0];
+				const UK2Node_VariableGet* VariableGet = Cast<UK2Node_VariableGet>(LinkedPin->GetOwningNode());
+				if (!VariableGet)
+				{
+					Resolution.Source = TEXT("blueprint_override_unsupported_return");
+					return Resolution;
+				}
+
+				const UEdGraphPin* VariableValuePin = VariableGet->GetValuePin();
+				const UClass* VariableClass =
+					Cast<UClass>(LinkedPin->PinType.PinSubCategoryObject.Get());
+				if (LinkedPin != VariableValuePin
+					|| LinkedPin->Direction != EGPD_Output
+					|| LinkedPin->PinType.PinCategory != UEdGraphSchema_K2::PC_Object
+					|| !VariableClass
+					|| !VariableClass->IsChildOf(UWidget::StaticClass()))
+				{
+					Resolution.Source = TEXT("blueprint_override_unsupported_return");
+					return Resolution;
+				}
+
+				const FName WidgetName = VariableGet->GetVarName();
+				if (WidgetName.IsNone() || !Blueprint->WidgetTree || !Blueprint->WidgetTree->FindWidget(WidgetName))
+				{
+					Resolution.Source = TEXT("blueprint_override_widget_missing");
+					return Resolution;
+				}
+
+				if (ResolvedWidgetName.IsNone())
+				{
+					ResolvedWidgetName = WidgetName;
+				}
+				else if (ResolvedWidgetName != WidgetName)
+				{
+					Resolution.Source = TEXT("blueprint_override_ambiguous");
+					return Resolution;
+				}
+			}
+
+			if (!bFoundFunctionResult || ResolvedWidgetName.IsNone())
+			{
+				return Resolution;
+			}
+
+			Resolution.WidgetName = ResolvedWidgetName;
+			Resolution.Source = TEXT("blueprint_override");
+			return Resolution;
+		}
+
+		const UUserWidget* WidgetCDO = Blueprint->GeneratedClass
+			? Blueprint->GeneratedClass->GetDefaultObject<UUserWidget>()
+			: nullptr;
+		Resolution.WidgetName = WidgetCDO ? WidgetCDO->GetDesiredFocusWidgetName() : NAME_None;
+		Resolution.Source = Resolution.WidgetName.IsNone()
+			? TEXT("class_default_none")
+			: TEXT("class_default");
+		return Resolution;
+	}
+}
 
 namespace
 {
@@ -584,13 +697,24 @@ namespace
 
         if (!Spec.DesiredFocusWidget.IsEmpty())
         {
-            const UUserWidget* WidgetCDO = WBP->GeneratedClass ? WBP->GeneratedClass->GetDefaultObject<UUserWidget>() : nullptr;
-            const FName ActualFocus = WidgetCDO ? WidgetCDO->GetDesiredFocusWidgetName() : NAME_None;
+            const MonolithUIFrontendFlowInternal::FDesiredFocusResolution FocusResolution =
+                MonolithUIFrontendFlowInternal::ResolveDesiredFocusWidget(WBP);
+            const FName ActualFocus = FocusResolution.WidgetName;
             const bool bMatches = ActualFocus == FName(*Spec.DesiredFocusWidget);
             AddCheck(ScreenChecks, TEXT("desired_focus_widget"), bMatches, ActualFocus.ToString());
+            Screen->SetStringField(TEXT("desired_focus_resolution_source"), FocusResolution.Source);
+            Screen->SetBoolField(TEXT("desired_focus_override_graph_present"), FocusResolution.bOverrideGraphPresent);
             if (!bMatches)
             {
-                AddIssue(Issues, TEXT("desired_focus_widget_mismatch"), FString::Printf(TEXT("Screen '%s' desired focus is '%s', expected '%s'."), *Spec.AssetPath, *ActualFocus.ToString(), *Spec.DesiredFocusWidget));
+                AddIssue(
+                    Issues,
+                    TEXT("desired_focus_widget_mismatch"),
+                    FString::Printf(
+                        TEXT("Screen '%s' desired focus is '%s' from '%s', expected '%s'."),
+                        *Spec.AssetPath,
+                        *ActualFocus.ToString(),
+                        *FocusResolution.Source,
+                        *Spec.DesiredFocusWidget));
             }
         }
 

@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "snapshot_id": "activation-settings-compact-api-final-20260726-03",
+  "snapshot_id": "open-cl-review-20260730-05",
   "suites": {
     "OfflineParity": {
       "state": "accepted",
-      "evidence": "Benchmarks/OfflineParity/accepted/activation-settings-compact-api-final-20260726-03/summary.json",
-      "evidence_bundle_sha256": "055cef23f3fc8299b093772c2d493fdd91ab5806fc8a22db85f4b94b023f546f",
-      "input_fingerprint": "1846a1a51c66e1346c3b7c7ebf6f285c937c82803f9afff49ffd2f482c09dfe5",
-      "diagnostic": "Compact UMonolithSettings activation API, project-default-aware cache, and shared parity fixture against the final single-writer EngineSource baseline: 311 MATCH, 0 DIFF, 0 ERROR, 6 explicit decision_id-dependent SKIP. The accepted bundle fingerprints the verified 3.83 GB EngineSource.db content SHA-256.",
+      "evidence": "Benchmarks/OfflineParity/accepted/open-cl-review-20260730-05/summary.json",
+      "evidence_bundle_sha256": "f844d7cd3c65cc37c60c83378e6dc40bf25dd99f8cc6b47976c6ad218d62b7d1",
+      "input_fingerprint": "c0fb73b5f4fa5fc1480f6b1efe5d09d8a3c98fff7582ed03b8e52d0f86ea7d45",
+      "diagnostic": "Authoritative immutable Query bundle and current Source CRG cache against the final stable single-writer EngineSource baseline: 311 MATCH, 0 DIFF, 0 ERROR, 6 explicit decision_id-dependent SKIP. The accepted bundle fingerprints the verified 997,572,608-byte EngineSource.db content SHA-256 after the final scoped project-source refresh.",
       "namespace_results": {
         "cppreflect": {"pass": 96, "fail": 0, "expected_skip": 0},
         "decision": {"pass": 44, "fail": 0, "expected_skip": 6},

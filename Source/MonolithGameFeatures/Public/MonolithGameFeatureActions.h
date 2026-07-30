@@ -15,6 +15,7 @@ public:
 	static FMonolithActionResult ListActionClasses(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult DescribeActionSet(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult AddActionSetInputMapping(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult AddActionSetComponents(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult SetPrimaryAssetScan(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult AddGameFeatureDataInputMapping(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult AddGameFeatureDataWidgets(const TSharedPtr<FJsonObject>& Params);
@@ -31,6 +32,7 @@ public:
 	static TSharedPtr<FJsonObject> ListActionClassesSchema();
 	static TSharedPtr<FJsonObject> DescribeActionSetSchema();
 	static TSharedPtr<FJsonObject> AddActionSetInputMappingSchema();
+	static TSharedPtr<FJsonObject> AddActionSetComponentsSchema();
 	static TSharedPtr<FJsonObject> SetPrimaryAssetScanSchema();
 	static TSharedPtr<FJsonObject> AddGameFeatureDataInputMappingSchema();
 	static TSharedPtr<FJsonObject> AddGameFeatureDataWidgetsSchema();

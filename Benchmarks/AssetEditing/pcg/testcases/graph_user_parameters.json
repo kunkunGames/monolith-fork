@@ -1,0 +1,340 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "pcg",
+  "asset_type_slug": "pcg",
+  "edit_domain": "graph_user_parameters",
+  "route_edit_domain": "graph_user_parameters",
+  "module_id": "asset_authoring.pcg.graph_user_parameters",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.pcg.graph_user_parameters",
+    "edit": "asset_operation.edit.pcg.graph_user_parameters",
+    "save": "asset_operation.save.pcg.graph_user_parameters",
+    "readback_verify": "asset_operation.readback_verify.pcg.graph_user_parameters"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-549"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-549",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "pcg",
+      "edit_domain": "graph_user_parameters",
+      "blueprint_type": "",
+      "workflow": "pcg_graph_user_parameter_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "create_pcg_graph",
+        "set_pcg_graph_user_parameters",
+        "save_asset"
+      ],
+      "description": "Create or reuse an isolated PCGGraph, normalize two typed scalar user parameters, prove alternate defaults through dry-run/apply/reload/no-op, remove both atomically, and leave a saved empty parameter schema for deterministic reruns"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-549",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "create_pcg_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchUserParams",
+            "existing_policy": "return_existing",
+            "save": true
+          },
+          "expect": {
+            "$.class": "PCGGraph",
+            "$.existing_policy": "return_existing"
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "set_pcg_graph_user_parameters",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchUserParams",
+            "upsert": [
+              {
+                "name": "BenchEnabled",
+                "type": "bool",
+                "default_value": true
+              },
+              {
+                "name": "BenchDensity",
+                "type": "double",
+                "default_value": 0.25
+              }
+            ],
+            "dry_run": false,
+            "save": true
+          },
+          "expect": {
+            "$.dry_run": false,
+            "$.parameter_count_after": 2,
+            "$.operation_count": 2
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "set_pcg_graph_user_parameters",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchUserParams",
+            "upsert": [
+              {
+                "name": "BenchEnabled",
+                "type": "bool",
+                "default_value": false
+              },
+              {
+                "name": "BenchDensity",
+                "type": "double",
+                "default_value": 0.75
+              }
+            ],
+            "dry_run": true,
+            "save": true
+          },
+          "expect": {
+            "$.status": "would_update",
+            "$.changed": true,
+            "$.dry_run": true,
+            "$.parameter_count_before": 2,
+            "$.parameter_count_after": 2,
+            "$.operation_count": 2,
+            "$.saved": false
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "set_pcg_graph_user_parameters",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchUserParams",
+            "upsert": [
+              {
+                "name": "BenchEnabled",
+                "type": "bool",
+                "default_value": false
+              },
+              {
+                "name": "BenchDensity",
+                "type": "double",
+                "default_value": 0.75
+              }
+            ],
+            "dry_run": false,
+            "save": true
+          },
+          "expect": {
+            "$.status": "updated",
+            "$.changed": true,
+            "$.dry_run": false,
+            "$.parameter_count_after": 2,
+            "$.operation_count": 2,
+            "$.saved": true
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchUserParams",
+            "verify_reload": true
+          },
+          "expect": {
+            "$.success": true,
+            "$.saved": true,
+            "$.dirty_after_save": false,
+            "$.exists_on_disk": true,
+            "$.verify_reload": true,
+            "$.reloaded": true
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "set_pcg_graph_user_parameters",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchUserParams",
+            "upsert": [
+              {
+                "name": "BenchEnabled",
+                "type": "bool",
+                "default_value": false
+              },
+              {
+                "name": "BenchDensity",
+                "type": "double",
+                "default_value": 0.75
+              }
+            ],
+            "dry_run": true,
+            "save": true
+          },
+          "expect": {
+            "$.status": "unchanged",
+            "$.changed": false,
+            "$.dry_run": true,
+            "$.parameter_count_before": 2,
+            "$.parameter_count_after": 2,
+            "$.saved": false
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "set_pcg_graph_user_parameters",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchUserParams",
+            "remove": [
+              "BenchEnabled",
+              "BenchDensity"
+            ],
+            "dry_run": true,
+            "save": true
+          },
+          "expect": {
+            "$.status": "would_update",
+            "$.changed": true,
+            "$.dry_run": true,
+            "$.parameter_count_before": 2,
+            "$.parameter_count_after": 0,
+            "$.operation_count": 2,
+            "$.saved": false
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "set_pcg_graph_user_parameters",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchUserParams",
+            "remove": [
+              "BenchEnabled",
+              "BenchDensity"
+            ],
+            "dry_run": false,
+            "save": true
+          },
+          "expect": {
+            "$.status": "updated",
+            "$.changed": true,
+            "$.dry_run": false,
+            "$.parameter_count_before": 2,
+            "$.parameter_count_after": 0,
+            "$.operation_count": 2,
+            "$.saved": true
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchUserParams",
+            "verify_reload": true
+          },
+          "expect": {
+            "$.success": true,
+            "$.saved": true,
+            "$.dirty_after_save": false,
+            "$.exists_on_disk": true,
+            "$.verify_reload": true,
+            "$.reloaded": true
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "set_pcg_graph_user_parameters",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchUserParams",
+            "upsert": [
+              {
+                "name": "BenchEnabled",
+                "type": "bool",
+                "default_value": true
+              },
+              {
+                "name": "BenchDensity",
+                "type": "double",
+                "default_value": 0.25
+              }
+            ],
+            "dry_run": true,
+            "save": true
+          },
+          "expect": {
+            "$.status": "would_update",
+            "$.changed": true,
+            "$.dry_run": true,
+            "$.parameter_count_before": 0,
+            "$.parameter_count_after": 2,
+            "$.operation_count": 2,
+            "$.saved": false
+          }
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "graph_user_parameters",
+      "blueprint_type": "",
+      "domain": "pcg",
+      "workflow": "pcg_graph_user_parameter_roundtrip",
+      "description": "Create or reuse an isolated PCGGraph, normalize two typed scalar user parameters, prove alternate defaults through dry-run/apply/reload/no-op, remove both atomically, and leave a saved empty parameter schema for deterministic reruns",
+      "reference_context": [
+        "source: Engine/Plugins/PCG/Source/PCG/Public/PCGGraph.h",
+        "source: Plugins/Monolith/Source/MonolithPCG/Private/MonolithPCGGraphAuthoringActions.cpp",
+        "skill_ref: Plugins/Monolith/Skills/unreal-pcg/references/verification-recipes.md"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "create_pcg_graph",
+          "set_pcg_graph_user_parameters",
+          "save_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

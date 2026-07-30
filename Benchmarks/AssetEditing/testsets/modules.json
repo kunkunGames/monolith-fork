@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-07-17T10:24:39.993026+00:00",
+  "generated_at": "2026-07-30T14:45:42.791281+00:00",
   "description": "Split-shard manifest for generated AssetEditing test-set modules. Use index.json for routing and module_shards/*.json for module payloads; tasks.jsonl remains the canonical task payload stream.",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "ea3c428db9e0fdb056ad50f6e36fce5a1d12383eef5b97982b9e371308a10165",
+  "source_task_sha256": "48ef08cb65bfcafb3877e48e05e619a364028a6523e31c8419d99f65d776057b",
   "module_storage": "split_shards",
   "module_shard_dir": "Benchmarks/AssetEditing/testsets/module_shards",
-  "task_count": 579,
+  "task_count": 588,
   "task_id_order": [
     "BEB-001",
     "BEB-002",
@@ -588,9 +588,18 @@
     "BEB-576",
     "BEB-577",
     "BEB-578",
-    "BEB-579"
+    "BEB-579",
+    "BEB-580",
+    "BEB-581",
+    "BEB-582",
+    "BEB-583",
+    "BEB-584",
+    "BEB-585",
+    "BEB-586",
+    "BEB-587",
+    "BEB-588"
   ],
-  "module_count": 1824,
+  "module_count": 1878,
   "routing_axes": [
     "category",
     "domain",
@@ -962,7 +971,12 @@
         "pcg": {
           "module": "asset_authoring.pcg",
           "edit_domains": {
-            "graph_authoring": "asset_authoring.pcg.graph_authoring"
+            "graph_authoring": "asset_authoring.pcg.graph_authoring",
+            "graph_mutation": "asset_authoring.pcg.graph_mutation",
+            "graph_replacement": "asset_authoring.pcg.graph_replacement",
+            "graph_user_parameters": "asset_authoring.pcg.graph_user_parameters",
+            "subgraph_assignment": "asset_authoring.pcg.subgraph_assignment",
+            "surface_discovery": "asset_authoring.pcg.surface_discovery"
           }
         },
         "project": {
@@ -976,16 +990,20 @@
         "ui": {
           "module": "asset_authoring.ui",
           "edit_domains": {
+            "animation_inspection_delta_binding": "asset_authoring.ui.animation_inspection_delta_binding",
             "box_shadow_mid": "asset_authoring.ui.box_shadow_mid",
             "commonui_action_widget_binding": "asset_authoring.ui.commonui_action_widget_binding",
             "commonui_container_navigation": "asset_authoring.ui.commonui_container_navigation",
+            "commonui_content_framework": "asset_authoring.ui.commonui_content_framework",
             "commonui_input_action_datatable": "asset_authoring.ui.commonui_input_action_datatable",
             "commonui_pause_menu_focus": "asset_authoring.ui.commonui_pause_menu_focus",
             "commonui_style_assets": "asset_authoring.ui.commonui_style_assets",
             "commonui_styled_button": "asset_authoring.ui.commonui_styled_button",
             "commonui_text_block": "asset_authoring.ui.commonui_text_block",
             "list_view_binding": "asset_authoring.ui.list_view_binding",
+            "registry_layout_accessibility": "asset_authoring.ui.registry_layout_accessibility",
             "settings_notification_templates": "asset_authoring.ui.settings_notification_templates",
+            "uispec_diff_patch": "asset_authoring.ui.uispec_diff_patch",
             "widget_animation_advanced_events": "asset_authoring.ui.widget_animation_advanced_events",
             "widget_animation_remove": "asset_authoring.ui.widget_animation_remove",
             "widget_animation_v2": "asset_authoring.ui.widget_animation_v2",
@@ -1465,7 +1483,12 @@
           "pcg": {
             "module": "asset_operation.creation_or_import.pcg",
             "edit_domains": {
-              "graph_authoring": "asset_operation.creation_or_import.pcg.graph_authoring"
+              "graph_authoring": "asset_operation.creation_or_import.pcg.graph_authoring",
+              "graph_mutation": "asset_operation.creation_or_import.pcg.graph_mutation",
+              "graph_replacement": "asset_operation.creation_or_import.pcg.graph_replacement",
+              "graph_user_parameters": "asset_operation.creation_or_import.pcg.graph_user_parameters",
+              "subgraph_assignment": "asset_operation.creation_or_import.pcg.subgraph_assignment",
+              "surface_discovery": "asset_operation.creation_or_import.pcg.surface_discovery"
             }
           },
           "project": {
@@ -1479,16 +1502,20 @@
           "ui": {
             "module": "asset_operation.creation_or_import.ui",
             "edit_domains": {
+              "animation_inspection_delta_binding": "asset_operation.creation_or_import.ui.animation_inspection_delta_binding",
               "box_shadow_mid": "asset_operation.creation_or_import.ui.box_shadow_mid",
               "commonui_action_widget_binding": "asset_operation.creation_or_import.ui.commonui_action_widget_binding",
               "commonui_container_navigation": "asset_operation.creation_or_import.ui.commonui_container_navigation",
+              "commonui_content_framework": "asset_operation.creation_or_import.ui.commonui_content_framework",
               "commonui_input_action_datatable": "asset_operation.creation_or_import.ui.commonui_input_action_datatable",
               "commonui_pause_menu_focus": "asset_operation.creation_or_import.ui.commonui_pause_menu_focus",
               "commonui_style_assets": "asset_operation.creation_or_import.ui.commonui_style_assets",
               "commonui_styled_button": "asset_operation.creation_or_import.ui.commonui_styled_button",
               "commonui_text_block": "asset_operation.creation_or_import.ui.commonui_text_block",
               "list_view_binding": "asset_operation.creation_or_import.ui.list_view_binding",
+              "registry_layout_accessibility": "asset_operation.creation_or_import.ui.registry_layout_accessibility",
               "settings_notification_templates": "asset_operation.creation_or_import.ui.settings_notification_templates",
+              "uispec_diff_patch": "asset_operation.creation_or_import.ui.uispec_diff_patch",
               "widget_animation_advanced_events": "asset_operation.creation_or_import.ui.widget_animation_advanced_events",
               "widget_animation_remove": "asset_operation.creation_or_import.ui.widget_animation_remove",
               "widget_animation_v2": "asset_operation.creation_or_import.ui.widget_animation_v2",
@@ -1855,7 +1882,12 @@
           "pcg": {
             "module": "asset_operation.edit.pcg",
             "edit_domains": {
-              "graph_authoring": "asset_operation.edit.pcg.graph_authoring"
+              "graph_authoring": "asset_operation.edit.pcg.graph_authoring",
+              "graph_mutation": "asset_operation.edit.pcg.graph_mutation",
+              "graph_replacement": "asset_operation.edit.pcg.graph_replacement",
+              "graph_user_parameters": "asset_operation.edit.pcg.graph_user_parameters",
+              "subgraph_assignment": "asset_operation.edit.pcg.subgraph_assignment",
+              "surface_discovery": "asset_operation.edit.pcg.surface_discovery"
             }
           },
           "project": {
@@ -1869,16 +1901,20 @@
           "ui": {
             "module": "asset_operation.edit.ui",
             "edit_domains": {
+              "animation_inspection_delta_binding": "asset_operation.edit.ui.animation_inspection_delta_binding",
               "box_shadow_mid": "asset_operation.edit.ui.box_shadow_mid",
               "commonui_action_widget_binding": "asset_operation.edit.ui.commonui_action_widget_binding",
               "commonui_container_navigation": "asset_operation.edit.ui.commonui_container_navigation",
+              "commonui_content_framework": "asset_operation.edit.ui.commonui_content_framework",
               "commonui_input_action_datatable": "asset_operation.edit.ui.commonui_input_action_datatable",
               "commonui_pause_menu_focus": "asset_operation.edit.ui.commonui_pause_menu_focus",
               "commonui_style_assets": "asset_operation.edit.ui.commonui_style_assets",
               "commonui_styled_button": "asset_operation.edit.ui.commonui_styled_button",
               "commonui_text_block": "asset_operation.edit.ui.commonui_text_block",
               "list_view_binding": "asset_operation.edit.ui.list_view_binding",
+              "registry_layout_accessibility": "asset_operation.edit.ui.registry_layout_accessibility",
               "settings_notification_templates": "asset_operation.edit.ui.settings_notification_templates",
+              "uispec_diff_patch": "asset_operation.edit.ui.uispec_diff_patch",
               "widget_animation_advanced_events": "asset_operation.edit.ui.widget_animation_advanced_events",
               "widget_animation_remove": "asset_operation.edit.ui.widget_animation_remove",
               "widget_animation_v2": "asset_operation.edit.ui.widget_animation_v2",
@@ -2246,7 +2282,12 @@
           "pcg": {
             "module": "asset_operation.readback_verify.pcg",
             "edit_domains": {
-              "graph_authoring": "asset_operation.readback_verify.pcg.graph_authoring"
+              "graph_authoring": "asset_operation.readback_verify.pcg.graph_authoring",
+              "graph_mutation": "asset_operation.readback_verify.pcg.graph_mutation",
+              "graph_replacement": "asset_operation.readback_verify.pcg.graph_replacement",
+              "graph_user_parameters": "asset_operation.readback_verify.pcg.graph_user_parameters",
+              "subgraph_assignment": "asset_operation.readback_verify.pcg.subgraph_assignment",
+              "surface_discovery": "asset_operation.readback_verify.pcg.surface_discovery"
             }
           },
           "project": {
@@ -2260,16 +2301,20 @@
           "ui": {
             "module": "asset_operation.readback_verify.ui",
             "edit_domains": {
+              "animation_inspection_delta_binding": "asset_operation.readback_verify.ui.animation_inspection_delta_binding",
               "box_shadow_mid": "asset_operation.readback_verify.ui.box_shadow_mid",
               "commonui_action_widget_binding": "asset_operation.readback_verify.ui.commonui_action_widget_binding",
               "commonui_container_navigation": "asset_operation.readback_verify.ui.commonui_container_navigation",
+              "commonui_content_framework": "asset_operation.readback_verify.ui.commonui_content_framework",
               "commonui_input_action_datatable": "asset_operation.readback_verify.ui.commonui_input_action_datatable",
               "commonui_pause_menu_focus": "asset_operation.readback_verify.ui.commonui_pause_menu_focus",
               "commonui_style_assets": "asset_operation.readback_verify.ui.commonui_style_assets",
               "commonui_styled_button": "asset_operation.readback_verify.ui.commonui_styled_button",
               "commonui_text_block": "asset_operation.readback_verify.ui.commonui_text_block",
               "list_view_binding": "asset_operation.readback_verify.ui.list_view_binding",
+              "registry_layout_accessibility": "asset_operation.readback_verify.ui.registry_layout_accessibility",
               "settings_notification_templates": "asset_operation.readback_verify.ui.settings_notification_templates",
+              "uispec_diff_patch": "asset_operation.readback_verify.ui.uispec_diff_patch",
               "widget_animation_advanced_events": "asset_operation.readback_verify.ui.widget_animation_advanced_events",
               "widget_animation_remove": "asset_operation.readback_verify.ui.widget_animation_remove",
               "widget_animation_v2": "asset_operation.readback_verify.ui.widget_animation_v2",
@@ -2634,7 +2679,12 @@
           "pcg": {
             "module": "asset_operation.save.pcg",
             "edit_domains": {
-              "graph_authoring": "asset_operation.save.pcg.graph_authoring"
+              "graph_authoring": "asset_operation.save.pcg.graph_authoring",
+              "graph_mutation": "asset_operation.save.pcg.graph_mutation",
+              "graph_replacement": "asset_operation.save.pcg.graph_replacement",
+              "graph_user_parameters": "asset_operation.save.pcg.graph_user_parameters",
+              "subgraph_assignment": "asset_operation.save.pcg.subgraph_assignment",
+              "surface_discovery": "asset_operation.save.pcg.surface_discovery"
             }
           },
           "project": {
@@ -2648,16 +2698,20 @@
           "ui": {
             "module": "asset_operation.save.ui",
             "edit_domains": {
+              "animation_inspection_delta_binding": "asset_operation.save.ui.animation_inspection_delta_binding",
               "box_shadow_mid": "asset_operation.save.ui.box_shadow_mid",
               "commonui_action_widget_binding": "asset_operation.save.ui.commonui_action_widget_binding",
               "commonui_container_navigation": "asset_operation.save.ui.commonui_container_navigation",
+              "commonui_content_framework": "asset_operation.save.ui.commonui_content_framework",
               "commonui_input_action_datatable": "asset_operation.save.ui.commonui_input_action_datatable",
               "commonui_pause_menu_focus": "asset_operation.save.ui.commonui_pause_menu_focus",
               "commonui_style_assets": "asset_operation.save.ui.commonui_style_assets",
               "commonui_styled_button": "asset_operation.save.ui.commonui_styled_button",
               "commonui_text_block": "asset_operation.save.ui.commonui_text_block",
               "list_view_binding": "asset_operation.save.ui.list_view_binding",
+              "registry_layout_accessibility": "asset_operation.save.ui.registry_layout_accessibility",
               "settings_notification_templates": "asset_operation.save.ui.settings_notification_templates",
+              "uispec_diff_patch": "asset_operation.save.ui.uispec_diff_patch",
               "widget_animation_advanced_events": "asset_operation.save.ui.widget_animation_advanced_events",
               "widget_animation_remove": "asset_operation.save.ui.widget_animation_remove",
               "widget_animation_v2": "asset_operation.save.ui.widget_animation_v2",
@@ -2931,6 +2985,11 @@
         "niagara_user_parameter_roundtrip": "workflow.niagara_user_parameter_roundtrip",
         "pbr_material_from_disk_roundtrip": "workflow.pbr_material_from_disk_roundtrip",
         "pcg_graph_idempotent_authoring_roundtrip": "workflow.pcg_graph_idempotent_authoring_roundtrip",
+        "pcg_graph_mutation_cleanup_roundtrip": "workflow.pcg_graph_mutation_cleanup_roundtrip",
+        "pcg_graph_replacement_roundtrip": "workflow.pcg_graph_replacement_roundtrip",
+        "pcg_graph_user_parameter_roundtrip": "workflow.pcg_graph_user_parameter_roundtrip",
+        "pcg_subgraph_assignment_roundtrip": "workflow.pcg_subgraph_assignment_roundtrip",
+        "pcg_surface_discovery_roundtrip": "workflow.pcg_surface_discovery_roundtrip",
         "project_generated_cleanup_roundtrip": "workflow.project_generated_cleanup_roundtrip",
         "project_index_details_text_roundtrip": "workflow.project_index_details_text_roundtrip",
         "project_saved_asset_state_roundtrip": "workflow.project_saved_asset_state_roundtrip",
@@ -2947,18 +3006,22 @@
         "texture_role_presets_roundtrip": "workflow.texture_role_presets_roundtrip",
         "texture_typed_validation_roundtrip": "workflow.texture_typed_validation_roundtrip",
         "ui_animation_advanced_events_roundtrip": "workflow.ui_animation_advanced_events_roundtrip",
+        "ui_animation_inspection_delta_binding_roundtrip": "workflow.ui_animation_inspection_delta_binding_roundtrip",
         "ui_animation_remove_roundtrip": "workflow.ui_animation_remove_roundtrip",
         "ui_animation_v2_roundtrip": "workflow.ui_animation_v2_roundtrip",
         "ui_box_shadow_mid_roundtrip": "workflow.ui_box_shadow_mid_roundtrip",
         "ui_commonui_action_widget_binding_roundtrip": "workflow.ui_commonui_action_widget_binding_roundtrip",
         "ui_commonui_container_navigation_roundtrip": "workflow.ui_commonui_container_navigation_roundtrip",
+        "ui_commonui_content_framework_roundtrip": "workflow.ui_commonui_content_framework_roundtrip",
         "ui_commonui_pause_menu_focus_roundtrip": "workflow.ui_commonui_pause_menu_focus_roundtrip",
         "ui_commonui_style_assets_roundtrip": "workflow.ui_commonui_style_assets_roundtrip",
         "ui_list_view_entry_widget_roundtrip": "workflow.ui_list_view_entry_widget_roundtrip",
+        "ui_registry_layout_accessibility_roundtrip": "workflow.ui_registry_layout_accessibility_roundtrip",
         "ui_settings_notification_templates_roundtrip": "workflow.ui_settings_notification_templates_roundtrip",
         "ui_slot_property_variable_roundtrip": "workflow.ui_slot_property_variable_roundtrip",
         "ui_spec_builder_dump_roundtrip": "workflow.ui_spec_builder_dump_roundtrip",
         "ui_template_widgets_roundtrip": "workflow.ui_template_widgets_roundtrip",
+        "ui_uispec_diff_patch_roundtrip": "workflow.ui_uispec_diff_patch_roundtrip",
         "ui_widget_styling_actions_roundtrip": "workflow.ui_widget_styling_actions_roundtrip",
         "ui_widget_tree_maintenance_roundtrip": "workflow.ui_widget_tree_maintenance_roundtrip",
         "umg_widget_tree_roundtrip": "workflow.umg_widget_tree_roundtrip",
@@ -10127,7 +10190,7 @@
       ],
       "track": "asset_authoring",
       "title": "Asset authoring: pcg",
-      "task_count": 1,
+      "task_count": 6,
       "filters": {
         "category": [
           "asset_authoring"
@@ -10140,7 +10203,12 @@
       "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/pcg.json",
       "parent_module_id": "category.asset_authoring",
       "child_module_ids": [
-        "asset_authoring.pcg.graph_authoring"
+        "asset_authoring.pcg.graph_authoring",
+        "asset_authoring.pcg.graph_mutation",
+        "asset_authoring.pcg.graph_replacement",
+        "asset_authoring.pcg.graph_user_parameters",
+        "asset_authoring.pcg.subgraph_assignment",
+        "asset_authoring.pcg.surface_discovery"
       ]
     },
     {
@@ -10163,6 +10231,141 @@
         ],
         "edit_domain": [
           "graph_authoring"
+        ]
+      },
+      "module_shard_id": "asset_authoring.pcg",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/pcg.json",
+      "parent_module_id": "asset_authoring.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.pcg.graph_mutation",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "pcg",
+        "graph_mutation"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: pcg/graph_mutation",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "graph_mutation"
+        ]
+      },
+      "module_shard_id": "asset_authoring.pcg",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/pcg.json",
+      "parent_module_id": "asset_authoring.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.pcg.graph_replacement",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "pcg",
+        "graph_replacement"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: pcg/graph_replacement",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "graph_replacement"
+        ]
+      },
+      "module_shard_id": "asset_authoring.pcg",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/pcg.json",
+      "parent_module_id": "asset_authoring.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.pcg.graph_user_parameters",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "pcg",
+        "graph_user_parameters"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: pcg/graph_user_parameters",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "graph_user_parameters"
+        ]
+      },
+      "module_shard_id": "asset_authoring.pcg",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/pcg.json",
+      "parent_module_id": "asset_authoring.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.pcg.subgraph_assignment",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "pcg",
+        "subgraph_assignment"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: pcg/subgraph_assignment",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "subgraph_assignment"
+        ]
+      },
+      "module_shard_id": "asset_authoring.pcg",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/pcg.json",
+      "parent_module_id": "asset_authoring.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.pcg.surface_discovery",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "pcg",
+        "surface_discovery"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: pcg/surface_discovery",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "surface_discovery"
         ]
       },
       "module_shard_id": "asset_authoring.pcg",
@@ -10287,7 +10490,7 @@
       ],
       "track": "asset_authoring",
       "title": "Asset authoring: ui",
-      "task_count": 19,
+      "task_count": 23,
       "filters": {
         "category": [
           "asset_authoring"
@@ -10300,16 +10503,20 @@
       "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/ui.json",
       "parent_module_id": "category.asset_authoring",
       "child_module_ids": [
+        "asset_authoring.ui.animation_inspection_delta_binding",
         "asset_authoring.ui.box_shadow_mid",
         "asset_authoring.ui.commonui_action_widget_binding",
         "asset_authoring.ui.commonui_container_navigation",
+        "asset_authoring.ui.commonui_content_framework",
         "asset_authoring.ui.commonui_input_action_datatable",
         "asset_authoring.ui.commonui_pause_menu_focus",
         "asset_authoring.ui.commonui_style_assets",
         "asset_authoring.ui.commonui_styled_button",
         "asset_authoring.ui.commonui_text_block",
         "asset_authoring.ui.list_view_binding",
+        "asset_authoring.ui.registry_layout_accessibility",
         "asset_authoring.ui.settings_notification_templates",
+        "asset_authoring.ui.uispec_diff_patch",
         "asset_authoring.ui.widget_animation_advanced_events",
         "asset_authoring.ui.widget_animation_remove",
         "asset_authoring.ui.widget_animation_v2",
@@ -10320,6 +10527,33 @@
         "asset_authoring.ui.widget_templates",
         "asset_authoring.ui.widget_tree_maintenance"
       ]
+    },
+    {
+      "module_id": "asset_authoring.ui.animation_inspection_delta_binding",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "ui",
+        "animation_inspection_delta_binding"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: ui/animation_inspection_delta_binding",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "animation_inspection_delta_binding"
+        ]
+      },
+      "module_shard_id": "asset_authoring.ui",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/ui.json",
+      "parent_module_id": "asset_authoring.ui",
+      "child_module_ids": []
     },
     {
       "module_id": "asset_authoring.ui.box_shadow_mid",
@@ -10395,6 +10629,33 @@
         ],
         "edit_domain": [
           "commonui_container_navigation"
+        ]
+      },
+      "module_shard_id": "asset_authoring.ui",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/ui.json",
+      "parent_module_id": "asset_authoring.ui",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.ui.commonui_content_framework",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "ui",
+        "commonui_content_framework"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: ui/commonui_content_framework",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "commonui_content_framework"
         ]
       },
       "module_shard_id": "asset_authoring.ui",
@@ -10565,6 +10826,33 @@
       "child_module_ids": []
     },
     {
+      "module_id": "asset_authoring.ui.registry_layout_accessibility",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "ui",
+        "registry_layout_accessibility"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: ui/registry_layout_accessibility",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "registry_layout_accessibility"
+        ]
+      },
+      "module_shard_id": "asset_authoring.ui",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/ui.json",
+      "parent_module_id": "asset_authoring.ui",
+      "child_module_ids": []
+    },
+    {
       "module_id": "asset_authoring.ui.settings_notification_templates",
       "route": [
         "AssetEditing",
@@ -10584,6 +10872,33 @@
         ],
         "edit_domain": [
           "settings_notification_templates"
+        ]
+      },
+      "module_shard_id": "asset_authoring.ui",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/ui.json",
+      "parent_module_id": "asset_authoring.ui",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.ui.uispec_diff_patch",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "ui",
+        "uispec_diff_patch"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: ui/uispec_diff_patch",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "uispec_diff_patch"
         ]
       },
       "module_shard_id": "asset_authoring.ui",
@@ -11119,7 +11434,7 @@
       ],
       "track": "asset_operation",
       "title": "Asset operation: Creation/import",
-      "task_count": 268,
+      "task_count": 277,
       "filters": {
         "asset_operation": [
           "creation_or_import"
@@ -19277,7 +19592,7 @@
       ],
       "track": "asset_operation_domain",
       "title": "Asset operation: Creation/import/pcg",
-      "task_count": 1,
+      "task_count": 6,
       "filters": {
         "category": [
           "asset_authoring"
@@ -19293,7 +19608,12 @@
       "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
       "parent_module_id": "asset_operation.creation_or_import",
       "child_module_ids": [
-        "asset_operation.creation_or_import.pcg.graph_authoring"
+        "asset_operation.creation_or_import.pcg.graph_authoring",
+        "asset_operation.creation_or_import.pcg.graph_mutation",
+        "asset_operation.creation_or_import.pcg.graph_replacement",
+        "asset_operation.creation_or_import.pcg.graph_user_parameters",
+        "asset_operation.creation_or_import.pcg.subgraph_assignment",
+        "asset_operation.creation_or_import.pcg.surface_discovery"
       ]
     },
     {
@@ -19317,6 +19637,161 @@
         ],
         "edit_domain": [
           "graph_authoring"
+        ],
+        "asset_operation": [
+          "creation_or_import"
+        ]
+      },
+      "module_shard_id": "asset_operation.creation_or_import",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
+      "parent_module_id": "asset_operation.creation_or_import.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.creation_or_import.pcg.graph_mutation",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "creation_or_import",
+        "pcg",
+        "graph_mutation"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Creation/import/pcg/graph_mutation",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "graph_mutation"
+        ],
+        "asset_operation": [
+          "creation_or_import"
+        ]
+      },
+      "module_shard_id": "asset_operation.creation_or_import",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
+      "parent_module_id": "asset_operation.creation_or_import.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.creation_or_import.pcg.graph_replacement",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "creation_or_import",
+        "pcg",
+        "graph_replacement"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Creation/import/pcg/graph_replacement",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "graph_replacement"
+        ],
+        "asset_operation": [
+          "creation_or_import"
+        ]
+      },
+      "module_shard_id": "asset_operation.creation_or_import",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
+      "parent_module_id": "asset_operation.creation_or_import.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.creation_or_import.pcg.graph_user_parameters",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "creation_or_import",
+        "pcg",
+        "graph_user_parameters"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Creation/import/pcg/graph_user_parameters",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "graph_user_parameters"
+        ],
+        "asset_operation": [
+          "creation_or_import"
+        ]
+      },
+      "module_shard_id": "asset_operation.creation_or_import",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
+      "parent_module_id": "asset_operation.creation_or_import.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.creation_or_import.pcg.subgraph_assignment",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "creation_or_import",
+        "pcg",
+        "subgraph_assignment"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Creation/import/pcg/subgraph_assignment",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "subgraph_assignment"
+        ],
+        "asset_operation": [
+          "creation_or_import"
+        ]
+      },
+      "module_shard_id": "asset_operation.creation_or_import",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
+      "parent_module_id": "asset_operation.creation_or_import.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.creation_or_import.pcg.surface_discovery",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "creation_or_import",
+        "pcg",
+        "surface_discovery"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Creation/import/pcg/surface_discovery",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "surface_discovery"
         ],
         "asset_operation": [
           "creation_or_import"
@@ -19461,7 +19936,7 @@
       ],
       "track": "asset_operation_domain",
       "title": "Asset operation: Creation/import/ui",
-      "task_count": 19,
+      "task_count": 23,
       "filters": {
         "category": [
           "asset_authoring"
@@ -19477,16 +19952,20 @@
       "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
       "parent_module_id": "asset_operation.creation_or_import",
       "child_module_ids": [
+        "asset_operation.creation_or_import.ui.animation_inspection_delta_binding",
         "asset_operation.creation_or_import.ui.box_shadow_mid",
         "asset_operation.creation_or_import.ui.commonui_action_widget_binding",
         "asset_operation.creation_or_import.ui.commonui_container_navigation",
+        "asset_operation.creation_or_import.ui.commonui_content_framework",
         "asset_operation.creation_or_import.ui.commonui_input_action_datatable",
         "asset_operation.creation_or_import.ui.commonui_pause_menu_focus",
         "asset_operation.creation_or_import.ui.commonui_style_assets",
         "asset_operation.creation_or_import.ui.commonui_styled_button",
         "asset_operation.creation_or_import.ui.commonui_text_block",
         "asset_operation.creation_or_import.ui.list_view_binding",
+        "asset_operation.creation_or_import.ui.registry_layout_accessibility",
         "asset_operation.creation_or_import.ui.settings_notification_templates",
+        "asset_operation.creation_or_import.ui.uispec_diff_patch",
         "asset_operation.creation_or_import.ui.widget_animation_advanced_events",
         "asset_operation.creation_or_import.ui.widget_animation_remove",
         "asset_operation.creation_or_import.ui.widget_animation_v2",
@@ -19497,6 +19976,37 @@
         "asset_operation.creation_or_import.ui.widget_templates",
         "asset_operation.creation_or_import.ui.widget_tree_maintenance"
       ]
+    },
+    {
+      "module_id": "asset_operation.creation_or_import.ui.animation_inspection_delta_binding",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "creation_or_import",
+        "ui",
+        "animation_inspection_delta_binding"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Creation/import/ui/animation_inspection_delta_binding",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "animation_inspection_delta_binding"
+        ],
+        "asset_operation": [
+          "creation_or_import"
+        ]
+      },
+      "module_shard_id": "asset_operation.creation_or_import",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
+      "parent_module_id": "asset_operation.creation_or_import.ui",
+      "child_module_ids": []
     },
     {
       "module_id": "asset_operation.creation_or_import.ui.box_shadow_mid",
@@ -19581,6 +20091,37 @@
         ],
         "edit_domain": [
           "commonui_container_navigation"
+        ],
+        "asset_operation": [
+          "creation_or_import"
+        ]
+      },
+      "module_shard_id": "asset_operation.creation_or_import",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
+      "parent_module_id": "asset_operation.creation_or_import.ui",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.creation_or_import.ui.commonui_content_framework",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "creation_or_import",
+        "ui",
+        "commonui_content_framework"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Creation/import/ui/commonui_content_framework",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "commonui_content_framework"
         ],
         "asset_operation": [
           "creation_or_import"
@@ -19778,6 +20319,37 @@
       "child_module_ids": []
     },
     {
+      "module_id": "asset_operation.creation_or_import.ui.registry_layout_accessibility",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "creation_or_import",
+        "ui",
+        "registry_layout_accessibility"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Creation/import/ui/registry_layout_accessibility",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "registry_layout_accessibility"
+        ],
+        "asset_operation": [
+          "creation_or_import"
+        ]
+      },
+      "module_shard_id": "asset_operation.creation_or_import",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
+      "parent_module_id": "asset_operation.creation_or_import.ui",
+      "child_module_ids": []
+    },
+    {
       "module_id": "asset_operation.creation_or_import.ui.settings_notification_templates",
       "route": [
         "AssetEditing",
@@ -19798,6 +20370,37 @@
         ],
         "edit_domain": [
           "settings_notification_templates"
+        ],
+        "asset_operation": [
+          "creation_or_import"
+        ]
+      },
+      "module_shard_id": "asset_operation.creation_or_import",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
+      "parent_module_id": "asset_operation.creation_or_import.ui",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.creation_or_import.ui.uispec_diff_patch",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "creation_or_import",
+        "ui",
+        "uispec_diff_patch"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Creation/import/ui/uispec_diff_patch",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "uispec_diff_patch"
         ],
         "asset_operation": [
           "creation_or_import"
@@ -20412,7 +21015,7 @@
       ],
       "track": "asset_operation",
       "title": "Asset operation: Asset edit",
-      "task_count": 268,
+      "task_count": 277,
       "filters": {
         "asset_operation": [
           "edit"
@@ -28570,7 +29173,7 @@
       ],
       "track": "asset_operation_domain",
       "title": "Asset operation: Asset edit/pcg",
-      "task_count": 1,
+      "task_count": 6,
       "filters": {
         "category": [
           "asset_authoring"
@@ -28586,7 +29189,12 @@
       "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
       "parent_module_id": "asset_operation.edit",
       "child_module_ids": [
-        "asset_operation.edit.pcg.graph_authoring"
+        "asset_operation.edit.pcg.graph_authoring",
+        "asset_operation.edit.pcg.graph_mutation",
+        "asset_operation.edit.pcg.graph_replacement",
+        "asset_operation.edit.pcg.graph_user_parameters",
+        "asset_operation.edit.pcg.subgraph_assignment",
+        "asset_operation.edit.pcg.surface_discovery"
       ]
     },
     {
@@ -28610,6 +29218,161 @@
         ],
         "edit_domain": [
           "graph_authoring"
+        ],
+        "asset_operation": [
+          "edit"
+        ]
+      },
+      "module_shard_id": "asset_operation.edit",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
+      "parent_module_id": "asset_operation.edit.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.edit.pcg.graph_mutation",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "edit",
+        "pcg",
+        "graph_mutation"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Asset edit/pcg/graph_mutation",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "graph_mutation"
+        ],
+        "asset_operation": [
+          "edit"
+        ]
+      },
+      "module_shard_id": "asset_operation.edit",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
+      "parent_module_id": "asset_operation.edit.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.edit.pcg.graph_replacement",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "edit",
+        "pcg",
+        "graph_replacement"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Asset edit/pcg/graph_replacement",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "graph_replacement"
+        ],
+        "asset_operation": [
+          "edit"
+        ]
+      },
+      "module_shard_id": "asset_operation.edit",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
+      "parent_module_id": "asset_operation.edit.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.edit.pcg.graph_user_parameters",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "edit",
+        "pcg",
+        "graph_user_parameters"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Asset edit/pcg/graph_user_parameters",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "graph_user_parameters"
+        ],
+        "asset_operation": [
+          "edit"
+        ]
+      },
+      "module_shard_id": "asset_operation.edit",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
+      "parent_module_id": "asset_operation.edit.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.edit.pcg.subgraph_assignment",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "edit",
+        "pcg",
+        "subgraph_assignment"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Asset edit/pcg/subgraph_assignment",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "subgraph_assignment"
+        ],
+        "asset_operation": [
+          "edit"
+        ]
+      },
+      "module_shard_id": "asset_operation.edit",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
+      "parent_module_id": "asset_operation.edit.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.edit.pcg.surface_discovery",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "edit",
+        "pcg",
+        "surface_discovery"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Asset edit/pcg/surface_discovery",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "surface_discovery"
         ],
         "asset_operation": [
           "edit"
@@ -28754,7 +29517,7 @@
       ],
       "track": "asset_operation_domain",
       "title": "Asset operation: Asset edit/ui",
-      "task_count": 19,
+      "task_count": 23,
       "filters": {
         "category": [
           "asset_authoring"
@@ -28770,16 +29533,20 @@
       "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
       "parent_module_id": "asset_operation.edit",
       "child_module_ids": [
+        "asset_operation.edit.ui.animation_inspection_delta_binding",
         "asset_operation.edit.ui.box_shadow_mid",
         "asset_operation.edit.ui.commonui_action_widget_binding",
         "asset_operation.edit.ui.commonui_container_navigation",
+        "asset_operation.edit.ui.commonui_content_framework",
         "asset_operation.edit.ui.commonui_input_action_datatable",
         "asset_operation.edit.ui.commonui_pause_menu_focus",
         "asset_operation.edit.ui.commonui_style_assets",
         "asset_operation.edit.ui.commonui_styled_button",
         "asset_operation.edit.ui.commonui_text_block",
         "asset_operation.edit.ui.list_view_binding",
+        "asset_operation.edit.ui.registry_layout_accessibility",
         "asset_operation.edit.ui.settings_notification_templates",
+        "asset_operation.edit.ui.uispec_diff_patch",
         "asset_operation.edit.ui.widget_animation_advanced_events",
         "asset_operation.edit.ui.widget_animation_remove",
         "asset_operation.edit.ui.widget_animation_v2",
@@ -28790,6 +29557,37 @@
         "asset_operation.edit.ui.widget_templates",
         "asset_operation.edit.ui.widget_tree_maintenance"
       ]
+    },
+    {
+      "module_id": "asset_operation.edit.ui.animation_inspection_delta_binding",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "edit",
+        "ui",
+        "animation_inspection_delta_binding"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Asset edit/ui/animation_inspection_delta_binding",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "animation_inspection_delta_binding"
+        ],
+        "asset_operation": [
+          "edit"
+        ]
+      },
+      "module_shard_id": "asset_operation.edit",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
+      "parent_module_id": "asset_operation.edit.ui",
+      "child_module_ids": []
     },
     {
       "module_id": "asset_operation.edit.ui.box_shadow_mid",
@@ -28874,6 +29672,37 @@
         ],
         "edit_domain": [
           "commonui_container_navigation"
+        ],
+        "asset_operation": [
+          "edit"
+        ]
+      },
+      "module_shard_id": "asset_operation.edit",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
+      "parent_module_id": "asset_operation.edit.ui",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.edit.ui.commonui_content_framework",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "edit",
+        "ui",
+        "commonui_content_framework"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Asset edit/ui/commonui_content_framework",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "commonui_content_framework"
         ],
         "asset_operation": [
           "edit"
@@ -29071,6 +29900,37 @@
       "child_module_ids": []
     },
     {
+      "module_id": "asset_operation.edit.ui.registry_layout_accessibility",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "edit",
+        "ui",
+        "registry_layout_accessibility"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Asset edit/ui/registry_layout_accessibility",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "registry_layout_accessibility"
+        ],
+        "asset_operation": [
+          "edit"
+        ]
+      },
+      "module_shard_id": "asset_operation.edit",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
+      "parent_module_id": "asset_operation.edit.ui",
+      "child_module_ids": []
+    },
+    {
       "module_id": "asset_operation.edit.ui.settings_notification_templates",
       "route": [
         "AssetEditing",
@@ -29091,6 +29951,37 @@
         ],
         "edit_domain": [
           "settings_notification_templates"
+        ],
+        "asset_operation": [
+          "edit"
+        ]
+      },
+      "module_shard_id": "asset_operation.edit",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
+      "parent_module_id": "asset_operation.edit.ui",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.edit.ui.uispec_diff_patch",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "edit",
+        "ui",
+        "uispec_diff_patch"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Asset edit/ui/uispec_diff_patch",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "uispec_diff_patch"
         ],
         "asset_operation": [
           "edit"
@@ -29705,7 +30596,7 @@
       ],
       "track": "asset_operation",
       "title": "Asset operation: Read-back verify",
-      "task_count": 269,
+      "task_count": 278,
       "filters": {
         "asset_operation": [
           "readback_verify"
@@ -37895,7 +38786,7 @@
       ],
       "track": "asset_operation_domain",
       "title": "Asset operation: Read-back verify/pcg",
-      "task_count": 1,
+      "task_count": 6,
       "filters": {
         "category": [
           "asset_authoring"
@@ -37911,7 +38802,12 @@
       "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/readback_verify.json",
       "parent_module_id": "asset_operation.readback_verify",
       "child_module_ids": [
-        "asset_operation.readback_verify.pcg.graph_authoring"
+        "asset_operation.readback_verify.pcg.graph_authoring",
+        "asset_operation.readback_verify.pcg.graph_mutation",
+        "asset_operation.readback_verify.pcg.graph_replacement",
+        "asset_operation.readback_verify.pcg.graph_user_parameters",
+        "asset_operation.readback_verify.pcg.subgraph_assignment",
+        "asset_operation.readback_verify.pcg.surface_discovery"
       ]
     },
     {
@@ -37935,6 +38831,161 @@
         ],
         "edit_domain": [
           "graph_authoring"
+        ],
+        "asset_operation": [
+          "readback_verify"
+        ]
+      },
+      "module_shard_id": "asset_operation.readback_verify",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/readback_verify.json",
+      "parent_module_id": "asset_operation.readback_verify.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.readback_verify.pcg.graph_mutation",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "readback_verify",
+        "pcg",
+        "graph_mutation"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Read-back verify/pcg/graph_mutation",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "graph_mutation"
+        ],
+        "asset_operation": [
+          "readback_verify"
+        ]
+      },
+      "module_shard_id": "asset_operation.readback_verify",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/readback_verify.json",
+      "parent_module_id": "asset_operation.readback_verify.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.readback_verify.pcg.graph_replacement",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "readback_verify",
+        "pcg",
+        "graph_replacement"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Read-back verify/pcg/graph_replacement",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "graph_replacement"
+        ],
+        "asset_operation": [
+          "readback_verify"
+        ]
+      },
+      "module_shard_id": "asset_operation.readback_verify",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/readback_verify.json",
+      "parent_module_id": "asset_operation.readback_verify.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.readback_verify.pcg.graph_user_parameters",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "readback_verify",
+        "pcg",
+        "graph_user_parameters"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Read-back verify/pcg/graph_user_parameters",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "graph_user_parameters"
+        ],
+        "asset_operation": [
+          "readback_verify"
+        ]
+      },
+      "module_shard_id": "asset_operation.readback_verify",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/readback_verify.json",
+      "parent_module_id": "asset_operation.readback_verify.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.readback_verify.pcg.subgraph_assignment",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "readback_verify",
+        "pcg",
+        "subgraph_assignment"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Read-back verify/pcg/subgraph_assignment",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "subgraph_assignment"
+        ],
+        "asset_operation": [
+          "readback_verify"
+        ]
+      },
+      "module_shard_id": "asset_operation.readback_verify",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/readback_verify.json",
+      "parent_module_id": "asset_operation.readback_verify.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.readback_verify.pcg.surface_discovery",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "readback_verify",
+        "pcg",
+        "surface_discovery"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Read-back verify/pcg/surface_discovery",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "surface_discovery"
         ],
         "asset_operation": [
           "readback_verify"
@@ -38079,7 +39130,7 @@
       ],
       "track": "asset_operation_domain",
       "title": "Asset operation: Read-back verify/ui",
-      "task_count": 19,
+      "task_count": 23,
       "filters": {
         "category": [
           "asset_authoring"
@@ -38095,16 +39146,20 @@
       "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/readback_verify.json",
       "parent_module_id": "asset_operation.readback_verify",
       "child_module_ids": [
+        "asset_operation.readback_verify.ui.animation_inspection_delta_binding",
         "asset_operation.readback_verify.ui.box_shadow_mid",
         "asset_operation.readback_verify.ui.commonui_action_widget_binding",
         "asset_operation.readback_verify.ui.commonui_container_navigation",
+        "asset_operation.readback_verify.ui.commonui_content_framework",
         "asset_operation.readback_verify.ui.commonui_input_action_datatable",
         "asset_operation.readback_verify.ui.commonui_pause_menu_focus",
         "asset_operation.readback_verify.ui.commonui_style_assets",
         "asset_operation.readback_verify.ui.commonui_styled_button",
         "asset_operation.readback_verify.ui.commonui_text_block",
         "asset_operation.readback_verify.ui.list_view_binding",
+        "asset_operation.readback_verify.ui.registry_layout_accessibility",
         "asset_operation.readback_verify.ui.settings_notification_templates",
+        "asset_operation.readback_verify.ui.uispec_diff_patch",
         "asset_operation.readback_verify.ui.widget_animation_advanced_events",
         "asset_operation.readback_verify.ui.widget_animation_remove",
         "asset_operation.readback_verify.ui.widget_animation_v2",
@@ -38115,6 +39170,37 @@
         "asset_operation.readback_verify.ui.widget_templates",
         "asset_operation.readback_verify.ui.widget_tree_maintenance"
       ]
+    },
+    {
+      "module_id": "asset_operation.readback_verify.ui.animation_inspection_delta_binding",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "readback_verify",
+        "ui",
+        "animation_inspection_delta_binding"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Read-back verify/ui/animation_inspection_delta_binding",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "animation_inspection_delta_binding"
+        ],
+        "asset_operation": [
+          "readback_verify"
+        ]
+      },
+      "module_shard_id": "asset_operation.readback_verify",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/readback_verify.json",
+      "parent_module_id": "asset_operation.readback_verify.ui",
+      "child_module_ids": []
     },
     {
       "module_id": "asset_operation.readback_verify.ui.box_shadow_mid",
@@ -38199,6 +39285,37 @@
         ],
         "edit_domain": [
           "commonui_container_navigation"
+        ],
+        "asset_operation": [
+          "readback_verify"
+        ]
+      },
+      "module_shard_id": "asset_operation.readback_verify",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/readback_verify.json",
+      "parent_module_id": "asset_operation.readback_verify.ui",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.readback_verify.ui.commonui_content_framework",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "readback_verify",
+        "ui",
+        "commonui_content_framework"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Read-back verify/ui/commonui_content_framework",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "commonui_content_framework"
         ],
         "asset_operation": [
           "readback_verify"
@@ -38396,6 +39513,37 @@
       "child_module_ids": []
     },
     {
+      "module_id": "asset_operation.readback_verify.ui.registry_layout_accessibility",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "readback_verify",
+        "ui",
+        "registry_layout_accessibility"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Read-back verify/ui/registry_layout_accessibility",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "registry_layout_accessibility"
+        ],
+        "asset_operation": [
+          "readback_verify"
+        ]
+      },
+      "module_shard_id": "asset_operation.readback_verify",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/readback_verify.json",
+      "parent_module_id": "asset_operation.readback_verify.ui",
+      "child_module_ids": []
+    },
+    {
       "module_id": "asset_operation.readback_verify.ui.settings_notification_templates",
       "route": [
         "AssetEditing",
@@ -38416,6 +39564,37 @@
         ],
         "edit_domain": [
           "settings_notification_templates"
+        ],
+        "asset_operation": [
+          "readback_verify"
+        ]
+      },
+      "module_shard_id": "asset_operation.readback_verify",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/readback_verify.json",
+      "parent_module_id": "asset_operation.readback_verify.ui",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.readback_verify.ui.uispec_diff_patch",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "readback_verify",
+        "ui",
+        "uispec_diff_patch"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Read-back verify/ui/uispec_diff_patch",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "uispec_diff_patch"
         ],
         "asset_operation": [
           "readback_verify"
@@ -39030,7 +40209,7 @@
       ],
       "track": "asset_operation",
       "title": "Asset operation: Save",
-      "task_count": 266,
+      "task_count": 275,
       "filters": {
         "asset_operation": [
           "save"
@@ -47124,7 +48303,7 @@
       ],
       "track": "asset_operation_domain",
       "title": "Asset operation: Save/pcg",
-      "task_count": 1,
+      "task_count": 6,
       "filters": {
         "category": [
           "asset_authoring"
@@ -47140,7 +48319,12 @@
       "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
       "parent_module_id": "asset_operation.save",
       "child_module_ids": [
-        "asset_operation.save.pcg.graph_authoring"
+        "asset_operation.save.pcg.graph_authoring",
+        "asset_operation.save.pcg.graph_mutation",
+        "asset_operation.save.pcg.graph_replacement",
+        "asset_operation.save.pcg.graph_user_parameters",
+        "asset_operation.save.pcg.subgraph_assignment",
+        "asset_operation.save.pcg.surface_discovery"
       ]
     },
     {
@@ -47164,6 +48348,161 @@
         ],
         "edit_domain": [
           "graph_authoring"
+        ],
+        "asset_operation": [
+          "save"
+        ]
+      },
+      "module_shard_id": "asset_operation.save",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
+      "parent_module_id": "asset_operation.save.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.save.pcg.graph_mutation",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "save",
+        "pcg",
+        "graph_mutation"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Save/pcg/graph_mutation",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "graph_mutation"
+        ],
+        "asset_operation": [
+          "save"
+        ]
+      },
+      "module_shard_id": "asset_operation.save",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
+      "parent_module_id": "asset_operation.save.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.save.pcg.graph_replacement",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "save",
+        "pcg",
+        "graph_replacement"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Save/pcg/graph_replacement",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "graph_replacement"
+        ],
+        "asset_operation": [
+          "save"
+        ]
+      },
+      "module_shard_id": "asset_operation.save",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
+      "parent_module_id": "asset_operation.save.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.save.pcg.graph_user_parameters",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "save",
+        "pcg",
+        "graph_user_parameters"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Save/pcg/graph_user_parameters",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "graph_user_parameters"
+        ],
+        "asset_operation": [
+          "save"
+        ]
+      },
+      "module_shard_id": "asset_operation.save",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
+      "parent_module_id": "asset_operation.save.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.save.pcg.subgraph_assignment",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "save",
+        "pcg",
+        "subgraph_assignment"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Save/pcg/subgraph_assignment",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "subgraph_assignment"
+        ],
+        "asset_operation": [
+          "save"
+        ]
+      },
+      "module_shard_id": "asset_operation.save",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
+      "parent_module_id": "asset_operation.save.pcg",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.save.pcg.surface_discovery",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "save",
+        "pcg",
+        "surface_discovery"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Save/pcg/surface_discovery",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "surface_discovery"
         ],
         "asset_operation": [
           "save"
@@ -47308,7 +48647,7 @@
       ],
       "track": "asset_operation_domain",
       "title": "Asset operation: Save/ui",
-      "task_count": 19,
+      "task_count": 23,
       "filters": {
         "category": [
           "asset_authoring"
@@ -47324,16 +48663,20 @@
       "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
       "parent_module_id": "asset_operation.save",
       "child_module_ids": [
+        "asset_operation.save.ui.animation_inspection_delta_binding",
         "asset_operation.save.ui.box_shadow_mid",
         "asset_operation.save.ui.commonui_action_widget_binding",
         "asset_operation.save.ui.commonui_container_navigation",
+        "asset_operation.save.ui.commonui_content_framework",
         "asset_operation.save.ui.commonui_input_action_datatable",
         "asset_operation.save.ui.commonui_pause_menu_focus",
         "asset_operation.save.ui.commonui_style_assets",
         "asset_operation.save.ui.commonui_styled_button",
         "asset_operation.save.ui.commonui_text_block",
         "asset_operation.save.ui.list_view_binding",
+        "asset_operation.save.ui.registry_layout_accessibility",
         "asset_operation.save.ui.settings_notification_templates",
+        "asset_operation.save.ui.uispec_diff_patch",
         "asset_operation.save.ui.widget_animation_advanced_events",
         "asset_operation.save.ui.widget_animation_remove",
         "asset_operation.save.ui.widget_animation_v2",
@@ -47344,6 +48687,37 @@
         "asset_operation.save.ui.widget_templates",
         "asset_operation.save.ui.widget_tree_maintenance"
       ]
+    },
+    {
+      "module_id": "asset_operation.save.ui.animation_inspection_delta_binding",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "save",
+        "ui",
+        "animation_inspection_delta_binding"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Save/ui/animation_inspection_delta_binding",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "animation_inspection_delta_binding"
+        ],
+        "asset_operation": [
+          "save"
+        ]
+      },
+      "module_shard_id": "asset_operation.save",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
+      "parent_module_id": "asset_operation.save.ui",
+      "child_module_ids": []
     },
     {
       "module_id": "asset_operation.save.ui.box_shadow_mid",
@@ -47428,6 +48802,37 @@
         ],
         "edit_domain": [
           "commonui_container_navigation"
+        ],
+        "asset_operation": [
+          "save"
+        ]
+      },
+      "module_shard_id": "asset_operation.save",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
+      "parent_module_id": "asset_operation.save.ui",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.save.ui.commonui_content_framework",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "save",
+        "ui",
+        "commonui_content_framework"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Save/ui/commonui_content_framework",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "commonui_content_framework"
         ],
         "asset_operation": [
           "save"
@@ -47625,6 +49030,37 @@
       "child_module_ids": []
     },
     {
+      "module_id": "asset_operation.save.ui.registry_layout_accessibility",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "save",
+        "ui",
+        "registry_layout_accessibility"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Save/ui/registry_layout_accessibility",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "registry_layout_accessibility"
+        ],
+        "asset_operation": [
+          "save"
+        ]
+      },
+      "module_shard_id": "asset_operation.save",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
+      "parent_module_id": "asset_operation.save.ui",
+      "child_module_ids": []
+    },
+    {
       "module_id": "asset_operation.save.ui.settings_notification_templates",
       "route": [
         "AssetEditing",
@@ -47645,6 +49081,37 @@
         ],
         "edit_domain": [
           "settings_notification_templates"
+        ],
+        "asset_operation": [
+          "save"
+        ]
+      },
+      "module_shard_id": "asset_operation.save",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
+      "parent_module_id": "asset_operation.save.ui",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.save.ui.uispec_diff_patch",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "save",
+        "ui",
+        "uispec_diff_patch"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Save/ui/uispec_diff_patch",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "ui"
+        ],
+        "edit_domain": [
+          "uispec_diff_patch"
         ],
         "asset_operation": [
           "save"
@@ -49631,7 +51098,7 @@
       ],
       "track": "category",
       "title": "Category: asset_authoring",
-      "task_count": 269,
+      "task_count": 278,
       "filters": {
         "category": [
           "asset_authoring"
@@ -49902,6 +51369,11 @@
         "workflow.niagara_user_parameter_roundtrip",
         "workflow.pbr_material_from_disk_roundtrip",
         "workflow.pcg_graph_idempotent_authoring_roundtrip",
+        "workflow.pcg_graph_mutation_cleanup_roundtrip",
+        "workflow.pcg_graph_replacement_roundtrip",
+        "workflow.pcg_graph_user_parameter_roundtrip",
+        "workflow.pcg_subgraph_assignment_roundtrip",
+        "workflow.pcg_surface_discovery_roundtrip",
         "workflow.project_generated_cleanup_roundtrip",
         "workflow.project_index_details_text_roundtrip",
         "workflow.project_saved_asset_state_roundtrip",
@@ -49917,18 +51389,22 @@
         "workflow.texture_role_presets_roundtrip",
         "workflow.texture_typed_validation_roundtrip",
         "workflow.ui_animation_advanced_events_roundtrip",
+        "workflow.ui_animation_inspection_delta_binding_roundtrip",
         "workflow.ui_animation_remove_roundtrip",
         "workflow.ui_animation_v2_roundtrip",
         "workflow.ui_box_shadow_mid_roundtrip",
         "workflow.ui_commonui_action_widget_binding_roundtrip",
         "workflow.ui_commonui_container_navigation_roundtrip",
+        "workflow.ui_commonui_content_framework_roundtrip",
         "workflow.ui_commonui_pause_menu_focus_roundtrip",
         "workflow.ui_commonui_style_assets_roundtrip",
         "workflow.ui_list_view_entry_widget_roundtrip",
+        "workflow.ui_registry_layout_accessibility_roundtrip",
         "workflow.ui_settings_notification_templates_roundtrip",
         "workflow.ui_slot_property_variable_roundtrip",
         "workflow.ui_spec_builder_dump_roundtrip",
         "workflow.ui_template_widgets_roundtrip",
+        "workflow.ui_uispec_diff_patch_roundtrip",
         "workflow.ui_widget_styling_actions_roundtrip",
         "workflow.ui_widget_tree_maintenance_roundtrip",
         "workflow.umg_widget_tree_roundtrip",
@@ -50190,7 +51666,7 @@
       ],
       "track": "lifecycle",
       "title": "Lifecycle phase: create_save",
-      "task_count": 266,
+      "task_count": 275,
       "filters": {
         "lifecycle_phase": [
           "create_save"
@@ -50250,7 +51726,7 @@
       ],
       "track": "operation_semantics",
       "title": "Operation semantics: create_save",
-      "task_count": 268,
+      "task_count": 277,
       "filters": {
         "operation_semantics": [
           "create_save"
@@ -55182,6 +56658,106 @@
       "child_module_ids": []
     },
     {
+      "module_id": "workflow.pcg_graph_mutation_cleanup_roundtrip",
+      "route": [
+        "AssetEditing",
+        "workflow",
+        "pcg_graph_mutation_cleanup_roundtrip"
+      ],
+      "track": "workflow",
+      "title": "Workflow: pcg_graph_mutation_cleanup_roundtrip",
+      "task_count": 1,
+      "filters": {
+        "workflow": [
+          "pcg_graph_mutation_cleanup_roundtrip"
+        ]
+      },
+      "module_shard_id": "workflow",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/workflow.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "workflow.pcg_graph_replacement_roundtrip",
+      "route": [
+        "AssetEditing",
+        "workflow",
+        "pcg_graph_replacement_roundtrip"
+      ],
+      "track": "workflow",
+      "title": "Workflow: pcg_graph_replacement_roundtrip",
+      "task_count": 1,
+      "filters": {
+        "workflow": [
+          "pcg_graph_replacement_roundtrip"
+        ]
+      },
+      "module_shard_id": "workflow",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/workflow.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "workflow.pcg_graph_user_parameter_roundtrip",
+      "route": [
+        "AssetEditing",
+        "workflow",
+        "pcg_graph_user_parameter_roundtrip"
+      ],
+      "track": "workflow",
+      "title": "Workflow: pcg_graph_user_parameter_roundtrip",
+      "task_count": 1,
+      "filters": {
+        "workflow": [
+          "pcg_graph_user_parameter_roundtrip"
+        ]
+      },
+      "module_shard_id": "workflow",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/workflow.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "workflow.pcg_subgraph_assignment_roundtrip",
+      "route": [
+        "AssetEditing",
+        "workflow",
+        "pcg_subgraph_assignment_roundtrip"
+      ],
+      "track": "workflow",
+      "title": "Workflow: pcg_subgraph_assignment_roundtrip",
+      "task_count": 1,
+      "filters": {
+        "workflow": [
+          "pcg_subgraph_assignment_roundtrip"
+        ]
+      },
+      "module_shard_id": "workflow",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/workflow.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "workflow.pcg_surface_discovery_roundtrip",
+      "route": [
+        "AssetEditing",
+        "workflow",
+        "pcg_surface_discovery_roundtrip"
+      ],
+      "track": "workflow",
+      "title": "Workflow: pcg_surface_discovery_roundtrip",
+      "task_count": 1,
+      "filters": {
+        "workflow": [
+          "pcg_surface_discovery_roundtrip"
+        ]
+      },
+      "module_shard_id": "workflow",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/workflow.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": []
+    },
+    {
       "module_id": "workflow.project_generated_cleanup_roundtrip",
       "route": [
         "AssetEditing",
@@ -55502,6 +57078,26 @@
       "child_module_ids": []
     },
     {
+      "module_id": "workflow.ui_animation_inspection_delta_binding_roundtrip",
+      "route": [
+        "AssetEditing",
+        "workflow",
+        "ui_animation_inspection_delta_binding_roundtrip"
+      ],
+      "track": "workflow",
+      "title": "Workflow: ui_animation_inspection_delta_binding_roundtrip",
+      "task_count": 1,
+      "filters": {
+        "workflow": [
+          "ui_animation_inspection_delta_binding_roundtrip"
+        ]
+      },
+      "module_shard_id": "workflow",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/workflow.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": []
+    },
+    {
       "module_id": "workflow.ui_animation_remove_roundtrip",
       "route": [
         "AssetEditing",
@@ -55602,6 +57198,26 @@
       "child_module_ids": []
     },
     {
+      "module_id": "workflow.ui_commonui_content_framework_roundtrip",
+      "route": [
+        "AssetEditing",
+        "workflow",
+        "ui_commonui_content_framework_roundtrip"
+      ],
+      "track": "workflow",
+      "title": "Workflow: ui_commonui_content_framework_roundtrip",
+      "task_count": 1,
+      "filters": {
+        "workflow": [
+          "ui_commonui_content_framework_roundtrip"
+        ]
+      },
+      "module_shard_id": "workflow",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/workflow.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": []
+    },
+    {
       "module_id": "workflow.ui_commonui_pause_menu_focus_roundtrip",
       "route": [
         "AssetEditing",
@@ -55654,6 +57270,26 @@
       "filters": {
         "workflow": [
           "ui_list_view_entry_widget_roundtrip"
+        ]
+      },
+      "module_shard_id": "workflow",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/workflow.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "workflow.ui_registry_layout_accessibility_roundtrip",
+      "route": [
+        "AssetEditing",
+        "workflow",
+        "ui_registry_layout_accessibility_roundtrip"
+      ],
+      "track": "workflow",
+      "title": "Workflow: ui_registry_layout_accessibility_roundtrip",
+      "task_count": 1,
+      "filters": {
+        "workflow": [
+          "ui_registry_layout_accessibility_roundtrip"
         ]
       },
       "module_shard_id": "workflow",
@@ -55734,6 +57370,26 @@
       "filters": {
         "workflow": [
           "ui_template_widgets_roundtrip"
+        ]
+      },
+      "module_shard_id": "workflow",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/workflow.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "workflow.ui_uispec_diff_patch_roundtrip",
+      "route": [
+        "AssetEditing",
+        "workflow",
+        "ui_uispec_diff_patch_roundtrip"
+      ],
+      "track": "workflow",
+      "title": "Workflow: ui_uispec_diff_patch_roundtrip",
+      "task_count": 1,
+      "filters": {
+        "workflow": [
+          "ui_uispec_diff_patch_roundtrip"
         ]
       },
       "module_shard_id": "workflow",
@@ -56423,10 +58079,15 @@
     "asset_authoring.pcg": {
       "shard_id": "asset_authoring.pcg",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/pcg.json",
-      "module_count": 2,
+      "module_count": 7,
       "module_ids": [
         "asset_authoring.pcg",
-        "asset_authoring.pcg.graph_authoring"
+        "asset_authoring.pcg.graph_authoring",
+        "asset_authoring.pcg.graph_mutation",
+        "asset_authoring.pcg.graph_replacement",
+        "asset_authoring.pcg.graph_user_parameters",
+        "asset_authoring.pcg.subgraph_assignment",
+        "asset_authoring.pcg.surface_discovery"
       ]
     },
     "asset_authoring.project": {
@@ -56443,19 +58104,23 @@
     "asset_authoring.ui": {
       "shard_id": "asset_authoring.ui",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/ui.json",
-      "module_count": 20,
+      "module_count": 24,
       "module_ids": [
         "asset_authoring.ui",
+        "asset_authoring.ui.animation_inspection_delta_binding",
         "asset_authoring.ui.box_shadow_mid",
         "asset_authoring.ui.commonui_action_widget_binding",
         "asset_authoring.ui.commonui_container_navigation",
+        "asset_authoring.ui.commonui_content_framework",
         "asset_authoring.ui.commonui_input_action_datatable",
         "asset_authoring.ui.commonui_pause_menu_focus",
         "asset_authoring.ui.commonui_style_assets",
         "asset_authoring.ui.commonui_styled_button",
         "asset_authoring.ui.commonui_text_block",
         "asset_authoring.ui.list_view_binding",
+        "asset_authoring.ui.registry_layout_accessibility",
         "asset_authoring.ui.settings_notification_templates",
+        "asset_authoring.ui.uispec_diff_patch",
         "asset_authoring.ui.widget_animation_advanced_events",
         "asset_authoring.ui.widget_animation_remove",
         "asset_authoring.ui.widget_animation_v2",
@@ -56487,7 +58152,7 @@
     "asset_operation.creation_or_import": {
       "shard_id": "asset_operation.creation_or_import",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
-      "module_count": 293,
+      "module_count": 302,
       "module_ids": [
         "asset_operation.creation_or_import",
         "asset_operation.creation_or_import.ai",
@@ -56748,21 +58413,30 @@
         "asset_operation.creation_or_import.niagara.user_parameters",
         "asset_operation.creation_or_import.pcg",
         "asset_operation.creation_or_import.pcg.graph_authoring",
+        "asset_operation.creation_or_import.pcg.graph_mutation",
+        "asset_operation.creation_or_import.pcg.graph_replacement",
+        "asset_operation.creation_or_import.pcg.graph_user_parameters",
+        "asset_operation.creation_or_import.pcg.subgraph_assignment",
+        "asset_operation.creation_or_import.pcg.surface_discovery",
         "asset_operation.creation_or_import.project",
         "asset_operation.creation_or_import.project.cleanup_generated_assets",
         "asset_operation.creation_or_import.project.index_details_text",
         "asset_operation.creation_or_import.project.saved_asset_state",
         "asset_operation.creation_or_import.ui",
+        "asset_operation.creation_or_import.ui.animation_inspection_delta_binding",
         "asset_operation.creation_or_import.ui.box_shadow_mid",
         "asset_operation.creation_or_import.ui.commonui_action_widget_binding",
         "asset_operation.creation_or_import.ui.commonui_container_navigation",
+        "asset_operation.creation_or_import.ui.commonui_content_framework",
         "asset_operation.creation_or_import.ui.commonui_input_action_datatable",
         "asset_operation.creation_or_import.ui.commonui_pause_menu_focus",
         "asset_operation.creation_or_import.ui.commonui_style_assets",
         "asset_operation.creation_or_import.ui.commonui_styled_button",
         "asset_operation.creation_or_import.ui.commonui_text_block",
         "asset_operation.creation_or_import.ui.list_view_binding",
+        "asset_operation.creation_or_import.ui.registry_layout_accessibility",
         "asset_operation.creation_or_import.ui.settings_notification_templates",
+        "asset_operation.creation_or_import.ui.uispec_diff_patch",
         "asset_operation.creation_or_import.ui.widget_animation_advanced_events",
         "asset_operation.creation_or_import.ui.widget_animation_remove",
         "asset_operation.creation_or_import.ui.widget_animation_v2",
@@ -56787,7 +58461,7 @@
     "asset_operation.edit": {
       "shard_id": "asset_operation.edit",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
-      "module_count": 293,
+      "module_count": 302,
       "module_ids": [
         "asset_operation.edit",
         "asset_operation.edit.ai",
@@ -57048,21 +58722,30 @@
         "asset_operation.edit.niagara.user_parameters",
         "asset_operation.edit.pcg",
         "asset_operation.edit.pcg.graph_authoring",
+        "asset_operation.edit.pcg.graph_mutation",
+        "asset_operation.edit.pcg.graph_replacement",
+        "asset_operation.edit.pcg.graph_user_parameters",
+        "asset_operation.edit.pcg.subgraph_assignment",
+        "asset_operation.edit.pcg.surface_discovery",
         "asset_operation.edit.project",
         "asset_operation.edit.project.cleanup_generated_assets",
         "asset_operation.edit.project.index_details_text",
         "asset_operation.edit.project.saved_asset_state",
         "asset_operation.edit.ui",
+        "asset_operation.edit.ui.animation_inspection_delta_binding",
         "asset_operation.edit.ui.box_shadow_mid",
         "asset_operation.edit.ui.commonui_action_widget_binding",
         "asset_operation.edit.ui.commonui_container_navigation",
+        "asset_operation.edit.ui.commonui_content_framework",
         "asset_operation.edit.ui.commonui_input_action_datatable",
         "asset_operation.edit.ui.commonui_pause_menu_focus",
         "asset_operation.edit.ui.commonui_style_assets",
         "asset_operation.edit.ui.commonui_styled_button",
         "asset_operation.edit.ui.commonui_text_block",
         "asset_operation.edit.ui.list_view_binding",
+        "asset_operation.edit.ui.registry_layout_accessibility",
         "asset_operation.edit.ui.settings_notification_templates",
+        "asset_operation.edit.ui.uispec_diff_patch",
         "asset_operation.edit.ui.widget_animation_advanced_events",
         "asset_operation.edit.ui.widget_animation_remove",
         "asset_operation.edit.ui.widget_animation_v2",
@@ -57087,7 +58770,7 @@
     "asset_operation.readback_verify": {
       "shard_id": "asset_operation.readback_verify",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/readback_verify.json",
-      "module_count": 294,
+      "module_count": 303,
       "module_ids": [
         "asset_operation.readback_verify",
         "asset_operation.readback_verify.ai",
@@ -57349,21 +59032,30 @@
         "asset_operation.readback_verify.niagara.user_parameters",
         "asset_operation.readback_verify.pcg",
         "asset_operation.readback_verify.pcg.graph_authoring",
+        "asset_operation.readback_verify.pcg.graph_mutation",
+        "asset_operation.readback_verify.pcg.graph_replacement",
+        "asset_operation.readback_verify.pcg.graph_user_parameters",
+        "asset_operation.readback_verify.pcg.subgraph_assignment",
+        "asset_operation.readback_verify.pcg.surface_discovery",
         "asset_operation.readback_verify.project",
         "asset_operation.readback_verify.project.cleanup_generated_assets",
         "asset_operation.readback_verify.project.index_details_text",
         "asset_operation.readback_verify.project.saved_asset_state",
         "asset_operation.readback_verify.ui",
+        "asset_operation.readback_verify.ui.animation_inspection_delta_binding",
         "asset_operation.readback_verify.ui.box_shadow_mid",
         "asset_operation.readback_verify.ui.commonui_action_widget_binding",
         "asset_operation.readback_verify.ui.commonui_container_navigation",
+        "asset_operation.readback_verify.ui.commonui_content_framework",
         "asset_operation.readback_verify.ui.commonui_input_action_datatable",
         "asset_operation.readback_verify.ui.commonui_pause_menu_focus",
         "asset_operation.readback_verify.ui.commonui_style_assets",
         "asset_operation.readback_verify.ui.commonui_styled_button",
         "asset_operation.readback_verify.ui.commonui_text_block",
         "asset_operation.readback_verify.ui.list_view_binding",
+        "asset_operation.readback_verify.ui.registry_layout_accessibility",
         "asset_operation.readback_verify.ui.settings_notification_templates",
+        "asset_operation.readback_verify.ui.uispec_diff_patch",
         "asset_operation.readback_verify.ui.widget_animation_advanced_events",
         "asset_operation.readback_verify.ui.widget_animation_remove",
         "asset_operation.readback_verify.ui.widget_animation_v2",
@@ -57388,7 +59080,7 @@
     "asset_operation.save": {
       "shard_id": "asset_operation.save",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
-      "module_count": 291,
+      "module_count": 300,
       "module_ids": [
         "asset_operation.save",
         "asset_operation.save.ai",
@@ -57647,21 +59339,30 @@
         "asset_operation.save.niagara.user_parameters",
         "asset_operation.save.pcg",
         "asset_operation.save.pcg.graph_authoring",
+        "asset_operation.save.pcg.graph_mutation",
+        "asset_operation.save.pcg.graph_replacement",
+        "asset_operation.save.pcg.graph_user_parameters",
+        "asset_operation.save.pcg.subgraph_assignment",
+        "asset_operation.save.pcg.surface_discovery",
         "asset_operation.save.project",
         "asset_operation.save.project.cleanup_generated_assets",
         "asset_operation.save.project.index_details_text",
         "asset_operation.save.project.saved_asset_state",
         "asset_operation.save.ui",
+        "asset_operation.save.ui.animation_inspection_delta_binding",
         "asset_operation.save.ui.box_shadow_mid",
         "asset_operation.save.ui.commonui_action_widget_binding",
         "asset_operation.save.ui.commonui_container_navigation",
+        "asset_operation.save.ui.commonui_content_framework",
         "asset_operation.save.ui.commonui_input_action_datatable",
         "asset_operation.save.ui.commonui_pause_menu_focus",
         "asset_operation.save.ui.commonui_style_assets",
         "asset_operation.save.ui.commonui_styled_button",
         "asset_operation.save.ui.commonui_text_block",
         "asset_operation.save.ui.list_view_binding",
+        "asset_operation.save.ui.registry_layout_accessibility",
         "asset_operation.save.ui.settings_notification_templates",
+        "asset_operation.save.ui.uispec_diff_patch",
         "asset_operation.save.ui.widget_animation_advanced_events",
         "asset_operation.save.ui.widget_animation_remove",
         "asset_operation.save.ui.widget_animation_v2",
@@ -57831,7 +59532,7 @@
     "workflow": {
       "shard_id": "workflow",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/workflow.json",
-      "module_count": 285,
+      "module_count": 294,
       "module_ids": [
         "workflow.actor_component_property_assembly",
         "workflow.actorcomponent_toggle_contract",
@@ -58076,6 +59777,11 @@
         "workflow.niagara_user_parameter_roundtrip",
         "workflow.pbr_material_from_disk_roundtrip",
         "workflow.pcg_graph_idempotent_authoring_roundtrip",
+        "workflow.pcg_graph_mutation_cleanup_roundtrip",
+        "workflow.pcg_graph_replacement_roundtrip",
+        "workflow.pcg_graph_user_parameter_roundtrip",
+        "workflow.pcg_subgraph_assignment_roundtrip",
+        "workflow.pcg_surface_discovery_roundtrip",
         "workflow.project_generated_cleanup_roundtrip",
         "workflow.project_index_details_text_roundtrip",
         "workflow.project_saved_asset_state_roundtrip",
@@ -58092,18 +59798,22 @@
         "workflow.texture_role_presets_roundtrip",
         "workflow.texture_typed_validation_roundtrip",
         "workflow.ui_animation_advanced_events_roundtrip",
+        "workflow.ui_animation_inspection_delta_binding_roundtrip",
         "workflow.ui_animation_remove_roundtrip",
         "workflow.ui_animation_v2_roundtrip",
         "workflow.ui_box_shadow_mid_roundtrip",
         "workflow.ui_commonui_action_widget_binding_roundtrip",
         "workflow.ui_commonui_container_navigation_roundtrip",
+        "workflow.ui_commonui_content_framework_roundtrip",
         "workflow.ui_commonui_pause_menu_focus_roundtrip",
         "workflow.ui_commonui_style_assets_roundtrip",
         "workflow.ui_list_view_entry_widget_roundtrip",
+        "workflow.ui_registry_layout_accessibility_roundtrip",
         "workflow.ui_settings_notification_templates_roundtrip",
         "workflow.ui_slot_property_variable_roundtrip",
         "workflow.ui_spec_builder_dump_roundtrip",
         "workflow.ui_template_widgets_roundtrip",
+        "workflow.ui_uispec_diff_patch_roundtrip",
         "workflow.ui_widget_styling_actions_roundtrip",
         "workflow.ui_widget_tree_maintenance_roundtrip",
         "workflow.umg_widget_tree_roundtrip",
@@ -58381,21 +60091,30 @@
     "asset_authoring.niagara.user_parameters": "asset_authoring.niagara",
     "asset_authoring.pcg": "asset_authoring.pcg",
     "asset_authoring.pcg.graph_authoring": "asset_authoring.pcg",
+    "asset_authoring.pcg.graph_mutation": "asset_authoring.pcg",
+    "asset_authoring.pcg.graph_replacement": "asset_authoring.pcg",
+    "asset_authoring.pcg.graph_user_parameters": "asset_authoring.pcg",
+    "asset_authoring.pcg.subgraph_assignment": "asset_authoring.pcg",
+    "asset_authoring.pcg.surface_discovery": "asset_authoring.pcg",
     "asset_authoring.project": "asset_authoring.project",
     "asset_authoring.project.cleanup_generated_assets": "asset_authoring.project",
     "asset_authoring.project.index_details_text": "asset_authoring.project",
     "asset_authoring.project.saved_asset_state": "asset_authoring.project",
     "asset_authoring.ui": "asset_authoring.ui",
+    "asset_authoring.ui.animation_inspection_delta_binding": "asset_authoring.ui",
     "asset_authoring.ui.box_shadow_mid": "asset_authoring.ui",
     "asset_authoring.ui.commonui_action_widget_binding": "asset_authoring.ui",
     "asset_authoring.ui.commonui_container_navigation": "asset_authoring.ui",
+    "asset_authoring.ui.commonui_content_framework": "asset_authoring.ui",
     "asset_authoring.ui.commonui_input_action_datatable": "asset_authoring.ui",
     "asset_authoring.ui.commonui_pause_menu_focus": "asset_authoring.ui",
     "asset_authoring.ui.commonui_style_assets": "asset_authoring.ui",
     "asset_authoring.ui.commonui_styled_button": "asset_authoring.ui",
     "asset_authoring.ui.commonui_text_block": "asset_authoring.ui",
     "asset_authoring.ui.list_view_binding": "asset_authoring.ui",
+    "asset_authoring.ui.registry_layout_accessibility": "asset_authoring.ui",
     "asset_authoring.ui.settings_notification_templates": "asset_authoring.ui",
+    "asset_authoring.ui.uispec_diff_patch": "asset_authoring.ui",
     "asset_authoring.ui.widget_animation_advanced_events": "asset_authoring.ui",
     "asset_authoring.ui.widget_animation_remove": "asset_authoring.ui",
     "asset_authoring.ui.widget_animation_v2": "asset_authoring.ui",
@@ -58674,21 +60393,30 @@
     "asset_operation.creation_or_import.niagara.user_parameters": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.pcg": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.pcg.graph_authoring": "asset_operation.creation_or_import",
+    "asset_operation.creation_or_import.pcg.graph_mutation": "asset_operation.creation_or_import",
+    "asset_operation.creation_or_import.pcg.graph_replacement": "asset_operation.creation_or_import",
+    "asset_operation.creation_or_import.pcg.graph_user_parameters": "asset_operation.creation_or_import",
+    "asset_operation.creation_or_import.pcg.subgraph_assignment": "asset_operation.creation_or_import",
+    "asset_operation.creation_or_import.pcg.surface_discovery": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.project": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.project.cleanup_generated_assets": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.project.index_details_text": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.project.saved_asset_state": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.ui": "asset_operation.creation_or_import",
+    "asset_operation.creation_or_import.ui.animation_inspection_delta_binding": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.ui.box_shadow_mid": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.ui.commonui_action_widget_binding": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.ui.commonui_container_navigation": "asset_operation.creation_or_import",
+    "asset_operation.creation_or_import.ui.commonui_content_framework": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.ui.commonui_input_action_datatable": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.ui.commonui_pause_menu_focus": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.ui.commonui_style_assets": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.ui.commonui_styled_button": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.ui.commonui_text_block": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.ui.list_view_binding": "asset_operation.creation_or_import",
+    "asset_operation.creation_or_import.ui.registry_layout_accessibility": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.ui.settings_notification_templates": "asset_operation.creation_or_import",
+    "asset_operation.creation_or_import.ui.uispec_diff_patch": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.ui.widget_animation_advanced_events": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.ui.widget_animation_remove": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.ui.widget_animation_v2": "asset_operation.creation_or_import",
@@ -58967,21 +60695,30 @@
     "asset_operation.edit.niagara.user_parameters": "asset_operation.edit",
     "asset_operation.edit.pcg": "asset_operation.edit",
     "asset_operation.edit.pcg.graph_authoring": "asset_operation.edit",
+    "asset_operation.edit.pcg.graph_mutation": "asset_operation.edit",
+    "asset_operation.edit.pcg.graph_replacement": "asset_operation.edit",
+    "asset_operation.edit.pcg.graph_user_parameters": "asset_operation.edit",
+    "asset_operation.edit.pcg.subgraph_assignment": "asset_operation.edit",
+    "asset_operation.edit.pcg.surface_discovery": "asset_operation.edit",
     "asset_operation.edit.project": "asset_operation.edit",
     "asset_operation.edit.project.cleanup_generated_assets": "asset_operation.edit",
     "asset_operation.edit.project.index_details_text": "asset_operation.edit",
     "asset_operation.edit.project.saved_asset_state": "asset_operation.edit",
     "asset_operation.edit.ui": "asset_operation.edit",
+    "asset_operation.edit.ui.animation_inspection_delta_binding": "asset_operation.edit",
     "asset_operation.edit.ui.box_shadow_mid": "asset_operation.edit",
     "asset_operation.edit.ui.commonui_action_widget_binding": "asset_operation.edit",
     "asset_operation.edit.ui.commonui_container_navigation": "asset_operation.edit",
+    "asset_operation.edit.ui.commonui_content_framework": "asset_operation.edit",
     "asset_operation.edit.ui.commonui_input_action_datatable": "asset_operation.edit",
     "asset_operation.edit.ui.commonui_pause_menu_focus": "asset_operation.edit",
     "asset_operation.edit.ui.commonui_style_assets": "asset_operation.edit",
     "asset_operation.edit.ui.commonui_styled_button": "asset_operation.edit",
     "asset_operation.edit.ui.commonui_text_block": "asset_operation.edit",
     "asset_operation.edit.ui.list_view_binding": "asset_operation.edit",
+    "asset_operation.edit.ui.registry_layout_accessibility": "asset_operation.edit",
     "asset_operation.edit.ui.settings_notification_templates": "asset_operation.edit",
+    "asset_operation.edit.ui.uispec_diff_patch": "asset_operation.edit",
     "asset_operation.edit.ui.widget_animation_advanced_events": "asset_operation.edit",
     "asset_operation.edit.ui.widget_animation_remove": "asset_operation.edit",
     "asset_operation.edit.ui.widget_animation_v2": "asset_operation.edit",
@@ -59261,21 +60998,30 @@
     "asset_operation.readback_verify.niagara.user_parameters": "asset_operation.readback_verify",
     "asset_operation.readback_verify.pcg": "asset_operation.readback_verify",
     "asset_operation.readback_verify.pcg.graph_authoring": "asset_operation.readback_verify",
+    "asset_operation.readback_verify.pcg.graph_mutation": "asset_operation.readback_verify",
+    "asset_operation.readback_verify.pcg.graph_replacement": "asset_operation.readback_verify",
+    "asset_operation.readback_verify.pcg.graph_user_parameters": "asset_operation.readback_verify",
+    "asset_operation.readback_verify.pcg.subgraph_assignment": "asset_operation.readback_verify",
+    "asset_operation.readback_verify.pcg.surface_discovery": "asset_operation.readback_verify",
     "asset_operation.readback_verify.project": "asset_operation.readback_verify",
     "asset_operation.readback_verify.project.cleanup_generated_assets": "asset_operation.readback_verify",
     "asset_operation.readback_verify.project.index_details_text": "asset_operation.readback_verify",
     "asset_operation.readback_verify.project.saved_asset_state": "asset_operation.readback_verify",
     "asset_operation.readback_verify.ui": "asset_operation.readback_verify",
+    "asset_operation.readback_verify.ui.animation_inspection_delta_binding": "asset_operation.readback_verify",
     "asset_operation.readback_verify.ui.box_shadow_mid": "asset_operation.readback_verify",
     "asset_operation.readback_verify.ui.commonui_action_widget_binding": "asset_operation.readback_verify",
     "asset_operation.readback_verify.ui.commonui_container_navigation": "asset_operation.readback_verify",
+    "asset_operation.readback_verify.ui.commonui_content_framework": "asset_operation.readback_verify",
     "asset_operation.readback_verify.ui.commonui_input_action_datatable": "asset_operation.readback_verify",
     "asset_operation.readback_verify.ui.commonui_pause_menu_focus": "asset_operation.readback_verify",
     "asset_operation.readback_verify.ui.commonui_style_assets": "asset_operation.readback_verify",
     "asset_operation.readback_verify.ui.commonui_styled_button": "asset_operation.readback_verify",
     "asset_operation.readback_verify.ui.commonui_text_block": "asset_operation.readback_verify",
     "asset_operation.readback_verify.ui.list_view_binding": "asset_operation.readback_verify",
+    "asset_operation.readback_verify.ui.registry_layout_accessibility": "asset_operation.readback_verify",
     "asset_operation.readback_verify.ui.settings_notification_templates": "asset_operation.readback_verify",
+    "asset_operation.readback_verify.ui.uispec_diff_patch": "asset_operation.readback_verify",
     "asset_operation.readback_verify.ui.widget_animation_advanced_events": "asset_operation.readback_verify",
     "asset_operation.readback_verify.ui.widget_animation_remove": "asset_operation.readback_verify",
     "asset_operation.readback_verify.ui.widget_animation_v2": "asset_operation.readback_verify",
@@ -59552,21 +61298,30 @@
     "asset_operation.save.niagara.user_parameters": "asset_operation.save",
     "asset_operation.save.pcg": "asset_operation.save",
     "asset_operation.save.pcg.graph_authoring": "asset_operation.save",
+    "asset_operation.save.pcg.graph_mutation": "asset_operation.save",
+    "asset_operation.save.pcg.graph_replacement": "asset_operation.save",
+    "asset_operation.save.pcg.graph_user_parameters": "asset_operation.save",
+    "asset_operation.save.pcg.subgraph_assignment": "asset_operation.save",
+    "asset_operation.save.pcg.surface_discovery": "asset_operation.save",
     "asset_operation.save.project": "asset_operation.save",
     "asset_operation.save.project.cleanup_generated_assets": "asset_operation.save",
     "asset_operation.save.project.index_details_text": "asset_operation.save",
     "asset_operation.save.project.saved_asset_state": "asset_operation.save",
     "asset_operation.save.ui": "asset_operation.save",
+    "asset_operation.save.ui.animation_inspection_delta_binding": "asset_operation.save",
     "asset_operation.save.ui.box_shadow_mid": "asset_operation.save",
     "asset_operation.save.ui.commonui_action_widget_binding": "asset_operation.save",
     "asset_operation.save.ui.commonui_container_navigation": "asset_operation.save",
+    "asset_operation.save.ui.commonui_content_framework": "asset_operation.save",
     "asset_operation.save.ui.commonui_input_action_datatable": "asset_operation.save",
     "asset_operation.save.ui.commonui_pause_menu_focus": "asset_operation.save",
     "asset_operation.save.ui.commonui_style_assets": "asset_operation.save",
     "asset_operation.save.ui.commonui_styled_button": "asset_operation.save",
     "asset_operation.save.ui.commonui_text_block": "asset_operation.save",
     "asset_operation.save.ui.list_view_binding": "asset_operation.save",
+    "asset_operation.save.ui.registry_layout_accessibility": "asset_operation.save",
     "asset_operation.save.ui.settings_notification_templates": "asset_operation.save",
+    "asset_operation.save.ui.uispec_diff_patch": "asset_operation.save",
     "asset_operation.save.ui.widget_animation_advanced_events": "asset_operation.save",
     "asset_operation.save.ui.widget_animation_remove": "asset_operation.save",
     "asset_operation.save.ui.widget_animation_v2": "asset_operation.save",
@@ -59904,6 +61659,11 @@
     "workflow.niagara_user_parameter_roundtrip": "workflow",
     "workflow.pbr_material_from_disk_roundtrip": "workflow",
     "workflow.pcg_graph_idempotent_authoring_roundtrip": "workflow",
+    "workflow.pcg_graph_mutation_cleanup_roundtrip": "workflow",
+    "workflow.pcg_graph_replacement_roundtrip": "workflow",
+    "workflow.pcg_graph_user_parameter_roundtrip": "workflow",
+    "workflow.pcg_subgraph_assignment_roundtrip": "workflow",
+    "workflow.pcg_surface_discovery_roundtrip": "workflow",
     "workflow.project_generated_cleanup_roundtrip": "workflow",
     "workflow.project_index_details_text_roundtrip": "workflow",
     "workflow.project_saved_asset_state_roundtrip": "workflow",
@@ -59920,18 +61680,22 @@
     "workflow.texture_role_presets_roundtrip": "workflow",
     "workflow.texture_typed_validation_roundtrip": "workflow",
     "workflow.ui_animation_advanced_events_roundtrip": "workflow",
+    "workflow.ui_animation_inspection_delta_binding_roundtrip": "workflow",
     "workflow.ui_animation_remove_roundtrip": "workflow",
     "workflow.ui_animation_v2_roundtrip": "workflow",
     "workflow.ui_box_shadow_mid_roundtrip": "workflow",
     "workflow.ui_commonui_action_widget_binding_roundtrip": "workflow",
     "workflow.ui_commonui_container_navigation_roundtrip": "workflow",
+    "workflow.ui_commonui_content_framework_roundtrip": "workflow",
     "workflow.ui_commonui_pause_menu_focus_roundtrip": "workflow",
     "workflow.ui_commonui_style_assets_roundtrip": "workflow",
     "workflow.ui_list_view_entry_widget_roundtrip": "workflow",
+    "workflow.ui_registry_layout_accessibility_roundtrip": "workflow",
     "workflow.ui_settings_notification_templates_roundtrip": "workflow",
     "workflow.ui_slot_property_variable_roundtrip": "workflow",
     "workflow.ui_spec_builder_dump_roundtrip": "workflow",
     "workflow.ui_template_widgets_roundtrip": "workflow",
+    "workflow.ui_uispec_diff_patch_roundtrip": "workflow",
     "workflow.ui_widget_styling_actions_roundtrip": "workflow",
     "workflow.ui_widget_tree_maintenance_roundtrip": "workflow",
     "workflow.umg_widget_tree_roundtrip": "workflow",

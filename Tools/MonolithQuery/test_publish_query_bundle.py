@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -116,6 +117,13 @@ class QueryBundlePublicationTests(unittest.TestCase):
             (self.binaries / "monolith_query.exe").stat().st_ino,
             (self.binaries / str(manifest["file"])).stat().st_ino,
             "the mutable compatibility name must not hard-link the immutable image",
+        )
+        expected_manifest = (
+            json.dumps(manifest, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
+        ).replace("\n", os.linesep).encode("utf-8")
+        self.assertEqual(
+            (self.binaries / PUBLISHER.MANIFEST_NAME).read_bytes(),
+            expected_manifest,
         )
 
     def test_validate_rejects_catalog_sha_tamper(self) -> None:

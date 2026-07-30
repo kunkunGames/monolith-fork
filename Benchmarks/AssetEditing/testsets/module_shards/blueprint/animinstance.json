@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-07-17T10:24:39.993026+00:00",
+  "generated_at": "2026-07-30T14:45:42.791281+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "ea3c428db9e0fdb056ad50f6e36fce5a1d12383eef5b97982b9e371308a10165",
+  "source_task_sha256": "48ef08cb65bfcafb3877e48e05e619a364028a6523e31c8419d99f65d776057b",
   "module_storage": "module_shard",
   "shard_id": "blueprint.animinstance",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/animinstance.json",
-  "task_count": 579,
+  "task_count": 588,
   "module_count": 8,
   "routing_axes": [
     "category",
@@ -269,7 +269,7 @@
         "BEB-253",
         "BEB-254",
         "BEB-255",
-        "BEB-576"
+        "BEB-585"
       ],
       "task_refs": [
         {
@@ -920,7 +920,7 @@
           "description": "Add Speed VariableGet node to BenchAnimEvaluateTransitions graph"
         },
         {
-          "id": "BEB-576",
+          "id": "BEB-585",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -945,7 +945,7 @@
       "groups": {
         "by_category": {
           "duplicate_reject": [
-            "BEB-576"
+            "BEB-585"
           ],
           "edit_execute": [
             "BEB-196",
@@ -1003,7 +1003,7 @@
             "BEB-200",
             "BEB-253",
             "BEB-254",
-            "BEB-576"
+            "BEB-585"
           ],
           "general": [
             "BEB-004",
@@ -1052,7 +1052,7 @@
             "BEB-253",
             "BEB-254",
             "BEB-255",
-            "BEB-576"
+            "BEB-585"
           ],
           "read_only": [
             "BEB-004",
@@ -1089,7 +1089,7 @@
             "BEB-253",
             "BEB-254",
             "BEB-255",
-            "BEB-576"
+            "BEB-585"
           ],
           "readback_verify": [
             "BEB-004",
@@ -1122,7 +1122,7 @@
             "BEB-253",
             "BEB-254",
             "BEB-255",
-            "BEB-576"
+            "BEB-585"
           ]
         }
       },
@@ -1340,7 +1340,7 @@
         "BEB-200",
         "BEB-253",
         "BEB-254",
-        "BEB-576"
+        "BEB-585"
       ],
       "task_refs": [
         {
@@ -1484,7 +1484,7 @@
           "description": "Mark BenchAnimEvaluateTransitions as thread-safe on AnimInstance"
         },
         {
-          "id": "BEB-576",
+          "id": "BEB-585",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -1509,7 +1509,7 @@
       "groups": {
         "by_category": {
           "duplicate_reject": [
-            "BEB-576"
+            "BEB-585"
           ],
           "edit_execute": [
             "BEB-196",
@@ -1530,7 +1530,7 @@
             "BEB-200",
             "BEB-253",
             "BEB-254",
-            "BEB-576"
+            "BEB-585"
           ]
         },
         "by_asset_operation": {
@@ -1541,7 +1541,7 @@
             "BEB-200",
             "BEB-253",
             "BEB-254",
-            "BEB-576"
+            "BEB-585"
           ],
           "readback_verify": [
             "BEB-160",
@@ -1550,7 +1550,7 @@
             "BEB-200",
             "BEB-253",
             "BEB-254",
-            "BEB-576"
+            "BEB-585"
           ]
         }
       },

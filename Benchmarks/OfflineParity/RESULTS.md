@@ -1,5 +1,26 @@
 # Offline Parity Benchmark Results
 
+## 2026-07-30 open-cl-review-20260730-05
+
+| Item | Value |
+| --- | ---: |
+| `offline_parity_score` | **1.0** |
+| Actions | 317 total; 311 comparable; 6 decision-chain skips |
+| MATCH / DIFF / real ERROR | 311 / 0 / 0 |
+| Expected-error cases | 5 (0 problems) |
+| `version_parity_score` | 1.0 (`2026-05-29.1` on both implementations) |
+| Input fingerprint | `c0fb73b5f4fa5fc1480f6b1efe5d09d8a3c98fff7582ed03b8e52d0f86ea7d45` |
+| Accepted evidence | `Benchmarks\OfflineParity\accepted\open-cl-review-20260730-05` |
+
+This full run pins the authoritative immutable Query bundle
+`monolith_query-a2c470a0c741ff18.exe` (SHA-256
+`5b9918ad3b74b6b6f7fd46620953a46bb4d104ad4e2b8469767f964ec1707406`)
+against the current stable single-writer `EngineSource.db` (997,572,608 bytes,
+SHA-256 `d6c98c5af9482ef67c306a361908a42546b33280c7bed975ab098d0ea023bfb2`).
+Native Query and Python matched every comparable action after deep Source
+health reported exact 390,098 / 390,098 symbol-to-CRG-node parity and no
+maintenance requirement.
+
 ## 2026-07-26 activation-settings-compact-api-final-20260726-03
 
 | Item | Value |

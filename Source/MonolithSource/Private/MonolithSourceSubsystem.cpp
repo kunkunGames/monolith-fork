@@ -238,9 +238,9 @@ void UMonolithSourceSubsystem::OnReloadComplete(EReloadCompleteReason Reason)
 // Full reindex: engine + shaders + project (clean build)
 // ============================================================
 
-void UMonolithSourceSubsystem::TriggerReindex()
+bool UMonolithSourceSubsystem::TriggerReindex()
 {
-	TriggerReindexInternal();
+	return TriggerReindexInternal();
 }
 
 bool UMonolithSourceSubsystem::TriggerReindexInternal()
@@ -248,6 +248,10 @@ bool UMonolithSourceSubsystem::TriggerReindexInternal()
 	check(IsInGameThread());
 	if (!IsIndexingWorkEnabled())
 	{
+		LastIndexContext = TEXT("Full source indexing");
+		LastIndexFailureStage = TEXT("indexing_disabled");
+		LastIndexFailureDetail =
+			TEXT("Source indexing is disabled; run Monolith.StartIndexing first.");
 		UE_LOG(LogMonolithSource, Warning,
 			TEXT("Full source indexing is disabled; run Monolith.StartIndexing first"));
 		return false;
@@ -276,6 +280,12 @@ bool UMonolithSourceSubsystem::TriggerReindexInternal()
 	}
 
 	bIsIndexing = true;
+	LastIndexContext = TEXT("Full source indexing");
+	LastIndexFailureStage.Reset();
+	LastIndexFailureDetail.Reset();
+	LastIndexFilesProcessed = 0;
+	LastIndexSymbolsExtracted = 0;
+	LastIndexErrors = 0;
 
 	delete Indexer;
 	Indexer = new FMonolithSourceIndexer();
@@ -287,14 +297,21 @@ bool UMonolithSourceSubsystem::TriggerReindexInternal()
 	Indexer->SetIndexProjectSource(true);
 
 	const TWeakObjectPtr<UMonolithSourceSubsystem> WeakThis(this);
-	Indexer->OnComplete.AddLambda([WeakThis, DbPath](int32 Files, int32 Symbols, int32 Errors, bool bSucceeded)
+	Indexer->OnComplete.AddLambda([WeakThis, DbPath](const FSourceIndexCompletion& Completion)
 	{
-		AsyncTask(ENamedThreads::GameThread, [WeakThis, DbPath, Files, Symbols, Errors, bSucceeded]()
+		const FSourceIndexCompletion CompletionCopy = Completion;
+		AsyncTask(ENamedThreads::GameThread, [WeakThis, DbPath, CompletionCopy]()
 		{
 			if (UMonolithSourceSubsystem* Subsystem = WeakThis.Get())
 			{
 				Subsystem->FinishIndexingOnGameThread(
-					DbPath, TEXT("Full source indexing"), Files, Symbols, Errors, bSucceeded,
+					DbPath, TEXT("Full source indexing"),
+					CompletionCopy.FilesProcessed,
+					CompletionCopy.SymbolsExtracted,
+					CompletionCopy.Errors,
+					CompletionCopy.bSucceeded,
+					CompletionCopy.FailureStage,
+					CompletionCopy.FailureDetail,
 					/*bRequiresFullCrgRebuild=*/true);
 			}
 		});
@@ -303,6 +320,8 @@ bool UMonolithSourceSubsystem::TriggerReindexInternal()
 	UE_LOG(LogMonolithSource, Log, TEXT("Starting full source indexing (engine + project) via C++ indexer"));
 	if (!Indexer->StartAsync())
 	{
+		LastIndexFailureStage = TEXT("start_index_thread");
+		LastIndexFailureDetail = TEXT("Failed to create the full source indexing worker thread.");
 		UE_LOG(LogMonolithSource, Error, TEXT("Failed to start full source indexing thread"));
 		if (!bDatabaseRequiresSuccessfulReindex)
 		{
@@ -318,9 +337,9 @@ bool UMonolithSourceSubsystem::TriggerReindexInternal()
 // Incremental project-only reindex
 // ============================================================
 
-void UMonolithSourceSubsystem::TriggerProjectReindex()
+bool UMonolithSourceSubsystem::TriggerProjectReindex()
 {
-	TriggerProjectReindexInternal();
+	return TriggerProjectReindexInternal();
 }
 
 bool UMonolithSourceSubsystem::TriggerProjectReindexInternal()
@@ -328,6 +347,10 @@ bool UMonolithSourceSubsystem::TriggerProjectReindexInternal()
 	check(IsInGameThread());
 	if (!IsIndexingWorkEnabled())
 	{
+		LastIndexContext = TEXT("Project source indexing");
+		LastIndexFailureStage = TEXT("indexing_disabled");
+		LastIndexFailureDetail =
+			TEXT("Source indexing is disabled; run Monolith.StartIndexing first.");
 		UE_LOG(LogMonolithSource, Warning,
 			TEXT("Project source indexing is disabled; run Monolith.StartIndexing first"));
 		return false;
@@ -344,6 +367,10 @@ bool UMonolithSourceSubsystem::TriggerProjectReindexInternal()
 	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
 	if (!PlatformFile.FileExists(*DbPath))
 	{
+		LastIndexContext = TEXT("Project source indexing");
+		LastIndexFailureStage = TEXT("database_missing");
+		LastIndexFailureDetail =
+			TEXT("EngineSource.db does not exist; a full source reindex is required.");
 		UE_LOG(LogMonolithSource, Error, TEXT("EngineSource.db not found at %s — run full TriggerReindex() first"), *DbPath);
 		return false;
 	}
@@ -355,6 +382,12 @@ bool UMonolithSourceSubsystem::TriggerProjectReindexInternal()
 	}
 
 	bIsIndexing = true;
+	LastIndexContext = TEXT("Project source indexing");
+	LastIndexFailureStage.Reset();
+	LastIndexFailureDetail.Reset();
+	LastIndexFilesProcessed = 0;
+	LastIndexSymbolsExtracted = 0;
+	LastIndexErrors = 0;
 
 	delete Indexer;
 	Indexer = new FMonolithSourceIndexer();
@@ -365,14 +398,21 @@ bool UMonolithSourceSubsystem::TriggerProjectReindexInternal()
 	Indexer->SetIndexProjectSource(true);
 
 	const TWeakObjectPtr<UMonolithSourceSubsystem> WeakThis(this);
-	Indexer->OnComplete.AddLambda([WeakThis, DbPath](int32 Files, int32 Symbols, int32 Errors, bool bSucceeded)
+	Indexer->OnComplete.AddLambda([WeakThis, DbPath](const FSourceIndexCompletion& Completion)
 	{
-		AsyncTask(ENamedThreads::GameThread, [WeakThis, DbPath, Files, Symbols, Errors, bSucceeded]()
+		const FSourceIndexCompletion CompletionCopy = Completion;
+		AsyncTask(ENamedThreads::GameThread, [WeakThis, DbPath, CompletionCopy]()
 		{
 			if (UMonolithSourceSubsystem* Subsystem = WeakThis.Get())
 			{
 				Subsystem->FinishIndexingOnGameThread(
-					DbPath, TEXT("Project source indexing"), Files, Symbols, Errors, bSucceeded,
+					DbPath, TEXT("Project source indexing"),
+					CompletionCopy.FilesProcessed,
+					CompletionCopy.SymbolsExtracted,
+					CompletionCopy.Errors,
+					CompletionCopy.bSucceeded,
+					CompletionCopy.FailureStage,
+					CompletionCopy.FailureDetail,
 					/*bRequiresFullCrgRebuild=*/false);
 			}
 		});
@@ -381,6 +421,8 @@ bool UMonolithSourceSubsystem::TriggerProjectReindexInternal()
 	UE_LOG(LogMonolithSource, Log, TEXT("Starting project source indexing (incremental) via C++ indexer"));
 	if (!Indexer->StartAsync())
 	{
+		LastIndexFailureStage = TEXT("start_index_thread");
+		LastIndexFailureDetail = TEXT("Failed to create the project source indexing worker thread.");
 		UE_LOG(LogMonolithSource, Error, TEXT("Failed to start project source indexing thread"));
 		if (!bDatabaseRequiresSuccessfulReindex)
 		{
@@ -430,6 +472,8 @@ void UMonolithSourceSubsystem::FinishIndexingOnGameThread(
 	int32 Symbols,
 	int32 Errors,
 	bool bSucceeded,
+	const FString& FailureStage,
+	const FString& FailureDetail,
 	bool bRequiresFullCrgRebuild)
 {
 	if (bIsDeinitializing)
@@ -437,12 +481,24 @@ void UMonolithSourceSubsystem::FinishIndexingOnGameThread(
 		return;
 	}
 
+	LastIndexContext = Context;
+	LastIndexFilesProcessed = Files;
+	LastIndexSymbolsExtracted = Symbols;
+	LastIndexErrors = Errors;
+
 	if (!bSucceeded)
 	{
+		LastIndexFailureStage =
+			FailureStage.IsEmpty() ? TEXT("index_failed") : FailureStage;
+		LastIndexFailureDetail =
+			FailureDetail.IsEmpty()
+				? TEXT("The source indexer reported failure without additional detail.")
+				: FailureDetail;
 		bDatabaseRequiresSuccessfulReindex = true;
 		UE_LOG(LogMonolithSource, Error,
-			TEXT("%s failed: %d files, %d symbols, %d errors. EngineSource DB remains closed until a successful reindex."),
-			*Context, Files, Symbols, Errors);
+			TEXT("%s failed at %s: %d files, %d symbols, %d errors. %s EngineSource DB remains closed until a successful reindex."),
+			*Context, *LastIndexFailureStage, Files, Symbols, Errors,
+			*LastIndexFailureDetail);
 		bIsIndexing = false;
 		return;
 	}
@@ -450,6 +506,10 @@ void UMonolithSourceSubsystem::FinishIndexingOnGameThread(
 	ReopenDatabase(DbPath);
 	if (!Database.IsValid() || !Database->IsOpen())
 	{
+		LastIndexFailureStage = TEXT("reopen_database");
+		LastIndexFailureDetail = LastDatabaseOpenFailureDetail.IsEmpty()
+			? TEXT("EngineSource.db could not be reopened after indexing.")
+			: LastDatabaseOpenFailureDetail;
 		bDatabaseRequiresSuccessfulReindex = true;
 		UE_LOG(LogMonolithSource, Error,
 			TEXT("%s completed indexing but EngineSource DB could not be reopened; a successful reindex is required."),
@@ -469,6 +529,8 @@ void UMonolithSourceSubsystem::FinishIndexingOnGameThread(
 			*Context);
 	}
 	bDatabaseRequiresSuccessfulReindex = false;
+	LastIndexFailureStage.Reset();
+	LastIndexFailureDetail.Reset();
 	UE_LOG(LogMonolithSource, Log, TEXT("%s complete: %d files, %d symbols, %d errors"),
 		*Context, Files, Symbols, Errors);
 	bIsIndexing = false;
@@ -489,6 +551,8 @@ bool UMonolithSourceSubsystem::TryOpenDatabaseWithRetry(const FString& DbPath, c
 	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
 	if (!PlatformFile.FileExists(*DbPath))
 	{
+		LastDatabaseOpenFailureDetail =
+			TEXT("EngineSource.db does not exist; run source.trigger_reindex to create it.");
 		UE_LOG(LogMonolithSource, Log, TEXT("Engine source DB not found at %s — run source.trigger_reindex to create it"), *DbPath);
 		LastDatabaseOpenFailureTimeSeconds = FPlatformTime::Seconds();
 		return false;
@@ -499,6 +563,7 @@ bool UMonolithSourceSubsystem::TryOpenDatabaseWithRetry(const FString& DbPath, c
 		if (Database->Open(DbPath))
 		{
 			LastDatabaseOpenFailureTimeSeconds = 0.0;
+			LastDatabaseOpenFailureDetail.Reset();
 			UE_LOG(LogMonolithSource, Log, TEXT("%s: Engine source DB opened from %s after %d attempt(s)"), Context, *DbPath, Attempt);
 			return true;
 		}
@@ -510,6 +575,9 @@ bool UMonolithSourceSubsystem::TryOpenDatabaseWithRetry(const FString& DbPath, c
 	}
 
 	LastDatabaseOpenFailureTimeSeconds = FPlatformTime::Seconds();
+	LastDatabaseOpenFailureDetail = Database.IsValid()
+		? Database->GetLastError()
+		: TEXT("EngineSource database object is unavailable.");
 	UE_LOG(LogMonolithSource, Warning, TEXT("%s: failed to open EngineSource.db after %d attempt(s): %s"), Context, SourceDbOpenRetryAttempts, *DbPath);
 	return false;
 }
@@ -537,6 +605,57 @@ FString UMonolithSourceSubsystem::GetDatabasePath() const
 
 	// Fallback — should not be reached when running inside the plugin itself
 	return FPaths::ConvertRelativePathToFull(FPaths::ProjectPluginsDir() / TEXT("Monolith") / TEXT("Saved") / TEXT("EngineSource.db"));
+}
+
+FMonolithSourceDatabaseStatus UMonolithSourceSubsystem::GetDatabaseStatus() const
+{
+	FMonolithSourceDatabaseStatus Status;
+	Status.DatabasePath = GetDatabasePath();
+	Status.bDatabaseExists =
+		FPlatformFileManager::Get().GetPlatformFile().FileExists(*Status.DatabasePath);
+	Status.bDatabaseOpen = Database.IsValid() && Database->IsOpen();
+	Status.bIndexing = bIsIndexing;
+	Status.bRequiresSuccessfulReindex = bDatabaseRequiresSuccessfulReindex;
+	Status.LastIndexContext = LastIndexContext;
+	Status.LastFailureStage = LastIndexFailureStage;
+	Status.LastFailureDetail = LastIndexFailureDetail;
+	Status.LastFilesProcessed = LastIndexFilesProcessed;
+	Status.LastSymbolsExtracted = LastIndexSymbolsExtracted;
+	Status.LastErrors = LastIndexErrors;
+
+	if (Status.bIndexing)
+	{
+		Status.State = TEXT("indexing");
+	}
+	else if (Status.bRequiresSuccessfulReindex)
+	{
+		Status.State = TEXT("reindex_required");
+	}
+	else if (Status.bDatabaseOpen)
+	{
+		Status.State = TEXT("ready");
+	}
+	else if (!Status.bDatabaseExists)
+	{
+		Status.State = TEXT("missing");
+		if (Status.LastFailureDetail.IsEmpty())
+		{
+			Status.LastFailureDetail =
+				TEXT("EngineSource.db does not exist; a full source reindex is required.");
+		}
+	}
+	else
+	{
+		Status.State = TEXT("open_failed");
+		if (Status.LastFailureDetail.IsEmpty())
+		{
+			Status.LastFailureDetail = LastDatabaseOpenFailureDetail.IsEmpty()
+				? TEXT("EngineSource.db exists but could not be opened.")
+				: LastDatabaseOpenFailureDetail;
+		}
+	}
+
+	return Status;
 }
 
 FString UMonolithSourceSubsystem::GetEngineSourcePath() const

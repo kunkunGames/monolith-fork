@@ -15,6 +15,7 @@
 #include "Misc/PackageName.h"
 #include "Modules/ModuleManager.h"
 #include "PlayerMappableInputConfig.h"
+#include "UserSettings/EnhancedInputUserSettings.h"
 #include "UObject/Class.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UnrealType.h"
@@ -44,7 +45,7 @@ namespace MonolithGameSettings
 		{ TEXT("GameSettingRegistry"), TEXT("/Script/GameSettings.GameSettingRegistry"), TEXT("registry root") },
 		{ TEXT("GameSettingScreen"), TEXT("/Script/GameSettings.GameSettingScreen"), TEXT("CommonUI settings screen") },
 		{ TEXT("GameSettingVisualData"), TEXT("/Script/GameSettings.GameSettingVisualData"), TEXT("entry widget/detail extension data asset") },
-		{ TEXT("PlayerMappableInputConfig"), TEXT("/Script/EnhancedInput.PlayerMappableInputConfig"), TEXT("deprecated Enhanced Input mappable config asset used by Lyra settings") },
+		{ TEXT("PlayerMappableInputConfig"), TEXT("/Script/EnhancedInput.PlayerMappableInputConfig"), TEXT("legacy serialized compatibility asset; active remapping uses UEnhancedInputUserSettings profiles") },
 		{ TEXT("InputMappingContext"), TEXT("/Script/EnhancedInput.InputMappingContext"), TEXT("Enhanced Input mapping context that owns player mappable key rows") },
 		{ TEXT("PlayerMappableKeySettings"), TEXT("/Script/EnhancedInput.PlayerMappableKeySettings"), TEXT("per-action or per-mapping save/display metadata") }
 	};
@@ -193,7 +194,7 @@ namespace MonolithGameSettings
 			TEXT("UGameSetting::DevName is a native FName identifier, not a reflected UPROPERTY; authoring flows must set it explicitly and keep it unique."),
 			TEXT("UGameSettingCollection::AddSetting builds the tree; UGameSettingValueDynamic variants use getter/setter data sources for live values."),
 			TEXT("FGameSettingDataSourceDynamic resolves a cached property path against the local player at runtime; static validation can only verify path shape without a player instance."),
-			TEXT("Lyra's keyboard settings screen builds setting rows from UPlayerMappableInputConfig::GetPlayerMappableKeys and rejects duplicate mapping names, missing mapping names, or missing display names.")
+			TEXT("Lyra's keyboard settings screen builds rows from UEnhancedInputUserSettings profiles, permits repeated mapping names across hardware/slot identities, and rejects missing mapping names, invalid keys, or ambiguous slot identities.")
 		};
 
 		TArray<TSharedPtr<FJsonValue>> Values;
@@ -235,11 +236,13 @@ namespace MonolithGameSettings
 			OutError = FString::Printf(TEXT("Missing required param '%s'"), FieldName);
 			return false;
 		}
-		if (!Params->TryGetStringField(FieldName, OutValue))
+		const TSharedPtr<FJsonValue> Field = Params->TryGetField(FieldName);
+		if (!Field.IsValid() || Field->Type != EJson::String)
 		{
 			OutError = FString::Printf(TEXT("Param '%s' must be a string"), FieldName);
 			return false;
 		}
+		OutValue = Field->AsString();
 		OutValue.TrimStartAndEndInline();
 		if (OutValue.IsEmpty())
 		{
@@ -249,52 +252,94 @@ namespace MonolithGameSettings
 		return true;
 	}
 
-	static FString ReadOptionalStringParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, const FString& DefaultValue = FString())
+	static bool TryReadOptionalStringParam(
+		const TSharedPtr<FJsonObject>& Params,
+		const TCHAR* FieldName,
+		FString& OutValue,
+		FString& OutError)
 	{
+		OutValue.Reset();
 		if (!Params.IsValid() || !Params->HasField(FieldName))
 		{
-			return DefaultValue;
+			return true;
 		}
-		FString Value;
-		if (!Params->TryGetStringField(FieldName, Value))
+		const TSharedPtr<FJsonValue> Field = Params->TryGetField(FieldName);
+		if (!Field.IsValid() || Field->Type != EJson::String)
 		{
-			return DefaultValue;
+			OutError = FString::Printf(
+				TEXT("Param '%s' must be a string"),
+				FieldName);
+			return false;
 		}
-		Value.TrimStartAndEndInline();
-		return Value;
+		OutValue = Field->AsString();
+		OutValue.TrimStartAndEndInline();
+		if (OutValue.IsEmpty())
+		{
+			OutError = FString::Printf(
+				TEXT("Param '%s' must not be empty when supplied"),
+				FieldName);
+			return false;
+		}
+		return true;
 	}
 
-	static bool ReadOptionalBoolParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, bool DefaultValue)
+	static bool TryReadOptionalBoolParam(
+		const TSharedPtr<FJsonObject>& Params,
+		const TCHAR* FieldName,
+		bool DefaultValue,
+		bool& OutValue,
+		FString& OutError)
 	{
-		if (!Params.IsValid())
+		OutValue = DefaultValue;
+		if (!Params.IsValid() || !Params->HasField(FieldName))
 		{
-			return DefaultValue;
+			return true;
 		}
-		bool Value = DefaultValue;
-		return Params->TryGetBoolField(FieldName, Value) ? Value : DefaultValue;
+		const TSharedPtr<FJsonValue> Field = Params->TryGetField(FieldName);
+		if (!Field.IsValid() || Field->Type != EJson::Boolean)
+		{
+			OutError = FString::Printf(
+				TEXT("Param '%s' must be a boolean"),
+				FieldName);
+			return false;
+		}
+		OutValue = Field->AsBool();
+		return true;
 	}
 
 	static bool ReadOptionalStringArrayParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, TArray<FString>& OutValues, FString& OutError)
 	{
 		OutValues.Reset();
-		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
-		if (!Params.IsValid() || !Params->TryGetArrayField(FieldName, Values) || !Values)
+		if (!Params.IsValid() || !Params->HasField(FieldName))
 		{
 			return true;
+		}
+		const TSharedPtr<FJsonValue> Field = Params->TryGetField(FieldName);
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (!Field.IsValid()
+			|| Field->Type != EJson::Array
+			|| !Params->TryGetArrayField(FieldName, Values)
+			|| !Values)
+		{
+			OutError = FString::Printf(TEXT("Param '%s' must be an array of strings"), FieldName);
+			return false;
 		}
 		for (const TSharedPtr<FJsonValue>& Value : *Values)
 		{
 			FString StringValue;
-			if (!Value.IsValid() || !Value->TryGetString(StringValue))
+			if (!Value.IsValid() || Value->Type != EJson::String)
 			{
 				OutError = FString::Printf(TEXT("Param '%s' must be an array of strings"), FieldName);
 				return false;
 			}
+			StringValue = Value->AsString();
 			StringValue.TrimStartAndEndInline();
-			if (!StringValue.IsEmpty())
+			if (StringValue.IsEmpty())
 			{
-				OutValues.Add(StringValue);
+				OutError = FString::Printf(TEXT("Param '%s' entries must not be empty"), FieldName);
+				return false;
 			}
+			OutValues.AddUnique(StringValue);
 		}
 		return true;
 	}
@@ -305,17 +350,20 @@ namespace MonolithGameSettings
 		{
 			return true;
 		}
-		FString Value;
-		if (!Params->TryGetStringField(FieldName, Value))
+		const TSharedPtr<FJsonValue> Field = Params->TryGetField(FieldName);
+		if (!Field.IsValid() || Field->Type != EJson::String)
 		{
 			OutError = FString::Printf(TEXT("Param '%s' must be a string"), FieldName);
 			return false;
 		}
+		FString Value = Field->AsString();
 		Value.TrimStartAndEndInline();
-		if (!Value.IsEmpty())
+		if (Value.IsEmpty())
 		{
-			InOutValues.AddUnique(Value);
+			OutError = FString::Printf(TEXT("Param '%s' must not be empty when supplied"), FieldName);
+			return false;
 		}
+		InOutValues.AddUnique(Value);
 		return true;
 	}
 
@@ -432,6 +480,11 @@ namespace MonolithGameSettings
 		Row->SetStringField(TEXT("mapping_name"), Mapping.GetMappingName().ToString());
 		Row->SetStringField(TEXT("display_name"), Mapping.GetDisplayName().ToString());
 		Row->SetStringField(TEXT("display_category"), Mapping.GetDisplayCategory().ToString());
+		Row->SetStringField(
+			TEXT("hardware_device_bucket"),
+			Mapping.Key.IsGamepadKey()
+				? TEXT("Gamepad")
+				: (Mapping.Key.IsTouch() ? TEXT("Touch") : TEXT("KeyboardAndMouse")));
 		Row->SetBoolField(TEXT("has_player_mappable_key_settings"), Mapping.GetPlayerMappableKeySettings() != nullptr);
 		Row->SetBoolField(TEXT("action_has_player_mappable_key_settings"), Action && Action->GetPlayerMappableKeySettings() != nullptr);
 		Row->SetNumberField(TEXT("trigger_count"), Mapping.Triggers.Num());
@@ -447,7 +500,8 @@ namespace MonolithGameSettings
 		bool bRequireConfigDisplayName = true;
 		bool bRequireContexts = true;
 		bool bRequireMappableKeys = true;
-		bool bRequireUniqueMappingNames = true;
+		bool bRequireUniqueMappingSlotIdentities = true;
+		bool bRequireConsistentMappingMetadata = true;
 		bool bRequireMappingDisplayNames = true;
 		bool bRequireValidKeys = true;
 		bool bRequireActions = true;
@@ -461,12 +515,18 @@ namespace MonolithGameSettings
 		TArray<TSharedPtr<FJsonValue>>& Issues,
 		bool& bOk,
 		int32& OutMappableCount,
-		int32& OutDuplicateCount)
+		int32& OutSlotIdentityConflictCount,
+		int32& OutAlternateSlotCount,
+		int32& OutSlotOverflowCount)
 	{
 		OutMappableCount = 0;
-		OutDuplicateCount = 0;
+		OutSlotIdentityConflictCount = 0;
+		OutAlternateSlotCount = 0;
+		OutSlotOverflowCount = 0;
 
-		TMap<FString, TArray<TSharedPtr<FJsonObject>>> RowsByScopedName;
+		TMap<FString, int32> NextSlotByRegistrationGroup;
+		TMap<FString, TArray<TSharedPtr<FJsonObject>>> RowsByLogicalName;
+		TMap<FString, TArray<TSharedPtr<FJsonObject>>> RowsBySlotIdentity;
 		for (const TSharedPtr<FJsonObject>& Row : MappingRows)
 		{
 			if (!Row.IsValid())
@@ -488,6 +548,8 @@ namespace MonolithGameSettings
 			const FString DisplayName = Row->GetStringField(TEXT("display_name"));
 			const FString ActionPath = Row->GetStringField(TEXT("action_path"));
 			const FString KeyName = Row->GetStringField(TEXT("key_name"));
+			const FString ContextPath = Row->GetStringField(TEXT("context_path"));
+			const FString HardwareDeviceBucket = Row->GetStringField(TEXT("hardware_device_bucket"));
 			const bool bKeyValid = Row->GetBoolField(TEXT("key_valid"));
 
 			const FString RowDetail = FString::Printf(
@@ -521,39 +583,134 @@ namespace MonolithGameSettings
 			if (!MappingName.IsEmpty() && MappingName != TEXT("None"))
 			{
 				const FString Scope = Source == TEXT("profile_override") ? FString::Printf(TEXT("profile:%s"), *ProfileId) : TEXT("default");
-				RowsByScopedName.FindOrAdd(Scope + TEXT("|") + MappingName).Add(Row);
+				const FString LogicalName = Scope + TEXT("|") + MappingName;
+				const FString RegistrationGroup = FString::Printf(
+					TEXT("%s|%s|%s|%s"),
+					*ContextPath,
+					*Scope,
+					*HardwareDeviceBucket,
+					*MappingName);
+				int32& NextSlot = NextSlotByRegistrationGroup.FindOrAdd(RegistrationGroup);
+				const int32 EffectiveSlotIndex = NextSlot++;
+				Row->SetNumberField(TEXT("effective_slot_index"), EffectiveSlotIndex);
+				RowsByLogicalName.FindOrAdd(LogicalName).Add(Row);
+
+				constexpr int32 MaxSupportedSlotCount =
+					static_cast<int32>(EPlayerMappableKeySlot::Unspecified);
+				if (EffectiveSlotIndex >= MaxSupportedSlotCount)
+				{
+					++OutSlotOverflowCount;
+					AddIssue(
+						Issues,
+						TEXT("error"),
+						TEXT("mapping_slot_capacity_exceeded"),
+						FString::Printf(
+							TEXT("%s exceeds the UE Enhanced Input First..Seventh slot capacity for device bucket '%s'."),
+							*RowDetail,
+							*HardwareDeviceBucket));
+					bOk = false;
+					continue;
+				}
+
+				if (EffectiveSlotIndex > 0)
+				{
+					++OutAlternateSlotCount;
+				}
+
+				const FString SlotIdentity = FString::Printf(
+					TEXT("%s|%s|%s|slot:%d"),
+					*Scope,
+					*MappingName,
+					*HardwareDeviceBucket,
+					EffectiveSlotIndex);
+				RowsBySlotIdentity.FindOrAdd(SlotIdentity).Add(Row);
 			}
 		}
 
-		for (const TPair<FString, TArray<TSharedPtr<FJsonObject>>>& Pair : RowsByScopedName)
+		for (const TPair<FString, TArray<TSharedPtr<FJsonObject>>>& Pair : RowsByLogicalName)
 		{
 			if (Pair.Value.Num() <= 1)
 			{
 				continue;
 			}
 
-			OutDuplicateCount += Pair.Value.Num();
-			if (Options.bRequireUniqueMappingNames)
+			const TSharedPtr<FJsonObject>& First = Pair.Value[0];
+			const FString ExpectedAction = First->GetStringField(TEXT("action_path"));
+			const FString ExpectedDisplayName = First->GetStringField(TEXT("display_name"));
+			const FString ExpectedDisplayCategory = First->GetStringField(TEXT("display_category"));
+			TArray<TSharedPtr<FJsonValue>> MismatchLocations;
+			for (const TSharedPtr<FJsonObject>& Row : Pair.Value)
 			{
-				TArray<TSharedPtr<FJsonValue>> Locations;
-				for (const TSharedPtr<FJsonObject>& Row : Pair.Value)
+				if (Row->GetStringField(TEXT("action_path")) == ExpectedAction
+					&& Row->GetStringField(TEXT("display_name")) == ExpectedDisplayName
+					&& Row->GetStringField(TEXT("display_category")) == ExpectedDisplayCategory)
 				{
-					TSharedPtr<FJsonObject> Location = MakeShared<FJsonObject>();
-					Location->SetStringField(TEXT("context_path"), Row->GetStringField(TEXT("context_path")));
-					Location->SetStringField(TEXT("source"), Row->GetStringField(TEXT("source")));
-					Location->SetStringField(TEXT("profile_id"), Row->GetStringField(TEXT("profile_id")));
-					Location->SetNumberField(TEXT("index"), Row->GetNumberField(TEXT("index")));
-					Locations.Add(MakeShared<FJsonValueObject>(Location));
+					continue;
 				}
 
+				TSharedPtr<FJsonObject> Location = MakeShared<FJsonObject>();
+				Location->SetStringField(TEXT("context_path"), Row->GetStringField(TEXT("context_path")));
+				Location->SetStringField(TEXT("source"), Row->GetStringField(TEXT("source")));
+				Location->SetStringField(TEXT("profile_id"), Row->GetStringField(TEXT("profile_id")));
+				Location->SetNumberField(TEXT("index"), Row->GetNumberField(TEXT("index")));
+				Location->SetStringField(TEXT("action_path"), Row->GetStringField(TEXT("action_path")));
+				Location->SetStringField(TEXT("display_name"), Row->GetStringField(TEXT("display_name")));
+				Location->SetStringField(TEXT("display_category"), Row->GetStringField(TEXT("display_category")));
+				MismatchLocations.Add(MakeShared<FJsonValueObject>(Location));
+			}
+
+			if (Options.bRequireConsistentMappingMetadata && MismatchLocations.Num() > 0)
+			{
 				TSharedPtr<FJsonObject> Issue = MakeShared<FJsonObject>();
 				Issue->SetStringField(TEXT("severity"), TEXT("error"));
-				Issue->SetStringField(TEXT("code"), TEXT("duplicate_mapping_name"));
-				Issue->SetStringField(TEXT("message"), FString::Printf(TEXT("Duplicate player-mappable mapping name in scope '%s'."), *Pair.Key));
-				Issue->SetArrayField(TEXT("locations"), Locations);
+				Issue->SetStringField(TEXT("code"), TEXT("mapping_row_contract_mismatch"));
+				Issue->SetStringField(
+					TEXT("message"),
+					FString::Printf(
+						TEXT("Player-mappable mappings in logical row '%s' must use the same action, display name, and display category."),
+						*Pair.Key));
+				Issue->SetArrayField(TEXT("locations"), MismatchLocations);
 				Issues.Add(MakeShared<FJsonValueObject>(Issue));
 				bOk = false;
 			}
+		}
+
+		for (const TPair<FString, TArray<TSharedPtr<FJsonObject>>>& Pair : RowsBySlotIdentity)
+		{
+			if (Pair.Value.Num() <= 1)
+			{
+				continue;
+			}
+
+			OutSlotIdentityConflictCount += Pair.Value.Num();
+			if (!Options.bRequireUniqueMappingSlotIdentities)
+			{
+				continue;
+			}
+
+			TArray<TSharedPtr<FJsonValue>> Locations;
+			for (const TSharedPtr<FJsonObject>& Row : Pair.Value)
+			{
+				TSharedPtr<FJsonObject> Location = MakeShared<FJsonObject>();
+				Location->SetStringField(TEXT("context_path"), Row->GetStringField(TEXT("context_path")));
+				Location->SetStringField(TEXT("source"), Row->GetStringField(TEXT("source")));
+				Location->SetStringField(TEXT("profile_id"), Row->GetStringField(TEXT("profile_id")));
+				Location->SetNumberField(TEXT("index"), Row->GetNumberField(TEXT("index")));
+				Location->SetNumberField(TEXT("effective_slot_index"), Row->GetNumberField(TEXT("effective_slot_index")));
+				Locations.Add(MakeShared<FJsonValueObject>(Location));
+			}
+
+			TSharedPtr<FJsonObject> Issue = MakeShared<FJsonObject>();
+			Issue->SetStringField(TEXT("severity"), TEXT("error"));
+			Issue->SetStringField(TEXT("code"), TEXT("duplicate_mapping_slot_identity"));
+			Issue->SetStringField(
+				TEXT("message"),
+				FString::Printf(
+					TEXT("Multiple mapping contexts resolve to the same Enhanced Input row/device/slot identity '%s'."),
+					*Pair.Key));
+			Issue->SetArrayField(TEXT("locations"), Locations);
+			Issues.Add(MakeShared<FJsonValueObject>(Issue));
+			bOk = false;
 		}
 
 		AddCheck(
@@ -670,8 +827,19 @@ namespace MonolithGameSettings
 		}
 
 		int32 MappableCount = 0;
-		int32 DuplicateCount = 0;
-		ValidateMappingRows(MappingRows, Options, Checks, Issues, bOk, MappableCount, DuplicateCount);
+		int32 SlotIdentityConflictCount = 0;
+		int32 AlternateSlotCount = 0;
+		int32 SlotOverflowCount = 0;
+		ValidateMappingRows(
+			MappingRows,
+			Options,
+			Checks,
+			Issues,
+			bOk,
+			MappableCount,
+			SlotIdentityConflictCount,
+			AlternateSlotCount,
+			SlotOverflowCount);
 
 		TArray<TSharedPtr<FJsonValue>> MappingValues;
 		for (const TSharedPtr<FJsonObject>& Row : MappingRows)
@@ -695,7 +863,10 @@ namespace MonolithGameSettings
 		Result->SetNumberField(TEXT("context_count"), Config ? Config->GetMappingContexts().Num() : 0);
 		Result->SetNumberField(TEXT("mapping_count"), MappingRows.Num());
 		Result->SetNumberField(TEXT("mappable_mapping_count"), MappableCount);
-		Result->SetNumberField(TEXT("duplicate_mapping_row_count"), DuplicateCount);
+		Result->SetNumberField(TEXT("duplicate_mapping_row_count"), SlotIdentityConflictCount);
+		Result->SetNumberField(TEXT("mapping_slot_identity_conflict_count"), SlotIdentityConflictCount);
+		Result->SetNumberField(TEXT("alternate_slot_mapping_count"), AlternateSlotCount);
+		Result->SetNumberField(TEXT("mapping_slot_overflow_count"), SlotOverflowCount);
 		Result->SetArrayField(TEXT("contexts"), ContextRows);
 		Result->SetArrayField(TEXT("mappings"), MappingValues);
 		Result->SetArrayField(TEXT("checks"), Checks);
@@ -729,8 +900,19 @@ namespace MonolithGameSettings
 		}
 
 		int32 MappableCount = 0;
-		int32 DuplicateCount = 0;
-		ValidateMappingRows(MappingRows, Options, Checks, Issues, bOk, MappableCount, DuplicateCount);
+		int32 SlotIdentityConflictCount = 0;
+		int32 AlternateSlotCount = 0;
+		int32 SlotOverflowCount = 0;
+		ValidateMappingRows(
+			MappingRows,
+			Options,
+			Checks,
+			Issues,
+			bOk,
+			MappableCount,
+			SlotIdentityConflictCount,
+			AlternateSlotCount,
+			SlotOverflowCount);
 
 		TArray<TSharedPtr<FJsonValue>> MappingValues;
 		for (const TSharedPtr<FJsonObject>& Row : MappingRows)
@@ -750,7 +932,10 @@ namespace MonolithGameSettings
 		Result->SetStringField(TEXT("context_path"), ObjectPath(Context));
 		Result->SetNumberField(TEXT("mapping_count"), MappingRows.Num());
 		Result->SetNumberField(TEXT("mappable_mapping_count"), MappableCount);
-		Result->SetNumberField(TEXT("duplicate_mapping_row_count"), DuplicateCount);
+		Result->SetNumberField(TEXT("duplicate_mapping_row_count"), SlotIdentityConflictCount);
+		Result->SetNumberField(TEXT("mapping_slot_identity_conflict_count"), SlotIdentityConflictCount);
+		Result->SetNumberField(TEXT("alternate_slot_mapping_count"), AlternateSlotCount);
+		Result->SetNumberField(TEXT("mapping_slot_overflow_count"), SlotOverflowCount);
 		Result->SetArrayField(TEXT("mappings"), MappingValues);
 		Result->SetArrayField(TEXT("checks"), Checks);
 		Result->SetArrayField(TEXT("issues"), Issues);
@@ -832,7 +1017,9 @@ void FMonolithGameSettingsActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Optional(TEXT("require_config_display_name"), TEXT("boolean"), TEXT("Require PlayerMappableInputConfig display name."), TEXT("true"))
 			.Optional(TEXT("require_contexts"), TEXT("boolean"), TEXT("Require config assets to reference at least one InputMappingContext."), TEXT("true"))
 			.Optional(TEXT("require_mappable_keys"), TEXT("boolean"), TEXT("Require at least one mappable mapping per inspected target."), TEXT("true"))
-			.Optional(TEXT("require_unique_mapping_names"), TEXT("boolean"), TEXT("Require unique player-mappable mapping names per default/profile scope."), TEXT("true"))
+			.Optional(TEXT("require_unique_mapping_slot_identities"), TEXT("boolean"), TEXT("Require each mapping name, inferred hardware device, and effective slot identity to resolve from only one mapping context."), TEXT("true"))
+			.Optional(TEXT("require_unique_mapping_names"), TEXT("boolean"), TEXT("Deprecated alias for require_unique_mapping_slot_identities. Repeated names within one context/device are valid alternate slots."), TEXT("true"))
+			.Optional(TEXT("require_consistent_mapping_metadata"), TEXT("boolean"), TEXT("Require mappings in one logical row to share action, display name, and display category."), TEXT("true"))
 			.Optional(TEXT("require_mapping_display_names"), TEXT("boolean"), TEXT("Require display names on player-mappable rows."), TEXT("true"))
 			.Optional(TEXT("require_valid_keys"), TEXT("boolean"), TEXT("Require player-mappable rows to use valid keys."), TEXT("true"))
 			.Optional(TEXT("require_actions"), TEXT("boolean"), TEXT("Require player-mappable rows to reference an InputAction."), TEXT("true"))
@@ -876,9 +1063,16 @@ FMonolithActionResult FMonolithGameSettingsActions::DescribeRegistryTree(const T
 {
 	using namespace MonolithGameSettings;
 
-	const FString ScreenClassPath = ReadOptionalStringParam(Params, TEXT("screen_class"));
-	const FString RegistryClassPath = ReadOptionalStringParam(Params, TEXT("registry_class"));
-	const FString SettingClassPath = ReadOptionalStringParam(Params, TEXT("setting_class"));
+	FString ScreenClassPath;
+	FString RegistryClassPath;
+	FString SettingClassPath;
+	FString Error;
+	if (!TryReadOptionalStringParam(Params, TEXT("screen_class"), ScreenClassPath, Error)
+		|| !TryReadOptionalStringParam(Params, TEXT("registry_class"), RegistryClassPath, Error)
+		|| !TryReadOptionalStringParam(Params, TEXT("setting_class"), SettingClassPath, Error))
+	{
+		return FMonolithActionResult::Error(Error, ErrInvalidParams);
+	}
 
 	UClass* ScreenBaseClass = LoadClassPath(TEXT("/Script/GameSettings.GameSettingScreen"));
 	UClass* RegistryBaseClass = LoadClassPath(TEXT("/Script/GameSettings.GameSettingRegistry"));
@@ -930,9 +1124,15 @@ FMonolithActionResult FMonolithGameSettingsActions::ValidateSettingClassContract
 		return FMonolithActionResult::Error(Error, ErrInvalidParams);
 	}
 
-	const bool bRequireConcrete = ReadOptionalBoolParam(Params, TEXT("require_concrete"), false);
-	const bool bRequireValueSetting = ReadOptionalBoolParam(Params, TEXT("require_value_setting"), false);
-	const bool bRequireCollection = ReadOptionalBoolParam(Params, TEXT("require_collection"), false);
+	bool bRequireConcrete = false;
+	bool bRequireValueSetting = false;
+	bool bRequireCollection = false;
+	if (!TryReadOptionalBoolParam(Params, TEXT("require_concrete"), false, bRequireConcrete, Error)
+		|| !TryReadOptionalBoolParam(Params, TEXT("require_value_setting"), false, bRequireValueSetting, Error)
+		|| !TryReadOptionalBoolParam(Params, TEXT("require_collection"), false, bRequireCollection, Error))
+	{
+		return FMonolithActionResult::Error(Error, ErrInvalidParams);
+	}
 
 	UClass* GameSettingClass = LoadClassPath(TEXT("/Script/GameSettings.GameSetting"));
 	UClass* ValueSettingClass = LoadClassPath(TEXT("/Script/GameSettings.GameSettingValue"));
@@ -990,14 +1190,17 @@ FMonolithActionResult FMonolithGameSettingsActions::ValidateDataSourceBindings(c
 {
 	using namespace MonolithGameSettings;
 
-	const FString GetterPath = ReadOptionalStringParam(Params, TEXT("getter_path"));
-	const FString SetterPath = ReadOptionalStringParam(Params, TEXT("setter_path"));
-	const bool bRequireGetter = ReadOptionalBoolParam(Params, TEXT("require_getter"), true);
-	const bool bRequireSetter = ReadOptionalBoolParam(Params, TEXT("require_setter"), false);
-
-	TArray<FString> DynamicPaths;
+	FString GetterPath;
+	FString SetterPath;
 	FString Error;
-	if (!ReadOptionalStringArrayParam(Params, TEXT("dynamic_paths"), DynamicPaths, Error))
+	bool bRequireGetter = true;
+	bool bRequireSetter = false;
+	TArray<FString> DynamicPaths;
+	if (!TryReadOptionalStringParam(Params, TEXT("getter_path"), GetterPath, Error)
+		|| !TryReadOptionalStringParam(Params, TEXT("setter_path"), SetterPath, Error)
+		|| !TryReadOptionalBoolParam(Params, TEXT("require_getter"), true, bRequireGetter, Error)
+		|| !TryReadOptionalBoolParam(Params, TEXT("require_setter"), false, bRequireSetter, Error)
+		|| !ReadOptionalStringArrayParam(Params, TEXT("dynamic_paths"), DynamicPaths, Error))
 	{
 		return FMonolithActionResult::Error(Error, ErrInvalidParams);
 	}
@@ -1050,8 +1253,18 @@ FMonolithActionResult FMonolithGameSettingsActions::ValidateVisualData(const TSh
 		return FMonolithActionResult::Error(Error, ErrInvalidParams);
 	}
 
-	const bool bRequireEntryWidgets = ReadOptionalBoolParam(Params, TEXT("require_entry_widgets"), false);
-	const bool bRequireDetailExtensions = ReadOptionalBoolParam(Params, TEXT("require_detail_extensions"), false);
+	bool bRequireEntryWidgets = false;
+	bool bRequireDetailExtensions = false;
+	if (!TryReadOptionalBoolParam(Params, TEXT("require_entry_widgets"), false, bRequireEntryWidgets, Error)
+		|| !TryReadOptionalBoolParam(
+			Params,
+			TEXT("require_detail_extensions"),
+			false,
+			bRequireDetailExtensions,
+			Error))
+	{
+		return FMonolithActionResult::Error(Error, ErrInvalidParams);
+	}
 
 	UObject* Object = LoadAnyObjectPath(AssetPath);
 	UClass* VisualDataClass = LoadClassPath(TEXT("/Script/GameSettings.GameSettingVisualData"));
@@ -1145,15 +1358,41 @@ FMonolithActionResult FMonolithGameSettingsActions::ValidatePlayerMappableInputS
 	}
 
 	FPlayerMappableValidationOptions Options;
-	Options.bRequireConfigName = ReadOptionalBoolParam(Params, TEXT("require_config_name"), true);
-	Options.bRequireConfigDisplayName = ReadOptionalBoolParam(Params, TEXT("require_config_display_name"), true);
-	Options.bRequireContexts = ReadOptionalBoolParam(Params, TEXT("require_contexts"), true);
-	Options.bRequireMappableKeys = ReadOptionalBoolParam(Params, TEXT("require_mappable_keys"), true);
-	Options.bRequireUniqueMappingNames = ReadOptionalBoolParam(Params, TEXT("require_unique_mapping_names"), true);
-	Options.bRequireMappingDisplayNames = ReadOptionalBoolParam(Params, TEXT("require_mapping_display_names"), true);
-	Options.bRequireValidKeys = ReadOptionalBoolParam(Params, TEXT("require_valid_keys"), true);
-	Options.bRequireActions = ReadOptionalBoolParam(Params, TEXT("require_actions"), true);
-	Options.bIncludeMappingProfileOverrides = ReadOptionalBoolParam(Params, TEXT("include_mapping_profile_overrides"), true);
+	bool bLegacyUniqueMappingNames = true;
+	if (!TryReadOptionalBoolParam(Params, TEXT("require_config_name"), true, Options.bRequireConfigName, Error)
+		|| !TryReadOptionalBoolParam(Params, TEXT("require_config_display_name"), true, Options.bRequireConfigDisplayName, Error)
+		|| !TryReadOptionalBoolParam(Params, TEXT("require_contexts"), true, Options.bRequireContexts, Error)
+		|| !TryReadOptionalBoolParam(Params, TEXT("require_mappable_keys"), true, Options.bRequireMappableKeys, Error)
+		|| !TryReadOptionalBoolParam(Params, TEXT("require_unique_mapping_names"), true, bLegacyUniqueMappingNames, Error)
+		|| !TryReadOptionalBoolParam(
+			Params,
+			TEXT("require_unique_mapping_slot_identities"),
+			bLegacyUniqueMappingNames,
+			Options.bRequireUniqueMappingSlotIdentities,
+			Error)
+		|| !TryReadOptionalBoolParam(
+			Params,
+			TEXT("require_consistent_mapping_metadata"),
+			true,
+			Options.bRequireConsistentMappingMetadata,
+			Error)
+		|| !TryReadOptionalBoolParam(
+			Params,
+			TEXT("require_mapping_display_names"),
+			true,
+			Options.bRequireMappingDisplayNames,
+			Error)
+		|| !TryReadOptionalBoolParam(Params, TEXT("require_valid_keys"), true, Options.bRequireValidKeys, Error)
+		|| !TryReadOptionalBoolParam(Params, TEXT("require_actions"), true, Options.bRequireActions, Error)
+		|| !TryReadOptionalBoolParam(
+			Params,
+			TEXT("include_mapping_profile_overrides"),
+			true,
+			Options.bIncludeMappingProfileOverrides,
+			Error))
+	{
+		return FMonolithActionResult::Error(Error, ErrInvalidParams);
+	}
 
 	bool bOk = true;
 	TArray<TSharedPtr<FJsonValue>> ConfigResults;
@@ -1179,7 +1418,15 @@ FMonolithActionResult FMonolithGameSettingsActions::ValidatePlayerMappableInputS
 	OptionsJson->SetBoolField(TEXT("require_config_display_name"), Options.bRequireConfigDisplayName);
 	OptionsJson->SetBoolField(TEXT("require_contexts"), Options.bRequireContexts);
 	OptionsJson->SetBoolField(TEXT("require_mappable_keys"), Options.bRequireMappableKeys);
-	OptionsJson->SetBoolField(TEXT("require_unique_mapping_names"), Options.bRequireUniqueMappingNames);
+	OptionsJson->SetBoolField(
+		TEXT("require_unique_mapping_slot_identities"),
+		Options.bRequireUniqueMappingSlotIdentities);
+	OptionsJson->SetBoolField(
+		TEXT("require_unique_mapping_names"),
+		Options.bRequireUniqueMappingSlotIdentities);
+	OptionsJson->SetBoolField(
+		TEXT("require_consistent_mapping_metadata"),
+		Options.bRequireConsistentMappingMetadata);
 	OptionsJson->SetBoolField(TEXT("require_mapping_display_names"), Options.bRequireMappingDisplayNames);
 	OptionsJson->SetBoolField(TEXT("require_valid_keys"), Options.bRequireValidKeys);
 	OptionsJson->SetBoolField(TEXT("require_actions"), Options.bRequireActions);
@@ -1197,7 +1444,9 @@ FMonolithActionResult FMonolithGameSettingsActions::ValidatePlayerMappableInputS
 	Result->SetArrayField(TEXT("configs"), ConfigResults);
 	Result->SetArrayField(TEXT("contexts"), ContextResults);
 	Result->SetArrayField(TEXT("issues"), Issues);
-	Result->SetStringField(TEXT("lyra_settings_contract"), TEXT("Lyra key-binding settings are generated from player-mappable mappings; mapping names must be non-empty and unique for save slots, display names must be present for UI rows, and duplicate names are skipped by the registry."));
+	Result->SetStringField(
+		TEXT("lyra_settings_contract"),
+		TEXT("Lyra key-binding settings are generated from Enhanced Input profile rows. Repeated mapping names inside one context/device become First..Seventh alternate slots; logical-row action/display metadata must match, and only cross-context collisions on the same mapping/device/slot identity are rejected."));
 	return FMonolithActionResult::Success(Result);
 }
 

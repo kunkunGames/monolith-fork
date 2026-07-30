@@ -130,6 +130,7 @@ public:
 	bool Open(const FString& DbPath);
 	void Close();
 	bool IsOpen() const;
+	FString GetLastError() const;
 
 	/**
 	 * Borrowable access to the underlying open SQLite handle.
@@ -310,5 +311,6 @@ private:
 
 	FSQLiteDatabase* Database = nullptr;
 	FString CachedDbPath;
+	FString LastError;
 	mutable FCriticalSection DbLock;
 };

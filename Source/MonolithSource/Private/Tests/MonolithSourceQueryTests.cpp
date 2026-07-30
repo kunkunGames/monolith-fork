@@ -1,11 +1,13 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithSourceBridgeHelpers.h"
+#include "MonolithSourceAvailability.h"
 #include "MonolithSourceDatabase.h"
 #include "MonolithSourceIndexer.h"
 #include "MonolithSourceQueryProcessArgs.h"
 #include "MonolithReindexCommandlet.h"
 #include "MonolithSourceReview.h"
 #include "MonolithSourceSchema.h"
+#include "MonolithJsonUtils.h"
 #include "HAL/PlatformFilemanager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -154,18 +156,44 @@ namespace
 		return Path;
 	}
 
-	bool CreateProjectPruneFailureDb(const FString& DbPath)
+	bool CreateProjectPruneFailureDb(const FString& DbPath, const FString& ProjectRoot)
 	{
-		FSQLiteDatabase Db;
-		if (!Db.Open(*DbPath, ESQLiteDatabaseOpenMode::ReadWriteCreate))
+		FMonolithSourceDatabase SourceDb;
+		if (!SourceDb.OpenForWriting(DbPath)
+			|| !SourceDb.CreateTablesIfNeeded())
 		{
 			return false;
 		}
 
-		// CREATE TABLE IF NOT EXISTS treats this view as an existing `files`
-		// object, but project pruning's SELECT id,path then fails deterministically.
-		const bool bCreated = Db.Execute(TEXT("CREATE VIEW files AS SELECT 1 AS wrong_column;"));
-		Db.Close();
+		const int64 ModuleId = SourceDb.InsertModule(
+			TEXT("MonolithPruneFailureFixture"),
+			FPaths::ConvertRelativePathToFull(
+				ProjectRoot / TEXT("Source/MonolithPruneFailureFixture")),
+			TEXT("Project"),
+			TEXT(""));
+		const int64 FileId = SourceDb.InsertFile(
+			FPaths::ConvertRelativePathToFull(
+				ProjectRoot / TEXT("Source/MonolithPruneFailureFixture.cpp")),
+			ModuleId,
+			TEXT("cpp"),
+			1,
+			0.0);
+		SourceDb.Close();
+		if (ModuleId <= 0 || FileId <= 0)
+		{
+			return false;
+		}
+
+		FSQLiteDatabase RawDb;
+		if (!RawDb.Open(*DbPath, ESQLiteDatabaseOpenMode::ReadWrite))
+		{
+			return false;
+		}
+		const bool bCreated = RawDb.Execute(
+			TEXT("CREATE TRIGGER monolith_test_block_file_delete ")
+			TEXT("BEFORE DELETE ON files BEGIN ")
+			TEXT("SELECT RAISE(ABORT, 'fixture prune blocked'); END;"));
+		RawDb.Close();
 		return bCreated;
 	}
 
@@ -823,16 +851,20 @@ bool FSourcePluginDescriptorDiscoveryDeduplicatesNestedSourceDirsTest::RunTest(c
 		int32 CompletionFiles = INDEX_NONE;
 		int32 CompletionErrors = INDEX_NONE;
 		bool bCompletionSucceeded = false;
-		Indexer.OnComplete.AddLambda([&](int32 Files, int32 Symbols, int32 Errors, bool bSucceeded)
+		FString CompletionFailureStage;
+		Indexer.OnComplete.AddLambda([&](const FSourceIndexCompletion& Completion)
 		{
-			CompletionFiles = Files;
-			CompletionErrors = Errors;
-			bCompletionSucceeded = bSucceeded;
+			CompletionFiles = Completion.FilesProcessed;
+			CompletionErrors = Completion.Errors;
+			bCompletionSucceeded = Completion.bSucceeded;
+			CompletionFailureStage = Completion.FailureStage;
 		});
 
 		const bool bRan = Indexer.RunSynchronous();
 		TestTrue(FString::Printf(TEXT("%s indexes successfully"), Context), bRan);
 		TestTrue(FString::Printf(TEXT("%s completion reports success"), Context), bCompletionSucceeded);
+		TestTrue(FString::Printf(TEXT("%s completion has no failure stage"), Context),
+			CompletionFailureStage.IsEmpty());
 		TestEqual(FString::Printf(TEXT("%s completion reports four unique normalized source paths"), Context), CompletionFiles, 4);
 		TestEqual(FString::Printf(TEXT("%s completion reports no errors"), Context), CompletionErrors, 0);
 		return bRan && bCompletionSucceeded && CompletionFiles == 4 && CompletionErrors == 0;
@@ -916,14 +948,18 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceIndexerFatalPruneCompletesExactlyOnceTes
 bool FSourceIndexerFatalPruneCompletesExactlyOnceTest::RunTest(const FString& Parameters)
 {
 	const FString DbPath = FPaths::CreateTempFilename(*FPaths::ProjectIntermediateDir(), TEXT("MonolithSourceIndexerFatal"), TEXT(".sqlite"));
-	if (!TestTrue(TEXT("prune-failure source DB fixture created"), CreateProjectPruneFailureDb(DbPath)))
+	const FString FixtureProjectRoot = FPaths::ConvertRelativePathToFull(
+		FPaths::ProjectIntermediateDir());
+	if (!TestTrue(
+		TEXT("prune-failure source DB fixture created"),
+		CreateProjectPruneFailureDb(DbPath, FixtureProjectRoot)))
 	{
 		DeleteSourceTestDb(DbPath);
 		return false;
 	}
 
 	FMonolithSourceIndexer Indexer;
-	Indexer.SetProjectPath(FPaths::ConvertRelativePathToFull(FPaths::ProjectDir()));
+	Indexer.SetProjectPath(FixtureProjectRoot);
 	Indexer.SetDatabasePath(DbPath);
 	Indexer.SetCleanBuild(false);
 	Indexer.SetIndexProjectSource(true);
@@ -933,21 +969,21 @@ bool FSourceIndexerFatalPruneCompletesExactlyOnceTest::RunTest(const FString& Pa
 	int32 CompletionSymbols = INDEX_NONE;
 	int32 CompletionErrors = 0;
 	bool bCompletionSucceeded = true;
-	Indexer.OnComplete.AddLambda([&](int32 Files, int32 Symbols, int32 Errors, bool bSucceeded)
+	FString CompletionFailureStage;
+	FString CompletionFailureDetail;
+	Indexer.OnComplete.AddLambda([&](const FSourceIndexCompletion& Completion)
 	{
 		++CompletionCount;
-		CompletionFiles = Files;
-		CompletionSymbols = Symbols;
-		CompletionErrors = Errors;
-		bCompletionSucceeded = bSucceeded;
+		CompletionFiles = Completion.FilesProcessed;
+		CompletionSymbols = Completion.SymbolsExtracted;
+		CompletionErrors = Completion.Errors;
+		bCompletionSucceeded = Completion.bSucceeded;
+		CompletionFailureStage = Completion.FailureStage;
+		CompletionFailureDetail = Completion.FailureDetail;
 	});
 
 	AddExpectedError(
-		TEXT("Failed to create prepared statement from 'SELECT id,path FROM files;'"),
-		EAutomationExpectedErrorFlags::Contains,
-		1);
-	AddExpectedError(
-		TEXT("PruneIndexedFilesUnderRoots failed to read files table"),
+		TEXT("PruneIndexedFilesUnderRoots SQL failed: fixture prune blocked"),
 		EAutomationExpectedErrorFlags::Contains,
 		1);
 	AddExpectedError(
@@ -963,6 +999,10 @@ bool FSourceIndexerFatalPruneCompletesExactlyOnceTest::RunTest(const FString& Pa
 	TestEqual(TEXT("fatal prune extracts no symbols"), CompletionSymbols, 0);
 	TestTrue(TEXT("fatal completion reports a nonzero error count"), CompletionErrors > 0);
 	TestFalse(TEXT("fatal completion reports unsuccessful outcome"), bCompletionSucceeded);
+	TestEqual(TEXT("fatal completion identifies project pruning as the failure stage"),
+		CompletionFailureStage, TEXT("prune_project_rows"));
+	TestEqual(TEXT("fatal completion preserves the first SQLite failure detail"),
+		CompletionFailureDetail, TEXT("fixture prune blocked"));
 
 	DeleteSourceTestDb(DbPath);
 	return true;
@@ -980,10 +1020,14 @@ bool FSourceIndexerCancellationReportsFailureTest::RunTest(const FString& Parame
 
 	int32 CompletionCount = 0;
 	bool bCompletionSucceeded = true;
-	Indexer.OnComplete.AddLambda([&](int32 Files, int32 Symbols, int32 Errors, bool bSucceeded)
+	FString CompletionFailureStage;
+	FString CompletionFailureDetail;
+	Indexer.OnComplete.AddLambda([&](const FSourceIndexCompletion& Completion)
 	{
 		++CompletionCount;
-		bCompletionSucceeded = bSucceeded;
+		bCompletionSucceeded = Completion.bSucceeded;
+		CompletionFailureStage = Completion.FailureStage;
+		CompletionFailureDetail = Completion.FailureDetail;
 	});
 
 	AddExpectedError(
@@ -994,8 +1038,81 @@ bool FSourceIndexerCancellationReportsFailureTest::RunTest(const FString& Parame
 	TestFalse(TEXT("cancelled run clears running state"), Indexer.IsRunning());
 	TestEqual(TEXT("cancelled run broadcasts completion exactly once"), CompletionCount, 1);
 	TestFalse(TEXT("cancelled completion reports unsuccessful outcome"), bCompletionSucceeded);
+	TestEqual(TEXT("cancelled completion identifies cancellation"),
+		CompletionFailureStage, TEXT("cancelled"));
+	TestFalse(TEXT("cancelled completion explains where cancellation occurred"),
+		CompletionFailureDetail.IsEmpty());
 
 	DeleteSourceTestDb(DbPath);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSourceDatabaseUnavailableErrorPreservesIndexFailureTest,
+	"Monolith.IndexGuard.Source.DatabaseUnavailableErrorPreservesIndexFailure",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSourceDatabaseUnavailableErrorPreservesIndexFailureTest::RunTest(
+	const FString& Parameters)
+{
+	FMonolithSourceDatabaseStatus Status;
+	Status.State = TEXT("reindex_required");
+	Status.DatabasePath = TEXT("D:/Project/Plugins/Monolith/Saved/EngineSource.db");
+	Status.bDatabaseExists = true;
+	Status.bRequiresSuccessfulReindex = true;
+	Status.LastIndexContext = TEXT("Project source indexing");
+	Status.LastFailureStage = TEXT("prune_project_rows");
+	Status.LastFailureDetail = TEXT("database disk image is malformed");
+	Status.LastFilesProcessed = 14;
+	Status.LastSymbolsExtracted = 120;
+	Status.LastErrors = 1;
+
+	const FMonolithActionResult Result =
+		MonolithSourceAvailability::MakeDatabaseUnavailableError(Status);
+	TestFalse(TEXT("unavailable database is a real action error"), Result.bSuccess);
+	TestEqual(TEXT("unavailable database uses server-state error code"),
+		Result.ErrorCode, -32000);
+	TestTrue(TEXT("unavailable database error includes structured data"),
+		Result.ErrorData.IsValid());
+	if (Result.ErrorData.IsValid())
+	{
+		TestEqual(TEXT("structured error classifies the database state"),
+			Result.ErrorData->GetStringField(TEXT("failure_cause")),
+			TEXT("source_index_reindex_required"));
+		TestEqual(TEXT("structured error preserves the exact failure stage"),
+			Result.ErrorData->GetStringField(TEXT("last_failure_stage")),
+			TEXT("prune_project_rows"));
+		TestEqual(TEXT("structured error preserves the underlying SQLite failure"),
+			Result.ErrorData->GetStringField(TEXT("last_failure_detail")),
+			TEXT("database disk image is malformed"));
+		TestEqual(TEXT("structured error preserves the processed-file count"),
+			Result.ErrorData->GetIntegerField(TEXT("last_files_processed")),
+			14);
+	}
+	TestTrue(TEXT("unavailable database points to the full reindex action"),
+		Result.RelatedActions.Contains(TEXT("source.trigger_reindex")));
+	TestTrue(TEXT("unavailable database points to post-rebuild health"),
+		Result.RelatedActions.Contains(TEXT("source.health")));
+
+	Status.State = TEXT("ready");
+	Status.LastFailureStage = TEXT("indexing_disabled");
+	Status.LastFailureDetail =
+		TEXT("Source indexing is disabled; run Monolith.StartIndexing first.");
+	const FMonolithActionResult RequestResult =
+		MonolithSourceAvailability::MakeIndexRequestError(Status, TEXT("full"));
+	TestFalse(TEXT("rejected index request is a real action error"),
+		RequestResult.bSuccess);
+	TestTrue(TEXT("rejected index request includes structured data"),
+		RequestResult.ErrorData.IsValid());
+	if (RequestResult.ErrorData.IsValid())
+	{
+		TestEqual(TEXT("index request reports the requested mode"),
+			RequestResult.ErrorData->GetStringField(TEXT("requested_mode")),
+			TEXT("full"));
+		TestEqual(TEXT("index request preserves the disabled-policy stage"),
+			RequestResult.ErrorData->GetStringField(TEXT("last_failure_stage")),
+			TEXT("indexing_disabled"));
+	}
 	return true;
 }
 
@@ -1004,18 +1121,18 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithReindexCommandletFatalIndexerExitCodeT
 bool FMonolithReindexCommandletFatalIndexerExitCodeTest::RunTest(const FString& Parameters)
 {
 	const FString DbPath = FPaths::CreateTempFilename(*FPaths::ProjectIntermediateDir(), TEXT("MonolithReindexCommandletFatal"), TEXT(".sqlite"));
-	if (!TestTrue(TEXT("commandlet prune-failure DB fixture created"), CreateProjectPruneFailureDb(DbPath)))
+	const FString FixtureProjectRoot = FPaths::ConvertRelativePathToFull(
+		FPaths::ProjectIntermediateDir());
+	if (!TestTrue(
+		TEXT("commandlet prune-failure DB fixture created"),
+		CreateProjectPruneFailureDb(DbPath, FixtureProjectRoot)))
 	{
 		DeleteSourceTestDb(DbPath);
 		return false;
 	}
 
 	AddExpectedError(
-		TEXT("Failed to create prepared statement from 'SELECT id,path FROM files;'"),
-		EAutomationExpectedErrorFlags::Contains,
-		1);
-	AddExpectedError(
-		TEXT("PruneIndexedFilesUnderRoots failed to read files table"),
+		TEXT("PruneIndexedFilesUnderRoots SQL failed: fixture prune blocked"),
 		EAutomationExpectedErrorFlags::Contains,
 		1);
 	AddExpectedError(
@@ -1034,7 +1151,7 @@ bool FMonolithReindexCommandletFatalIndexerExitCodeTest::RunTest(const FString& 
 		const FString CommandletParams = FString::Printf(
 			TEXT("-mode=project -db=\"%s\" -projectpath=\"%s\" -AllowWhenIndexingDisabled"),
 			*DbPath,
-			*FPaths::ConvertRelativePathToFull(FPaths::ProjectDir()));
+			*FixtureProjectRoot);
 		TestEqual(TEXT("fatal indexer failure returns commandlet exit code 1"), Commandlet->Main(CommandletParams), 1);
 	}
 
@@ -1495,9 +1612,13 @@ bool FSourceFindReferencesValidatesParamsTest::RunTest(const FString& Parameters
 	P1->SetStringField(TEXT("limit"), TEXT("NotANumber"));
 	FMonolithActionResult R1 = FMonolithToolRegistry::Get().ExecuteAction(TEXT("source"), TEXT("find_references"), P1);
 	TestFalse(TEXT("Rejects string limit"), R1.bSuccess);
+	TestEqual(TEXT("String limit uses invalid-params result code"),
+		R1.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+	TestTrue(TEXT("String limit includes structured error data"), R1.ErrorData.IsValid());
 	if (R1.ErrorData.IsValid())
 	{
-		TestEqual(TEXT("Error code -32602"), R1.ErrorData->GetIntegerField(TEXT("code")), -32602);
+		TestEqual(TEXT("String limit identifies invalid param failure"),
+			R1.ErrorData->GetStringField(TEXT("failure_cause")), TEXT("invalid_param"));
 	}
 
 	// ref_kind type mismatch
@@ -1506,9 +1627,13 @@ bool FSourceFindReferencesValidatesParamsTest::RunTest(const FString& Parameters
 	P2->SetNumberField(TEXT("ref_kind"), 123);
 	FMonolithActionResult R2 = FMonolithToolRegistry::Get().ExecuteAction(TEXT("source"), TEXT("find_references"), P2);
 	TestFalse(TEXT("Rejects number ref_kind"), R2.bSuccess);
+	TestEqual(TEXT("Numeric ref_kind uses invalid-params result code"),
+		R2.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+	TestTrue(TEXT("Numeric ref_kind includes structured error data"), R2.ErrorData.IsValid());
 	if (R2.ErrorData.IsValid())
 	{
-		TestEqual(TEXT("Error code -32602"), R2.ErrorData->GetIntegerField(TEXT("code")), -32602);
+		TestEqual(TEXT("Numeric ref_kind identifies invalid param failure"),
+			R2.ErrorData->GetStringField(TEXT("failure_cause")), TEXT("invalid_param"));
 	}
 	return true;
 }
@@ -1605,6 +1730,37 @@ bool FSourceRepairCrgCacheTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("one CRG node per symbol"), After->GetIntegerField(TEXT("crg_nodes")), 5);
 	TestEqual(TEXT("reference + inheritance edges"), After->GetIntegerField(TEXT("crg_edges")), 4);
 	TestEqual(TEXT("one metric per CRG node"), After->GetIntegerField(TEXT("crg_node_metrics")), 5);
+
+	// Reproduce the production failure mode where a prior interrupted/scoped
+	// projection update removed a node but left its metric row behind. The full
+	// rebuild must delete that orphan before reinserting the same symbol id.
+	TestTrue(TEXT("source node can be removed while retaining its derived metric"), ExecuteSourceSql(
+		T.Db, FString::Printf(TEXT("DELETE FROM crg_nodes WHERE id=%lld;"), T.Sa)));
+	TestEqual(TEXT("one orphan metric exists before repair"), CountSourceRows(T.Db, TEXT(
+		"SELECT COUNT(*) FROM crg_node_metrics m "
+		"LEFT JOIN crg_nodes n ON n.id=m.node_id WHERE n.id IS NULL;")), static_cast<int64>(1));
+
+	TSharedPtr<FJsonObject> OrphanHealth = T.Db.ComputeHealth(false, true);
+	TestEqual(TEXT("orphan metric yields warning health"), OrphanHealth->GetStringField(TEXT("status")), FString(TEXT("warning")));
+	TestTrue(TEXT("health identifies the orphan metric contract"),
+		JsonCheckHasResult(OrphanHealth, TEXT("crg:orphan_metrics"), TEXT("warning")));
+
+	TSharedPtr<FJsonObject> OrphanDryRun = T.Db.RepairCrgCache(false);
+	TestTrue(TEXT("orphan metric requires a full rebuild"), OrphanDryRun->GetBoolField(TEXT("repair_needed")));
+
+	TSharedPtr<FJsonObject> OrphanRepair = T.Db.RepairCrgCache(true);
+	TestEqual(TEXT("full repair recovers from a colliding orphan metric"),
+		OrphanRepair->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestEqual(TEXT("full repair restores every source node"),
+		CountSourceRows(T.Db, TEXT("SELECT COUNT(*) FROM crg_nodes WHERE domain='source';")), static_cast<int64>(5));
+	TestEqual(TEXT("full repair restores one metric per source node"),
+		CountSourceRows(T.Db, TEXT(
+			"SELECT COUNT(*) FROM crg_node_metrics m "
+			"JOIN crg_nodes n ON n.id=m.node_id WHERE n.domain='source';")), static_cast<int64>(5));
+	TestEqual(TEXT("full repair removes every orphan metric"),
+		CountSourceRows(T.Db, TEXT(
+			"SELECT COUNT(*) FROM crg_node_metrics m "
+			"LEFT JOIN crg_nodes n ON n.id=m.node_id WHERE n.id IS NULL;")), static_cast<int64>(0));
 	return true;
 }
 

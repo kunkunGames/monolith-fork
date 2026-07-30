@@ -1,0 +1,27 @@
+{
+  "schema_version": 2,
+  "benchmark": "OfflineParity",
+  "suite": "OfflineParity",
+  "snapshot_id": "open-cl-review-20260730-05",
+  "summary_file": "summary.json",
+  "summary_sha256": "fe82bba465097e180b0ce3cae658d4c944f6b4facb6930e076047b942c499d21",
+  "artifact_files": {
+    "per_action.jsonl": {
+      "sha256": "e44d6171b05ef78563152f205c6de202e2bf9faa4c11be2da6ddcfc0293abf8b",
+      "non_empty_line_count": 317
+    }
+  },
+  "input_fingerprint": "c0fb73b5f4fa5fc1480f6b1efe5d09d8a3c98fff7582ed03b8e52d0f86ea7d45",
+  "database_inputs": [
+    {
+      "kind": "database",
+      "path": "Saved/EngineSource.db",
+      "exists": true,
+      "size_bytes": 997572608,
+      "mtime_ns": 1785355568053513300,
+      "signature": "997572608:1785355568053513300",
+      "sha256": "d6c98c5af9482ef67c306a361908a42546b33280c7bed975ab098d0ea023bfb2"
+    }
+  ],
+  "portable_database_policy": "attest_when_absent_verify_when_present"
+}

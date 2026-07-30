@@ -1,4 +1,5 @@
 #include "MonolithSourceActions.h"
+#include "MonolithSourceAvailability.h"
 #include "MonolithSettings.h"
 #include "MonolithSourceDatabase.h"
 #include "MonolithSourceReview.h"
@@ -676,6 +677,26 @@ FMonolithSourceDatabase* FMonolithSourceActions::GetDB()
 	return Subsystem->GetDatabase();
 }
 
+FMonolithActionResult FMonolithSourceActions::MakeDatabaseUnavailableError()
+{
+	FMonolithSourceDatabaseStatus Status;
+	Status.State = TEXT("subsystem_unavailable");
+	Status.LastFailureStage = TEXT("source_subsystem_unavailable");
+	Status.LastFailureDetail =
+		TEXT("A live editor MonolithSourceSubsystem is required for source index actions.");
+	if (GEditor)
+	{
+		if (UMonolithSourceSubsystem* Subsystem =
+			Cast<UMonolithSourceSubsystem>(
+				GEditor->GetEditorSubsystemBase(
+					UMonolithSourceSubsystem::StaticClass())))
+		{
+			Status = Subsystem->GetDatabaseStatus();
+		}
+	}
+	return MonolithSourceAvailability::MakeDatabaseUnavailableError(Status);
+}
+
 // ============================================================================
 // CRG-inspired navigation/review handlers
 // ============================================================================
@@ -722,7 +743,7 @@ FMonolithActionResult FMonolithSourceActions::HandleImpactRadius(const TSharedPt
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB)
 	{
-		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+		return MakeDatabaseUnavailableError();
 	}
 	TSharedPtr<FJsonObject> R = FMonolithSourceReview::ImpactRadius(*DB, Symbol,
 		FMonolithSourceReview::PStr(Params, TEXT("edge_kinds"), TEXT("call|type|inheritance")),
@@ -742,7 +763,7 @@ FMonolithActionResult FMonolithSourceActions::HandleFindOverrides(const TSharedP
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB)
 	{
-		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+		return MakeDatabaseUnavailableError();
 	}
 	TArray<FString> Fields;
 	{
@@ -789,7 +810,7 @@ FMonolithActionResult FMonolithSourceActions::HandleHealth(const TSharedPtr<FJso
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB)
 	{
-		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+		return MakeDatabaseUnavailableError();
 	}
 	const bool bCounts = FMonolithSourceReview::PBool(Params, TEXT("include_counts"), false);
 	const bool bDeepChecks = FMonolithSourceReview::PBool(Params, TEXT("include_deep_checks"), false);
@@ -801,7 +822,7 @@ FMonolithActionResult FMonolithSourceActions::HandleRepairFts(const TSharedPtr<F
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB)
 	{
-		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+		return MakeDatabaseUnavailableError();
 	}
 	const FString Target = FMonolithSourceReview::PStr(Params, TEXT("target"), TEXT("all"));
 	const bool bExecute = FMonolithSourceReview::PBool(Params, TEXT("execute"), false);
@@ -825,7 +846,7 @@ FMonolithActionResult FMonolithSourceActions::HandleRepairCrgCache(const TShared
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB)
 	{
-		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+		return MakeDatabaseUnavailableError();
 	}
 	const bool bExecute = FMonolithSourceReview::PBool(Params, TEXT("execute"), false);
 	const FString Scope = FMonolithSourceReview::PStr(Params, TEXT("scope"), TEXT("all")).ToLower();
@@ -875,9 +896,7 @@ FMonolithActionResult FMonolithSourceActions::HandleSearchCrgGraph(const TShared
 	}
 	if (!Subsystem->GetDatabase())
 	{
-		return FMonolithActionResult::Error(TEXT("Source index database not available"), -32000)
-			.WithHint(TEXT("Run source.health, then source.trigger_reindex if the database is missing."))
-			.WithRelatedAction(TEXT("source.health"));
+		return MakeDatabaseUnavailableError();
 	}
 
 	const FString Kind = FMonolithSourceReview::PStr(Params, TEXT("kind"));
@@ -899,7 +918,7 @@ FMonolithActionResult FMonolithSourceActions::HandleRiskScore(const TSharedPtr<F
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB)
 	{
-		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+		return MakeDatabaseUnavailableError();
 	}
 	const int32 Limit = FMonolithSourceReview::PInt(Params, TEXT("limit"), 10);
 	const FString MinTier = FMonolithSourceReview::PStr(Params, TEXT("min_tier"), TEXT("low"));
@@ -912,7 +931,7 @@ FMonolithActionResult FMonolithSourceActions::HandleDetectChanges(const TSharedP
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB)
 	{
-		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+		return MakeDatabaseUnavailableError();
 	}
 	return FMonolithActionResult::Success(DB->DetectChanges(
 		CollectChangedPaths(Params),
@@ -926,7 +945,7 @@ FMonolithActionResult FMonolithSourceActions::HandleFindUnused(const TSharedPtr<
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB)
 	{
-		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+		return MakeDatabaseUnavailableError();
 	}
 	return FMonolithActionResult::Success(DB->FindUnused(
 		FMonolithSourceReview::PStr(Params, TEXT("kind"), TEXT("all")),
@@ -939,7 +958,7 @@ FMonolithActionResult FMonolithSourceActions::HandlePreMergeCheck(const TSharedP
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB)
 	{
-		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+		return MakeDatabaseUnavailableError();
 	}
 	return FMonolithActionResult::Success(DB->PreMergeCheck(
 		CollectChangedPaths(Params),
@@ -954,7 +973,7 @@ FMonolithActionResult FMonolithSourceActions::HandleSnapshot(const TSharedPtr<FJ
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB)
 	{
-		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+		return MakeDatabaseUnavailableError();
 	}
 	const bool bExecute = FMonolithSourceReview::PBool(Params, TEXT("execute"), false);
 	if (bExecute && GEditor)
@@ -978,7 +997,7 @@ FMonolithActionResult FMonolithSourceActions::HandleDiffSnapshots(const TSharedP
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB)
 	{
-		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+		return MakeDatabaseUnavailableError();
 	}
 	return FMonolithActionResult::Success(DB->DiffSnapshots(
 		FMonolithSourceReview::PStr(Params, TEXT("before")),
@@ -991,7 +1010,7 @@ FMonolithActionResult FMonolithSourceActions::HandleReviewHotspots(const TShared
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB)
 	{
-		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+		return MakeDatabaseUnavailableError();
 	}
 	return FMonolithActionResult::Success(FMonolithSourceReview::ReviewHotspots(*DB,
 		FMonolithSourceReview::PStr(Params, TEXT("kind"), TEXT("all")),
@@ -1010,7 +1029,7 @@ FMonolithActionResult FMonolithSourceActions::HandleReviewContext(const TSharedP
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB)
 	{
-		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+		return MakeDatabaseUnavailableError();
 	}
 	TSharedPtr<FJsonObject> R = FMonolithSourceReview::ReviewContext(*DB, Symbol,
 		FMonolithSourceReview::PStr(Params, TEXT("direction"), TEXT("both")),
@@ -1663,7 +1682,7 @@ FMonolithActionResult FMonolithSourceActions::HandleReadSource(const TSharedPtr<
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB || !DB->IsOpen())
 	{
-		return FMonolithActionResult::Error(TEXT("Engine source DB not available. Run source.trigger_reindex first."));
+		return MakeDatabaseUnavailableError();
 	}
 
 	FString Symbol;
@@ -1847,12 +1866,6 @@ FMonolithActionResult FMonolithSourceActions::HandleReadSource(const TSharedPtr<
 
 FMonolithActionResult FMonolithSourceActions::HandleFindReferences(const TSharedPtr<FJsonObject>& Params)
 {
-	FMonolithSourceDatabase* DB = GetDB();
-	if (!DB || !DB->IsOpen())
-	{
-		return FMonolithActionResult::Error(TEXT("Engine source DB not available."));
-	}
-
 	FString Symbol;
 	if (!Params->TryGetStringField(TEXT("symbol"), Symbol) || Symbol.IsEmpty())
 	{
@@ -1883,6 +1896,15 @@ FMonolithActionResult FMonolithSourceActions::HandleFindReferences(const TShared
 		Limit = static_cast<int32>(LimitValue);
 	}
 	Limit = FMath::Clamp(Limit, 1, 1000);
+
+	// Validate the complete request before consulting mutable index state. A
+	// temporarily indexing or unavailable database must not mask an invalid
+	// caller contract with an unrelated availability error.
+	FMonolithSourceDatabase* DB = GetDB();
+	if (!DB || !DB->IsOpen())
+	{
+		return MakeDatabaseUnavailableError();
+	}
 
 	TArray<FMonolithSourceSymbol> Symbols = DB->GetSymbolsByName(Symbol);
 	if (Symbols.Num() == 0) Symbols = DB->SearchSymbolsFTS(Symbol, 5);
@@ -1986,7 +2008,7 @@ FMonolithActionResult FMonolithSourceActions::HandleFindCallers(const TSharedPtr
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB || !DB->IsOpen())
 	{
-		return FMonolithActionResult::Error(TEXT("Engine source DB not available."));
+		return MakeDatabaseUnavailableError();
 	}
 
 	FString Function;
@@ -2083,7 +2105,7 @@ FMonolithActionResult FMonolithSourceActions::HandleFindCallees(const TSharedPtr
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB || !DB->IsOpen())
 	{
-		return FMonolithActionResult::Error(TEXT("Engine source DB not available."));
+		return MakeDatabaseUnavailableError();
 	}
 
 	FString Function;
@@ -2198,7 +2220,7 @@ FMonolithActionResult FMonolithSourceActions::HandleSearchSource(const TSharedPt
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB || !DB->IsOpen())
 	{
-		return FMonolithActionResult::Error(TEXT("Engine source DB not available."));
+		return MakeDatabaseUnavailableError();
 	}
 
 	FString Scope = TEXT("all");
@@ -2496,7 +2518,7 @@ FMonolithActionResult FMonolithSourceActions::HandleGetClassHierarchy(const TSha
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB || !DB->IsOpen())
 	{
-		return FMonolithActionResult::Error(TEXT("Engine source DB not available."));
+		return MakeDatabaseUnavailableError();
 	}
 
 	FString ClassName;
@@ -2611,7 +2633,7 @@ FMonolithActionResult FMonolithSourceActions::HandleGetModuleInfo(const TSharedP
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB || !DB->IsOpen())
 	{
-		return FMonolithActionResult::Error(TEXT("Engine source DB not available."));
+		return MakeDatabaseUnavailableError();
 	}
 
 	FString ModuleName;
@@ -2676,7 +2698,7 @@ FMonolithActionResult FMonolithSourceActions::HandleGetSymbolContext(const TShar
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB || !DB->IsOpen())
 	{
-		return FMonolithActionResult::Error(TEXT("Engine source DB not available."));
+		return MakeDatabaseUnavailableError();
 	}
 
 	FString Symbol;
@@ -2752,7 +2774,7 @@ FMonolithActionResult FMonolithSourceActions::HandleReadFile(const TSharedPtr<FJ
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB || !DB->IsOpen())
 	{
-		return FMonolithActionResult::Error(TEXT("Engine source DB not available."));
+		return MakeDatabaseUnavailableError();
 	}
 
 	FString Path;
@@ -2901,7 +2923,12 @@ FMonolithActionResult FMonolithSourceActions::HandleTriggerReindex(const TShared
 		return FMonolithActionResult::Error(TEXT("Indexing already in progress."));
 	}
 
-	Subsystem->TriggerReindex();
+	if (!Subsystem->TriggerReindex())
+	{
+		return MonolithSourceAvailability::MakeIndexRequestError(
+			Subsystem->GetDatabaseStatus(),
+			TEXT("full"));
+	}
 
 	auto ResultObj = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> ContentArr;
@@ -2941,7 +2968,12 @@ FMonolithActionResult FMonolithSourceActions::HandleTriggerProjectReindex(const 
 		return FMonolithActionResult::Error(TEXT("Indexing already in progress."));
 	}
 
-	Subsystem->TriggerProjectReindex();
+	if (!Subsystem->TriggerProjectReindex())
+	{
+		return MonolithSourceAvailability::MakeIndexRequestError(
+			Subsystem->GetDatabaseStatus(),
+			TEXT("project"));
+	}
 
 	auto ResultObj = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> ContentArr;
@@ -2962,7 +2994,7 @@ FMonolithActionResult FMonolithSourceActions::HandleGetIncludePath(const TShared
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB || !DB->IsOpen())
 	{
-		return FMonolithActionResult::Error(TEXT("Engine source DB not available. Run source.trigger_reindex first."));
+		return MakeDatabaseUnavailableError();
 	}
 
 	FString Symbol;
@@ -3111,7 +3143,7 @@ FMonolithActionResult FMonolithSourceActions::HandleGetSignature(const TSharedPt
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB || !DB->IsOpen())
 	{
-		return FMonolithActionResult::Error(TEXT("Engine source DB not available. Run source.trigger_reindex first."));
+		return MakeDatabaseUnavailableError();
 	}
 
 	FString Symbol;
@@ -3294,7 +3326,7 @@ FMonolithActionResult FMonolithSourceActions::HandleCheckDeprecations(const TSha
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB || !DB->IsOpen())
 	{
-		return FMonolithActionResult::Error(TEXT("Engine source DB not available. Run source.trigger_reindex first."));
+		return MakeDatabaseUnavailableError();
 	}
 
 	// Collect the requested symbol names (array of strings).
@@ -3386,7 +3418,7 @@ FMonolithActionResult FMonolithSourceActions::HandleVerifySymbols(const TSharedP
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB || !DB->IsOpen())
 	{
-		return FMonolithActionResult::Error(TEXT("Engine source DB not available. Run source.trigger_reindex first."));
+		return MakeDatabaseUnavailableError();
 	}
 
 	TArray<FString> SymbolNames;
@@ -3523,7 +3555,7 @@ FMonolithActionResult FMonolithSourceActions::HandleFindExampleUsage(const TShar
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB || !DB->IsOpen())
 	{
-		return FMonolithActionResult::Error(TEXT("Engine source DB not available. Run source.trigger_reindex first."));
+		return MakeDatabaseUnavailableError();
 	}
 
 	FString Symbol;
@@ -4192,7 +4224,7 @@ FMonolithActionResult FMonolithSourceActions::HandleGenerateClassStub(const TSha
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB || !DB->IsOpen())
 	{
-		return FMonolithActionResult::Error(TEXT("Engine source DB not available. Run source.trigger_reindex first."));
+		return MakeDatabaseUnavailableError();
 	}
 
 	FString ParentClass;

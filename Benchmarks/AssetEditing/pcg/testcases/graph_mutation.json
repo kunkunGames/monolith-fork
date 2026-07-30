@@ -1,0 +1,276 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "pcg",
+  "asset_type_slug": "pcg",
+  "edit_domain": "graph_mutation",
+  "route_edit_domain": "graph_mutation",
+  "module_id": "asset_authoring.pcg.graph_mutation",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.pcg.graph_mutation",
+    "edit": "asset_operation.edit.pcg.graph_mutation",
+    "save": "asset_operation.save.pcg.graph_mutation",
+    "readback_verify": "asset_operation.readback_verify.pcg.graph_mutation"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-548"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-548",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "pcg",
+      "edit_domain": "graph_mutation",
+      "blueprint_type": "",
+      "workflow": "pcg_graph_mutation_cleanup_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "create_pcg_graph",
+        "add_pcg_node",
+        "connect_pcg_nodes",
+        "disconnect_pcg_nodes",
+        "remove_pcg_node",
+        "save_asset",
+        "get_pcg_graph_info",
+        "validate_pcg_graph"
+      ],
+      "description": "Create or reuse an isolated PCGGraph, author one connected node, disconnect an exact edge idempotently, remove the node and its remaining edge, then prove the saved graph is structurally clean and rerunnable"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-548",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "create_pcg_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchMutation",
+            "existing_policy": "return_existing",
+            "save": true
+          },
+          "expect": {
+            "$.class": "PCGGraph",
+            "$.existing_policy": "return_existing"
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "add_pcg_node",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchMutation",
+            "node_type": "PCGAddTagSettings",
+            "node_title": "Bench_MutationNode",
+            "position": [
+              320,
+              0
+            ],
+            "existing_policy": "return_existing",
+            "save": true
+          },
+          "expect": {
+            "$.node_title": "Bench_MutationNode",
+            "$.settings_class": "PCGAddTagSettings",
+            "$.existing_policy": "return_existing"
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "connect_pcg_nodes",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchMutation",
+            "source_node": "__input__",
+            "source_pin": "In",
+            "target_node": "Bench_MutationNode",
+            "target_pin": "In",
+            "save": true
+          },
+          "expect": {
+            "$.source_pin": "In",
+            "$.target_pin": "In"
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "connect_pcg_nodes",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchMutation",
+            "source_node": "Bench_MutationNode",
+            "source_pin": "Out",
+            "target_node": "__output__",
+            "target_pin": "Out",
+            "save": true
+          },
+          "expect": {
+            "$.source_pin": "Out",
+            "$.target_pin": "Out"
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "disconnect_pcg_nodes",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchMutation",
+            "source_node": "Bench_MutationNode",
+            "source_pin": "Out",
+            "target_node": "__output__",
+            "target_pin": "Out",
+            "save": true
+          },
+          "expect": {
+            "$.status": "disconnected",
+            "$.removed": true,
+            "$.saved": true
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "disconnect_pcg_nodes",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchMutation",
+            "source_node": "Bench_MutationNode",
+            "source_pin": "Out",
+            "target_node": "__output__",
+            "target_pin": "Out",
+            "save": true
+          },
+          "expect": {
+            "$.status": "not_connected",
+            "$.removed": false,
+            "$.saved": false
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "remove_pcg_node",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchMutation",
+            "node_id": "Bench_MutationNode",
+            "save": true
+          },
+          "expect": {
+            "$.status": "removed",
+            "$.removed_node_title": "Bench_MutationNode",
+            "$.removed_edge_count": 1,
+            "$.element_node_count": 0,
+            "$.saved": true
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchMutation",
+            "verify_reload": true
+          },
+          "expect": {
+            "$.success": true,
+            "$.saved": true,
+            "$.dirty_after_save": false,
+            "$.exists_on_disk": true,
+            "$.verify_reload": true,
+            "$.reloaded": true
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "get_pcg_graph_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchMutation"
+          },
+          "expect": {
+            "$.class": "PCGGraph",
+            "$.dirty": false,
+            "$.element_node_count": 0,
+            "$.edge_count": 0
+          }
+        },
+        {
+          "tool": "pcg_query",
+          "args": {
+            "action": "validate_pcg_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PCG/PCG_BenchMutation",
+            "require_output_connection": false,
+            "require_no_isolated_nodes": true
+          },
+          "expect": {
+            "$.valid": true,
+            "$.element_node_count": 0,
+            "$.edge_count": 0,
+            "$.error_count": 0
+          }
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "graph_mutation",
+      "blueprint_type": "",
+      "domain": "pcg",
+      "workflow": "pcg_graph_mutation_cleanup_roundtrip",
+      "description": "Create or reuse an isolated PCGGraph, author one connected node, disconnect an exact edge idempotently, remove the node and its remaining edge, then prove the saved graph is structurally clean and rerunnable",
+      "reference_context": [
+        "source: Engine/Plugins/PCG/Source/PCG/Public/PCGGraph.h",
+        "source: Plugins/Monolith/Source/MonolithPCG/Private/MonolithPCGGraphAuthoringActions.cpp",
+        "skill_ref: Plugins/Monolith/Skills/unreal-pcg/SKILL.md"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "create_pcg_graph",
+          "add_pcg_node",
+          "connect_pcg_nodes",
+          "disconnect_pcg_nodes",
+          "remove_pcg_node",
+          "save_asset",
+          "get_pcg_graph_info",
+          "validate_pcg_graph"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

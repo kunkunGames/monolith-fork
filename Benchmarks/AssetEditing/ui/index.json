@@ -5,17 +5,17 @@
   "asset_type": "ui",
   "asset_type_slug": "ui",
   "module_id": "asset_authoring.ui",
-  "task_count": 19,
+  "task_count": 23,
   "operation_counts": {
-    "creation_or_import": 19,
-    "edit": 19,
-    "save": 19,
-    "readback_verify": 19
+    "creation_or_import": 23,
+    "edit": 23,
+    "save": 23,
+    "readback_verify": 23
   },
   "lifecycle_counts": {
-    "create_save": 19
+    "create_save": 23
   },
-  "edit_domain_count": 19,
+  "edit_domain_count": 23,
   "task_ids": [
     "BEB-312",
     "BEB-313",
@@ -35,7 +35,11 @@
     "BEB-494",
     "BEB-523",
     "BEB-524",
-    "BEB-531"
+    "BEB-531",
+    "BEB-553",
+    "BEB-554",
+    "BEB-555",
+    "BEB-556"
   ],
   "task_refs": [
     {
@@ -673,6 +677,160 @@
         "inspect_assets_batch"
       ],
       "description": "Create saved UMG settings-panel and notification-toast template Widget Blueprints, then read both widget trees back"
+    },
+    {
+      "id": "BEB-553",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "registry_layout_accessibility",
+      "blueprint_type": "",
+      "workflow": "ui_registry_layout_accessibility_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_widget_blueprint",
+        "add_widget",
+        "set_text",
+        "compile_widget",
+        "save_asset",
+        "list_widget_types",
+        "dump_property_allowlist",
+        "describe_widget_type_schema",
+        "list_widget_property_enums",
+        "list_widget_events",
+        "get_widget_bindings",
+        "audit_accessibility",
+        "audit_widget_layout",
+        "measure_widget_layout",
+        "compute_widget_uispec_fingerprint",
+        "get_widget_tree"
+      ],
+      "description": "Create and reload a deterministic CanvasPanel Widget Blueprint, then prove reflection-backed UMG/CommonUI type discovery, type/property/event/binding schemas, accessibility lint, layout audit/measurement, and canonical UISpec fingerprinting"
+    },
+    {
+      "id": "BEB-554",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "commonui_content_framework",
+      "blueprint_type": "",
+      "workflow": "ui_commonui_content_framework_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_widget_blueprint",
+        "add_widget",
+        "set_text",
+        "compile_widget",
+        "save_asset",
+        "configure_numeric_text",
+        "configure_rotator",
+        "configure_animated_switcher",
+        "setup_common_list_view",
+        "create_widget_carousel",
+        "create_hardware_visibility_border",
+        "create_lazy_image",
+        "create_load_guard",
+        "get_widget_tree",
+        "describe_widget_type_schema",
+        "get_common_framework_status",
+        "describe_common_widget_blueprint",
+        "describe_common_messaging_flow",
+        "validate_common_dialog_contract",
+        "list_platform_input_tables",
+        "inspect_assets_batch"
+      ],
+      "description": "Create and reload CommonUI numeric text, rotator, animated switcher, list, carousel, hardware visibility, lazy-image, and load-guard widgets, then inspect Common framework and messaging contracts"
+    },
+    {
+      "id": "BEB-555",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "uispec_diff_patch",
+      "blueprint_type": "",
+      "workflow": "ui_uispec_diff_patch_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "build_ui_from_spec",
+        "apply_ui_spec_patch",
+        "save_asset",
+        "dump_ui_spec_schema",
+        "get_widget_tree",
+        "dump_ui_spec",
+        "diff_ui_spec",
+        "compute_widget_uispec_fingerprint"
+      ],
+      "description": "Build a Widget Blueprint from canonical UISpec, plan and apply a confirm-gated owner-action text patch, reload the package, and prove the desired spec converges with a required diff"
+    },
+    {
+      "id": "BEB-556",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "animation_inspection_delta_binding",
+      "blueprint_type": "",
+      "workflow": "ui_animation_inspection_delta_binding_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_widget_blueprint",
+        "add_widget",
+        "set_text",
+        "create_animation_v2",
+        "apply_animation_delta",
+        "remap_animation_binding",
+        "save_asset",
+        "get_animation_overview",
+        "get_animation_timeline",
+        "get_animation_time_slice",
+        "get_animation_details",
+        "get_widget_tree",
+        "inspect_asset"
+      ],
+      "description": "Create and reload a UMG float animation, plan/apply one delta key, remap its binding GUID to a resident replacement widget, then prove overview, timeline, sampled values, and full track readback"
     }
   ],
   "tasks_file": "tasks.jsonl",
@@ -680,6 +838,28 @@
   "readme_file": "README.md",
   "testcase_dir": "testcases",
   "testcases": [
+    {
+      "edit_domain": "animation_inspection_delta_binding",
+      "route_edit_domain": "animation_inspection_delta_binding",
+      "module_id": "asset_authoring.ui.animation_inspection_delta_binding",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.ui.animation_inspection_delta_binding",
+        "edit": "asset_operation.edit.ui.animation_inspection_delta_binding",
+        "save": "asset_operation.save.ui.animation_inspection_delta_binding",
+        "readback_verify": "asset_operation.readback_verify.ui.animation_inspection_delta_binding"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-556"
+      ],
+      "case_file": "testcases\\animation_inspection_delta_binding.json"
+    },
     {
       "edit_domain": "box_shadow_mid",
       "route_edit_domain": "box_shadow_mid",
@@ -745,6 +925,28 @@
         "BEB-453"
       ],
       "case_file": "testcases\\commonui_container_navigation.json"
+    },
+    {
+      "edit_domain": "commonui_content_framework",
+      "route_edit_domain": "commonui_content_framework",
+      "module_id": "asset_authoring.ui.commonui_content_framework",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.ui.commonui_content_framework",
+        "edit": "asset_operation.edit.ui.commonui_content_framework",
+        "save": "asset_operation.save.ui.commonui_content_framework",
+        "readback_verify": "asset_operation.readback_verify.ui.commonui_content_framework"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-554"
+      ],
+      "case_file": "testcases\\commonui_content_framework.json"
     },
     {
       "edit_domain": "commonui_input_action_datatable",
@@ -879,6 +1081,28 @@
       "case_file": "testcases\\list_view_binding.json"
     },
     {
+      "edit_domain": "registry_layout_accessibility",
+      "route_edit_domain": "registry_layout_accessibility",
+      "module_id": "asset_authoring.ui.registry_layout_accessibility",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.ui.registry_layout_accessibility",
+        "edit": "asset_operation.edit.ui.registry_layout_accessibility",
+        "save": "asset_operation.save.ui.registry_layout_accessibility",
+        "readback_verify": "asset_operation.readback_verify.ui.registry_layout_accessibility"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-553"
+      ],
+      "case_file": "testcases\\registry_layout_accessibility.json"
+    },
+    {
       "edit_domain": "settings_notification_templates",
       "route_edit_domain": "settings_notification_templates",
       "module_id": "asset_authoring.ui.settings_notification_templates",
@@ -899,6 +1123,28 @@
         "BEB-531"
       ],
       "case_file": "testcases\\settings_notification_templates.json"
+    },
+    {
+      "edit_domain": "uispec_diff_patch",
+      "route_edit_domain": "uispec_diff_patch",
+      "module_id": "asset_authoring.ui.uispec_diff_patch",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.ui.uispec_diff_patch",
+        "edit": "asset_operation.edit.ui.uispec_diff_patch",
+        "save": "asset_operation.save.ui.uispec_diff_patch",
+        "readback_verify": "asset_operation.readback_verify.ui.uispec_diff_patch"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-555"
+      ],
+      "case_file": "testcases\\uispec_diff_patch.json"
     },
     {
       "edit_domain": "widget_animation_advanced_events",

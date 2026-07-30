@@ -1,0 +1,416 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ui",
+  "asset_type_slug": "ui",
+  "edit_domain": "registry_layout_accessibility",
+  "route_edit_domain": "registry_layout_accessibility",
+  "module_id": "asset_authoring.ui.registry_layout_accessibility",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ui.registry_layout_accessibility",
+    "edit": "asset_operation.edit.ui.registry_layout_accessibility",
+    "save": "asset_operation.save.ui.registry_layout_accessibility",
+    "readback_verify": "asset_operation.readback_verify.ui.registry_layout_accessibility"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-553"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-553",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "registry_layout_accessibility",
+      "blueprint_type": "",
+      "workflow": "ui_registry_layout_accessibility_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_widget_blueprint",
+        "add_widget",
+        "set_text",
+        "compile_widget",
+        "save_asset",
+        "list_widget_types",
+        "dump_property_allowlist",
+        "describe_widget_type_schema",
+        "list_widget_property_enums",
+        "list_widget_events",
+        "get_widget_bindings",
+        "audit_accessibility",
+        "audit_widget_layout",
+        "measure_widget_layout",
+        "compute_widget_uispec_fingerprint",
+        "get_widget_tree"
+      ],
+      "description": "Create and reload a deterministic CanvasPanel Widget Blueprint, then prove reflection-backed UMG/CommonUI type discovery, type/property/event/binding schemas, accessibility lint, layout audit/measurement, and canonical UISpec fingerprinting"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-553",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchDiscovery"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_widget_blueprint",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchDiscovery",
+            "root_widget": "CanvasPanel"
+          },
+          "contains": [
+            "WBP_BenchDiscovery",
+            "CanvasPanel"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchDiscovery",
+            "widget_class": "TextBlock",
+            "widget_name": "BenchDiscoveryLabel",
+            "anchor_preset": "top_left",
+            "position": {
+              "x": 64,
+              "y": 64
+            },
+            "size": {
+              "x": 480,
+              "y": 80
+            },
+            "compile": false
+          },
+          "contains": [
+            "BenchDiscoveryLabel",
+            "TextBlock"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "set_text",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchDiscovery",
+            "widget_name": "BenchDiscoveryLabel",
+            "text": "Registry and layout benchmark",
+            "font_size": 24,
+            "compile": false
+          },
+          "contains": [
+            "BenchDiscoveryLabel"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchDiscovery",
+            "widget_class": "Button",
+            "widget_name": "BenchDiscoveryButton",
+            "anchor_preset": "top_left",
+            "position": {
+              "x": 64,
+              "y": 176
+            },
+            "size": {
+              "x": 280,
+              "y": 72
+            },
+            "compile": false
+          },
+          "contains": [
+            "BenchDiscoveryButton",
+            "Button"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "compile_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchDiscovery"
+          },
+          "expect": {
+            "$.error_count": 0
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchDiscovery",
+            "verify_reload": true
+          },
+          "expect": {
+            "$.success": true,
+            "$.saved": true,
+            "$.dirty_after_save": false,
+            "$.exists_on_disk": true,
+            "$.verify_reload": true,
+            "$.reloaded": true
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "list_widget_types",
+            "filter": "display",
+            "module_filter": "CommonUI"
+          },
+          "contains": [
+            "CommonNumericTextBlock",
+            "CommonUI",
+            "display",
+            "class_path",
+            "container_kind",
+            "total_registered"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "dump_property_allowlist",
+            "widget_type": "TextBlock"
+          },
+          "contains": [
+            "TextBlock",
+            "allowed_paths",
+            "Text",
+            "Font"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "describe_widget_type_schema",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchDiscovery",
+            "widget_name": "BenchDiscoveryLabel",
+            "include_inherited": false,
+            "include_unsafe": false
+          },
+          "contains": [
+            "BenchDiscoveryLabel",
+            "TextBlock",
+            "property",
+            "next_actions"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "list_widget_property_enums",
+            "widget_class": "TextBlock",
+            "property_name": "Justification"
+          },
+          "contains": [
+            "TextBlock",
+            "Justification",
+            "valid_values"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "list_widget_events",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchDiscovery",
+            "widget_name": "BenchDiscoveryButton"
+          },
+          "contains": [
+            "BenchDiscoveryButton",
+            "OnClicked",
+            "MulticastDelegateProperty"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_bindings",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchDiscovery"
+          },
+          "expect": {
+            "$.count": 0
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "audit_accessibility",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchDiscovery"
+          },
+          "contains": [
+            "WBP_BenchDiscovery",
+            "widget_count",
+            "issue_count",
+            "BenchDiscoveryButton"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "audit_widget_layout",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchDiscovery"
+            ],
+            "allowed_canvas_slots": [
+              "*"
+            ],
+            "rule_profile": "advisory",
+            "treat_warnings_as_errors": false
+          },
+          "expect": {
+            "$.bSuccess": true,
+            "$.summary.assets_scanned": 1,
+            "$.summary.dump_error_count": 0
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "measure_widget_layout",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchDiscovery",
+            "profiles": [
+              {
+                "name": "pc_1080p",
+                "resolution": [
+                  1920,
+                  1080
+                ],
+                "dpi_scale": 1.0
+              }
+            ],
+            "check_overlap": true,
+            "check_safe_zone": false,
+            "max_allowed_overlap_ratio": 0.0
+          },
+          "expect": {
+            "$.bSuccess": true,
+            "$.status": "pass",
+            "$.summary.profile_count": 1,
+            "$.summary.layout_bounds_unavailable_count": 0
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "compute_widget_uispec_fingerprint",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchDiscovery"
+            ]
+          },
+          "contains": [
+            "WBP_BenchDiscovery",
+            "aggregate_sha256",
+            "widgets",
+            "sha256"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchDiscovery"
+          },
+          "contains": [
+            "BenchDiscoveryLabel",
+            "Registry and layout benchmark",
+            "BenchDiscoveryButton",
+            "CanvasPanel"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "registry_layout_accessibility",
+      "blueprint_type": "",
+      "domain": "ui",
+      "workflow": "ui_registry_layout_accessibility_roundtrip",
+      "description": "Create and reload a deterministic CanvasPanel Widget Blueprint, then prove reflection-backed UMG/CommonUI type discovery, type/property/event/binding schemas, accessibility lint, layout audit/measurement, and canonical UISpec fingerprinting",
+      "reference_context": [
+        "source: Plugins/Monolith/Source/MonolithUI/Private/MonolithUIActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithUI/Private/MonolithUIRegistryActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithUI/Private/MonolithUIAccessibilityActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithUI/Private/Actions/MonolithUISpecActions.cpp",
+        "skill_ref: Plugins/Monolith/Skills/unreal-ui/SKILL.md"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_widget_blueprint",
+          "add_widget",
+          "set_text",
+          "compile_widget",
+          "save_asset",
+          "list_widget_types",
+          "dump_property_allowlist",
+          "describe_widget_type_schema",
+          "list_widget_property_enums",
+          "list_widget_events",
+          "get_widget_bindings",
+          "audit_accessibility",
+          "audit_widget_layout",
+          "measure_widget_layout",
+          "compute_widget_uispec_fingerprint",
+          "get_widget_tree"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

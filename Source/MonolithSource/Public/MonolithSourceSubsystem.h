@@ -9,6 +9,22 @@ class FMonolithSourceIndexer;
 // UE 5.7: declared without underlying type at UObject/UObjectGlobals.h:3216 — match exactly.
 enum class EReloadCompleteReason;
 
+struct MONOLITHSOURCE_API FMonolithSourceDatabaseStatus
+{
+	FString State = TEXT("unavailable");
+	FString DatabasePath;
+	bool bDatabaseExists = false;
+	bool bDatabaseOpen = false;
+	bool bIndexing = false;
+	bool bRequiresSuccessfulReindex = false;
+	FString LastIndexContext;
+	FString LastFailureStage;
+	FString LastFailureDetail;
+	int32 LastFilesProcessed = 0;
+	int32 LastSymbolsExtracted = 0;
+	int32 LastErrors = 0;
+};
+
 /**
  * Editor subsystem that owns the engine source DB and triggers C++ source indexing.
  */
@@ -26,10 +42,10 @@ public:
 	FMonolithSourceDatabase* GetDatabase();
 
 	/** Full reindex: engine + shaders + project source (clean build). */
-	void TriggerReindex();
+	bool TriggerReindex();
 
 	/** Incremental project-only reindex: loads existing engine symbols, indexes only project C++ source. */
-	void TriggerProjectReindex();
+	bool TriggerProjectReindex();
 
 	/** Start project-only indexing when the DB exists, otherwise bootstrap a full source index. */
 	bool StartPreferredIndex();
@@ -43,6 +59,9 @@ public:
 	/** Absolute path of the authoritative EngineSource database, including any configured override. */
 	FString GetDatabasePath() const;
 
+	/** Fail-closed database/index state used by source actions for structured recovery errors. */
+	FMonolithSourceDatabaseStatus GetDatabaseStatus() const;
+
 private:
 	FString GetEngineSourcePath() const;
 	FString GetEngineShaderPath() const;
@@ -54,7 +73,9 @@ private:
 	bool TryOpenDatabaseWithRetry(const FString& DbPath, const TCHAR* Context);
 	void ReopenDatabase(const FString& DbPath);
 	void FinishIndexingOnGameThread(const FString& DbPath, const FString& Context,
-		int32 Files, int32 Symbols, int32 Errors, bool bSucceeded, bool bRequiresFullCrgRebuild);
+		int32 Files, int32 Symbols, int32 Errors, bool bSucceeded,
+		const FString& FailureStage, const FString& FailureDetail,
+		bool bRequiresFullCrgRebuild);
 
 	/**
 	 * F17 (2026-04-26): Auto-reindex hook. Fires when Live Coding / hot-reload completes.
@@ -81,4 +102,12 @@ private:
 
 	/** Last failed lazy DB open attempt; throttles repeated source_query failures. */
 	double LastDatabaseOpenFailureTimeSeconds = 0.0;
+	FString LastDatabaseOpenFailureDetail;
+
+	FString LastIndexContext;
+	FString LastIndexFailureStage;
+	FString LastIndexFailureDetail;
+	int32 LastIndexFilesProcessed = 0;
+	int32 LastIndexSymbolsExtracted = 0;
+	int32 LastIndexErrors = 0;
 };

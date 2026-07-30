@@ -712,6 +712,7 @@ FMonolithSourceDatabase::~FMonolithSourceDatabase()
 bool FMonolithSourceDatabase::Open(const FString& DbPath)
 {
 	FScopeLock Lock(&DbLock);
+	LastError.Reset();
 
 	if (Database)
 	{
@@ -727,6 +728,7 @@ bool FMonolithSourceDatabase::Open(const FString& DbPath)
 	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
 	if (!PlatformFile.FileExists(*DbPath))
 	{
+		LastError = TEXT("EngineSource.db does not exist.");
 		UE_LOG(LogMonolithSource, Warning, TEXT("Engine source DB not found: %s"), *DbPath);
 		return false;
 	}
@@ -734,6 +736,7 @@ bool FMonolithSourceDatabase::Open(const FString& DbPath)
 	Database = new FSQLiteDatabase();
 	if (!Database->Open(*DbPath, ESQLiteDatabaseOpenMode::ReadWrite))
 	{
+		LastError = Database->GetLastError();
 		UE_LOG(LogMonolithSource, Error, TEXT("Failed to open engine source DB: %s"), *DbPath);
 		delete Database;
 		Database = nullptr;
@@ -742,6 +745,7 @@ bool FMonolithSourceDatabase::Open(const FString& DbPath)
 
 	if (!ApplyEngineSourceDeletePragmas(*Database, DbPath))
 	{
+		LastError = Database->GetLastError();
 		UE_LOG(LogMonolithSource, Error, TEXT("Failed to configure EngineSource DB journal mode: %s"), *DbPath);
 		Database->Close();
 		delete Database;
@@ -754,6 +758,7 @@ bool FMonolithSourceDatabase::Open(const FString& DbPath)
 	// here instead of relying on a later indexing operation to call schema setup.
 	if (!CreateTablesIfNeededLocked())
 	{
+		LastError = Database->GetLastError();
 		UE_LOG(LogMonolithSource, Error, TEXT("Failed to migrate/verify EngineSource DB schema: %s"), *DbPath);
 		Database->Close();
 		delete Database;
@@ -1703,6 +1708,25 @@ bool FMonolithSourceDatabase::IsOpen() const
 {
 	FScopeLock Lock(&DbLock);
 	return Database != nullptr && Database->IsValid();
+}
+
+FString FMonolithSourceDatabase::GetLastError() const
+{
+	FScopeLock Lock(&DbLock);
+	if (Database)
+	{
+		const FString DatabaseError = Database->GetLastError();
+		if (!DatabaseError.IsEmpty()
+			&& !DatabaseError.Equals(TEXT("not an error"), ESearchCase::IgnoreCase))
+		{
+			return DatabaseError;
+		}
+	}
+	if (!LastError.IsEmpty())
+	{
+		return LastError;
+	}
+	return Database ? Database->GetLastError() : FString();
 }
 
 FSQLiteDatabase* FMonolithSourceDatabase::GetRawHandle() const
@@ -3353,6 +3377,7 @@ int32 FMonolithSourceDatabase::CountSourceFTSFiltered(const FString& Query, cons
 bool FMonolithSourceDatabase::OpenForWriting(const FString& DbPath)
 {
 	FScopeLock Lock(&DbLock);
+	LastError.Reset();
 
 	if (Database)
 	{
@@ -3366,6 +3391,7 @@ bool FMonolithSourceDatabase::OpenForWriting(const FString& DbPath)
 	Database = new FSQLiteDatabase();
 	if (!Database->Open(*DbPath, ESQLiteDatabaseOpenMode::ReadWriteCreate))
 	{
+		LastError = Database->GetLastError();
 		UE_LOG(LogMonolithSource, Error, TEXT("OpenForWriting: failed to open/create DB: %s"), *DbPath);
 		delete Database;
 		Database = nullptr;
@@ -3374,6 +3400,7 @@ bool FMonolithSourceDatabase::OpenForWriting(const FString& DbPath)
 
 	if (!ApplyEngineSourceDeletePragmas(*Database, DbPath))
 	{
+		LastError = Database->GetLastError();
 		UE_LOG(LogMonolithSource, Error, TEXT("OpenForWriting: failed to configure journal mode: %s"), *DbPath);
 		Database->Close();
 		delete Database;
@@ -3522,8 +3549,10 @@ bool FMonolithSourceDatabase::CreateTablesIfNeededLocked()
 bool FMonolithSourceDatabase::ResetDatabase()
 {
 	FScopeLock Lock(&DbLock);
+	LastError.Reset();
 	if (CachedDbPath.IsEmpty())
 	{
+		LastError = TEXT("No database path was configured.");
 		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: no cached DB path"));
 		return false;
 	}
@@ -3539,6 +3568,7 @@ bool FMonolithSourceDatabase::ResetDatabase()
 	PlatformFile.CreateDirectoryTree(*FPaths::GetPath(CachedDbPath));
 	if (!DeleteSourceDatabaseFileIfPresent(PlatformFile, CachedDbPath, /*bRequired=*/true))
 	{
+		LastError = TEXT("The existing EngineSource.db could not be deleted before recreation.");
 		return false;
 	}
 	DeleteSourceDatabaseFileIfPresent(PlatformFile, CachedDbPath + TEXT("-journal"), /*bRequired=*/false);
@@ -3548,6 +3578,7 @@ bool FMonolithSourceDatabase::ResetDatabase()
 	Database = new FSQLiteDatabase();
 	if (!Database->Open(*CachedDbPath, ESQLiteDatabaseOpenMode::ReadWriteCreate))
 	{
+		LastError = Database->GetLastError();
 		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: failed to recreate DB: %s"), *CachedDbPath);
 		delete Database;
 		Database = nullptr;
@@ -3556,6 +3587,7 @@ bool FMonolithSourceDatabase::ResetDatabase()
 
 	if (!ApplyEngineSourceDeletePragmas(*Database, CachedDbPath))
 	{
+		LastError = Database->GetLastError();
 		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: failed to configure journal mode: %s"), *CachedDbPath);
 		Database->Close();
 		delete Database;
@@ -3604,7 +3636,12 @@ bool FMonolithSourceDatabase::RollbackTransaction()
 int32 FMonolithSourceDatabase::PruneIndexedFilesUnderRoots(const TArray<FString>& RootPaths)
 {
 	FScopeLock Lock(&DbLock);
-	if (!Database || !Database->IsValid()) return -1;
+	LastError.Reset();
+	if (!Database || !Database->IsValid())
+	{
+		LastError = TEXT("EngineSource.db is not open for project-source pruning.");
+		return -1;
+	}
 
 	TArray<FString> NormalizedRoots;
 	NormalizedRoots.Reserve(RootPaths.Num());
@@ -3634,7 +3671,8 @@ int32 FMonolithSourceDatabase::PruneIndexedFilesUnderRoots(const TArray<FString>
 		FSQLitePreparedStatement Stmt;
 		if (!Stmt.Create(*Database, TEXT("SELECT id,path FROM files;")))
 		{
-			UE_LOG(LogMonolithSource, Warning, TEXT("PruneIndexedFilesUnderRoots failed to read files table: %s"), *Database->GetLastError());
+			LastError = Database->GetLastError();
+			UE_LOG(LogMonolithSource, Warning, TEXT("PruneIndexedFilesUnderRoots failed to read files table: %s"), *LastError);
 			return -1;
 		}
 		while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
@@ -3674,7 +3712,14 @@ int32 FMonolithSourceDatabase::PruneIndexedFilesUnderRoots(const TArray<FString>
 	{
 		if (!Database->Execute(Sql))
 		{
-			UE_LOG(LogMonolithSource, Warning, TEXT("PruneIndexedFilesUnderRoots SQL failed: %s"), *Database->GetLastError());
+			const FString SqlError = Database->GetLastError();
+			if (LastError.IsEmpty())
+			{
+				LastError = SqlError.IsEmpty()
+					? FString::Printf(TEXT("SQLite execution failed for: %s"), Sql)
+					: SqlError;
+			}
+			UE_LOG(LogMonolithSource, Warning, TEXT("PruneIndexedFilesUnderRoots SQL failed: %s"), *LastError);
 			return false;
 		}
 		return true;
@@ -3694,12 +3739,20 @@ int32 FMonolithSourceDatabase::PruneIndexedFilesUnderRoots(const TArray<FString>
 	{
 		FSQLitePreparedStatement InsertFile;
 		bOk = InsertFile.Create(*Database, TEXT("INSERT OR IGNORE INTO monolith_prune_files(id) VALUES(?);"));
+		if (!bOk)
+		{
+			LastError = Database->GetLastError();
+		}
 		for (int64 FileId : FileIds)
 		{
 			if (!bOk) break;
 			InsertFile.Reset();
 			InsertFile.SetBindingValueByIndex(1, FileId);
 			bOk = InsertFile.Step() == ESQLitePreparedStatementStepResult::Done;
+			if (!bOk)
+			{
+				LastError = Database->GetLastError();
+			}
 		}
 	}
 	if (bOk)
@@ -3860,6 +3913,9 @@ int32 FMonolithSourceDatabase::PruneIndexedFilesUnderRoots(const TArray<FString>
 	{
 		if (!Exec(TEXT("COMMIT;")))
 		{
+			const FString CommitError = LastError;
+			Database->Execute(TEXT("ROLLBACK;"));
+			LastError = CommitError;
 			UE_LOG(LogMonolithSource, Warning, TEXT("Failed to commit project source prune before scoped source reindex"));
 			return -1;
 		}
@@ -3867,7 +3923,15 @@ int32 FMonolithSourceDatabase::PruneIndexedFilesUnderRoots(const TArray<FString>
 		return FileIds.Num();
 	}
 
-	Exec(TEXT("ROLLBACK;"));
+	const FString PruneError = LastError;
+	if (!Database->Execute(TEXT("ROLLBACK;")) && LastError.IsEmpty())
+	{
+		LastError = Database->GetLastError();
+	}
+	if (!PruneError.IsEmpty())
+	{
+		LastError = PruneError;
+	}
 	UE_LOG(LogMonolithSource, Warning, TEXT("Failed to prune indexed project source files before scoped source reindex; rolled back"));
 	return -1;
 }
@@ -4832,6 +4896,16 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 		Check(TEXT("crg:orphan_edges"), OrphanCrgEdges == 0,
 			OrphanCrgEdges == 0 ? TEXT("no orphan CRG projection edge rows")
 				: FString::Printf(TEXT("%lld orphan CRG projection edge row(s)"), OrphanCrgEdges));
+		const int64 OrphanCrgMetrics = CountOf(TEXT(
+			"SELECT COUNT(*) FROM crg_node_metrics m "
+			"LEFT JOIN crg_nodes n ON n.id = m.node_id WHERE n.id IS NULL;"));
+		if (OrphanCrgMetrics != 0)
+		{
+			bNeedsCrgRepair = true;
+		}
+		Check(TEXT("crg:orphan_metrics"), OrphanCrgMetrics == 0,
+			OrphanCrgMetrics == 0 ? TEXT("no orphan CRG metric rows")
+				: FString::Printf(TEXT("%lld orphan CRG metric row(s)"), OrphanCrgMetrics));
 		FString CacheVersion;
 		FSQLitePreparedStatement S;
 		if (S.Create(*Database, TEXT("SELECT value FROM crg_meta WHERE key = 'cache_version';"))
@@ -5331,7 +5405,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairCrgCache(const FString& S
 	{
 		Plan.Add(MakeShared<FJsonValueString>(TEXT("CREATE IF MISSING crg_nodes/crg_edges/crg_node_metrics/crg_meta")));
 		Plan.Add(MakeShared<FJsonValueString>(TEXT("CREATE IF MISSING review/override helper indexes")));
-		Plan.Add(MakeShared<FJsonValueString>(TEXT("DELETE existing source CRG projection rows")));
+		Plan.Add(MakeShared<FJsonValueString>(TEXT("DELETE existing source CRG projection rows and orphan metrics")));
 		Plan.Add(MakeShared<FJsonValueString>(TEXT("SOURCE symbols -> crg_nodes; references/inheritance -> crg_edges")));
 		Plan.Add(MakeShared<FJsonValueString>(TEXT("Recompute caller/callee/descendant/risk_score into crg_node_metrics")));
 		Plan.Add(MakeShared<FJsonValueString>(TEXT("Recompute signature-aware source_override_edges cache")));
@@ -5485,12 +5559,19 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairCrgCache(const FString& S
 			const int64 FreshCrgMetricCnt = Count(TEXT(
 				"SELECT COUNT(*) FROM crg_node_metrics m "
 				"JOIN crg_nodes n ON n.id = m.node_id WHERE n.domain = 'source';"));
+			const int64 FreshOrphanMetricCnt = Count(TEXT(
+				"SELECT COUNT(*) FROM crg_node_metrics m "
+				"LEFT JOIN crg_nodes n ON n.id = m.node_id WHERE n.id IS NULL;"));
 			AddFreshnessCheck(TEXT("crg:nodes_row_parity"), FreshCrgNodeCnt == FreshSymCnt,
 				FString::Printf(TEXT("symbols=%lld crg_nodes(source)=%lld"), FreshSymCnt, FreshCrgNodeCnt));
 			AddFreshnessCheck(TEXT("crg:edges_row_parity"), FreshCrgEdgeCnt == FreshValidRefCnt + FreshInhCnt,
 				FString::Printf(TEXT("valid references+inheritance=%lld crg_edges(source)=%lld"), FreshValidRefCnt + FreshInhCnt, FreshCrgEdgeCnt));
 			AddFreshnessCheck(TEXT("crg:metrics_row_parity"), FreshCrgMetricCnt == FreshCrgNodeCnt,
 				FString::Printf(TEXT("crg_nodes(source)=%lld crg_node_metrics=%lld"), FreshCrgNodeCnt, FreshCrgMetricCnt));
+			AddFreshnessCheck(TEXT("crg:orphan_metrics"), FreshOrphanMetricCnt == 0,
+				FreshOrphanMetricCnt == 0
+					? TEXT("no orphan CRG metric rows")
+					: FString::Printf(TEXT("%lld orphan CRG metric row(s)"), FreshOrphanMetricCnt));
 			const FString CacheVersion = MetaValue(TEXT("cache_version"));
 			AddFreshnessCheck(TEXT("meta:cache_version"), !CacheVersion.IsEmpty(),
 				CacheVersion.IsEmpty() ? TEXT("cache_version missing")
@@ -5569,8 +5650,14 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairCrgCache(const FString& S
 		if (!Database->Execute(Sql))
 		{
 			bOk = false;
+			const FString Error = Database->GetLastError();
+			UE_LOG(LogMonolithSource, Warning,
+				TEXT("CRG cache rebuild step failed: %s error=%s"),
+				Label, Error.IsEmpty() ? TEXT("<unavailable>") : *Error);
 			Warnings.Add(MakeShared<FJsonValueString>(
-				FString::Printf(TEXT("CRG cache rebuild failed at %s"), Label)));
+				Error.IsEmpty()
+					? FString::Printf(TEXT("CRG cache rebuild failed at %s"), Label)
+					: FString::Printf(TEXT("CRG cache rebuild failed at %s: %s"), Label, *Error)));
 		}
 	};
 
@@ -5628,6 +5715,10 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairCrgCache(const FString& S
 		bOk = Database->Execute(TEXT("BEGIN;"));
 	}
 	Exec(TEXT("DELETE FROM crg_node_metrics WHERE node_id IN (SELECT id FROM crg_nodes WHERE domain = 'source');"), TEXT("clear metrics"));
+	Exec(TEXT(
+		"DELETE FROM crg_node_metrics "
+		"WHERE NOT EXISTS (SELECT 1 FROM crg_nodes n WHERE n.id = crg_node_metrics.node_id);"),
+		TEXT("clear orphan metrics"));
 	Exec(TEXT("DELETE FROM crg_edges WHERE domain = 'source';"), TEXT("clear edges"));
 	Exec(TEXT("DELETE FROM crg_nodes WHERE domain = 'source';"), TEXT("clear nodes"));
 	Exec(TEXT("DELETE FROM source_override_edges;"), TEXT("clear source override edges"));

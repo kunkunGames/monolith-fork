@@ -84,12 +84,13 @@ namespace MonolithUI::TestUtils
      *                          callers can configure it (e.g. set canvas slot geometry).
      * @return true on success.
      */
-    inline bool CreateOrReuseTestWidgetBlueprint(
+    inline bool CreateOrReuseTestWidgetBlueprintInternal(
         const FString& AssetPath,
         FName ChildWidgetName,
         UClass* ChildWidgetClass,
         FString& OutError,
-        UWidget** OutChildWidget = nullptr)
+        UWidget** OutChildWidget,
+        const bool bSavePackage)
     {
         if (!ChildWidgetClass)
         {
@@ -163,6 +164,11 @@ namespace MonolithUI::TestUtils
         FAssetRegistryModule::AssetCreated(WBP);
         Package->MarkPackageDirty();
 
+        if (!bSavePackage)
+        {
+            return true;
+        }
+
         FSavePackageArgs SaveArgs;
         SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
         const FString PackageFilename = FPackageName::LongPackageNameToFilename(
@@ -183,5 +189,42 @@ namespace MonolithUI::TestUtils
             return false;
         }
         return true;
+    }
+
+    inline bool CreateOrReuseTestWidgetBlueprint(
+        const FString& AssetPath,
+        FName ChildWidgetName,
+        UClass* ChildWidgetClass,
+        FString& OutError,
+        UWidget** OutChildWidget = nullptr)
+    {
+        return CreateOrReuseTestWidgetBlueprintInternal(
+            AssetPath,
+            ChildWidgetName,
+            ChildWidgetClass,
+            OutError,
+            OutChildWidget,
+            true);
+    }
+
+    /**
+     * Build the same throwaway WBP entirely in memory. Mutation tests use this
+     * variant so the execution guard can exercise source-control preparation
+     * without adding disposable fixture packages to Perforce.
+     */
+    inline bool CreateOrReuseUnsavedTestWidgetBlueprint(
+        const FString& AssetPath,
+        FName ChildWidgetName,
+        UClass* ChildWidgetClass,
+        FString& OutError,
+        UWidget** OutChildWidget = nullptr)
+    {
+        return CreateOrReuseTestWidgetBlueprintInternal(
+            AssetPath,
+            ChildWidgetName,
+            ChildWidgetClass,
+            OutError,
+            OutChildWidget,
+            false);
     }
 } // namespace MonolithUI::TestUtils

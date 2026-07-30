@@ -1,0 +1,564 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ui",
+  "asset_type_slug": "ui",
+  "edit_domain": "commonui_content_framework",
+  "route_edit_domain": "commonui_content_framework",
+  "module_id": "asset_authoring.ui.commonui_content_framework",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ui.commonui_content_framework",
+    "edit": "asset_operation.edit.ui.commonui_content_framework",
+    "save": "asset_operation.save.ui.commonui_content_framework",
+    "readback_verify": "asset_operation.readback_verify.ui.commonui_content_framework"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-554"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-554",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "commonui_content_framework",
+      "blueprint_type": "",
+      "workflow": "ui_commonui_content_framework_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_widget_blueprint",
+        "add_widget",
+        "set_text",
+        "compile_widget",
+        "save_asset",
+        "configure_numeric_text",
+        "configure_rotator",
+        "configure_animated_switcher",
+        "setup_common_list_view",
+        "create_widget_carousel",
+        "create_hardware_visibility_border",
+        "create_lazy_image",
+        "create_load_guard",
+        "get_widget_tree",
+        "describe_widget_type_schema",
+        "get_common_framework_status",
+        "describe_common_widget_blueprint",
+        "describe_common_messaging_flow",
+        "validate_common_dialog_contract",
+        "list_platform_input_tables",
+        "inspect_assets_batch"
+      ],
+      "description": "Create and reload CommonUI numeric text, rotator, animated switcher, list, carousel, hardware visibility, lazy-image, and load-guard widgets, then inspect Common framework and messaging contracts"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-554",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonContent",
+              "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonEntry"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_widget_blueprint",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonEntry",
+            "root_widget": "Border"
+          },
+          "contains": [
+            "WBP_BenchCommonEntry",
+            "Border"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonEntry",
+            "widget_class": "TextBlock",
+            "widget_name": "BenchEntryLabel",
+            "compile": false
+          },
+          "contains": [
+            "BenchEntryLabel",
+            "TextBlock"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "set_text",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonEntry",
+            "widget_name": "BenchEntryLabel",
+            "text": "Common list entry",
+            "font_size": 20,
+            "compile": false
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "compile_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonEntry"
+          },
+          "expect": {
+            "$.error_count": 0
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonEntry",
+            "verify_reload": true
+          },
+          "expect": {
+            "$.success": true,
+            "$.saved": true,
+            "$.dirty_after_save": false,
+            "$.exists_on_disk": true,
+            "$.verify_reload": true,
+            "$.reloaded": true
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_widget_blueprint",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonContent",
+            "root_widget": "VerticalBox"
+          },
+          "contains": [
+            "WBP_BenchCommonContent",
+            "VerticalBox"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonContent",
+            "widget_class": "CommonNumericTextBlock",
+            "widget_name": "BenchNumericText",
+            "compile": false
+          },
+          "contains": [
+            "BenchNumericText",
+            "CommonNumericTextBlock"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "configure_numeric_text",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonContent",
+            "widget_name": "BenchNumericText",
+            "numeric_type": "Number",
+            "current_value": 42.5,
+            "ease_out_exponent": 3.0,
+            "post_interpolation_shrink_duration": 0.2
+          },
+          "contains": [
+            "BenchNumericText",
+            "numeric_type",
+            "current_value",
+            "ease_out_exponent",
+            "post_interpolation_shrink_duration"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonContent",
+            "widget_class": "CommonRotator",
+            "widget_name": "BenchRotator",
+            "compile": false
+          },
+          "contains": [
+            "BenchRotator",
+            "CommonRotator"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "configure_rotator",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonContent",
+            "widget_name": "BenchRotator",
+            "labels": [
+              "Low",
+              "Medium",
+              "High"
+            ],
+            "selected_index": 1
+          },
+          "expect": {
+            "$.labels_set": 3
+          },
+          "contains": [
+            "BenchRotator"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonContent",
+            "widget_class": "CommonAnimatedSwitcher",
+            "widget_name": "BenchCommonSwitcher",
+            "compile": false
+          },
+          "contains": [
+            "BenchCommonSwitcher",
+            "CommonAnimatedSwitcher"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "configure_animated_switcher",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonContent",
+            "widget_name": "BenchCommonSwitcher",
+            "transition_duration": 0.3
+          },
+          "contains": [
+            "BenchCommonSwitcher",
+            "transition_duration"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonContent",
+            "widget_class": "CommonListView",
+            "widget_name": "BenchCommonList",
+            "compile": false
+          },
+          "contains": [
+            "BenchCommonList",
+            "CommonListView"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "setup_common_list_view",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonContent",
+            "widget_name": "BenchCommonList",
+            "entry_class": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonEntry.WBP_BenchCommonEntry_C",
+            "entry_spacing": 8.0,
+            "pool_size": 4
+          },
+          "contains": [
+            "BenchCommonList",
+            "WBP_BenchCommonEntry_C"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_widget_carousel",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonContent",
+            "widget_name": "BenchCarousel"
+          },
+          "contains": [
+            "BenchCarousel",
+            "CommonWidgetCarousel"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_hardware_visibility_border",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonContent",
+            "widget_name": "BenchHardwareBorder"
+          },
+          "contains": [
+            "BenchHardwareBorder",
+            "CommonHardwareVisibilityBorder"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_lazy_image",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonContent",
+            "widget_name": "BenchLazyImage"
+          },
+          "contains": [
+            "BenchLazyImage"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_load_guard",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonContent",
+            "widget_name": "BenchLoadGuard"
+          },
+          "contains": [
+            "BenchLoadGuard"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "compile_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonContent"
+          },
+          "expect": {
+            "$.error_count": 0
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonContent",
+            "verify_reload": true
+          },
+          "expect": {
+            "$.success": true,
+            "$.saved": true,
+            "$.dirty_after_save": false,
+            "$.exists_on_disk": true,
+            "$.verify_reload": true,
+            "$.reloaded": true
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonContent"
+          },
+          "contains": [
+            "BenchNumericText",
+            "CommonNumericTextBlock",
+            "BenchRotator",
+            "CommonRotator",
+            "BenchCommonSwitcher",
+            "CommonAnimatedSwitcher",
+            "BenchCommonList",
+            "CommonListView",
+            "BenchCarousel",
+            "CommonWidgetCarousel",
+            "BenchHardwareBorder",
+            "CommonHardwareVisibilityBorder",
+            "BenchLazyImage",
+            "CommonLazyImage",
+            "BenchLoadGuard",
+            "CommonLoadGuard"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "describe_widget_type_schema",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonContent",
+            "widget_name": "BenchNumericText"
+          },
+          "contains": [
+            "BenchNumericText",
+            "CommonNumericTextBlock",
+            "CommonUI"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "describe_widget_type_schema",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonContent",
+            "widget_name": "BenchCommonList"
+          },
+          "contains": [
+            "BenchCommonList",
+            "CommonListView",
+            "ListView"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_common_framework_status",
+            "include_properties": false,
+            "include_functions": false
+          },
+          "expect": {
+            "$.common_ui_available": true,
+            "$.uses_hard_dependencies": false
+          },
+          "contains": [
+            "CommonUI",
+            "CommonGame",
+            "UIExtension",
+            "GameplayMessageRuntime"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "describe_common_widget_blueprint",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonContent",
+            "include_extension_points": true,
+            "include_layer_candidates": true,
+            "include_widget_tree": true
+          },
+          "expect": {
+            "$.common_ui_available": true
+          },
+          "contains": [
+            "WBP_BenchCommonContent",
+            "widget_count",
+            "BenchCommonSwitcher",
+            "BenchCommonList"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "describe_common_messaging_flow",
+            "include_subclasses": true,
+            "subclass_limit": 20
+          },
+          "server_ok_only": true,
+          "server_ok_reason": "Messaging class/config presence is project-dependent; the benchmark requires a valid read-only contract response without treating optional CommonGame configuration as mutation failure"
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "validate_common_dialog_contract"
+          },
+          "server_ok_only": true,
+          "server_ok_reason": "Dialog class configuration is project-dependent; validation findings are benchmark evidence and transport success proves the validator action remains executable"
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "list_platform_input_tables"
+          },
+          "contains": [
+            "controller_data",
+            "count"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_assets_batch",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonContent",
+              "/Game/Benchmarks/AssetAuthoring/UI/WBP_BenchCommonEntry"
+            ],
+            "include_references": false
+          },
+          "contains": [
+            "WBP_BenchCommonContent",
+            "WBP_BenchCommonEntry",
+            "WidgetBlueprint"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "commonui_content_framework",
+      "blueprint_type": "",
+      "domain": "ui",
+      "workflow": "ui_commonui_content_framework_roundtrip",
+      "description": "Create and reload CommonUI numeric text, rotator, animated switcher, list, carousel, hardware visibility, lazy-image, and load-guard widgets, then inspect Common framework and messaging contracts",
+      "reference_context": [
+        "source: Engine/Plugins/Runtime/CommonUI/Source/CommonUI/Public",
+        "source: Plugins/Monolith/Source/MonolithUI/Private/CommonUI/MonolithCommonUIContentActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithUI/Private/CommonUI/MonolithCommonUIListActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithUI/Private/MonolithUIActions.cpp",
+        "skill_ref: Plugins/Monolith/Skills/unreal-ui/references/commonui-actions.md"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_widget_blueprint",
+          "add_widget",
+          "set_text",
+          "compile_widget",
+          "save_asset",
+          "configure_numeric_text",
+          "configure_rotator",
+          "configure_animated_switcher",
+          "setup_common_list_view",
+          "create_widget_carousel",
+          "create_hardware_visibility_border",
+          "create_lazy_image",
+          "create_load_guard",
+          "get_widget_tree",
+          "describe_widget_type_schema",
+          "get_common_framework_status",
+          "describe_common_widget_blueprint",
+          "describe_common_messaging_flow",
+          "validate_common_dialog_contract",
+          "list_platform_input_tables",
+          "inspect_assets_batch"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

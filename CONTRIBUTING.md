@@ -336,11 +336,21 @@ When preparing a new release of Monolith:
    ```powershell
    powershell -ExecutionPolicy Bypass -File Scripts/make_release.ps1 -Version "X.Y.Z"
    ```
-6. **Publish:** Create a GitHub Release with the new tag and attach the generated ZIP assets (`../../Monolith-vX.Y.Z.zip`, `../../Monolith-vX.Y.Z-UE5.7.zip`, and `../../Monolith-vX.Y.Z-UE5.8.zip`).
+6. **Stage a draft release:** Create the tag/release as a draft and upload all three generated ZIP assets while it is still invisible to `/releases/latest`.
    ```bash
-   gh release create vX.Y.Z "../../Monolith-vX.Y.Z.zip" "../../Monolith-vX.Y.Z-UE5.7.zip" "../../Monolith-vX.Y.Z-UE5.8.zip" --title "Monolith vX.Y.Z" --notes-file release_notes.md
+   gh release create vX.Y.Z "../../Monolith-vX.Y.Z.zip" "../../Monolith-vX.Y.Z-UE5.7.zip" "../../Monolith-vX.Y.Z-UE5.8.zip" --draft --title "Monolith vX.Y.Z" --notes-file release_notes.md
    ```
-   **Crucial:** You must copy the exact SHA256 marker lines printed by the release script into the release notes body before publishing. Per-engine assets use `Monolith-SHA256-v2-UE5.7: <hash>` / `Monolith-SHA256-v2-UE5.8: <hash>`, and the script also prints legacy `Monolith-SHA256-v2: <hash>` for compatibility. If the matching platform/engine marker is missing, the auto-updater aborts the installation (the "warn and proceed" fallback only applies to legacy assets).
+   **Crucial:** Copy the exact SHA256 marker lines printed by the release script into `release_notes.md` before creating the draft. Per-engine assets use `Monolith-SHA256-v2-UE5.7: <hash>` / `Monolith-SHA256-v2-UE5.8: <hash>`, and the script also prints legacy `Monolith-SHA256-v2: <hash>` for compatibility.
+7. **Gate the complete draft:** Verify that the release is still a draft, has exactly the three expected non-empty uploaded assets, carries only the three v2 markers, and that every marker matches its local ZIP.
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File Scripts/verify_release_body.ps1 -Version "X.Y.Z"
+   ```
+   Any non-zero exit is ship-blocking. Fix the draft body/assets and rerun; never publish around this gate.
+8. **Publish the verified draft:** Flip only the already-verified draft live.
+   ```bash
+   gh release edit vX.Y.Z --draft=false
+   ```
+   Do not use an immediate non-draft `gh release create`: it exposes a partial-asset window to deployed updaters.
 
 ## Architecture Notes
 

@@ -1,4 +1,4 @@
-# Monolith — MonolithReflectionIntel Module
+﻿# Monolith — MonolithReflectionIntel Module
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
@@ -513,7 +513,7 @@ The audit is a four-pass scan against the project's source tree:
 
 1. **Parse every `*.Build.cs` under `Source/`** — regex-extract `PublicDependencyModuleNames.AddRange({...})` and `PrivateDependencyModuleNames.AddRange({...})` array contents. Build a `module → declared_deps` map.
 2. **Parse every `*.h` / `*.cpp` under each module's source root** — regex-extract type-bearing reflection declarations (`UPROPERTY(...)\s+\w+`, `UFUNCTION(...)\s+\w+`, function signatures). Extract the type names used (including template arguments — `TSoftObjectPtr<UMyClass>` extracts `UMyClass`).
-3. **Resolve each extracted type name against `EngineSource.db`** — locate the symbol's owning module via the existing source-indexer tables. Unknown / external-to-Unreal types are skipped silently.
+3. **Resolve each extracted type name against `EngineSource.db`** — accept only indexed type declarations (`class`, `struct`, `enum`, `union`, `typedef`, or `type_alias`) and reject non-type symbols. Reflection/declaration macro identifiers such as `UPROPERTY` and `UCLASS` are rejected before lookup, while reflected UCLASS/USTRUCT rows remain valid type declarations even when `symbols.is_ue_macro=1`; that field describes how the type was declared and is not evidence that the indexed symbol name is itself a macro. Derive the owning UBT module from the indexed source path (`Source/<Module>` for project/plugin modules and `Source/<Category>/<Module>` for grouped engine source). Absolute engine paths are recognized against the current engine root; the index's relative engine forms (`Source/Runtime/GameplayTags/...` and `Engine/Source/Runtime/GameplayTags/...`) use the indexed module name to disambiguate the category from a project module literally named `Runtime`/`Editor`/`Developer`/`Programs`/`ThirdParty`. Fall back to the indexed module only when no source path can be derived. Unknown, ambiguous, and external-to-Unreal types are skipped silently.
 4. **Emit a violation** for each `(declaring_module, used_type, used_type_owning_module)` triple where `used_type_owning_module` is NOT in `declaring_module`'s declared deps AND NOT in the implicit-deps whitelist (see §4b.3).
 
 The audit is heuristic — it catches the common case (direct UCLASS / USTRUCT references in UPROPERTY) but does not currently chase typedef aliases or template-argument metaclasses with full UHT fidelity. That fidelity lands in Phase 3 when the UHT-artefact parser ships.
@@ -536,9 +536,8 @@ Scan the project for UPROPERTY / API-symbol usages whose owning module is missin
 
 | Param | Type | EMonolithParamKind | Required | Default | Notes |
 |-------|------|---------------------|----------|---------|-------|
-| `module_filter` | string | `Other` | no | `""` | Substring match against the **declaring** module's name. Empty scans all. |
-| `include_whitelist` | bool | `Other` | no | `false` | When `true`, also reports references to whitelisted implicit-dep modules (debug aid). |
-| `limit` | integer | `Other` | no | `100` | Hard cap `500`. |
+| `scan_root` | string | `DiskPath` | no | project `Source` + `Plugins` | Optional directory that bounds the recursive source/Build.cs scan. Relative paths resolve from the project root. |
+| `limit` | integer | `Other` | no | `50` | Hard-clamped to `1..200`; fractional or wrong-type values fail before DB access. |
 | `cursor` | string | `Other` | no | `""` | Opaque base64+JSON cursor. |
 
 **Response:**
@@ -547,22 +546,21 @@ Scan the project for UPROPERTY / API-symbol usages whose owning module is missin
 {
   "violations": [
     {
-      "declaring_module": "MonolithMesh",
-      "source_path": "Source/MonolithMesh/Private/Foo.cpp",
-      "source_line": 142,
-      "used_type": "UNiagaraSystem",
-      "missing_dep": "Niagara"
+      "file": "Source/MonolithMesh/Private/Foo.cpp",
+      "line": 142,
+      "symbol": "UNiagaraSystem",
+      "expected_module": "Niagara",
+      "currently_listed_modules": ["Core", "CoreUObject", "Engine"]
     }
   ],
-  "scanned_modules": 17,
-  "scanned_declarations": 4823,
+  "total_estimate": 1,
   "next_cursor": "<opaque>"
 }
 ```
 
-Annotations: `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`. Carries `EMonolithParamKind::Other` on all params (no path normalisation applies — `module_filter` is a name substring, not a path).
+Annotations: `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`. `scan_root` is the only `DiskPath`; the cursor and integer limit retain `Other` semantics.
 
-**False-positive mitigation.** The audit returns violations sorted by `(declaring_module, source_path, source_line)` so duplicates clump together — typical scan reports group related findings, making batch review tractable. Callers MAY treat `include_whitelist=true` results as advisory only.
+**False-positive mitigation.** The audit returns violations sorted by `(file, line, symbol)` and omits ambiguous/unknown symbols, non-type declarations, known reflection/declaration macro identifiers, exact self-module references, and the implicit module whitelist, so cursor pages remain stable for an unchanged checkout. Reflected type rows are retained even when the source index marks their declaration as UE-macro-backed. This lets a reflected `FGameplayTag` resolve normally while a genuine same-name collision such as the CoreUObject and Dataflow `FAssetData` declarations stays ambiguous and is omitted. Path-derived UBT module identity prevents a multi-module plugin's local types from being mistaken for dependencies on the plugin's aggregate index label.
 
 ### 4b.5 Known limitations
 
@@ -578,17 +576,17 @@ A second action on `FModuleDepRealityAdapter`, registered onto the `source` name
 | Param | Type | EMonolithParamKind | Required | Notes |
 |-------|------|---------------------|----------|-------|
 | `file_path` | string | `Other` | one of file_path/symbols | A `.h`/`.cpp` whose declaring module's Build.cs deps to audit. **Intentionally `Other`, NOT `DiskPath`** — see kind note below. |
-| `symbols` | array | `Other` | one of file_path/symbols | Explicit UE type names (used instead of / together with file extraction). |
+| `symbols` | string array | `Other` | one of file_path/symbols | Explicit non-empty UE type names (used instead of / together with file extraction). Wrong-type/empty elements fail the whole request. |
 
 **`file_path` is `Other`, not `DiskPath`, by design.** The `DiskPath` kind warns "paths in this index are stored with forward slashes, so a query for '<x>' will likely return zero results" on backslashes — correct for actions that key the SQLite index BY PATH, but FALSE here: this handler uses `file_path` only for on-disk reads (the file + its `<Module>.Build.cs`, both backslash-tolerant on Windows) and path-string module derivation. The DB is queried by TYPE NAME, never by path, so a backslash path resolves fine and the warning was spurious. `Other` passes the value through untouched.
 
-**Declaring-module resolution is path-first** — parse `Source/<Module>/...` or `Plugins/<X>/Source/<Module>/...` out of `file_path` (LAST `/Source/` wins → innermost module), then read `<Module>.Build.cs` from disk. This works on **uncommitted/unindexed files** (the common case: a header the agent just wrote). The DB is used ONLY to resolve the OWNING modules of the *used types*, never the declaring module.
+**Module resolution is path-first.** The declaring file resolves from `Source/<Module>/...` or `Plugins/<X>/Source/<Module>/...` (LAST `/Source/` wins → innermost module), then reads `<Module>.Build.cs` from disk. Used indexed types resolve through the same path contract. Only paths under the current engine's `Engine/Source` tree treat `Runtime`, `Editor`, `Developer`, `Programs`, or `ThirdParty` as a grouping directory, so `Engine/Source/Runtime/Core/...` resolves to `Core` while a project module at `Project/Source/Runtime/...` correctly remains module `Runtime`. The indexed module name is only a fallback when a symbol path has no derivable `Source` layout. This makes self-module and multi-module-plugin ownership exact while preserving uncommitted declaring-file support.
 
 **Build.cs dep parse strips C# comments first.** `ParseBuildCs` (shared with `audit_module_dep_reality`) runs the dependency-array regex over a comment-stripped copy of the file. Without this, a `//` or `/* */` comment containing a `)` *inside* the `AddRange(new string[]{ ... })` body (e.g. `// (AIMODULE_API). ...`) truncated the non-greedy `(...)` site capture at the first `)`, silently dropping every dependency declared after it (observed: `EnhancedInput` / `UMG` / `MaterialEditor` reported missing though declared). Comment stripping is string-literal aware. This hardening benefits both `suggest_build_cs_deps` and `audit_module_dep_reality`.
 
 **Response:** `{ declaring_module, build_cs (or build_cs_note if none on disk), required_modules[], missing[] }` (+ a `content[].text` rendering). `required_modules` excludes self + the Core/CoreUObject/Engine/Projects/RHI/RenderCore implicit whitelist; `missing` = required minus declared.
 
-Annotations: `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, game-thread only (`ensure(IsInGameThread())`). Borrows the shared `FMonolithSourceDatabase` via `GetSharedSourceDb()` and holds `FScopeLock(&SharedDb->GetLock())` for the full statement borrow (prepare→step→`Destroy()`), per the `GetRawHandle` contract.
+Annotations: `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, game-thread only (`ensure(IsInGameThread())`). Parameter shape and the one-of input contract are validated before DB availability is checked. The action then borrows the shared `FMonolithSourceDatabase` via `GetSharedSourceDb()` and holds `FScopeLock(&SharedDb->GetLock())` for the full statement borrow (prepare→step→`Destroy()`), per the `GetRawHandle` contract.
 
 **NOT offline-served.** Like `audit_module_dep_reality`, this action is RI/live-only — it needs the cached query DB plus an on-disk Build.cs/source walk that the standalone `monolith_query.exe` / `monolith_offline.py` do not implement. It is absent from the offline tools and from `verify_offline_parity.py`.
 

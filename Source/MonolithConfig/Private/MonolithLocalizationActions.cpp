@@ -1,36 +1,76 @@
 #include "MonolithLocalizationActions.h"
 
 #include "MonolithAssetUtils.h"
+#include "MonolithAsyncJobRegistry.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithLocalizationTargetConfig.h"
 #include "MonolithParamSchema.h"
+#include "MonolithSettings.h"
 
 #include "AssetToolsModule.h"
+#include "Async/Async.h"
+#include "Commandlets/CommandletHelpers.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Engine/ObjectLibrary.h"
 #include "Factories/StringTableFactory.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformProcess.h"
+#include "HAL/PlatformTime.h"
 #include "IAssetTools.h"
 #include "Internationalization/Culture.h"
 #include "Internationalization/Internationalization.h"
 #include "Internationalization/StringTable.h"
 #include "Internationalization/StringTableCore.h"
 #include "Internationalization/StringTableRegistry.h"
+#include "ISourceControlChangelist.h"
+#include "ISourceControlModule.h"
+#include "ISourceControlProvider.h"
+#include "ISourceControlState.h"
+#include "LocalizationModule.h"
+#include "LocalizationTargetTypes.h"
+#include "Misc/ConfigCacheIni.h"
 #include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
+#include "Misc/ScopeExit.h"
+#include "Misc/ScopeLock.h"
+#include "Misc/SecureHash.h"
 #include "Modules/ModuleManager.h"
 #include "Serialization/Csv/CsvParser.h"
+#include "UnrealEdMisc.h"
+#include "UObject/Class.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
+#include "UObject/StructOnScope.h"
 
 namespace
 {
+	FMonolithActionExecutionPolicy LocalizationTargetConfigurationExecutionPolicy()
+	{
+		FMonolithActionExecutionPolicy Policy;
+		Policy.PolicyId = TEXT("track_dirty_packages");
+		Policy.bDefaulted = false;
+		Policy.bDirtyPackageTracking = true;
+		// The handler owns exact numbered-changelist validation plus byte
+		// snapshots and rollback for its two project-config files.
+		Policy.bTransactionWrapping = false;
+		Policy.bPostEditValidation = false;
+		Policy.bEnforced = true;
+		return Policy;
+	}
+
 	struct FLocalizationMutationOptions
 	{
 		bool bDryRun = false;
 		bool bConfirm = false;
 		bool bSave = false;
+	};
+
+	struct FPersistedProjectLocalizationTarget
+	{
+		FString Name;
+		TArray<FGatherTextSearchDirectory> TextSearchDirectories;
 	};
 
 	struct FStringTableCsvRow
@@ -138,14 +178,14 @@ namespace
 
 	bool ReadOptionalBoolParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, bool& OutValue, FString& OutError)
 	{
-			if (Params.IsValid())
+		if (Params.IsValid())
 		{
-				const TSharedPtr<FJsonValue> Field = Params->TryGetField(FieldName);
-				if (Field.IsValid() && !Field->IsNull() && !Field->TryGetBool(OutValue))
-				{
-					OutError = FString::Printf(TEXT("Malformed parameter: %s must be a boolean"), FieldName);
-					return false;
-				}
+			const TSharedPtr<FJsonValue> Field = Params->TryGetField(FieldName);
+			if (Field.IsValid() && !Field->IsNull() && !Field->TryGetBool(OutValue))
+			{
+				OutError = FString::Printf(TEXT("Malformed parameter: %s must be a boolean"), FieldName);
+				return false;
+			}
 		}
 		return true;
 	}
@@ -643,10 +683,1720 @@ namespace
 		}
 		return Table;
 	}
+
+	struct FLocalizationPipelinePlan
+	{
+		FString TargetName;
+		TArray<FString> Operations;
+		TArray<FString> ConfigPaths;
+		FString ContentDirectory;
+		FString ProjectDirectory;
+		FString ProjectFilePath;
+		FString CommandletExecutable;
+		FString LogDirectory;
+		TArray<FString> ExistingOutputFiles;
+		TArray<FString> ReadOnlyOutputFiles;
+		int32 TimeoutSeconds = 900;
+	};
+
+	struct FLocalizationConfigRunResult
+	{
+		FString Operation;
+		FString ConfigPath;
+		FString LogPath;
+		FString ProcessArguments;
+		FString OutputTail;
+		FString Error;
+		int32 ExitCode = MIN_int32;
+		double DurationSeconds = 0.0;
+		bool bLaunched = false;
+		bool bCancelled = false;
+		bool bTimedOut = false;
+	};
+
+	FCriticalSection GLocalizationPipelineStateLock;
+	FString GActiveLocalizationPipelineJobId;
+	TFuture<void> GLocalizationPipelineFuture;
+	bool GLocalizationPipelineShuttingDown = false;
+	bool GLocalizationTargetConfigurationActive = false;
+
+	struct FLocalizationSourceControlFileAudit
+	{
+		FString File;
+		FString ActualChangelist;
+		FString CheckedOutOtherBy;
+		TArray<FString> Blockers;
+		bool bStateValid = false;
+		bool bStateUnknown = true;
+		bool bSourceControlled = false;
+		bool bCurrent = false;
+		bool bCheckedOut = false;
+		bool bAdded = false;
+		bool bDeleted = false;
+		bool bIgnored = false;
+		bool bConflicted = false;
+		bool bCanCheckout = false;
+		bool bCheckedOutOther = false;
+		bool bDefaultChangelist = false;
+		bool bMatchesExpectedChangelist = false;
+	};
+
+	TArray<TSharedPtr<FJsonValue>> StringsToJson(const TArray<FString>& Values)
+	{
+		TArray<TSharedPtr<FJsonValue>> Result;
+		Result.Reserve(Values.Num());
+		for (const FString& Value : Values)
+		{
+			Result.Add(MakeShared<FJsonValueString>(Value));
+		}
+		return Result;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> LocalizationSourceControlFilesToJson(
+		const TArray<FLocalizationSourceControlFileAudit>& Files)
+	{
+		TArray<TSharedPtr<FJsonValue>> Result;
+		Result.Reserve(Files.Num());
+		for (const FLocalizationSourceControlFileAudit& File : Files)
+		{
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("file"), File.File);
+			Row->SetBoolField(TEXT("state_valid"), File.bStateValid);
+			Row->SetBoolField(TEXT("state_unknown"), File.bStateUnknown);
+			Row->SetBoolField(TEXT("source_controlled"), File.bSourceControlled);
+			Row->SetBoolField(TEXT("current"), File.bCurrent);
+			Row->SetBoolField(TEXT("checked_out"), File.bCheckedOut);
+			Row->SetBoolField(TEXT("added"), File.bAdded);
+			Row->SetBoolField(TEXT("deleted"), File.bDeleted);
+			Row->SetBoolField(TEXT("ignored"), File.bIgnored);
+			Row->SetBoolField(TEXT("conflicted"), File.bConflicted);
+			Row->SetBoolField(TEXT("can_checkout"), File.bCanCheckout);
+			Row->SetBoolField(TEXT("checked_out_other"), File.bCheckedOutOther);
+			Row->SetStringField(
+				TEXT("checked_out_other_by"),
+				File.CheckedOutOtherBy);
+			Row->SetStringField(
+				TEXT("actual_changelist"),
+				File.ActualChangelist);
+			Row->SetBoolField(
+				TEXT("default_changelist"),
+				File.bDefaultChangelist);
+			Row->SetBoolField(
+				TEXT("matches_expected_changelist"),
+				File.bMatchesExpectedChangelist);
+			Row->SetArrayField(TEXT("blockers"), StringsToJson(File.Blockers));
+			Result.Add(MakeShared<FJsonValueObject>(Row));
+		}
+		return Result;
+	}
+
+	struct FLocalizationTargetConfigPreview
+	{
+		TArray<TPair<FString, FString>> DesiredConfigContents;
+		TArray<FString> ChangedConfigFiles;
+		TArray<FString> MissingFiles;
+		TArray<FString> ReadOnlyFiles;
+		TArray<FString> SourceControlBlockers;
+		TArray<FLocalizationSourceControlFileAudit> SourceControlFiles;
+		FString SettingsFile;
+		FString SourceControlProvider;
+		int32 ExpectedTargetChangelist = 0;
+		bool bSourceControlEnabled = false;
+		bool bSourceControlProviderEnabled = false;
+		bool bSourceControlAvailable = false;
+		bool bSourceControlUsesCheckout = false;
+		bool bSourceControlUsesChangelists = false;
+		bool bSourceControlForceUpdated = false;
+		bool bSourceControlReady = false;
+		bool bSettingsChanged = false;
+	};
+
+	TSharedPtr<FJsonObject> LocalizationSourceControlAuditToJson(
+		const FLocalizationTargetConfigPreview& Preview)
+	{
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetBoolField(TEXT("module_enabled"), Preview.bSourceControlEnabled);
+		Result->SetBoolField(
+			TEXT("provider_enabled"),
+			Preview.bSourceControlProviderEnabled);
+		Result->SetBoolField(
+			TEXT("provider_available"),
+			Preview.bSourceControlAvailable);
+		Result->SetBoolField(
+			TEXT("provider_ready"),
+			Preview.bSourceControlEnabled &&
+				Preview.bSourceControlProviderEnabled &&
+				Preview.bSourceControlAvailable &&
+				Preview.bSourceControlUsesCheckout &&
+				Preview.bSourceControlUsesChangelists);
+		Result->SetStringField(TEXT("provider"), Preview.SourceControlProvider);
+		Result->SetBoolField(
+			TEXT("uses_checkout"),
+			Preview.bSourceControlUsesCheckout);
+		Result->SetBoolField(
+			TEXT("uses_changelists"),
+			Preview.bSourceControlUsesChangelists);
+		Result->SetBoolField(
+			TEXT("force_updated"),
+			Preview.bSourceControlForceUpdated);
+		Result->SetNumberField(
+			TEXT("expected_changelist"),
+			Preview.ExpectedTargetChangelist);
+		Result->SetBoolField(TEXT("ready"), Preview.bSourceControlReady);
+		Result->SetNumberField(
+			TEXT("blocker_count"),
+			Preview.SourceControlBlockers.Num());
+		Result->SetArrayField(
+			TEXT("blockers"),
+			StringsToJson(Preview.SourceControlBlockers));
+		Result->SetArrayField(
+			TEXT("files"),
+			LocalizationSourceControlFilesToJson(
+				Preview.SourceControlFiles));
+		return Result;
+	}
+
+	TSharedPtr<FJsonObject> BuildLocalizationHandlerOwnedSourceControlPrepare(
+		const FLocalizationTargetConfigPreview& Preview,
+		const FString& Status)
+	{
+		TSharedPtr<FJsonObject> Prepare = MakeShared<FJsonObject>();
+		Prepare->SetStringField(
+			TEXT("mode"),
+			TEXT("handler_owned_pre_mutation"));
+		Prepare->SetStringField(TEXT("status"), Status);
+		Prepare->SetStringField(
+			TEXT("expected_changelist"),
+			FString::FromInt(
+				Preview.ExpectedTargetChangelist));
+		Prepare->SetObjectField(
+			TEXT("before_action"),
+			LocalizationSourceControlAuditToJson(Preview));
+		return Prepare;
+	}
+
+	struct FLocalizationFileSnapshot
+	{
+		FString Path;
+		TArray<uint8> Bytes;
+		bool bExisted = false;
+	};
+
+	FString LocalizationGatherDirectoryToString(const FGatherTextSearchDirectory& Directory)
+	{
+		FString Path = Directory.Path;
+		Path.ReplaceInline(TEXT("\\"), TEXT("/"));
+		while (Path.StartsWith(TEXT("/")))
+		{
+			Path.RightChopInline(1);
+		}
+		while (Path.EndsWith(TEXT("/")))
+		{
+			Path.LeftChopInline(1);
+		}
+
+		FString RootToken;
+		switch (Directory.PathRoot)
+		{
+		case ELocalizationGatherPathRoot::Engine:
+			RootToken = TEXT("%LOCENGINEROOT%");
+			break;
+		case ELocalizationGatherPathRoot::Project:
+			RootToken = TEXT("%LOCPROJECTROOT%");
+			break;
+		default:
+			RootToken = TEXT("%LOCAUTOROOT%");
+			break;
+		}
+		return RootToken + Path;
+	}
+
+	TArray<FString> LocalizationGatherDirectoriesToStrings(
+		const TArray<FGatherTextSearchDirectory>& Directories)
+	{
+		TArray<FString> Result;
+		Result.Reserve(Directories.Num());
+		for (const FGatherTextSearchDirectory& Directory : Directories)
+		{
+			Result.Add(LocalizationGatherDirectoryToString(Directory));
+		}
+		return Result;
+	}
+
+	bool AreLocalizationGatherDirectoriesEqual(
+		const TArray<FGatherTextSearchDirectory>& Left,
+		const TArray<FGatherTextSearchDirectory>& Right)
+	{
+		if (Left.Num() != Right.Num())
+		{
+			return false;
+		}
+		for (int32 Index = 0; Index < Left.Num(); ++Index)
+		{
+			if (Left[Index].PathRoot != Right[Index].PathRoot ||
+				!Left[Index].Path.Equals(Right[Index].Path, ESearchCase::CaseSensitive))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	bool ParseLocalizationGatherDirectory(
+		FString Input,
+		FGatherTextSearchDirectory& OutDirectory,
+		FString& OutCanonical,
+		FString& OutError)
+	{
+		MonolithLocalizationTargetConfig::FParsedSearchDirectory Parsed;
+		if (!MonolithLocalizationTargetConfig::ParseSearchDirectory(
+				MoveTemp(Input),
+				Parsed,
+				OutError))
+		{
+			return false;
+		}
+		OutDirectory.PathRoot =
+			Parsed.Root == MonolithLocalizationTargetConfig::EGatherPathRoot::Engine
+				? ELocalizationGatherPathRoot::Engine
+				: ELocalizationGatherPathRoot::Project;
+		OutDirectory.Path = MoveTemp(Parsed.RelativePath);
+		OutCanonical = MoveTemp(Parsed.Canonical);
+		return true;
+	}
+
+	bool ReadLocalizationGatherDirectories(
+		const TSharedPtr<FJsonObject>& Params,
+		TArray<FGatherTextSearchDirectory>& OutDirectories,
+		TArray<FString>& OutCanonical,
+		FString& OutError)
+	{
+		if (!Params.IsValid())
+		{
+			OutError = TEXT("Missing required param 'search_directories'");
+			return false;
+		}
+
+		const TSharedPtr<FJsonValue> Field = Params->TryGetField(TEXT("search_directories"));
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (!Field.IsValid() || Field->IsNull())
+		{
+			OutError = TEXT("Missing required param 'search_directories'");
+			return false;
+		}
+		if (!Field->TryGetArray(Values) || Values == nullptr)
+		{
+			OutError = TEXT("Malformed parameter: search_directories must be an array");
+			return false;
+		}
+		if (Values->IsEmpty() || Values->Num() > 64)
+		{
+			OutError = TEXT("search_directories must contain between 1 and 64 entries");
+			return false;
+		}
+
+		TSet<FString> UniqueDirectories;
+		for (const TSharedPtr<FJsonValue>& Value : *Values)
+		{
+			FString Input;
+			if (!Value.IsValid() || !Value->TryGetString(Input))
+			{
+				OutError = TEXT("Malformed parameter: every search_directories entry must be a string");
+				return false;
+			}
+
+			FGatherTextSearchDirectory Directory;
+			FString Canonical;
+			if (!ParseLocalizationGatherDirectory(Input, Directory, Canonical, OutError))
+			{
+				return false;
+			}
+
+			FString UniqueKey = Canonical.ToLower();
+			if (UniqueDirectories.Contains(UniqueKey))
+			{
+				OutError = FString::Printf(
+					TEXT("Duplicate search_directories entry after normalization: %s"),
+					*Canonical);
+				return false;
+			}
+			UniqueDirectories.Add(MoveTemp(UniqueKey));
+			OutDirectories.Add(MoveTemp(Directory));
+			OutCanonical.Add(MoveTemp(Canonical));
+		}
+		return true;
+	}
+
+	FString GetLocalizationSettingsFile()
+	{
+		FString SettingsFile =
+			FPaths::ConvertRelativePathToFull(
+				FPaths::Combine(FPaths::ProjectConfigDir(), TEXT("DefaultEditor.ini")));
+		FPaths::NormalizeFilename(SettingsFile);
+		return SettingsFile;
+	}
+
+	bool ReadPersistedProjectLocalizationTargets(
+		const FString& SettingsFile,
+		TArray<FPersistedProjectLocalizationTarget>& OutTargets,
+		FString& OutError)
+	{
+		if (!IFileManager::Get().FileExists(*SettingsFile))
+		{
+			OutError = FString::Printf(
+				TEXT("Localization settings file is missing: %s"),
+				*SettingsFile);
+			return false;
+		}
+
+		UScriptStruct* SettingsStruct = FindObject<UScriptStruct>(
+			nullptr,
+			TEXT("/Script/Localization.LocalizationTargetSettings"));
+		if (!SettingsStruct)
+		{
+			OutError =
+				TEXT("LocalizationTargetSettings reflection type is unavailable after loading the Localization module");
+			return false;
+		}
+
+		FConfigFile Config;
+		Config.Read(SettingsFile);
+		TArray<FString> SerializedTargets;
+		Config.GetArray(
+			TEXT("/Script/Localization.LocalizationSettings"),
+			TEXT("GameTargetsSettings"),
+			SerializedTargets);
+
+		TSet<FString> UniqueTargetNames;
+		for (int32 Index = 0; Index < SerializedTargets.Num(); ++Index)
+		{
+			FStructOnScope ParsedSettingsScope(SettingsStruct);
+			uint8* ParsedSettingsMemory = ParsedSettingsScope.GetStructMemory();
+			if (!ParsedSettingsMemory)
+			{
+				OutError = FString::Printf(
+					TEXT("Failed to initialize GameTargetsSettings entry %d through LocalizationTargetSettings reflection"),
+					Index);
+				return false;
+			}
+
+			const TCHAR* ParseEnd = SettingsStruct->ImportText(
+				*SerializedTargets[Index],
+				ParsedSettingsMemory,
+				nullptr,
+				PPF_None,
+				nullptr,
+				TEXT("GameTargetsSettings"));
+			if (!ParseEnd)
+			{
+				OutError = FString::Printf(
+					TEXT("Failed to parse GameTargetsSettings entry %d from '%s'"),
+					Index,
+					*SettingsFile);
+				return false;
+			}
+			const FLocalizationTargetSettings* ParsedSettings =
+				reinterpret_cast<const FLocalizationTargetSettings*>(
+					ParsedSettingsMemory);
+			while (*ParseEnd != TEXT('\0') && FChar::IsWhitespace(*ParseEnd))
+			{
+				++ParseEnd;
+			}
+			if (*ParseEnd != TEXT('\0') || ParsedSettings->Name.IsEmpty())
+			{
+				OutError = FString::Printf(
+					TEXT("GameTargetsSettings entry %d in '%s' has trailing data or no target name"),
+					Index,
+					*SettingsFile);
+				return false;
+			}
+
+			const FString UniqueName = ParsedSettings->Name.ToLower();
+			if (UniqueTargetNames.Contains(UniqueName))
+			{
+				OutError = FString::Printf(
+					TEXT("Localization settings contain duplicate project target '%s'"),
+					*ParsedSettings->Name);
+				return false;
+			}
+			UniqueTargetNames.Add(UniqueName);
+
+			FPersistedProjectLocalizationTarget Target;
+			Target.Name = ParsedSettings->Name;
+			Target.TextSearchDirectories =
+				ParsedSettings->GatherFromTextFiles.SearchDirectories;
+			OutTargets.Add(MoveTemp(Target));
+		}
+		return true;
+	}
+
+	bool ReadLocalizationSourceControlContract(
+		const TSharedPtr<FJsonObject>& Params,
+		int32& OutChangelist,
+		FString& OutError)
+	{
+		if (!Params.IsValid())
+		{
+			OutError =
+				TEXT("source_control_policy=require_checked_out and target_changelist are required");
+			return false;
+		}
+		FString SourceControlPolicy;
+		if (!Params->TryGetStringField(
+				TEXT("source_control_policy"),
+				SourceControlPolicy) ||
+			!SourceControlPolicy.Equals(
+				TEXT("require_checked_out"),
+				ESearchCase::CaseSensitive))
+		{
+			OutError =
+				TEXT("source_control_policy currently permits only require_checked_out");
+			return false;
+		}
+
+		const TSharedPtr<FJsonValue> Field =
+			Params->TryGetField(TEXT("target_changelist"));
+		double Number = 0.0;
+		if (!Field.IsValid() || Field->IsNull())
+		{
+			OutError =
+				TEXT("target_changelist is required and must be an exact positive numbered changelist; default is forbidden");
+			return false;
+		}
+		if (!Field->TryGetNumber(Number) ||
+			!FMath::IsFinite(Number) ||
+			Number < 1.0 ||
+			Number > static_cast<double>(MAX_int32) ||
+			Number != FMath::FloorToDouble(Number))
+		{
+			OutError =
+				TEXT("target_changelist is required and must be an exact positive numbered changelist; default is forbidden");
+			return false;
+		}
+
+		OutChangelist = static_cast<int32>(Number);
+		return true;
+	}
+
+	bool FindProjectLocalizationTarget(
+		const FString& TargetName,
+		const FString& SettingsFile,
+		ULocalizationTarget*& OutTarget,
+		TArray<FString>& OutAvailableTargets,
+		FString& OutError)
+	{
+		OutTarget = nullptr;
+		ILocalizationModule* LocalizationModule =
+			FModuleManager::LoadModulePtr<ILocalizationModule>(TEXT("Localization"));
+		if (!LocalizationModule)
+		{
+			OutError =
+				TEXT("The engine Localization module could not be loaded; project target configuration is unavailable");
+			return false;
+		}
+
+		TArray<FPersistedProjectLocalizationTarget> PersistedTargets;
+		if (!ReadPersistedProjectLocalizationTargets(
+				SettingsFile,
+				PersistedTargets,
+				OutError))
+		{
+			return false;
+		}
+
+		const FPersistedProjectLocalizationTarget* PersistedMatch = nullptr;
+		for (const FPersistedProjectLocalizationTarget& Settings : PersistedTargets)
+		{
+			OutAvailableTargets.Add(Settings.Name);
+			if (Settings.Name.Equals(TargetName, ESearchCase::IgnoreCase))
+			{
+				PersistedMatch = &Settings;
+			}
+		}
+		OutAvailableTargets.Sort();
+		if (!PersistedMatch)
+		{
+			return true;
+		}
+
+		OutTarget = LocalizationModule->GetLocalizationTargetByName(
+			PersistedMatch->Name,
+			/*bIsEngineTarget=*/false);
+		if (!OutTarget)
+		{
+			OutError = FString::Printf(
+				TEXT("Project localization target '%s' exists in DefaultEditor.ini but is absent from the live Localization Dashboard model"),
+				*PersistedMatch->Name);
+			return false;
+		}
+		if (!OutTarget->Settings.Name.Equals(
+				PersistedMatch->Name,
+				ESearchCase::CaseSensitive) ||
+			!AreLocalizationGatherDirectoriesEqual(
+				OutTarget->Settings.GatherFromTextFiles.SearchDirectories,
+				PersistedMatch->TextSearchDirectories))
+		{
+			OutError = FString::Printf(
+				TEXT("Project localization target '%s' live model is stale relative to DefaultEditor.ini; reload the editor before mutating it"),
+				*PersistedMatch->Name);
+			OutTarget = nullptr;
+			return false;
+		}
+		return true;
+	}
+
+	void AddLocalizationSourceControlBlocker(
+		FLocalizationTargetConfigPreview& Preview,
+		FLocalizationSourceControlFileAudit& File,
+		const FString& Blocker)
+	{
+		File.Blockers.AddUnique(Blocker);
+		Preview.SourceControlBlockers.AddUnique(Blocker);
+	}
+
+	void AuditLocalizationSourceControlOwnership(
+		const TArray<FString>& WriteFiles,
+		const int32 TargetChangelist,
+		FLocalizationTargetConfigPreview& OutPreview)
+	{
+		OutPreview.ExpectedTargetChangelist = TargetChangelist;
+		if (WriteFiles.IsEmpty())
+		{
+			OutPreview.bSourceControlReady = true;
+			return;
+		}
+
+		ISourceControlModule& SourceControlModule = ISourceControlModule::Get();
+		OutPreview.bSourceControlEnabled = SourceControlModule.IsEnabled();
+		if (!OutPreview.bSourceControlEnabled)
+		{
+			OutPreview.SourceControlProvider = TEXT("disabled");
+			for (const FString& FilePath : WriteFiles)
+			{
+				FLocalizationSourceControlFileAudit& File =
+					OutPreview.SourceControlFiles.AddDefaulted_GetRef();
+				File.File = FilePath;
+				AddLocalizationSourceControlBlocker(
+					OutPreview,
+					File,
+					TEXT("provider_disabled"));
+			}
+			return;
+		}
+
+		ISourceControlProvider& Provider = SourceControlModule.GetProvider();
+		OutPreview.SourceControlProvider = Provider.GetName().ToString();
+		OutPreview.bSourceControlProviderEnabled = Provider.IsEnabled();
+		OutPreview.bSourceControlAvailable = Provider.IsAvailable();
+		OutPreview.bSourceControlUsesCheckout = Provider.UsesCheckout();
+		OutPreview.bSourceControlUsesChangelists = Provider.UsesChangelists();
+
+		TArray<FString> ProviderBlockers;
+		if (!OutPreview.bSourceControlProviderEnabled)
+		{
+			ProviderBlockers.Add(TEXT("provider_disabled"));
+		}
+		if (!OutPreview.bSourceControlAvailable)
+		{
+			ProviderBlockers.Add(TEXT("provider_unavailable"));
+		}
+		if (!OutPreview.bSourceControlUsesCheckout)
+		{
+			ProviderBlockers.Add(TEXT("provider_without_checkout"));
+		}
+		if (!OutPreview.bSourceControlUsesChangelists)
+		{
+			ProviderBlockers.Add(TEXT("provider_without_changelists"));
+		}
+
+		const FString ExpectedIdentifier =
+			FString::FromInt(TargetChangelist);
+		for (const FString& FilePath : WriteFiles)
+		{
+			FLocalizationSourceControlFileAudit& File =
+				OutPreview.SourceControlFiles.AddDefaulted_GetRef();
+			File.File = FilePath;
+			for (const FString& ProviderBlocker : ProviderBlockers)
+			{
+				AddLocalizationSourceControlBlocker(
+					OutPreview,
+					File,
+					ProviderBlocker);
+			}
+			if (!ProviderBlockers.IsEmpty())
+			{
+				continue;
+			}
+
+			const FSourceControlStatePtr State = Provider.GetState(
+				FilePath,
+				EStateCacheUsage::ForceUpdate);
+			OutPreview.bSourceControlForceUpdated = true;
+			File.bStateValid = State.IsValid();
+			if (!State.IsValid())
+			{
+				AddLocalizationSourceControlBlocker(
+					OutPreview,
+					File,
+					TEXT("state_unavailable"));
+				continue;
+			}
+
+			File.bStateUnknown = State->IsUnknown();
+			File.bSourceControlled = State->IsSourceControlled();
+			File.bCurrent = State->IsCurrent();
+			File.bAdded = State->IsAdded();
+			File.bDeleted = State->IsDeleted();
+			File.bIgnored = State->IsIgnored();
+			File.bConflicted = State->IsConflicted();
+			File.bCanCheckout = State->CanCheckout();
+			File.bCheckedOut = State->IsCheckedOut();
+			File.bCheckedOutOther =
+				State->IsCheckedOutOther(&File.CheckedOutOtherBy);
+
+			const FSourceControlChangelistPtr OpenedChangelist =
+				State->GetCheckInIdentifier();
+			if (OpenedChangelist.IsValid())
+			{
+				File.ActualChangelist =
+					OpenedChangelist->GetIdentifier();
+				File.bDefaultChangelist =
+					OpenedChangelist->IsDefault();
+				File.bMatchesExpectedChangelist =
+					!File.bDefaultChangelist &&
+					File.ActualChangelist.Equals(
+						ExpectedIdentifier,
+						ESearchCase::CaseSensitive);
+			}
+
+			if (File.bStateUnknown)
+			{
+				AddLocalizationSourceControlBlocker(
+					OutPreview,
+					File,
+					TEXT("state_unknown"));
+			}
+			if (!File.bSourceControlled)
+			{
+				AddLocalizationSourceControlBlocker(
+					OutPreview,
+					File,
+					TEXT("not_source_controlled"));
+			}
+			if (File.bAdded)
+			{
+				AddLocalizationSourceControlBlocker(
+					OutPreview,
+					File,
+					TEXT("opened_for_add"));
+			}
+			if (File.bDeleted)
+			{
+				AddLocalizationSourceControlBlocker(
+					OutPreview,
+					File,
+					TEXT("opened_for_delete"));
+			}
+			if (File.bIgnored)
+			{
+				AddLocalizationSourceControlBlocker(
+					OutPreview,
+					File,
+					TEXT("ignored"));
+			}
+			if (!File.bCurrent)
+			{
+				AddLocalizationSourceControlBlocker(
+					OutPreview,
+					File,
+					TEXT("not_current"));
+			}
+			if (File.bConflicted)
+			{
+				AddLocalizationSourceControlBlocker(
+					OutPreview,
+					File,
+					TEXT("conflicted"));
+			}
+			if (File.bCheckedOutOther)
+			{
+				AddLocalizationSourceControlBlocker(
+					OutPreview,
+					File,
+					TEXT("checked_out_other"));
+			}
+			if (!File.bCheckedOut)
+			{
+				AddLocalizationSourceControlBlocker(
+					OutPreview,
+					File,
+					TEXT("not_checked_out_by_current_client"));
+			}
+			if (!OpenedChangelist.IsValid())
+			{
+				AddLocalizationSourceControlBlocker(
+					OutPreview,
+					File,
+					TEXT("opened_changelist_unavailable"));
+			}
+			else if (File.bDefaultChangelist)
+			{
+				AddLocalizationSourceControlBlocker(
+					OutPreview,
+					File,
+					TEXT("opened_in_default_changelist"));
+			}
+			else if (!File.bMatchesExpectedChangelist)
+			{
+				AddLocalizationSourceControlBlocker(
+					OutPreview,
+					File,
+					TEXT("opened_changelist_mismatch"));
+			}
+			if (IFileManager::Get().IsReadOnly(*FilePath))
+			{
+				AddLocalizationSourceControlBlocker(
+					OutPreview,
+					File,
+					TEXT("filesystem_read_only"));
+			}
+		}
+
+		OutPreview.bSourceControlReady =
+			OutPreview.SourceControlBlockers.IsEmpty();
+	}
+
+	bool BuildLocalizationTargetConfigPreview(
+		ULocalizationTarget* Target,
+		const TArray<FGatherTextSearchDirectory>& DesiredDirectories,
+		const int32 TargetChangelist,
+		FLocalizationTargetConfigPreview& OutPreview,
+		FString& OutError)
+	{
+		if (!Target)
+		{
+			OutError = TEXT("Cannot preview localization configs for a null target");
+			return false;
+		}
+
+		OutPreview.SettingsFile = GetLocalizationSettingsFile();
+		OutPreview.bSettingsChanged = !AreLocalizationGatherDirectoriesEqual(
+			Target->Settings.GatherFromTextFiles.SearchDirectories,
+			DesiredDirectories);
+
+		FString GatherConfigPath = FPaths::ConvertRelativePathToFull(
+			FPaths::Combine(
+				FPaths::ProjectConfigDir(),
+				TEXT("Localization"),
+				FString::Printf(
+					TEXT("%s_Gather.ini"),
+					*Target->Settings.Name)));
+		FPaths::NormalizeFilename(GatherConfigPath);
+		if (!IFileManager::Get().FileExists(*GatherConfigPath))
+		{
+			OutPreview.ChangedConfigFiles.Add(GatherConfigPath);
+			OutPreview.MissingFiles.Add(GatherConfigPath);
+		}
+		else
+		{
+			FString ExistingContents;
+			if (!FFileHelper::LoadFileToString(
+					ExistingContents,
+					*GatherConfigPath))
+			{
+				OutError = FString::Printf(
+					TEXT("Failed to read existing localization gather config '%s'"),
+					*GatherConfigPath);
+				return false;
+			}
+
+			MonolithLocalizationTargetConfig::FGatherConfigPatch Patch;
+			if (!MonolithLocalizationTargetConfig::BuildGatherConfigPatch(
+					ExistingContents,
+					Target->Settings.Name,
+					LocalizationGatherDirectoriesToStrings(DesiredDirectories),
+					Patch,
+					OutError))
+			{
+				OutError = FString::Printf(
+					TEXT("Localization gather config '%s' is not canonical enough for a targeted patch: %s"),
+					*GatherConfigPath,
+					*OutError);
+				return false;
+			}
+			OutPreview.DesiredConfigContents.Emplace(
+				GatherConfigPath,
+				MoveTemp(Patch.DesiredContents));
+			if (Patch.bChanged)
+			{
+				OutPreview.ChangedConfigFiles.Add(GatherConfigPath);
+				if (IFileManager::Get().IsReadOnly(*GatherConfigPath))
+				{
+					OutPreview.ReadOnlyFiles.Add(GatherConfigPath);
+				}
+			}
+		}
+
+		if (OutPreview.bSettingsChanged)
+		{
+			if (!IFileManager::Get().FileExists(*OutPreview.SettingsFile))
+			{
+				OutPreview.MissingFiles.Add(OutPreview.SettingsFile);
+			}
+			else if (IFileManager::Get().IsReadOnly(*OutPreview.SettingsFile))
+			{
+				OutPreview.ReadOnlyFiles.Add(OutPreview.SettingsFile);
+			}
+		}
+
+		TArray<FString> WriteFiles = OutPreview.ChangedConfigFiles;
+		if (OutPreview.bSettingsChanged)
+		{
+			WriteFiles.AddUnique(OutPreview.SettingsFile);
+		}
+		WriteFiles.Sort();
+		AuditLocalizationSourceControlOwnership(
+			WriteFiles,
+			TargetChangelist,
+			OutPreview);
+
+		OutPreview.ChangedConfigFiles.Sort();
+		OutPreview.MissingFiles.Sort();
+		OutPreview.ReadOnlyFiles.Sort();
+		OutPreview.SourceControlBlockers.Sort();
+		return true;
+	}
+
+	bool WriteLocalizationTargetConfigs(
+		const FLocalizationTargetConfigPreview& Preview,
+		FString& OutError)
+	{
+		for (const TPair<FString, FString>& Pair : Preview.DesiredConfigContents)
+		{
+			if (!Preview.ChangedConfigFiles.Contains(Pair.Key))
+			{
+				continue;
+			}
+			if (!FFileHelper::SaveStringToFile(
+					Pair.Value,
+					*Pair.Key,
+					FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+			{
+				OutError = FString::Printf(
+					TEXT("Failed to write targeted localization gather config '%s'"),
+					*Pair.Key);
+				return false;
+			}
+		}
+		return true;
+	}
+
+	bool VerifyLocalizationTargetConfigContents(
+		const FLocalizationTargetConfigPreview& Preview,
+		FString& OutError)
+	{
+		for (const TPair<FString, FString>& Pair : Preview.DesiredConfigContents)
+		{
+			FString ActualContents;
+			if (!FFileHelper::LoadFileToString(ActualContents, *Pair.Key) ||
+				!ActualContents.Equals(Pair.Value, ESearchCase::CaseSensitive))
+			{
+				OutError = FString::Printf(
+					TEXT("Localization gather-config readback did not match the targeted patch text: %s"),
+					*Pair.Key);
+				return false;
+			}
+		}
+		return true;
+	}
+
+	bool VerifyPersistedLocalizationTargetDirectories(
+		const FString& SettingsFile,
+		const FString& TargetName,
+		const TArray<FGatherTextSearchDirectory>& ExpectedDirectories,
+		FString& OutError)
+	{
+		TArray<FPersistedProjectLocalizationTarget> PersistedTargets;
+		if (!ReadPersistedProjectLocalizationTargets(
+				SettingsFile,
+				PersistedTargets,
+				OutError))
+		{
+			return false;
+		}
+
+		for (const FPersistedProjectLocalizationTarget& PersistedTarget : PersistedTargets)
+		{
+			if (!PersistedTarget.Name.Equals(TargetName, ESearchCase::IgnoreCase))
+			{
+				continue;
+			}
+
+			if (!AreLocalizationGatherDirectoriesEqual(
+					PersistedTarget.TextSearchDirectories,
+					ExpectedDirectories))
+			{
+				OutError = FString::Printf(
+					TEXT("Persisted localization target '%s' search directories do not match the requested model"),
+					*TargetName);
+				return false;
+			}
+			return true;
+		}
+
+		OutError = FString::Printf(
+			TEXT("Persisted localization target '%s' was not found in '%s'"),
+			*TargetName,
+			*SettingsFile);
+		return false;
+	}
+
+	bool CaptureLocalizationFileSnapshots(
+		const TArray<FString>& Paths,
+		TArray<FLocalizationFileSnapshot>& OutSnapshots,
+		FString& OutError)
+	{
+		for (const FString& Path : Paths)
+		{
+			FLocalizationFileSnapshot Snapshot;
+			Snapshot.Path = Path;
+			Snapshot.bExisted = IFileManager::Get().FileExists(*Path);
+			if (Snapshot.bExisted && !FFileHelper::LoadFileToArray(Snapshot.Bytes, *Path))
+			{
+				OutError = FString::Printf(
+					TEXT("Failed to snapshot localization file before mutation: %s"),
+					*Path);
+				return false;
+			}
+			OutSnapshots.Add(MoveTemp(Snapshot));
+		}
+		return true;
+	}
+
+	bool RestoreLocalizationFileSnapshots(
+		const TArray<FLocalizationFileSnapshot>& Snapshots,
+		FString& OutError)
+	{
+		TArray<FString> Failures;
+		for (const FLocalizationFileSnapshot& Snapshot : Snapshots)
+		{
+			const bool bRestored = Snapshot.bExisted
+				? FFileHelper::SaveArrayToFile(Snapshot.Bytes, *Snapshot.Path)
+				: (!IFileManager::Get().FileExists(*Snapshot.Path) ||
+					IFileManager::Get().Delete(*Snapshot.Path, false, true, true));
+			if (!bRestored)
+			{
+				Failures.Add(Snapshot.Path);
+			}
+		}
+
+		if (!Failures.IsEmpty())
+		{
+			OutError = FString::Printf(
+				TEXT("Failed to restore localization files after mutation failure: %s"),
+				*FString::Join(Failures, TEXT(", ")));
+			return false;
+		}
+		return true;
+	}
+
+	bool IsValidLocalizationTargetName(const FString& TargetName, FString& OutError)
+	{
+		if (TargetName.IsEmpty() || TargetName.Len() > 64)
+		{
+			OutError = TEXT("target must contain 1-64 ASCII letters, digits, underscores, or hyphens");
+			return false;
+		}
+
+		for (const TCHAR Character : TargetName)
+		{
+			const bool bAsciiLetter =
+				(Character >= 'A' && Character <= 'Z') ||
+				(Character >= 'a' && Character <= 'z');
+			const bool bAsciiDigit = Character >= '0' && Character <= '9';
+			if (!bAsciiLetter && !bAsciiDigit && Character != '_' && Character != '-')
+			{
+				OutError = TEXT("target must contain only ASCII letters, digits, underscores, or hyphens");
+				return false;
+			}
+		}
+		return true;
+	}
+
+	bool ReadLocalizationPipelineOperations(
+		const TSharedPtr<FJsonObject>& Params,
+		TArray<FString>& OutOperations,
+		FString& OutError)
+	{
+		OutOperations = {TEXT("gather"), TEXT("compile")};
+		if (!Params.IsValid())
+		{
+			return true;
+		}
+
+		const TSharedPtr<FJsonValue> OperationsField = Params->TryGetField(TEXT("operations"));
+		if (!OperationsField.IsValid() || OperationsField->IsNull())
+		{
+			return true;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (!OperationsField->TryGetArray(Values) || Values == nullptr)
+		{
+			OutError = TEXT("Malformed parameter: operations must be an array");
+			return false;
+		}
+		if (Values->IsEmpty() || Values->Num() > 2)
+		{
+			OutError = TEXT("operations must contain one or two entries from: gather, compile");
+			return false;
+		}
+
+		OutOperations.Reset();
+		for (const TSharedPtr<FJsonValue>& Value : *Values)
+		{
+			FString Operation;
+			if (!Value.IsValid() || !Value->TryGetString(Operation))
+			{
+				OutError = TEXT("Malformed parameter: every operations entry must be a string");
+				return false;
+			}
+
+			Operation = Operation.TrimStartAndEnd().ToLower();
+			if (Operation != TEXT("gather") && Operation != TEXT("compile"))
+			{
+				OutError = FString::Printf(
+					TEXT("Unsupported localization pipeline operation '%s'; allowed values are gather and compile"),
+					*Operation);
+				return false;
+			}
+			if (OutOperations.Contains(Operation))
+			{
+				OutError = FString::Printf(TEXT("Duplicate localization pipeline operation '%s'"), *Operation);
+				return false;
+			}
+			OutOperations.Add(Operation);
+		}
+
+		const int32 GatherIndex = OutOperations.IndexOfByKey(TEXT("gather"));
+		const int32 CompileIndex = OutOperations.IndexOfByKey(TEXT("compile"));
+		if (GatherIndex != INDEX_NONE && CompileIndex != INDEX_NONE && CompileIndex < GatherIndex)
+		{
+			OutError = TEXT("operations must place gather before compile");
+			return false;
+		}
+		return true;
+	}
+
+	bool ReadLocalizationPipelineTimeout(
+		const TSharedPtr<FJsonObject>& Params,
+		int32& OutTimeoutSeconds,
+		FString& OutError)
+	{
+		OutTimeoutSeconds = 900;
+		if (!Params.IsValid())
+		{
+			return true;
+		}
+
+		const TSharedPtr<FJsonValue> TimeoutField = Params->TryGetField(TEXT("timeout_seconds"));
+		if (!TimeoutField.IsValid() || TimeoutField->IsNull())
+		{
+			return true;
+		}
+
+		double TimeoutNumber = 0.0;
+		if (!TimeoutField->TryGetNumber(TimeoutNumber) ||
+			!FMath::IsFinite(TimeoutNumber) ||
+			!FMath::IsNearlyZero(FMath::Frac(TimeoutNumber)))
+		{
+			OutError = TEXT("Malformed parameter: timeout_seconds must be an integer");
+			return false;
+		}
+
+		if (TimeoutNumber < 30.0 || TimeoutNumber > 3600.0)
+		{
+			OutError = TEXT("timeout_seconds must be between 30 and 3600");
+			return false;
+		}
+
+		OutTimeoutSeconds = static_cast<int32>(TimeoutNumber);
+		return true;
+	}
+
+	FString NormalizeLocalizationContentSetting(FString Value)
+	{
+		Value = Value.TrimStartAndEnd();
+		Value.ReplaceInline(TEXT("\\"), TEXT("/"));
+		while (Value.EndsWith(TEXT("/")))
+		{
+			Value.LeftChopInline(1);
+		}
+		return Value;
+	}
+
+	bool ValidateLocalizationPipelineConfig(
+		const FString& ConfigPath,
+		const FString& TargetName,
+		const FString& Operation,
+		FString& OutError)
+	{
+		FConfigFile Config;
+		Config.Read(ConfigPath);
+
+		FString SourcePath;
+		FString DestinationPath;
+		FString CommandletClass;
+		if (!Config.GetString(TEXT("CommonSettings"), TEXT("SourcePath"), SourcePath) ||
+			!Config.GetString(TEXT("CommonSettings"), TEXT("DestinationPath"), DestinationPath))
+		{
+			OutError = FString::Printf(
+				TEXT("Localization config '%s' must define CommonSettings SourcePath and DestinationPath"),
+				*ConfigPath);
+			return false;
+		}
+		if (!Config.GetString(TEXT("GatherTextStep0"), TEXT("CommandletClass"), CommandletClass) ||
+			CommandletClass.TrimStartAndEnd().IsEmpty())
+		{
+			OutError = FString::Printf(
+				TEXT("Localization config '%s' must define GatherTextStep0 CommandletClass"),
+				*ConfigPath);
+			return false;
+		}
+
+		const FString ExpectedContentPath =
+			FString::Printf(TEXT("Content/Localization/%s"), *TargetName);
+		SourcePath = NormalizeLocalizationContentSetting(SourcePath);
+		DestinationPath = NormalizeLocalizationContentSetting(DestinationPath);
+		if (!SourcePath.Equals(ExpectedContentPath, ESearchCase::IgnoreCase) ||
+			!DestinationPath.Equals(ExpectedContentPath, ESearchCase::IgnoreCase))
+		{
+			OutError = FString::Printf(
+				TEXT("Localization config '%s' must keep SourcePath and DestinationPath at '%s'"),
+				*ConfigPath,
+				*ExpectedContentPath);
+			return false;
+		}
+
+		if (Operation == TEXT("compile") &&
+			!CommandletClass.Equals(TEXT("GenerateTextLocalizationResource"), ESearchCase::IgnoreCase))
+		{
+			OutError = FString::Printf(
+				TEXT("Compile config '%s' must start with GenerateTextLocalizationResource, not '%s'"),
+				*ConfigPath,
+				*CommandletClass);
+			return false;
+		}
+		return true;
+	}
+
+	bool IsExistingLocalizationPipelineOutput(
+		const FString& FilePath,
+		const TArray<FString>& Operations)
+	{
+		const FString Extension = FString::Printf(TEXT(".%s"), *FPaths::GetExtension(FilePath, false)).ToLower();
+		if (Operations.Contains(TEXT("gather")) &&
+			(Extension == TEXT(".manifest") ||
+			 Extension == TEXT(".archive") ||
+			 Extension == TEXT(".csv") ||
+			 Extension == TEXT(".txt")))
+		{
+			return true;
+		}
+		if (Operations.Contains(TEXT("compile")) &&
+			(Extension == TEXT(".locres") || Extension == TEXT(".locmeta")))
+		{
+			return true;
+		}
+		return false;
+	}
+
+	bool BuildLocalizationPipelinePlan(
+		const TSharedPtr<FJsonObject>& Params,
+		FLocalizationPipelinePlan& OutPlan,
+		FString& OutError)
+	{
+		if (!ReadRequiredStringParam(Params, TEXT("target"), OutPlan.TargetName, OutError))
+		{
+			return false;
+		}
+		OutPlan.TargetName = OutPlan.TargetName.TrimStartAndEnd();
+		if (!IsValidLocalizationTargetName(OutPlan.TargetName, OutError) ||
+			!ReadLocalizationPipelineOperations(Params, OutPlan.Operations, OutError) ||
+			!ReadLocalizationPipelineTimeout(Params, OutPlan.TimeoutSeconds, OutError))
+		{
+			return false;
+		}
+
+		OutPlan.ProjectDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+		FPaths::NormalizeDirectoryName(OutPlan.ProjectDirectory);
+		OutPlan.ProjectFilePath = FPaths::ConvertRelativePathToFull(FPaths::GetProjectFilePath());
+		FPaths::NormalizeFilename(OutPlan.ProjectFilePath);
+		if (!IFileManager::Get().FileExists(*OutPlan.ProjectFilePath))
+		{
+			OutError = FString::Printf(TEXT("Project file does not exist: %s"), *OutPlan.ProjectFilePath);
+			return false;
+		}
+
+		OutPlan.CommandletExecutable =
+			FPaths::ConvertRelativePathToFull(FUnrealEdMisc::Get().GetExecutableForCommandlets());
+		FPaths::NormalizeFilename(OutPlan.CommandletExecutable);
+		if (!IFileManager::Get().FileExists(*OutPlan.CommandletExecutable))
+		{
+			OutError = FString::Printf(
+				TEXT("Unreal commandlet executable does not exist: %s"),
+				*OutPlan.CommandletExecutable);
+			return false;
+		}
+
+		const FString ConfigDirectory =
+			FPaths::Combine(OutPlan.ProjectDirectory, TEXT("Config/Localization"));
+		for (const FString& Operation : OutPlan.Operations)
+		{
+			const FString OperationSuffix = Operation == TEXT("gather") ? TEXT("Gather") : TEXT("Compile");
+			FString ConfigPath = FPaths::Combine(
+				ConfigDirectory,
+				FString::Printf(TEXT("%s_%s.ini"), *OutPlan.TargetName, *OperationSuffix));
+			ConfigPath = FPaths::ConvertRelativePathToFull(ConfigPath);
+			FPaths::NormalizeFilename(ConfigPath);
+			if (!IFileManager::Get().FileExists(*ConfigPath))
+			{
+				OutError = FString::Printf(
+					TEXT("Localization %s config does not exist: %s"),
+					*Operation,
+					*ConfigPath);
+				return false;
+			}
+			if (!ValidateLocalizationPipelineConfig(ConfigPath, OutPlan.TargetName, Operation, OutError))
+			{
+				return false;
+			}
+			OutPlan.ConfigPaths.Add(ConfigPath);
+		}
+
+		OutPlan.ContentDirectory = FPaths::Combine(
+			OutPlan.ProjectDirectory,
+			TEXT("Content/Localization"),
+			OutPlan.TargetName);
+		OutPlan.ContentDirectory = FPaths::ConvertRelativePathToFull(OutPlan.ContentDirectory);
+		FPaths::NormalizeDirectoryName(OutPlan.ContentDirectory);
+		OutPlan.LogDirectory = FPaths::Combine(
+			FPaths::ProjectSavedDir(),
+			TEXT("Monolith/LocalizationJobs"));
+		OutPlan.LogDirectory = FPaths::ConvertRelativePathToFull(OutPlan.LogDirectory);
+		FPaths::NormalizeDirectoryName(OutPlan.LogDirectory);
+
+		TArray<FString> ExistingFiles;
+		if (IFileManager::Get().DirectoryExists(*OutPlan.ContentDirectory))
+		{
+			IFileManager::Get().FindFilesRecursive(
+				ExistingFiles,
+				*OutPlan.ContentDirectory,
+				TEXT("*"),
+				true,
+				false,
+				false);
+		}
+		ExistingFiles.Sort();
+		for (FString FilePath : ExistingFiles)
+		{
+			FPaths::NormalizeFilename(FilePath);
+			if (!IsExistingLocalizationPipelineOutput(FilePath, OutPlan.Operations))
+			{
+				continue;
+			}
+			OutPlan.ExistingOutputFiles.Add(FilePath);
+			if (IFileManager::Get().IsReadOnly(*FilePath))
+			{
+				OutPlan.ReadOnlyOutputFiles.Add(FilePath);
+			}
+		}
+		return true;
+	}
+
+	bool MakePathRelativeToProject(FString& InOutPath, const FString& ProjectDirectory)
+	{
+		FString ProjectDirectoryWithSlash = ProjectDirectory;
+		FPaths::NormalizeDirectoryName(ProjectDirectoryWithSlash);
+		ProjectDirectoryWithSlash += TEXT("/");
+		return FPaths::MakePathRelativeTo(InOutPath, *ProjectDirectoryWithSlash);
+	}
+
+	bool CaptureLocalizationArtifactHashes(
+		const FString& ContentDirectory,
+		const FString& ProjectDirectory,
+		TMap<FString, FString>& OutHashes,
+		FString& OutError)
+	{
+		OutHashes.Reset();
+		TArray<FString> Files;
+		if (IFileManager::Get().DirectoryExists(*ContentDirectory))
+		{
+			IFileManager::Get().FindFilesRecursive(
+				Files,
+				*ContentDirectory,
+				TEXT("*"),
+				true,
+				false,
+				false);
+		}
+		Files.Sort();
+
+		for (FString FilePath : Files)
+		{
+			FPaths::NormalizeFilename(FilePath);
+			FString RelativePath = FilePath;
+			if (!MakePathRelativeToProject(RelativePath, ProjectDirectory))
+			{
+				RelativePath = FilePath;
+			}
+			FPaths::NormalizeFilename(RelativePath);
+			const FMD5Hash FileHash = FMD5Hash::HashFile(*FilePath);
+			if (!FileHash.IsValid())
+			{
+				OutError = FString::Printf(
+					TEXT("Failed to hash localization artifact '%s'"),
+					*FilePath);
+				return false;
+			}
+			OutHashes.Add(RelativePath, BytesToHex(FileHash.GetBytes(), 16));
+		}
+		return true;
+	}
+
+	void AppendLocalizationProcessOutput(
+		void* ReadPipe,
+		const FString& OutputLogPath,
+		FString& InOutTail,
+		FString& InOutLogError)
+	{
+		const FString Chunk = FPlatformProcess::ReadPipe(ReadPipe);
+		if (Chunk.IsEmpty())
+		{
+			return;
+		}
+
+		InOutTail += Chunk;
+		constexpr int32 MaxTailCharacters = 32768;
+		if (InOutTail.Len() > MaxTailCharacters)
+		{
+			InOutTail.RightInline(MaxTailCharacters);
+		}
+
+		if (InOutLogError.IsEmpty() &&
+			!FFileHelper::SaveStringToFile(
+				Chunk,
+				*OutputLogPath,
+				FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM,
+				&IFileManager::Get(),
+				FILEWRITE_Append))
+		{
+			InOutLogError = FString::Printf(TEXT("Failed to append process output log '%s'"), *OutputLogPath);
+		}
+	}
+
+	FLocalizationConfigRunResult RunLocalizationConfig(
+		const FLocalizationPipelinePlan& Plan,
+		const FString& JobId,
+		const FString& Operation,
+		const FString& ConfigPath)
+	{
+		FLocalizationConfigRunResult Result;
+		Result.Operation = Operation;
+		Result.ConfigPath = ConfigPath;
+
+		const FString JobLogDirectory = FPaths::Combine(Plan.LogDirectory, JobId);
+		if (!IFileManager::Get().MakeDirectory(*JobLogDirectory, true))
+		{
+			Result.Error = FString::Printf(
+				TEXT("Failed to create localization job log directory '%s'"),
+				*JobLogDirectory);
+			return Result;
+		}
+		Result.LogPath = FPaths::Combine(
+			JobLogDirectory,
+			FString::Printf(TEXT("%s.log"), *Operation));
+		IFileManager::Get().Delete(*Result.LogPath, false, true, true);
+
+		FString RelativeConfigPath = ConfigPath;
+		if (!MakePathRelativeToProject(RelativeConfigPath, Plan.ProjectDirectory))
+		{
+			Result.Error = FString::Printf(
+				TEXT("Failed to make config path project-relative: %s"),
+				*ConfigPath);
+			return Result;
+		}
+		FPaths::NormalizeFilename(RelativeConfigPath);
+
+		const FString AdditionalArguments = FString::Printf(
+			TEXT("-config=\"%s\" -Unattended -nop4 -stdout -FullStdOutLogOutput -UTF8Output"),
+			*RelativeConfigPath);
+		const FString QuotedProjectFile = FString::Printf(TEXT("\"%s\""), *Plan.ProjectFilePath);
+		Result.ProcessArguments = CommandletHelpers::BuildCommandletProcessArguments(
+			TEXT("GatherText"),
+			*QuotedProjectFile,
+			*AdditionalArguments);
+
+		void* ReadPipe = nullptr;
+		void* WritePipe = nullptr;
+		if (!FPlatformProcess::CreatePipe(ReadPipe, WritePipe))
+		{
+			Result.Error = TEXT("Failed to create localization commandlet output pipe");
+			return Result;
+		}
+
+		FProcHandle ProcessHandle = FPlatformProcess::CreateProc(
+			*Plan.CommandletExecutable,
+			*Result.ProcessArguments,
+			false,
+			true,
+			true,
+			nullptr,
+			0,
+			*Plan.ProjectDirectory,
+			WritePipe);
+		if (!ProcessHandle.IsValid())
+		{
+			FPlatformProcess::ClosePipe(ReadPipe, WritePipe);
+			Result.Error = FString::Printf(
+				TEXT("Failed to launch localization %s commandlet using '%s'"),
+				*Operation,
+				*Plan.CommandletExecutable);
+			return Result;
+		}
+
+		Result.bLaunched = true;
+		const double StartSeconds = FPlatformTime::Seconds();
+		FString LogError;
+		while (FPlatformProcess::IsProcRunning(ProcessHandle))
+		{
+			AppendLocalizationProcessOutput(ReadPipe, Result.LogPath, Result.OutputTail, LogError);
+
+			if (FMonolithAsyncJobRegistry::Get().IsCancelRequested(JobId))
+			{
+				Result.bCancelled = true;
+				FPlatformProcess::TerminateProc(ProcessHandle, true);
+				break;
+			}
+			if ((FPlatformTime::Seconds() - StartSeconds) > static_cast<double>(Plan.TimeoutSeconds))
+			{
+				Result.bTimedOut = true;
+				FPlatformProcess::TerminateProc(ProcessHandle, true);
+				break;
+			}
+			FPlatformProcess::Sleep(0.05f);
+		}
+
+		FPlatformProcess::WaitForProc(ProcessHandle);
+		AppendLocalizationProcessOutput(ReadPipe, Result.LogPath, Result.OutputTail, LogError);
+		Result.DurationSeconds = FPlatformTime::Seconds() - StartSeconds;
+
+		if (!Result.bCancelled && !Result.bTimedOut &&
+			!FPlatformProcess::GetProcReturnCode(ProcessHandle, &Result.ExitCode))
+		{
+			Result.Error = TEXT("Localization commandlet exited without a readable return code");
+		}
+		else if (Result.bCancelled)
+		{
+			Result.Error = FString::Printf(TEXT("Localization %s operation was cancelled"), *Operation);
+		}
+		else if (Result.bTimedOut)
+		{
+			Result.Error = FString::Printf(
+				TEXT("Localization %s operation exceeded timeout_seconds=%d"),
+				*Operation,
+				Plan.TimeoutSeconds);
+		}
+		else if (Result.ExitCode != 0)
+		{
+			Result.Error = FString::Printf(
+				TEXT("Localization %s commandlet exited with code %d"),
+				*Operation,
+				Result.ExitCode);
+		}
+
+		if (!LogError.IsEmpty())
+		{
+			if (Result.Error.IsEmpty())
+			{
+				Result.Error = LogError;
+			}
+			else
+			{
+				Result.Error += TEXT("; ");
+				Result.Error += LogError;
+			}
+		}
+
+		FPlatformProcess::ClosePipe(ReadPipe, WritePipe);
+		FPlatformProcess::CloseProc(ProcessHandle);
+		return Result;
+	}
+
+	TSharedPtr<FJsonObject> LocalizationConfigRunResultToJson(
+		const FLocalizationConfigRunResult& RunResult)
+	{
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("operation"), RunResult.Operation);
+		Result->SetStringField(TEXT("config_path"), RunResult.ConfigPath);
+		Result->SetStringField(TEXT("log_path"), RunResult.LogPath);
+		Result->SetBoolField(TEXT("launched"), RunResult.bLaunched);
+		Result->SetBoolField(TEXT("cancelled"), RunResult.bCancelled);
+		Result->SetBoolField(TEXT("timed_out"), RunResult.bTimedOut);
+		Result->SetNumberField(TEXT("exit_code"), RunResult.ExitCode);
+		Result->SetNumberField(TEXT("duration_seconds"), RunResult.DurationSeconds);
+		Result->SetStringField(TEXT("output_tail"), RunResult.OutputTail);
+		if (!RunResult.Error.IsEmpty())
+		{
+			Result->SetStringField(TEXT("error"), RunResult.Error);
+		}
+		return Result;
+	}
+
+	void ExecuteLocalizationPipelineAsync(
+		FLocalizationPipelinePlan Plan,
+		const FString JobId)
+	{
+		ON_SCOPE_EXIT
+		{
+			FScopeLock Lock(&GLocalizationPipelineStateLock);
+			if (GActiveLocalizationPipelineJobId == JobId)
+			{
+				GActiveLocalizationPipelineJobId.Reset();
+			}
+		};
+
+		FMonolithAsyncJobRegistry& JobRegistry = FMonolithAsyncJobRegistry::Get();
+		JobRegistry.UpdateProgress(
+			JobId,
+			0.0,
+			TEXT("preflight_complete"),
+			TEXT("Localization target configs and writable outputs passed preflight."));
+
+		TMap<FString, FString> BeforeHashes;
+		FString HashError;
+		if (!CaptureLocalizationArtifactHashes(
+				Plan.ContentDirectory,
+				Plan.ProjectDirectory,
+				BeforeHashes,
+				HashError))
+		{
+			JobRegistry.FailJob(JobId, HashError);
+			return;
+		}
+		TArray<TSharedPtr<FJsonValue>> StepResults;
+		const int32 OperationCount = Plan.Operations.Num();
+		for (int32 OperationIndex = 0; OperationIndex < OperationCount; ++OperationIndex)
+		{
+			if (JobRegistry.IsCancelRequested(JobId))
+			{
+				JobRegistry.CancelJob(JobId, TEXT("Cancellation acknowledged before the next localization operation."));
+				return;
+			}
+
+			const FString& Operation = Plan.Operations[OperationIndex];
+			const double StartPercent = 5.0 + (85.0 * static_cast<double>(OperationIndex) / OperationCount);
+			JobRegistry.UpdateProgress(
+				JobId,
+				StartPercent,
+				Operation,
+				FString::Printf(TEXT("Running localization %s commandlet."), *Operation));
+
+			FLocalizationConfigRunResult RunResult = RunLocalizationConfig(
+				Plan,
+				JobId,
+				Operation,
+				Plan.ConfigPaths[OperationIndex]);
+			StepResults.Add(MakeShared<FJsonValueObject>(LocalizationConfigRunResultToJson(RunResult)));
+			if (RunResult.bCancelled)
+			{
+				JobRegistry.CancelJob(JobId, RunResult.Error);
+				return;
+			}
+			if (!RunResult.Error.IsEmpty())
+			{
+				const FString FailureTail = RunResult.OutputTail.Right(1024);
+				JobRegistry.FailJob(
+					JobId,
+					FString::Printf(
+						TEXT("%s; log=%s; output_tail=%s"),
+						*RunResult.Error,
+						*RunResult.LogPath,
+						*FailureTail));
+				return;
+			}
+		}
+
+		JobRegistry.UpdateProgress(
+			JobId,
+			95.0,
+			TEXT("artifact_audit"),
+			TEXT("Hashing localization target outputs after gather/compile."));
+
+		TMap<FString, FString> AfterHashes;
+		if (!CaptureLocalizationArtifactHashes(
+				Plan.ContentDirectory,
+				Plan.ProjectDirectory,
+				AfterHashes,
+				HashError))
+		{
+			JobRegistry.FailJob(JobId, HashError);
+			return;
+		}
+		TArray<FString> CreatedFiles;
+		TArray<FString> UpdatedFiles;
+		TArray<FString> DeletedFiles;
+		for (const TPair<FString, FString>& Pair : AfterHashes)
+		{
+			const FString* BeforeHash = BeforeHashes.Find(Pair.Key);
+			if (!BeforeHash)
+			{
+				CreatedFiles.Add(Pair.Key);
+			}
+			else if (*BeforeHash != Pair.Value)
+			{
+				UpdatedFiles.Add(Pair.Key);
+			}
+		}
+		for (const TPair<FString, FString>& Pair : BeforeHashes)
+		{
+			if (!AfterHashes.Contains(Pair.Key))
+			{
+				DeletedFiles.Add(Pair.Key);
+			}
+		}
+		CreatedFiles.Sort();
+		UpdatedFiles.Sort();
+		DeletedFiles.Sort();
+
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("status"), TEXT("completed"));
+		Result->SetStringField(TEXT("target"), Plan.TargetName);
+		Result->SetArrayField(TEXT("operations"), StringsToJson(Plan.Operations));
+		Result->SetArrayField(TEXT("steps"), StepResults);
+		Result->SetStringField(TEXT("content_directory"), Plan.ContentDirectory);
+		Result->SetStringField(TEXT("log_directory"), FPaths::Combine(Plan.LogDirectory, JobId));
+		Result->SetBoolField(
+			TEXT("changed"),
+			!CreatedFiles.IsEmpty() || !UpdatedFiles.IsEmpty() || !DeletedFiles.IsEmpty());
+		Result->SetBoolField(TEXT("source_control_enabled_for_child"), false);
+		Result->SetNumberField(TEXT("before_file_count"), BeforeHashes.Num());
+		Result->SetNumberField(TEXT("after_file_count"), AfterHashes.Num());
+		Result->SetArrayField(TEXT("created_files"), StringsToJson(CreatedFiles));
+		Result->SetArrayField(TEXT("updated_files"), StringsToJson(UpdatedFiles));
+		Result->SetArrayField(TEXT("deleted_files"), StringsToJson(DeletedFiles));
+		JobRegistry.CompleteJob(JobId, Result);
+	}
 }
 
 void FMonolithLocalizationActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
+	{
+		FScopeLock Lock(&GLocalizationPipelineStateLock);
+		GLocalizationPipelineShuttingDown = false;
+		GLocalizationTargetConfigurationActive = false;
+	}
+
 	Registry.RegisterAction(TEXT("localization"), TEXT("list_cultures"),
 		TEXT("List available cultures known to Unreal internationalization."),
 		FMonolithActionHandler::CreateStatic(&FMonolithLocalizationActions::ListCultures),
@@ -672,6 +2422,57 @@ void FMonolithLocalizationActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StringTable asset path"))
 			.Optional(TEXT("include_metadata"), TEXT("boolean"), TEXT("Include per-entry metadata"), TEXT("true"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum entries to return"), TEXT("200"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("localization"), TEXT("set_target_text_search_directories"),
+		TEXT("Set one project localization target's Gather Text From Source search directories through "
+			 "the runtime-loaded Localization Dashboard model, persist DefaultEditor.ini, and patch only "
+			 "the matching GatherTextFromSource rows in the existing gather config. Entries must use "
+			 "explicit %LOCENGINEROOT% or %LOCPROJECTROOT% tokens. "
+			 "Requires source_control_policy=require_checked_out plus an exact positive target_changelist; "
+			 "dry_run ForceUpdates structured readiness without mutation and confirm revalidates before writing."),
+		FMonolithActionHandler::CreateStatic(
+			&FMonolithLocalizationActions::SetTargetTextSearchDirectories),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Required(TEXT("target"), TEXT("string"), TEXT("Project localization target name"))
+			.Required(
+				TEXT("search_directories"),
+				TEXT("array"),
+				TEXT("One to 64 existing source directories using %LOCENGINEROOT% or %LOCPROJECTROOT% prefixes"))
+			.Required(
+				TEXT("source_control_policy"),
+				TEXT("string"),
+				TEXT("Must be require_checked_out; prepare every changed file in the intended numbered changelist before execution"))
+			.Enum(
+				TEXT("source_control_policy"),
+				{TEXT("require_checked_out")})
+			.Required(
+				TEXT("target_changelist"),
+				TEXT("integer"),
+				TEXT("Exact positive numbered changelist that must already own every file the action would write; default is forbidden"))
+			.Range(
+				TEXT("target_changelist"),
+				1.0,
+				static_cast<double>(MAX_int32))
+			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("ForceUpdate source-control state and preview model/config changes plus structured blockers without writing"), TEXT("false"))
+			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true to persist the target model and targeted gather-config patch"), TEXT("false"))
+			.Build(),
+		FString(),
+		LocalizationTargetConfigurationExecutionPolicy());
+
+	Registry.RegisterAction(TEXT("localization"), TEXT("run_target_pipeline"),
+		TEXT("Asynchronously gather and/or compile one project localization target from its canonical "
+			 "Config/Localization/<Target>_{Gather,Compile}.ini files. The child commandlet never enables "
+			 "source control; existing generated outputs must already be writable. Requires dry_run=true "
+			 "for preflight or confirm=true to start."),
+		FMonolithActionHandler::CreateStatic(&FMonolithLocalizationActions::RunTargetPipeline),
+		FParamSchemaBuilder()
+			.Required(TEXT("target"), TEXT("string"), TEXT("Localization target name; ASCII letters, digits, underscores, and hyphens only"))
+			.Optional(TEXT("operations"), TEXT("array"), TEXT("Ordered subset of gather and compile"), TEXT("[\"gather\",\"compile\"]"))
+			.Optional(TEXT("timeout_seconds"), TEXT("integer"), TEXT("Per-operation timeout in seconds (30-3600)"), TEXT("900"))
+			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Validate configs and report output checkout requirements without launching a child process"), TEXT("false"))
+			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true to launch the asynchronous pipeline"), TEXT("false"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("localization"), TEXT("validate_string_table"),
@@ -752,6 +2553,629 @@ void FMonolithLocalizationActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Preview without writing"), TEXT("false"))
 			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true for non-dry-run writes"), TEXT("false"))
 			.Build());
+
+	Registry.SetActionAnnotations(
+		TEXT("localization"), TEXT("set_target_text_search_directories"),
+		false, true, false, TEXT("Set localization target source directories"));
+	Registry.SetActionSearchMetadata(
+		TEXT("localization"), TEXT("set_target_text_search_directories"),
+		{
+			TEXT("configure localization target"),
+			TEXT("set gather text source directories"),
+			TEXT("edit localization dashboard target"),
+			TEXT("change localization gather paths")
+		},
+		{TEXT("configure_target"), TEXT("set_gather_paths")},
+		{TEXT("limit EngineOverrides gathering to one engine source directory")});
+	Registry.SetActionPlanningMetadata(
+		TEXT("localization"), TEXT("set_target_text_search_directories"),
+		TEXT("unreal-localization"),
+		{
+			TEXT("Every search directory uses an explicit localization root token and exists"),
+			TEXT("Run dry_run first and open every reported file in target_changelist under source_control_policy=require_checked_out before confirm"),
+			TEXT("No localization.run_target_pipeline job is active")
+		},
+		{
+			TEXT("DefaultEditor.ini persists the target model"),
+			TEXT("the existing GatherTextFromSource config keeps its non-directory text/line terminators and matches exact directory readback"),
+			TEXT("source_control_prepare and source_control_after prove exact numbered-changelist ownership with per-file actual_changelist")
+		},
+		{TEXT("source_control.get_status"), TEXT("localization.run_target_pipeline")});
+
+	Registry.SetActionAnnotations(
+		TEXT("localization"), TEXT("run_target_pipeline"),
+		false, true, false, TEXT("Run localization target pipeline"));
+	Registry.SetActionSearchMetadata(
+		TEXT("localization"), TEXT("run_target_pipeline"),
+		{
+			TEXT("gather localization target"),
+			TEXT("compile locres"),
+			TEXT("refresh localization resource"),
+			TEXT("run gather text commandlet"),
+			TEXT("regenerate localization target")
+		},
+		{TEXT("gather_target"), TEXT("compile_target"), TEXT("refresh_locres")},
+		{TEXT("gather and compile the EngineOverrides localization target")});
+	Registry.SetActionPlanningMetadata(
+		TEXT("localization"), TEXT("run_target_pipeline"),
+		TEXT("unreal-localization"),
+		{
+			TEXT("Config/Localization/<Target>_<Operation>.ini exists and keeps SourcePath/DestinationPath under Content/Localization/<Target>"),
+			TEXT("Run dry_run first and check out every reported read_only_output_file before confirm")
+		},
+		{
+			TEXT("asynchronous job_id with monolith.get_job polling"),
+			TEXT("per-operation logs and a created/updated/deleted artifact audit")
+		},
+		{TEXT("monolith.get_job"), TEXT("monolith.cancel_job"), TEXT("source_control.get_status")});
+}
+
+void FMonolithLocalizationActions::ShutdownActions()
+{
+	FString ActiveJobId;
+	{
+		FScopeLock Lock(&GLocalizationPipelineStateLock);
+		GLocalizationPipelineShuttingDown = true;
+		ActiveJobId = GActiveLocalizationPipelineJobId;
+	}
+
+	if (!ActiveJobId.IsEmpty())
+	{
+		FMonolithAsyncJobRegistry::Get().RequestCancel(ActiveJobId);
+	}
+	if (GLocalizationPipelineFuture.IsValid())
+	{
+		// The worker acknowledges cancellation, terminates only its owned child process, and then
+		// releases the module's static state. Joining here prevents code from executing after unload.
+		GLocalizationPipelineFuture.Wait();
+	}
+}
+
+FMonolithActionResult FMonolithLocalizationActions::SetTargetTextSearchDirectories(
+	const TSharedPtr<FJsonObject>& Params)
+{
+	FLocalizationMutationOptions Options;
+	FString Error;
+	if (!ReadMutationOptions(Params, Options, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString TargetName;
+	if (!ReadRequiredStringParam(Params, TEXT("target"), TargetName, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+	TargetName = TargetName.TrimStartAndEnd();
+	if (!IsValidLocalizationTargetName(TargetName, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	TArray<FGatherTextSearchDirectory> DesiredDirectories;
+	TArray<FString> DesiredDirectoryStrings;
+	if (!ReadLocalizationGatherDirectories(
+			Params,
+			DesiredDirectories,
+			DesiredDirectoryStrings,
+			Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+	int32 TargetChangelist = 0;
+	if (!ReadLocalizationSourceControlContract(
+			Params,
+			TargetChangelist,
+			Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	{
+		FScopeLock Lock(&GLocalizationPipelineStateLock);
+		if (GLocalizationPipelineShuttingDown)
+		{
+			return FMonolithActionResult::Error(
+				TEXT("MonolithConfig is shutting down; localization target configuration is unavailable"));
+		}
+		if (!GActiveLocalizationPipelineJobId.IsEmpty())
+		{
+			TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+			ErrorData->SetStringField(TEXT("active_job_id"), GActiveLocalizationPipelineJobId);
+			ErrorData->SetStringField(TEXT("poll_action"), TEXT("monolith.get_job"));
+			FMonolithActionResult Result = FMonolithActionResult::Error(
+				TEXT("Cannot configure a localization target while localization.run_target_pipeline is active"));
+			Result.WithErrorData(ErrorData).WithRelatedAction(TEXT("monolith.get_job"));
+			return Result;
+		}
+		if (GLocalizationTargetConfigurationActive)
+		{
+			return FMonolithActionResult::Error(
+				TEXT("Another localization target configuration mutation is already active"));
+		}
+	}
+
+	const FString SettingsFile = GetLocalizationSettingsFile();
+	TArray<FString> AvailableTargets;
+	ULocalizationTarget* Target = nullptr;
+	if (!FindProjectLocalizationTarget(
+			TargetName,
+			SettingsFile,
+			Target,
+			AvailableTargets,
+			Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+	if (!Target)
+	{
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("target"), TargetName);
+		ErrorData->SetArrayField(TEXT("available_project_targets"), StringsToJson(AvailableTargets));
+		FMonolithActionResult Result = FMonolithActionResult::Error(
+			FString::Printf(
+				TEXT("Project localization target '%s' was not found in the Localization Dashboard model"),
+				*TargetName));
+		Result.WithErrorData(ErrorData);
+		return Result;
+	}
+
+	FLocalizationTargetConfigPreview Preview;
+	if (!BuildLocalizationTargetConfigPreview(
+			Target,
+			DesiredDirectories,
+			TargetChangelist,
+			Preview,
+			Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	const TArray<FString> ExistingDirectoryStrings =
+		LocalizationGatherDirectoriesToStrings(
+			Target->Settings.GatherFromTextFiles.SearchDirectories);
+	const bool bWouldChange =
+		Preview.bSettingsChanged || !Preview.ChangedConfigFiles.IsEmpty();
+
+	TSharedPtr<FJsonObject> Preflight = MakeShared<FJsonObject>();
+	Preflight->SetStringField(
+		TEXT("action"),
+		TEXT("localization.set_target_text_search_directories"));
+	Preflight->SetStringField(TEXT("target"), Target->Settings.Name);
+	Preflight->SetStringField(TEXT("target_set"), TEXT("project"));
+	Preflight->SetArrayField(
+		TEXT("search_directories_before"),
+		StringsToJson(ExistingDirectoryStrings));
+	Preflight->SetArrayField(
+		TEXT("search_directories_after"),
+		StringsToJson(DesiredDirectoryStrings));
+	Preflight->SetBoolField(TEXT("settings_would_change"), Preview.bSettingsChanged);
+	Preflight->SetStringField(TEXT("settings_file"), Preview.SettingsFile);
+	Preflight->SetArrayField(
+		TEXT("config_files_would_change"),
+		StringsToJson(Preview.ChangedConfigFiles));
+	Preflight->SetArrayField(
+		TEXT("missing_files"),
+		StringsToJson(Preview.MissingFiles));
+	Preflight->SetArrayField(
+		TEXT("read_only_files"),
+		StringsToJson(Preview.ReadOnlyFiles));
+	Preflight->SetNumberField(TEXT("missing_file_count"), Preview.MissingFiles.Num());
+	Preflight->SetNumberField(TEXT("read_only_file_count"), Preview.ReadOnlyFiles.Num());
+	Preflight->SetBoolField(TEXT("would_change"), bWouldChange);
+	Preflight->SetStringField(
+		TEXT("source_control_policy"),
+		TEXT("require_checked_out"));
+	Preflight->SetNumberField(
+		TEXT("expected_target_changelist"),
+		TargetChangelist);
+	Preflight->SetObjectField(
+		TEXT("source_control_before"),
+		LocalizationSourceControlAuditToJson(Preview));
+	Preflight->SetBoolField(
+		TEXT("source_control_ready"),
+		Preview.bSourceControlReady);
+	Preflight->SetNumberField(
+		TEXT("source_control_blocker_count"),
+		Preview.SourceControlBlockers.Num());
+	Preflight->SetArrayField(
+		TEXT("source_control_blockers"),
+		StringsToJson(Preview.SourceControlBlockers));
+	Preflight->SetArrayField(
+		TEXT("source_control_files"),
+		LocalizationSourceControlFilesToJson(
+			Preview.SourceControlFiles));
+	Preflight->SetBoolField(
+		TEXT("ready"),
+		Preview.MissingFiles.IsEmpty() &&
+			Preview.ReadOnlyFiles.IsEmpty() &&
+			Preview.bSourceControlReady);
+	Preflight->SetBoolField(TEXT("changed"), false);
+	Preflight->SetBoolField(TEXT("targeted_gather_config_patch"), true);
+	Preflight->SetBoolField(TEXT("non_directory_config_text_preserved"), true);
+	const FString SourceControlPrepareStatus = !bWouldChange
+		? TEXT("not_required_no_change")
+		: (Preview.bSourceControlReady
+			? TEXT("validated_exact_numbered_changelist")
+			: TEXT("failed"));
+	const TSharedPtr<FJsonObject> SourceControlPrepare =
+		BuildLocalizationHandlerOwnedSourceControlPrepare(
+			Preview,
+			SourceControlPrepareStatus);
+	Preflight->SetObjectField(
+		TEXT("source_control_prepare"),
+		SourceControlPrepare);
+
+	if (Options.bDryRun)
+	{
+		Preflight->SetStringField(TEXT("status"), TEXT("planned"));
+		return FMonolithActionResult::Success(Preflight);
+	}
+
+	if (!Preview.MissingFiles.IsEmpty())
+	{
+		Preflight->SetStringField(TEXT("status"), TEXT("blocked"));
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetObjectField(TEXT("preflight"), Preflight);
+		FMonolithActionResult Result = FMonolithActionResult::Error(
+			FString::Printf(
+					TEXT("Localization target '%s' has %d missing settings/gather-config file(s); refusing to create unowned source-control files"),
+				*Target->Settings.Name,
+				Preview.MissingFiles.Num()));
+		Result.WithErrorData(ErrorData);
+		return Result;
+	}
+
+	if (!Preview.ReadOnlyFiles.IsEmpty())
+	{
+		Preflight->SetStringField(TEXT("status"), TEXT("blocked"));
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetObjectField(TEXT("preflight"), Preflight);
+		FMonolithActionResult Result = FMonolithActionResult::Error(
+			FString::Printf(
+				TEXT("Localization target '%s' has %d read-only settings/config file(s); check them out before confirm"),
+				*Target->Settings.Name,
+				Preview.ReadOnlyFiles.Num()));
+		Result.WithErrorData(ErrorData)
+			.WithRelatedAction(TEXT("source_control.get_status"));
+		return Result;
+	}
+
+	if (bWouldChange && !Preview.bSourceControlReady)
+	{
+		Preflight->SetStringField(TEXT("status"), TEXT("blocked"));
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetObjectField(TEXT("preflight"), Preflight);
+		ErrorData->SetObjectField(
+			TEXT("source_control_prepare"),
+			SourceControlPrepare);
+		FMonolithActionResult Result = FMonolithActionResult::Error(
+			FString::Printf(
+				TEXT("Localization target '%s' source-control preflight has %d blocker(s); every write file must be a current, non-conflicted existing edit owned by this client in exact numbered changelist %d"),
+				*Target->Settings.Name,
+				Preview.SourceControlBlockers.Num(),
+				TargetChangelist));
+		Result.WithErrorData(ErrorData)
+			.WithRelatedAction(TEXT("source_control.get_status"));
+		return Result;
+	}
+
+	if (!bWouldChange)
+	{
+		Preflight->SetStringField(TEXT("status"), TEXT("unchanged"));
+		return FMonolithActionResult::Success(Preflight);
+	}
+
+	{
+		FScopeLock Lock(&GLocalizationPipelineStateLock);
+		if (GLocalizationPipelineShuttingDown)
+		{
+			return FMonolithActionResult::Error(
+				TEXT("MonolithConfig is shutting down; localization target configuration is unavailable"));
+		}
+		if (!GActiveLocalizationPipelineJobId.IsEmpty())
+		{
+			TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+			ErrorData->SetStringField(TEXT("active_job_id"), GActiveLocalizationPipelineJobId);
+			ErrorData->SetStringField(TEXT("poll_action"), TEXT("monolith.get_job"));
+			FMonolithActionResult Result = FMonolithActionResult::Error(
+				TEXT("A localization target pipeline started after preflight; retry configuration after it completes"));
+			Result.WithErrorData(ErrorData).WithRelatedAction(TEXT("monolith.get_job"));
+			return Result;
+		}
+		if (GLocalizationTargetConfigurationActive)
+		{
+			return FMonolithActionResult::Error(
+				TEXT("Another localization target configuration mutation started after preflight"));
+		}
+		GLocalizationTargetConfigurationActive = true;
+	}
+	ON_SCOPE_EXIT
+	{
+		FScopeLock Lock(&GLocalizationPipelineStateLock);
+		GLocalizationTargetConfigurationActive = false;
+	};
+
+	TArray<FString> SnapshotPaths = Preview.ChangedConfigFiles;
+	if (Preview.bSettingsChanged)
+	{
+		SnapshotPaths.AddUnique(Preview.SettingsFile);
+	}
+	SnapshotPaths.Sort();
+
+	FLocalizationTargetConfigPreview FreshPreWriteSourceControl;
+	AuditLocalizationSourceControlOwnership(
+		SnapshotPaths,
+		TargetChangelist,
+		FreshPreWriteSourceControl);
+	const TSharedPtr<FJsonObject> FreshPreWriteSourceControlJson =
+		LocalizationSourceControlAuditToJson(
+			FreshPreWriteSourceControl);
+	Preflight->SetObjectField(
+		TEXT("source_control_pre_write"),
+		FreshPreWriteSourceControlJson);
+	const TSharedPtr<FJsonObject> FreshSourceControlPrepare =
+		BuildLocalizationHandlerOwnedSourceControlPrepare(
+			FreshPreWriteSourceControl,
+			FreshPreWriteSourceControl.bSourceControlReady
+				? TEXT("validated_exact_numbered_changelist")
+				: TEXT("failed"));
+	Preflight->SetObjectField(
+		TEXT("source_control_prepare"),
+		FreshSourceControlPrepare);
+	if (!FreshPreWriteSourceControl.bSourceControlReady)
+	{
+		Preflight->SetStringField(TEXT("status"), TEXT("blocked"));
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetObjectField(TEXT("preflight"), Preflight);
+		ErrorData->SetObjectField(
+			TEXT("source_control_prepare"),
+			FreshSourceControlPrepare);
+		FMonolithActionResult Result = FMonolithActionResult::Error(
+			FString::Printf(
+				TEXT("Localization target '%s' source-control ownership changed before mutation; fresh ForceUpdate reported %d blocker(s), so no snapshot or write was attempted"),
+				*Target->Settings.Name,
+				FreshPreWriteSourceControl.SourceControlBlockers.Num()));
+		Result.WithErrorData(ErrorData)
+			.WithRelatedAction(TEXT("source_control.get_status"));
+		return Result;
+	}
+
+	TArray<FLocalizationFileSnapshot> Snapshots;
+	if (!CaptureLocalizationFileSnapshots(SnapshotPaths, Snapshots, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	const TArray<FGatherTextSearchDirectory> PreviousDirectories =
+		Target->Settings.GatherFromTextFiles.SearchDirectories;
+	FString MutationError;
+	TSharedPtr<FJsonObject> SourceControlAfter;
+	if (Preview.bSettingsChanged)
+	{
+		Target->Modify();
+		Target->Settings.GatherFromTextFiles.SearchDirectories = DesiredDirectories;
+		Target->PostEditChange();
+		if (!VerifyPersistedLocalizationTargetDirectories(
+				Preview.SettingsFile,
+				Target->Settings.Name,
+				DesiredDirectories,
+				MutationError))
+		{
+			// Failure is handled by the common rollback below.
+		}
+	}
+
+	if (MutationError.IsEmpty() &&
+		!WriteLocalizationTargetConfigs(Preview, MutationError))
+	{
+		// Failure is handled by the common rollback below.
+	}
+	if (MutationError.IsEmpty() &&
+		!VerifyLocalizationTargetConfigContents(Preview, MutationError))
+	{
+		// Failure is handled by the common rollback below.
+	}
+	if (MutationError.IsEmpty())
+	{
+		FLocalizationTargetConfigPreview PostMutationSourceControl;
+		AuditLocalizationSourceControlOwnership(
+			SnapshotPaths,
+			TargetChangelist,
+			PostMutationSourceControl);
+		SourceControlAfter =
+			LocalizationSourceControlAuditToJson(
+				PostMutationSourceControl);
+		if (!PostMutationSourceControl.bSourceControlReady)
+		{
+			MutationError = FString::Printf(
+				TEXT("Source-control ownership changed during mutation; %d blocker(s) were reported after ForceUpdate"),
+				PostMutationSourceControl.SourceControlBlockers.Num());
+		}
+	}
+
+	if (!MutationError.IsEmpty())
+	{
+		if (Preview.bSettingsChanged)
+		{
+			Target->Settings.GatherFromTextFiles.SearchDirectories = PreviousDirectories;
+			Target->PostEditChange();
+		}
+
+		FString RollbackError;
+		const bool bRollbackSucceeded =
+			RestoreLocalizationFileSnapshots(Snapshots, RollbackError);
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetObjectField(TEXT("preflight"), Preflight);
+		ErrorData->SetStringField(TEXT("mutation_error"), MutationError);
+		ErrorData->SetBoolField(TEXT("rollback_succeeded"), bRollbackSucceeded);
+		if (SourceControlAfter.IsValid())
+		{
+			ErrorData->SetObjectField(
+				TEXT("source_control_after"),
+				SourceControlAfter);
+		}
+		if (!RollbackError.IsEmpty())
+		{
+			ErrorData->SetStringField(TEXT("rollback_error"), RollbackError);
+		}
+
+		FMonolithActionResult Result = FMonolithActionResult::Error(
+			bRollbackSucceeded
+				? TEXT("Localization target configuration failed; model and files were rolled back")
+				: TEXT("Localization target configuration failed and rollback was incomplete"));
+		Result.WithErrorData(ErrorData);
+		return Result;
+	}
+
+	Preflight->SetStringField(TEXT("status"), TEXT("completed"));
+	Preflight->SetBoolField(TEXT("changed"), true);
+	Preflight->SetBoolField(TEXT("settings_changed"), Preview.bSettingsChanged);
+	Preflight->SetArrayField(
+		TEXT("config_files_changed"),
+		StringsToJson(Preview.ChangedConfigFiles));
+	Preflight->SetBoolField(TEXT("settings_readback_verified"), true);
+	Preflight->SetBoolField(TEXT("config_readback_verified"), true);
+	Preflight->SetBoolField(TEXT("source_control_readback_verified"), true);
+	Preflight->SetObjectField(
+		TEXT("source_control_after"),
+		SourceControlAfter);
+	return FMonolithActionResult::Success(Preflight);
+}
+
+FMonolithActionResult FMonolithLocalizationActions::RunTargetPipeline(const TSharedPtr<FJsonObject>& Params)
+{
+	FLocalizationMutationOptions Options;
+	FString Error;
+	if (!ReadMutationOptions(Params, Options, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+	{
+		FScopeLock Lock(&GLocalizationPipelineStateLock);
+		if (GLocalizationPipelineShuttingDown)
+		{
+			return FMonolithActionResult::Error(
+				TEXT("MonolithConfig is shutting down; localization pipeline launch is unavailable"));
+		}
+	}
+
+	FLocalizationPipelinePlan Plan;
+	if (!BuildLocalizationPipelinePlan(Params, Plan, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	TSharedPtr<FJsonObject> Preflight = MakeShared<FJsonObject>();
+	Preflight->SetStringField(TEXT("action"), TEXT("localization.run_target_pipeline"));
+	Preflight->SetStringField(TEXT("status"), TEXT("planned"));
+	Preflight->SetStringField(TEXT("target"), Plan.TargetName);
+	Preflight->SetArrayField(TEXT("operations"), StringsToJson(Plan.Operations));
+	Preflight->SetArrayField(TEXT("config_paths"), StringsToJson(Plan.ConfigPaths));
+	Preflight->SetStringField(TEXT("content_directory"), Plan.ContentDirectory);
+	Preflight->SetStringField(TEXT("commandlet_executable"), Plan.CommandletExecutable);
+	Preflight->SetStringField(TEXT("log_root"), Plan.LogDirectory);
+	Preflight->SetNumberField(TEXT("timeout_seconds"), Plan.TimeoutSeconds);
+	Preflight->SetArrayField(TEXT("existing_output_files"), StringsToJson(Plan.ExistingOutputFiles));
+	Preflight->SetArrayField(TEXT("read_only_output_files"), StringsToJson(Plan.ReadOnlyOutputFiles));
+	Preflight->SetNumberField(TEXT("existing_output_count"), Plan.ExistingOutputFiles.Num());
+	Preflight->SetNumberField(TEXT("read_only_output_count"), Plan.ReadOnlyOutputFiles.Num());
+	Preflight->SetBoolField(TEXT("ready"), Plan.ReadOnlyOutputFiles.IsEmpty());
+	Preflight->SetBoolField(TEXT("dry_run"), Options.bDryRun);
+	Preflight->SetBoolField(TEXT("changed"), false);
+	Preflight->SetBoolField(TEXT("source_control_enabled_for_child"), false);
+
+	if (Options.bDryRun)
+	{
+		return FMonolithActionResult::Success(Preflight);
+	}
+
+	if (!Plan.ReadOnlyOutputFiles.IsEmpty())
+	{
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("target"), Plan.TargetName);
+		ErrorData->SetArrayField(TEXT("read_only_output_files"), StringsToJson(Plan.ReadOnlyOutputFiles));
+		ErrorData->SetNumberField(TEXT("read_only_output_count"), Plan.ReadOnlyOutputFiles.Num());
+		ErrorData->SetStringField(
+			TEXT("required_action"),
+			TEXT("Check out the listed generated files in the intended changelist, then rerun with confirm=true."));
+
+		FMonolithActionResult Result = FMonolithActionResult::Error(
+			FString::Printf(
+				TEXT("Localization target '%s' has %d read-only generated output file(s); refusing to launch a child commandlet"),
+				*Plan.TargetName,
+				Plan.ReadOnlyOutputFiles.Num()));
+		Result.WithErrorData(ErrorData).WithRelatedAction(TEXT("source_control.checkout"));
+		return Result;
+	}
+
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	if (!Settings || !Settings->bEnableAsyncJobs)
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Localization target pipeline requires Monolith async jobs; enable bEnableAsyncJobs and retry"));
+	}
+
+	FString JobId;
+	{
+		FScopeLock Lock(&GLocalizationPipelineStateLock);
+		if (GLocalizationPipelineShuttingDown)
+		{
+			return FMonolithActionResult::Error(
+				TEXT("MonolithConfig is shutting down; localization pipeline launch is unavailable"));
+		}
+		if (!GActiveLocalizationPipelineJobId.IsEmpty())
+		{
+			TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+			ErrorData->SetStringField(TEXT("active_job_id"), GActiveLocalizationPipelineJobId);
+			ErrorData->SetStringField(TEXT("poll_action"), TEXT("monolith.get_job"));
+			FMonolithActionResult Result = FMonolithActionResult::Error(
+				TEXT("Another localization target pipeline is already active"));
+			Result.WithErrorData(ErrorData).WithRelatedAction(TEXT("monolith.get_job"));
+			return Result;
+		}
+		if (GLocalizationTargetConfigurationActive)
+		{
+			return FMonolithActionResult::Error(
+				TEXT("A localization target configuration mutation is active; retry the pipeline after it completes"));
+		}
+
+		FMonolithAsyncJobRegistry& JobRegistry = FMonolithAsyncJobRegistry::Get();
+		JobId = JobRegistry.SubmitJob(
+			TEXT("localization"),
+			TEXT("run_target_pipeline"),
+			/*bCancellable=*/true,
+			/*bSupportsProgress=*/true,
+			TEXT("monolith.get_job"),
+			TEXT("monolith.cancel_job"));
+		JobRegistry.UpdateProgress(
+			JobId,
+			0.0,
+			TEXT("queued"),
+			TEXT("Localization target pipeline queued on the worker thread."));
+		GActiveLocalizationPipelineJobId = JobId;
+		GLocalizationPipelineFuture = Async(
+			EAsyncExecution::ThreadPool,
+			[Plan = MoveTemp(Plan), JobId]() mutable
+			{
+				ExecuteLocalizationPipelineAsync(MoveTemp(Plan), JobId);
+			});
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("action"), TEXT("localization.run_target_pipeline"));
+	Result->SetStringField(TEXT("status"), TEXT("started"));
+	Result->SetStringField(TEXT("target"), Preflight->GetStringField(TEXT("target")));
+	Result->SetArrayField(TEXT("operations"), Preflight->GetArrayField(TEXT("operations")));
+	Result->SetStringField(TEXT("job_id"), JobId);
+	Result->SetStringField(TEXT("poll_action"), TEXT("monolith.get_job"));
+	Result->SetStringField(TEXT("cancel_action"), TEXT("monolith.cancel_job"));
+	Result->SetBoolField(TEXT("supports_progress"), true);
+	Result->SetBoolField(TEXT("cancellable"), true);
+	Result->SetBoolField(TEXT("source_control_enabled_for_child"), false);
+	Result->SetStringField(TEXT("log_directory"), FPaths::Combine(Preflight->GetStringField(TEXT("log_root")), JobId));
+	Result->SetBoolField(TEXT("changed"), false);
+	return FMonolithActionResult::Success(Result);
 }
 
 FMonolithActionResult FMonolithLocalizationActions::ListCultures(const TSharedPtr<FJsonObject>& Params)

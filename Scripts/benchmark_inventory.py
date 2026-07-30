@@ -51,6 +51,20 @@ OUTPUT_PATH = BENCHMARK_ROOT / "INVENTORY.md"
 ACCEPTED_BUNDLE_FILENAME = "bundle_manifest.json"
 ACCEPTED_BUNDLE_SCHEMA_VERSION = 2
 PORTABLE_DATABASE_POLICY = "attest_when_absent_verify_when_present"
+QUERY_BUNDLE_MANIFEST_RELATIVE = "Binaries/monolith_query.current.json"
+QUERY_BUNDLE_MANIFEST_FIELDS = {
+    "schema_version",
+    "tool",
+    "runtime",
+    "file",
+    "plugin_version",
+    "parity_spec_rev",
+    "source_hash",
+    "sha256",
+    "catalog_file",
+    "catalog_source_hash",
+    "catalog_sha256",
+}
 
 
 @dataclass(frozen=True)
@@ -122,8 +136,8 @@ SUITE_INPUT_PATHS: Dict[str, Dict[str, str]] = {
         "tasks": "Benchmarks/OfflineParity/actions.jsonl",
         "manifest": "Benchmarks/OfflineParity/manifest.json",
         "runner": "Scripts/offline_parity_benchmark.py",
-        "offline_exe": "Binaries/monolith_query.exe",
         "offline_python": "Scripts/monolith_offline.py",
+        "query_manifest": QUERY_BUNDLE_MANIFEST_RELATIVE,
     },
     "ActionGuidance": {
         "tasks": "Benchmarks/ActionGuidance/tasks.jsonl",
@@ -291,6 +305,46 @@ def load_json(path: pathlib.Path) -> Dict[str, Any]:
     return payload
 
 
+def expected_suite_input_paths(suite_key: str) -> Dict[str, str]:
+    """Resolve accepted input paths, including the manifest-selected Query image."""
+    expected = dict(SUITE_INPUT_PATHS[suite_key])
+    if suite_key != "OfflineParity":
+        return expected
+
+    manifest_path = MONOLITH_ROOT / QUERY_BUNDLE_MANIFEST_RELATIVE
+    manifest = load_json(manifest_path)
+    if set(manifest) != QUERY_BUNDLE_MANIFEST_FIELDS:
+        raise InventoryError(
+            "current Query manifest fields are invalid for OfflineParity"
+        )
+    if (
+        type(manifest.get("schema_version")) is not int
+        or manifest.get("schema_version") != 1
+        or manifest.get("tool") != "monolith_query"
+        or manifest.get("runtime") != "native-cpp"
+    ):
+        raise InventoryError(
+            "current Query manifest identity is invalid for OfflineParity"
+        )
+    source_hash = manifest.get("source_hash")
+    filename = manifest.get("file")
+    if (
+        not isinstance(source_hash, str)
+        or len(source_hash) != 16
+        or any(character not in "0123456789abcdef" for character in source_hash)
+        or not isinstance(filename, str)
+        or filename != f"monolith_query-{source_hash}.exe"
+        or pathlib.PurePath(filename).name != filename
+        or "/" in filename
+        or "\\" in filename
+    ):
+        raise InventoryError(
+            "current Query manifest executable identity is invalid for OfflineParity"
+        )
+    expected["offline_exe"] = f"Binaries/{filename}"
+    return expected
+
+
 def current_catalog_identity() -> Dict[str, Any]:
     """Return the checked-in catalog-contract snapshot used by accepted suites."""
     manifest = load_json(BENCHMARK_ROOT / "ActionGuidance/manifest.json")
@@ -328,12 +382,12 @@ def load_jsonl(path: pathlib.Path) -> List[Dict[str, Any]]:
     return rows
 
 
-_FILE_HASH_CACHE: Dict[tuple[str, int, int], str] = {}
+_FILE_HASH_CACHE: Dict[tuple[str, int, int, str], str] = {}
 
 
 def file_sha256(path: pathlib.Path) -> str:
     stat = path.stat()
-    cache_key = (str(path.resolve()), stat.st_size, stat.st_mtime_ns)
+    cache_key = (str(path.resolve()), stat.st_size, stat.st_mtime_ns, "raw")
     cached = _FILE_HASH_CACHE.get(cache_key)
     if cached is not None:
         return cached
@@ -342,6 +396,26 @@ def file_sha256(path: pathlib.Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     result = digest.hexdigest()
+    _FILE_HASH_CACHE[cache_key] = result
+    return result
+
+
+def tracked_text_sha256(path: pathlib.Path) -> str:
+    """Hash tracked text evidence without platform newline drift.
+
+    Perforce and Git may materialize the same source-controlled text as LF or
+    CRLF depending on the client platform. Accepted benchmark bundles are
+    portable evidence, so their JSON/JSONL content is hashed after normalizing
+    CRLF and lone CR bytes to LF. Binary inputs, especially databases and
+    executables, continue to use ``file_sha256`` and remain byte-exact.
+    """
+    stat = path.stat()
+    cache_key = (str(path.resolve()), stat.st_size, stat.st_mtime_ns, "text-lf")
+    cached = _FILE_HASH_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    content = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    result = hashlib.sha256(content).hexdigest()
     _FILE_HASH_CACHE[cache_key] = result
     return result
 
@@ -450,7 +524,7 @@ def load_accepted_bundle(
         suite_status.get("evidence_bundle_sha256"),
         f"accepted {suite_key} evidence_bundle_sha256",
     )
-    observed_manifest_sha = file_sha256(manifest_path)
+    observed_manifest_sha = tracked_text_sha256(manifest_path)
     if observed_manifest_sha != pinned_manifest_sha:
         raise InventoryError(
             f"accepted {suite_key} bundle manifest drifted: "
@@ -492,7 +566,7 @@ def load_accepted_bundle(
         manifest.get("summary_sha256"),
         f"accepted {suite_key} bundle summary_sha256",
     )
-    if file_sha256(summary_path) != summary_sha:
+    if tracked_text_sha256(summary_path) != summary_sha:
         raise InventoryError(f"accepted {suite_key} bundle summary content drifted")
 
     artifact_files = manifest.get("artifact_files")
@@ -523,7 +597,7 @@ def load_accepted_bundle(
             metadata.get("sha256"),
             f"accepted {suite_key} bundle artifact SHA-256 for {artifact_name}",
         )
-        if file_sha256(artifact_path) != expected_artifact_sha:
+        if tracked_text_sha256(artifact_path) != expected_artifact_sha:
             raise InventoryError(
                 f"accepted {suite_key} bundle artifact content drifted: {artifact_name}"
             )
@@ -631,7 +705,7 @@ def validate_input_evidence(
     files = inputs.get("files")
     if not isinstance(files, dict):
         raise InventoryError(f"accepted {suite_key} benchmark input files are invalid")
-    expected_paths = SUITE_INPUT_PATHS[suite_key]
+    expected_paths = expected_suite_input_paths(suite_key)
     if set(files) != set(expected_paths):
         raise InventoryError(
             f"accepted {suite_key} input files differ from the suite contract: "

@@ -1344,6 +1344,170 @@ namespace MonolithGameFeatures
 		return true;
 	}
 
+	static FMonolithActionResult AddComponentsToActionOwner(
+		const TSharedPtr<FJsonObject>& Params,
+		const TCHAR* OwnerPathParam,
+		const TCHAR* OwnerPathResult,
+		bool bRequireGameFeatureData)
+	{
+		FString OwnerPath;
+		FString ActorClassPath;
+		FString ComponentClassPath;
+		FString Error;
+		if (!TryGetRequiredStringParam(Params, OwnerPathParam, OwnerPath, Error)
+			|| !TryGetRequiredStringParam(Params, TEXT("actor_class"), ActorClassPath, Error)
+			|| !TryGetRequiredStringParam(Params, TEXT("component_class"), ComponentClassPath, Error))
+		{
+			return FMonolithActionResult::Error(Error, -32602);
+		}
+
+		FString ActionClassPath = TEXT("/Script/GameFeatures.GameFeatureAction_AddComponents");
+		FString ActionName;
+		bool bClientComponent = true;
+		bool bServerComponent = true;
+		bool bSave = true;
+		bool bDryRun = false;
+		bool bRemoveNullActions = true;
+		int32 AdditionFlags = 0;
+		if (Params.IsValid())
+		{
+			Params->TryGetStringField(TEXT("action_class_path"), ActionClassPath);
+			Params->TryGetStringField(TEXT("action_name"), ActionName);
+			ActionClassPath.TrimStartAndEndInline();
+			ActionName.TrimStartAndEndInline();
+		}
+		if (!TryReadOptionalBoolParam(Params, TEXT("client_component"), bClientComponent, Error)
+			|| !TryReadOptionalBoolParam(Params, TEXT("server_component"), bServerComponent, Error)
+			|| !TryReadOptionalBoolParam(Params, TEXT("save"), bSave, Error)
+			|| !TryReadOptionalBoolParam(Params, TEXT("dry_run"), bDryRun, Error)
+			|| !TryReadOptionalBoolParam(Params, TEXT("remove_null_actions"), bRemoveNullActions, Error)
+			|| !TryReadOptionalIntParam(Params, TEXT("addition_flags"), AdditionFlags, Error))
+		{
+			return FMonolithActionResult::Error(Error, -32602);
+		}
+		if (AdditionFlags < 0 || AdditionFlags > 255)
+		{
+			return FMonolithActionResult::Error(TEXT("Param 'addition_flags' must be between 0 and 255"), -32602);
+		}
+		if (!bClientComponent && !bServerComponent)
+		{
+			return FMonolithActionResult::Error(TEXT("At least one of client_component or server_component must be true"), -32602);
+		}
+
+		UObject* ActionOwner = bRequireGameFeatureData
+			? static_cast<UObject*>(LoadGameFeatureDataAsset(OwnerPath, Error))
+			: LoadAssetObject(OwnerPath, Error);
+		if (!ActionOwner)
+		{
+			return FMonolithActionResult::Error(Error, -32602);
+		}
+
+		UClass* ActionClass = LoadActionClass(ActionClassPath, Error);
+		if (!ActionClass)
+		{
+			return FMonolithActionResult::Error(Error, -32602);
+		}
+		if (!FindFProperty<FArrayProperty>(ActionClass, TEXT("ComponentList")))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("Action class '%s' does not expose a ComponentList array"), *ActionClass->GetPathName()),
+				-32602);
+		}
+
+		UObject* ActionObject = nullptr;
+		bool bCreatedAction = false;
+		int32 ActionIndex = INDEX_NONE;
+		int32 RemovedNullActionCount = 0;
+		int32 ActionCountBefore = 0;
+		int32 ActionCountAfter = 0;
+		if (!EnsureInstancedActionObject(
+			ActionOwner,
+			ActionClass,
+			ActionName,
+			bRemoveNullActions,
+			bDryRun,
+			ActionObject,
+			bCreatedAction,
+			ActionIndex,
+			RemovedNullActionCount,
+			ActionCountBefore,
+			ActionCountAfter,
+			Error))
+		{
+			return FMonolithActionResult::Error(Error, -32602);
+		}
+
+		UObject* ComponentsActionObject = ActionObject;
+		const bool bUseTransientAction = !ComponentsActionObject;
+		if (!ComponentsActionObject)
+		{
+			ComponentsActionObject = NewObject<UObject>(GetTransientPackage(), ActionClass, NAME_None, RF_Transient);
+			if (!ComponentsActionObject)
+			{
+				return FMonolithActionResult::Error(TEXT("Failed to create transient GameFeatureAction object for dry-run validation"), -32603);
+			}
+		}
+
+		bool bAddedComponent = false;
+		bool bUpdatedComponent = false;
+		int32 ComponentCountBefore = 0;
+		int32 ComponentCountAfter = 0;
+		if (!EnsureComponentListEntry(
+			ComponentsActionObject,
+			ActorClassPath,
+			ComponentClassPath,
+			bClientComponent,
+			bServerComponent,
+			AdditionFlags,
+			bDryRun && !bUseTransientAction,
+			bAddedComponent,
+			bUpdatedComponent,
+			ComponentCountBefore,
+			ComponentCountAfter,
+			Error))
+		{
+			return FMonolithActionResult::Error(Error, -32602);
+		}
+
+		bool bSaved = false;
+		const bool bChanged = bCreatedAction || RemovedNullActionCount > 0 || bAddedComponent || bUpdatedComponent;
+		if (bChanged && !bDryRun)
+		{
+			if (!SaveAssetIfRequested(ActionOwner, bSave, bSaved, Error))
+			{
+				return FMonolithActionResult::Error(Error, -32603);
+			}
+		}
+
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetBoolField(TEXT("dry_run"), bDryRun);
+		Result->SetStringField(OwnerPathResult, ActionOwner->GetPathName());
+		Result->SetStringField(TEXT("action_owner_class"), ActionOwner->GetClass()->GetPathName());
+		Result->SetStringField(TEXT("action_class_path"), ActionClass->GetPathName());
+		Result->SetStringField(TEXT("actor_class"), NormalizeSoftClassPath(ActorClassPath));
+		Result->SetStringField(TEXT("component_class"), NormalizeSoftClassPath(ComponentClassPath));
+		Result->SetBoolField(TEXT("client_component"), bClientComponent);
+		Result->SetBoolField(TEXT("server_component"), bServerComponent);
+		Result->SetNumberField(TEXT("addition_flags"), AdditionFlags);
+		Result->SetBoolField(TEXT("created_action"), bCreatedAction);
+		Result->SetBoolField(TEXT("added_component"), bAddedComponent);
+		Result->SetBoolField(TEXT("updated_component"), bUpdatedComponent);
+		Result->SetNumberField(TEXT("removed_null_actions"), RemovedNullActionCount);
+		Result->SetNumberField(TEXT("actions_before"), ActionCountBefore);
+		Result->SetNumberField(TEXT("actions_after"), ActionCountAfter);
+		Result->SetNumberField(TEXT("action_index"), ActionIndex);
+		Result->SetNumberField(TEXT("components_before"), ComponentCountBefore);
+		Result->SetNumberField(TEXT("components_after"), ComponentCountAfter);
+		Result->SetBoolField(TEXT("saved"), bSaved);
+		Result->SetBoolField(TEXT("changed"), bChanged);
+		if (ActionObject)
+		{
+			Result->SetStringField(TEXT("action_object_path"), ActionObject->GetPathName());
+			Result->SetStringField(TEXT("action_object_name"), ActionObject->GetName());
+		}
+		return FMonolithActionResult::Success(Result);
+	}
+
 	static bool EnsureDirectoryPathArrayValues(
 		UObject* ActionObject,
 		const FString& ArrayPropertyName,
@@ -2290,6 +2454,7 @@ namespace MonolithGameFeatures
 		const TArray<FString> AlwaysActions = {
 			TEXT("get_status"),
 			TEXT("add_action_set_input_mapping"),
+			TEXT("add_action_set_components"),
 			TEXT("set_primary_asset_scan"),
 			TEXT("add_game_feature_data_input_mapping"),
 			TEXT("add_game_feature_data_widgets"),
@@ -2308,6 +2473,7 @@ namespace MonolithGameFeatures
 		};
 		const TArray<FString> WriteActions = {
 			TEXT("add_action_set_input_mapping"),
+			TEXT("add_action_set_components"),
 			TEXT("set_primary_asset_scan"),
 			TEXT("add_game_feature_data_input_mapping"),
 			TEXT("add_game_feature_data_widgets"),
@@ -2398,6 +2564,49 @@ void FMonolithGameFeatureActions::Register(FMonolithToolRegistry& Registry, bool
 		MonolithGameFeatures::MakeInstancedActionWritePolicy(),
 		InputMappingSearch,
 		InputMappingPlanning);
+
+	FMonolithActionSearchMetadata ActionSetComponentsSearch;
+	ActionSetComponentsSearch.Keywords = {
+		TEXT("GameFeatureAction_AddComponents"),
+		TEXT("ActionSet"),
+		TEXT("LyraExperienceActionSet"),
+		TEXT("ComponentList"),
+		TEXT("ModularGameplay"),
+		TEXT("ActorComponent")
+	};
+	ActionSetComponentsSearch.Aliases = {
+		TEXT("add components action to ActionSet"),
+		TEXT("register ActionSet component request"),
+		TEXT("set ActionSet AddComponents")
+	};
+	ActionSetComponentsSearch.Examples = {
+		TEXT("add a server-only bot creation component request to an ActionSet"),
+		TEXT("add GameFeatureAction_AddComponents entry to a LyraExperienceActionSet idempotently")
+	};
+
+	FMonolithActionPlanningMetadata ActionSetComponentsPlanning;
+	ActionSetComponentsPlanning.Skill = TEXT("unreal-gamefeatures");
+	ActionSetComponentsPlanning.Preconditions = {
+		TEXT("action_set_path must load an asset exposing an instanced Actions object array."),
+		TEXT("actor_class must resolve to an AActor class."),
+		TEXT("component_class must resolve to a UActorComponent class.")
+	};
+	ActionSetComponentsPlanning.Outputs = {
+		TEXT("Reports created action state plus added/updated ComponentList entry state.")
+	};
+	ActionSetComponentsPlanning.NextActions = {
+		TEXT("gamefeatures.describe_action_set"),
+		TEXT("project.export_asset_text")
+	};
+
+	Registry.RegisterAction(TEXT("gamefeatures"), TEXT("add_action_set_components"),
+		TEXT("Add or update a GameFeatureAction_AddComponents instanced action on an ActionSet asset with one actor/component request entry."),
+		FMonolithActionHandler::CreateStatic(&FMonolithGameFeatureActions::AddActionSetComponents),
+		AddActionSetComponentsSchema(),
+		TEXT("Action Authoring"),
+		MonolithGameFeatures::MakeInstancedActionWritePolicy(),
+		ActionSetComponentsSearch,
+		ActionSetComponentsPlanning);
 
 	FMonolithActionSearchMetadata PrimaryAssetScanSearch;
 	PrimaryAssetScanSearch.Keywords = {
@@ -3221,6 +3430,15 @@ FMonolithActionResult FMonolithGameFeatureActions::AddActionSetInputMapping(cons
 	return FMonolithActionResult::Success(Result);
 }
 
+FMonolithActionResult FMonolithGameFeatureActions::AddActionSetComponents(const TSharedPtr<FJsonObject>& Params)
+{
+	return MonolithGameFeatures::AddComponentsToActionOwner(
+		Params,
+		TEXT("action_set_path"),
+		TEXT("action_set_path"),
+		false);
+}
+
 FMonolithActionResult FMonolithGameFeatureActions::SetPrimaryAssetScan(const TSharedPtr<FJsonObject>& Params)
 {
 	FString GameFeatureDataPath;
@@ -3778,159 +3996,11 @@ FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataWidgets(con
 
 FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataComponents(const TSharedPtr<FJsonObject>& Params)
 {
-	FString GameFeatureDataPath;
-	FString ActorClassPath;
-	FString ComponentClassPath;
-	FString Error;
-	if (!MonolithGameFeatures::TryGetRequiredStringParam(Params, TEXT("game_feature_data_path"), GameFeatureDataPath, Error)
-		|| !MonolithGameFeatures::TryGetRequiredStringParam(Params, TEXT("actor_class"), ActorClassPath, Error)
-		|| !MonolithGameFeatures::TryGetRequiredStringParam(Params, TEXT("component_class"), ComponentClassPath, Error))
-	{
-		return FMonolithActionResult::Error(Error, -32602);
-	}
-
-	FString ActionClassPath = TEXT("/Script/GameFeatures.GameFeatureAction_AddComponents");
-	FString ActionName;
-	bool bClientComponent = true;
-	bool bServerComponent = true;
-	bool bSave = true;
-	bool bDryRun = false;
-	bool bRemoveNullActions = true;
-	int32 AdditionFlags = 0;
-	if (Params.IsValid())
-	{
-		Params->TryGetStringField(TEXT("action_class_path"), ActionClassPath);
-		Params->TryGetStringField(TEXT("action_name"), ActionName);
-		ActionClassPath.TrimStartAndEndInline();
-		ActionName.TrimStartAndEndInline();
-	}
-	if (!MonolithGameFeatures::TryReadOptionalBoolParam(Params, TEXT("client_component"), bClientComponent, Error)
-		|| !MonolithGameFeatures::TryReadOptionalBoolParam(Params, TEXT("server_component"), bServerComponent, Error)
-		|| !MonolithGameFeatures::TryReadOptionalBoolParam(Params, TEXT("save"), bSave, Error)
-		|| !MonolithGameFeatures::TryReadOptionalBoolParam(Params, TEXT("dry_run"), bDryRun, Error)
-		|| !MonolithGameFeatures::TryReadOptionalBoolParam(Params, TEXT("remove_null_actions"), bRemoveNullActions, Error)
-		|| !MonolithGameFeatures::TryReadOptionalIntParam(Params, TEXT("addition_flags"), AdditionFlags, Error))
-	{
-		return FMonolithActionResult::Error(Error, -32602);
-	}
-	if (AdditionFlags < 0 || AdditionFlags > 255)
-	{
-		return FMonolithActionResult::Error(TEXT("Param 'addition_flags' must be between 0 and 255"), -32602);
-	}
-	if (!bClientComponent && !bServerComponent)
-	{
-		return FMonolithActionResult::Error(TEXT("At least one of client_component or server_component must be true"), -32602);
-	}
-
-	UGameFeatureData* GameFeatureData = MonolithGameFeatures::LoadGameFeatureDataAsset(GameFeatureDataPath, Error);
-	if (!GameFeatureData)
-	{
-		return FMonolithActionResult::Error(Error, -32602);
-	}
-
-	UClass* ActionClass = MonolithGameFeatures::LoadActionClass(ActionClassPath, Error);
-	if (!ActionClass)
-	{
-		return FMonolithActionResult::Error(Error, -32602);
-	}
-	if (!FindFProperty<FArrayProperty>(ActionClass, TEXT("ComponentList")))
-	{
-		return FMonolithActionResult::Error(
-			FString::Printf(TEXT("Action class '%s' does not expose a ComponentList array"), *ActionClass->GetPathName()),
-			-32602);
-	}
-
-	UObject* ActionObject = nullptr;
-	bool bCreatedAction = false;
-	int32 ActionIndex = INDEX_NONE;
-	int32 RemovedNullActionCount = 0;
-	int32 ActionCountBefore = 0;
-	int32 ActionCountAfter = 0;
-	if (!MonolithGameFeatures::EnsureInstancedActionObject(
-		GameFeatureData,
-		ActionClass,
-		ActionName,
-		bRemoveNullActions,
-		bDryRun,
-		ActionObject,
-		bCreatedAction,
-		ActionIndex,
-		RemovedNullActionCount,
-		ActionCountBefore,
-		ActionCountAfter,
-		Error))
-	{
-		return FMonolithActionResult::Error(Error, -32602);
-	}
-
-	UObject* ComponentsActionObject = ActionObject;
-	const bool bUseTransientAction = !ComponentsActionObject;
-	if (!ComponentsActionObject)
-	{
-		ComponentsActionObject = NewObject<UObject>(GetTransientPackage(), ActionClass, NAME_None, RF_Transient);
-		if (!ComponentsActionObject)
-		{
-			return FMonolithActionResult::Error(TEXT("Failed to create transient GameFeatureAction object for dry-run validation"), -32603);
-		}
-	}
-
-	bool bAddedComponent = false;
-	bool bUpdatedComponent = false;
-	int32 ComponentCountBefore = 0;
-	int32 ComponentCountAfter = 0;
-	if (!MonolithGameFeatures::EnsureComponentListEntry(
-		ComponentsActionObject,
-		ActorClassPath,
-		ComponentClassPath,
-		bClientComponent,
-		bServerComponent,
-		AdditionFlags,
-		bDryRun && !bUseTransientAction,
-		bAddedComponent,
-		bUpdatedComponent,
-		ComponentCountBefore,
-		ComponentCountAfter,
-		Error))
-	{
-		return FMonolithActionResult::Error(Error, -32602);
-	}
-
-	bool bSaved = false;
-	const bool bChanged = bCreatedAction || RemovedNullActionCount > 0 || bAddedComponent || bUpdatedComponent;
-	if (bChanged && !bDryRun)
-	{
-		if (!MonolithGameFeatures::SaveAssetIfRequested(GameFeatureData, bSave, bSaved, Error))
-		{
-			return FMonolithActionResult::Error(Error, -32603);
-		}
-	}
-
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetBoolField(TEXT("dry_run"), bDryRun);
-	Result->SetStringField(TEXT("game_feature_data_path"), GameFeatureData->GetPathName());
-	Result->SetStringField(TEXT("action_class_path"), ActionClass->GetPathName());
-	Result->SetStringField(TEXT("actor_class"), MonolithGameFeatures::NormalizeSoftClassPath(ActorClassPath));
-	Result->SetStringField(TEXT("component_class"), MonolithGameFeatures::NormalizeSoftClassPath(ComponentClassPath));
-	Result->SetBoolField(TEXT("client_component"), bClientComponent);
-	Result->SetBoolField(TEXT("server_component"), bServerComponent);
-	Result->SetNumberField(TEXT("addition_flags"), AdditionFlags);
-	Result->SetBoolField(TEXT("created_action"), bCreatedAction);
-	Result->SetBoolField(TEXT("added_component"), bAddedComponent);
-	Result->SetBoolField(TEXT("updated_component"), bUpdatedComponent);
-	Result->SetNumberField(TEXT("removed_null_actions"), RemovedNullActionCount);
-	Result->SetNumberField(TEXT("actions_before"), ActionCountBefore);
-	Result->SetNumberField(TEXT("actions_after"), ActionCountAfter);
-	Result->SetNumberField(TEXT("action_index"), ActionIndex);
-	Result->SetNumberField(TEXT("components_before"), ComponentCountBefore);
-	Result->SetNumberField(TEXT("components_after"), ComponentCountAfter);
-	Result->SetBoolField(TEXT("saved"), bSaved);
-	Result->SetBoolField(TEXT("changed"), bChanged);
-	if (ActionObject)
-	{
-		Result->SetStringField(TEXT("action_object_path"), ActionObject->GetPathName());
-		Result->SetStringField(TEXT("action_object_name"), ActionObject->GetName());
-	}
-	return FMonolithActionResult::Success(Result);
+	return MonolithGameFeatures::AddComponentsToActionOwner(
+		Params,
+		TEXT("game_feature_data_path"),
+		TEXT("game_feature_data_path"),
+		true);
 }
 
 FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataGameplayCuePaths(const TSharedPtr<FJsonObject>& Params)
@@ -4562,6 +4632,24 @@ TSharedPtr<FJsonObject> FMonolithGameFeatureActions::AddActionSetInputMappingSch
 		.Build();
 }
 
+TSharedPtr<FJsonObject> FMonolithGameFeatureActions::AddActionSetComponentsSchema()
+{
+	return FParamSchemaBuilder()
+		.EnableValidation()
+		.Required(TEXT("action_set_path"), TEXT("string"), TEXT("ActionSet asset path whose instanced Actions array should contain the AddComponents action"))
+		.Required(TEXT("actor_class"), TEXT("string"), TEXT("Actor class to receive the component request"))
+		.Required(TEXT("component_class"), TEXT("string"), TEXT("ActorComponent class to add through ModularGameplay"))
+		.Optional(TEXT("action_class_path"), TEXT("string"), TEXT("GameFeatureAction class path. Defaults to /Script/GameFeatures.GameFeatureAction_AddComponents"), TEXT("/Script/GameFeatures.GameFeatureAction_AddComponents"))
+		.Optional(TEXT("action_name"), TEXT("string"), TEXT("Optional exact instanced action object name to reuse or create"))
+		.Optional(TEXT("client_component"), TEXT("bool"), TEXT("Whether to request the component on clients"), TEXT("true"))
+		.Optional(TEXT("server_component"), TEXT("bool"), TEXT("Whether to request the component on servers"), TEXT("true"))
+		.Optional(TEXT("addition_flags"), TEXT("integer"), TEXT("Bitmask for EGameFrameworkAddComponentFlags"), TEXT("0"))
+		.Optional(TEXT("remove_null_actions"), TEXT("bool"), TEXT("Remove null entries from the Actions array while editing"), TEXT("true"))
+		.Optional(TEXT("save"), TEXT("bool"), TEXT("Save the ActionSet package after changes"), TEXT("true"))
+		.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Preview the edit without modifying the asset"), TEXT("false"))
+		.Build();
+}
+
 TSharedPtr<FJsonObject> FMonolithGameFeatureActions::SetPrimaryAssetScanSchema()
 {
 	return FParamSchemaBuilder()
@@ -4738,6 +4826,7 @@ FMonolithActionResult FMonolithGameFeatureActions::GetStatus(const TSharedPtr<FJ
 	Result->SetArrayField(TEXT("write_actions"), StringArrayToJson({}));
 	Result->SetArrayField(TEXT("available_when_compiled"), StringArrayToJson({
 		TEXT("add_action_set_input_mapping"),
+		TEXT("add_action_set_components"),
 		TEXT("set_primary_asset_scan"),
 		TEXT("add_game_feature_data_input_mapping"),
 		TEXT("add_game_feature_data_widgets"),
@@ -4781,6 +4870,11 @@ FMonolithActionResult FMonolithGameFeatureActions::DescribeActionSet(const TShar
 }
 
 FMonolithActionResult FMonolithGameFeatureActions::AddActionSetInputMapping(const TSharedPtr<FJsonObject>& Params)
+{
+	return GameFeaturesUnavailable();
+}
+
+FMonolithActionResult FMonolithGameFeatureActions::AddActionSetComponents(const TSharedPtr<FJsonObject>& Params)
 {
 	return GameFeaturesUnavailable();
 }
@@ -4856,6 +4950,11 @@ TSharedPtr<FJsonObject> FMonolithGameFeatureActions::DescribeActionSetSchema()
 }
 
 TSharedPtr<FJsonObject> FMonolithGameFeatureActions::AddActionSetInputMappingSchema()
+{
+	return EmptySchema();
+}
+
+TSharedPtr<FJsonObject> FMonolithGameFeatureActions::AddActionSetComponentsSchema()
 {
 	return EmptySchema();
 }

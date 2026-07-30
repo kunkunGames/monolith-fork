@@ -12,6 +12,7 @@ Run from any directory:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import pathlib
@@ -571,13 +572,18 @@ class PortableAcceptedBundleValidationTests(unittest.TestCase):
         path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
     def _fixture(self) -> tuple[dict, dict, dict, dict[str, pathlib.Path]]:
+        query_source_hash = "0123456789abcdef"
+        query_filename = f"monolith_query-{query_source_hash}.exe"
         paths = {
             "tasks": self.root / "Benchmarks" / "OfflineParity" / "actions.jsonl",
             "manifest": self.root / "Benchmarks" / "OfflineParity" / "manifest.json",
             "runner": self.root / "Scripts" / "offline_parity_benchmark.py",
             "benchmark_common": self.root / "Scripts" / "benchmark_common.py",
             "offline_python": self.root / "Scripts" / "monolith_offline.py",
-            "offline_exe": self.root / "Binaries" / "monolith_query.exe",
+            "offline_exe": self.root / "Binaries" / query_filename,
+            "query_manifest": (
+                self.root / benchmark_inventory.QUERY_BUNDLE_MANIFEST_RELATIVE
+            ),
             "database": self.root / "Saved" / "EngineSource.db",
         }
         for path in paths.values():
@@ -596,6 +602,22 @@ class PortableAcceptedBundleValidationTests(unittest.TestCase):
         paths["benchmark_common"].write_text("# unit common\n", encoding="utf-8")
         paths["offline_python"].write_text("# unit offline reader\n", encoding="utf-8")
         paths["offline_exe"].write_bytes(b"MZ-unit-query")
+        self._write_json(
+            paths["query_manifest"],
+            {
+                "schema_version": 1,
+                "tool": "monolith_query",
+                "runtime": "native-cpp",
+                "file": query_filename,
+                "plugin_version": "0.0.0-unit",
+                "parity_spec_rev": "unit",
+                "source_hash": query_source_hash,
+                "sha256": hashlib.sha256(b"MZ-unit-query").hexdigest(),
+                "catalog_file": f"monolith_catalog-{'a' * 64}.json",
+                "catalog_source_hash": "a" * 64,
+                "catalog_sha256": "b" * 64,
+            },
+        )
         paths["database"].write_bytes(b"database-v1")
 
         inputs = benchmark_common.build_benchmark_inputs(
@@ -605,6 +627,7 @@ class PortableAcceptedBundleValidationTests(unittest.TestCase):
                 "runner": paths["runner"],
                 "offline_exe": paths["offline_exe"],
                 "offline_python": paths["offline_python"],
+                "query_manifest": paths["query_manifest"],
             },
             database_paths=("Saved/EngineSource.db",),
             plugin_root=self.root,
@@ -619,6 +642,37 @@ class PortableAcceptedBundleValidationTests(unittest.TestCase):
             "database_inputs": json.loads(json.dumps(inputs["database_files"])),
         }
         return summary, status, bundle_manifest, paths
+
+    def test_offline_parity_expected_inputs_follow_query_manifest(self) -> None:
+        _, _, _, paths = self._fixture()
+        expected = benchmark_inventory.expected_suite_input_paths(
+            "OfflineParity"
+        )
+        self.assertEqual(
+            expected["offline_exe"],
+            f"Binaries/{paths['offline_exe'].name}",
+        )
+        self.assertEqual(
+            expected["query_manifest"],
+            benchmark_inventory.QUERY_BUNDLE_MANIFEST_RELATIVE,
+        )
+        self.assertNotEqual(
+            expected["offline_exe"],
+            "Binaries/monolith_query.exe",
+        )
+
+    def test_offline_parity_rejects_nonimmutable_manifest_leaf(self) -> None:
+        _, _, _, paths = self._fixture()
+        manifest = json.loads(
+            paths["query_manifest"].read_text(encoding="utf-8")
+        )
+        manifest["file"] = "../monolith_query.exe"
+        self._write_json(paths["query_manifest"], manifest)
+        with self.assertRaisesRegex(
+            benchmark_inventory.InventoryError,
+            "executable identity is invalid",
+        ):
+            benchmark_inventory.expected_suite_input_paths("OfflineParity")
 
     def test_portable_accepts_clean_checkout_mtime_drift_and_absent_database(self) -> None:
         summary, status, bundle_manifest, paths = self._fixture()
@@ -739,10 +793,10 @@ class PortableAcceptedBundleValidationTests(unittest.TestCase):
             "suite": "OfflineParity",
             "snapshot_id": snapshot_id,
             "summary_file": "summary.json",
-            "summary_sha256": benchmark_inventory.file_sha256(summary_path),
+            "summary_sha256": benchmark_inventory.tracked_text_sha256(summary_path),
             "artifact_files": {
                 "per_action.jsonl": {
-                    "sha256": benchmark_inventory.file_sha256(result_path),
+                    "sha256": benchmark_inventory.tracked_text_sha256(result_path),
                     "non_empty_line_count": 1,
                 },
             },
@@ -755,7 +809,7 @@ class PortableAcceptedBundleValidationTests(unittest.TestCase):
             "evidence": (
                 f"Benchmarks/OfflineParity/accepted/{snapshot_id}/summary.json"
             ),
-            "evidence_bundle_sha256": benchmark_inventory.file_sha256(manifest_path),
+            "evidence_bundle_sha256": benchmark_inventory.tracked_text_sha256(manifest_path),
         })
 
         benchmark_inventory.load_accepted_bundle(
@@ -775,6 +829,70 @@ class PortableAcceptedBundleValidationTests(unittest.TestCase):
                 summary_path,
                 portable=True,
             )
+
+    def test_bundle_text_hashes_are_portable_across_lf_and_crlf(self) -> None:
+        summary, status, bundle_inputs, _ = self._fixture()
+        snapshot_id = "newline-portable"
+        bundle_dir = (
+            self.root
+            / "Benchmarks"
+            / "OfflineParity"
+            / "accepted"
+            / snapshot_id
+        )
+        summary_path = bundle_dir / "summary.json"
+        result_path = bundle_dir / "per_action.jsonl"
+        manifest_path = bundle_dir / benchmark_inventory.ACCEPTED_BUNDLE_FILENAME
+        self._write_json(summary_path, summary)
+        result_path.write_text(
+            json.dumps({"label": "cppreflect.list_uclasses", "status": "MATCH"}) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        manifest = {
+            "schema_version": benchmark_inventory.ACCEPTED_BUNDLE_SCHEMA_VERSION,
+            "benchmark": "OfflineParity",
+            "suite": "OfflineParity",
+            "snapshot_id": snapshot_id,
+            "summary_file": "summary.json",
+            "summary_sha256": benchmark_inventory.tracked_text_sha256(summary_path),
+            "artifact_files": {
+                "per_action.jsonl": {
+                    "sha256": benchmark_inventory.tracked_text_sha256(result_path),
+                    "non_empty_line_count": 1,
+                },
+            },
+            "input_fingerprint": bundle_inputs["input_fingerprint"],
+            "database_inputs": bundle_inputs["database_inputs"],
+            "portable_database_policy": benchmark_inventory.PORTABLE_DATABASE_POLICY,
+        }
+        self._write_json(manifest_path, manifest)
+        status.update({
+            "evidence": (
+                f"Benchmarks/OfflineParity/accepted/{snapshot_id}/summary.json"
+            ),
+            "evidence_bundle_sha256": benchmark_inventory.tracked_text_sha256(manifest_path),
+        })
+
+        for path in (summary_path, result_path, manifest_path):
+            text = path.read_text(encoding="utf-8")
+            path.write_text(
+                text.replace("\r\n", "\n"),
+                encoding="utf-8",
+                newline="\r\n",
+            )
+
+        benchmark_inventory.load_accepted_bundle(
+            "OfflineParity",
+            status,
+            summary_path,
+            portable=True,
+        )
+        self.assertNotEqual(
+            benchmark_inventory.file_sha256(manifest_path),
+            status["evidence_bundle_sha256"],
+            "raw hashes must still expose the platform newline difference",
+        )
 
     def test_artifact_contract_covers_every_validator_consumed_sidecar(self) -> None:
         self.assertEqual(
@@ -826,17 +944,17 @@ class PortableAcceptedBundleValidationTests(unittest.TestCase):
             "suite": benchmark_inventory.FULL_CATALOG_KEY,
             "snapshot_id": snapshot_id,
             "summary_file": "summary.json",
-            "summary_sha256": benchmark_inventory.file_sha256(summary_path),
+            "summary_sha256": benchmark_inventory.tracked_text_sha256(summary_path),
             "artifact_files": {
                 "per_action.jsonl": {
-                    "sha256": benchmark_inventory.file_sha256(action_path),
+                    "sha256": benchmark_inventory.tracked_text_sha256(action_path),
                     "non_empty_line_count": 1,
                 },
                 "namespace_breakdown.json": {
-                    "sha256": benchmark_inventory.file_sha256(namespace_path),
+                    "sha256": benchmark_inventory.tracked_text_sha256(namespace_path),
                 },
                 "scan_checkpoint.json": {
-                    "sha256": benchmark_inventory.file_sha256(checkpoint_path),
+                    "sha256": benchmark_inventory.tracked_text_sha256(checkpoint_path),
                 },
             },
             "input_fingerprint": "0" * 64,
@@ -848,7 +966,7 @@ class PortableAcceptedBundleValidationTests(unittest.TestCase):
             "evidence": (
                 f"Benchmarks/SchemaCompleteness/accepted/{snapshot_id}/summary.json"
             ),
-            "evidence_bundle_sha256": benchmark_inventory.file_sha256(manifest_path),
+            "evidence_bundle_sha256": benchmark_inventory.tracked_text_sha256(manifest_path),
         }
 
         benchmark_inventory.load_accepted_bundle(
@@ -872,7 +990,7 @@ class PortableAcceptedBundleValidationTests(unittest.TestCase):
         self._write_json(namespace_path, {})
         del manifest["artifact_files"]["scan_checkpoint.json"]
         self._write_json(manifest_path, manifest)
-        status["evidence_bundle_sha256"] = benchmark_inventory.file_sha256(manifest_path)
+        status["evidence_bundle_sha256"] = benchmark_inventory.tracked_text_sha256(manifest_path)
         with self.assertRaisesRegex(
             benchmark_inventory.InventoryError,
             "bundle artifact set is invalid",
