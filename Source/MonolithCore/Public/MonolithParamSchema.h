@@ -218,11 +218,36 @@ public:
 		checkf(Param.IsValid(), TEXT("Schema param '%s' is invalid"), *Name);
 		Param->SetNumberField(TEXT("minimum"), MinValue);
 		Param->SetNumberField(TEXT("maximum"), MaxValue);
+	/**
+	 * Require exact JSON array/object types for every complex parameter in this
+	 * action schema. This prevents the registry's legacy client-compatibility
+	 * parser from silently converting JSON-encoded strings before dispatch.
+	 */
+	FParamSchemaBuilder& StrictComplexTypes()
+		bStrictComplexTypes = true;
 		return *this;
 	}
 
 	TSharedPtr<FJsonObject> Build()
 	{
+		if (bStrictComplexTypes)
+		{
+			for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Schema->Values)
+			{
+				const TSharedPtr<FJsonObject>* Param = nullptr;
+				if (!Pair.Value.IsValid() || !Pair.Value->TryGetObject(Param) || !Param || !Param->IsValid())
+				{
+					continue;
+				}
+
+				FString Type;
+				if ((*Param)->TryGetStringField(TEXT("type"), Type)
+					&& (Type == TEXT("array") || Type == TEXT("object")))
+				{
+					(*Param)->SetBoolField(TEXT("allow_string_encoded_complex"), false);
+				}
+			}
+		}
 		return Schema;
 	}
 
@@ -238,6 +263,7 @@ private:
 			(*Param)->SetBoolField(TEXT("allow_string_encoded_complex"), false);
 		}
 	}
+	bool bStrictComplexTypes = false;
 
 	void AddParam(const FString& Name, const FString& Type, const FString& Desc, bool bRequired,
 		const FString& Default, bool bHasDefault, std::initializer_list<const TCHAR*> Aliases,

@@ -335,6 +335,12 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 	// allow_string_encoded_complex=false (via RequiredExactType /
 	// OptionalExactType) when the action contract must observe the original
 	// EJson type instead of accepting this client-compatibility transform.
+	// lookup ("<param> array is required" with the value right there).
+	//
+	// Exact-contract actions mark complex schema entries
+	// allow_string_encoded_complex=false. Those entries bypass legacy recovery
+	// so the handler sees and rejects the caller's actual JSON type instead of
+	// accepting an implicit conversion.
 	if (ActionInfo.ParamSchema.IsValid())
 	{
 		for (const auto& SchemaPair : ActionInfo.ParamSchema->Values)
@@ -410,7 +416,8 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 			return FMonolithActionResult::Error(
 				FString::Printf(TEXT("Missing required param(s): [%s]. Provided keys: [%s] — inspect the action's parameter schema via monolith_discover(\"<namespace>\") and supply all required fields."),
 					*FString::Join(Missing, TEXT(", ")),
-					*FString::Join(Provided, TEXT(", "))));
+					*FString::Join(Provided, TEXT(", "))),
+				FMonolithJsonUtils::ErrInvalidParams);
 		}
 	}
 

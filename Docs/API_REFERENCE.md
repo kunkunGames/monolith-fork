@@ -26,6 +26,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [chooser](#chooser) | 16 | ChooserTable discovery, bounded readback, non-mutating structural validation, deep inspection, authoring, and reference editing |
 | [niagara](#niagara) | 119 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, effect types, event-aware summaries + validate_system event-chain reasoning, temporal-control composite writers + read aggregators, stateless-emitter factory) |
 | [editor](#editor) | 29 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, Python escape-hatch, persistent-level swap |
+| [asset](#asset) | 20 | Exact-path texture/font ingest, lifecycle, inspection/search, guarded move/rename, and package-graph copy/fixup/closure workflows |
 | [config](#config) | 6 | INI config inspection and search |
 | [localization](#localization) | 10 | Culture discovery plus guarded StringTable inspect, validate, mutation, and CSV round-trip actions |
 | [project](#project) | 7 | Project-wide asset index (SQLite + FTS5) |
@@ -57,6 +58,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | **In-tree subtotal** | **1419** | (all default-active; +45 experimental town gen → 1464 when registered) |
 | **In-tree subtotal** | **1416** | (all default-active; +45 experimental town gen → 1461 when registered) |
 | **In-tree subtotal** | **1421** | (full compiled/config-enabled GameFeatures surface; +45 experimental town gen → 1466 when registered) |
+| **In-tree subtotal** | **1426** | (all default-active; +45 experimental town gen → 1471 when registered) |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -684,6 +686,41 @@ Close the current persistent level (without saving) and load the specified level
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `path` | string | **required** | Asset path of the level to load (e.g. `/Game/Maps/L_Backyard`). Must exist. |
+
+---
+
+## asset
+
+Generic asset lifecycle and package-graph workflows. **20 actions.** The namespace is registered by the `MonolithAsset` editor module when `bEnableAsset=true`.
+
+| Action | Kind | Contract |
+|--------|------|----------|
+| `import_texture_from_bytes` | write | Decode base64 image bytes into an exact `/Game/...` `UTexture2D`; explicit `fail`, `replace`, or `unique` collision policy and strict texture-role/settings validation. |
+| `import_font_family` | write | Preflight absolute `.ttf` sources and every output package, then create a composite `UFont` plus `UFontFace` assets; suffixing requires `allow_unique_names=true`. |
+| `import_texture_from_file` | write | Import an external image to the exact requested texture path; nested and compatibility top-level `srgb`/`tiling` must be native JSON booleans, and malformed/duplicate settings or unexpected imported packages are errors. |
+| `save_asset` | write | Save one loaded asset package and optionally verify persistence by a non-interactive reload. |
+| `delete_assets` | write | Guarded, non-interactive deletion with dry-run, allowed-root checks, postconditions, and optional source-control preflight. |
+| `move_assets` | write | Guarded exact package moves; defaults to dry-run, never overwrites, and rejects chains/cycles. |
+| `cleanup_moved_redirectors` | write | Validate and remove redirectors left by completed exact moves after referencer, destination, file, and source-control checks. |
+| `validate_naming_conventions` | read | Report prefix-rule violations beneath a content path. |
+| `batch_rename_assets` | write | Preview or apply batch renames through AssetTools. |
+| `find_assets` | read | Fuzzy live-AssetRegistry search with bounded integer limits/thresholds and optional adjacent-transposition matching. |
+| `list_supported_asset_enrichers` | read | List typed read-only enrichers available to inspection. |
+| `inspect_asset` | read | Inspect one asset with typed enrichment and optional reflected references; soft-reference existence is checked for `/Game`, `/Engine`, and plugin mounts, while `/Script` class paths are the intentional non-asset exception. |
+| `inspect_assets_batch` | read | Inspect multiple assets with a success/error result for every requested row. |
+| `validate_typed_asset` | read | Run typed validation and report warnings without mutation. |
+| `register_content_mount_points` | write | Register explicit process-local content mounts; defaults to dry-run and requires exactly one resolver per mount. |
+| `plan_package_graph_copy` | read | Traverse AssetRegistry dependencies and emit an exact source-to-destination copy/remap plan. |
+| `copy_package_graph_with_remap` | write | Duplicate a planned package graph without overwriting; requires dry-run or explicit confirmation. |
+| `copy_package_graph_with_strategy` | write | Plan and orchestrate supported duplicate/advanced/header-patched/opt-in raw-copy strategies; unsupported manual rows remain explicit blockers. |
+| `fixup_copied_references` | write | Rewrite reflected hard/soft references inside copied destination packages; requires dry-run or explicit confirmation. |
+| `validate_dependency_closure` | read | Verify copied destination packages no longer depend on disallowed external or legacy source roots. |
+
+All `asset` actions require native JSON arrays/objects rather than JSON-encoded strings. Boolean parameters, including nested and compatibility top-level texture settings, must be JSON booleans; strings such as `"true"`/`"false"` return `-32602` instead of being coerced by UE 5.7. Import handlers also reject unknown enum values, malformed integers, and duplicate setting sources with `-32602`; they do not silently choose a default for invalid input. File texture import succeeds only when the exact requested package is produced. Font import uses exact output names by default and performs source/output preflight before creating packages.
+
+Reflected soft-reference inspection first accepts an already loaded object, then queries the live AssetRegistry for mounted content. This applies equally to project, engine, and plugin content roots; an unregistered or missing `/Engine/...` or `/PluginName/...` asset reports `exists=false` and produces `unresolved_soft_reference`. `/Script/...` class paths are valid non-asset references and are not reported as missing.
+
+For exhaustive parameter schemas, call `describe_query("action_schema", target_namespace="asset", target_action="<action>")`. The authoritative implementation contract is [`specs/SPEC_MonolithAsset.md`](specs/SPEC_MonolithAsset.md).
 
 ---
 
@@ -2107,6 +2144,7 @@ Both invoke the same SQLite indexes the live MCP uses.
 | MonolithUI CommonUI | `WITH_COMMONUI` | 42 (UMG baseline only) |
 | MonolithAudio MetaSound | `WITH_METASOUND` | Sound Cue + CRUD + batch (no MetaSound graph) |
 | MonolithMesh town gen | `bEnableProceduralTownGen` (Editor Preferences, default `false`) | 195 (core mesh only) |
+| MonolithAsset | `bEnableAsset` (Editor Preferences, default `true`) | 0 |
 
 ---
 
