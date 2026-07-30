@@ -33,6 +33,7 @@
 namespace
 {
 	static constexpr int32 ErrInvalidParams = -32602;
+	static constexpr int32 ErrInternal = -32603;
 
 	struct FRootRemap
 	{
@@ -2568,6 +2569,12 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::RegisterContentMountPoi
 			.WithErrorData(ErrorResult);
 	}
 
+	// Mount-point registration is process-global. A failure partway through the
+	// loop previously left the roots registered before it in place while the
+	// action still returned bSuccess=true, so callers continued into package
+	// planning against a half-mounted process. Track what this invocation
+	// registered so it can be undone.
+	TArray<TPair<FString, FString>> RegisteredByThisCall;
 	if (!Mutation.bDryRun)
 	{
 		for (const int32 Index : RegisterIndices)
@@ -2587,8 +2594,38 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::RegisterContentMountPoi
 			}
 
 			++RegisteredCount;
+			RegisteredByThisCall.Emplace(Spec.MountPoint, Spec.ContentDir);
 			RootsToScan.AddUnique(Spec.MountPoint);
 			Rows.Add(MakeShared<FJsonValueObject>(MakeMountPointRow(Spec, TEXT("registered"))));
+		}
+
+		if (PreflightErrors.Num() > 0)
+		{
+			// Undo this invocation's registrations so the process is left as it
+			// was found, then report the failure instead of a success the caller
+			// would build on.
+			for (int32 Index = RegisteredByThisCall.Num() - 1; Index >= 0; --Index)
+			{
+				FPackageName::UnRegisterMountPoint(
+					RegisteredByThisCall[Index].Key,
+					RegisteredByThisCall[Index].Value);
+			}
+
+			TSharedPtr<FJsonObject> ErrorResult = MakeShared<FJsonObject>();
+			ErrorResult->SetStringField(TEXT("namespace"), TEXT("asset"));
+			ErrorResult->SetStringField(TEXT("action"), TEXT("register_content_mount_points"));
+			ErrorResult->SetStringField(TEXT("status"), TEXT("register_failed"));
+			ErrorResult->SetBoolField(TEXT("rolled_back"), true);
+			ErrorResult->SetNumberField(
+				TEXT("rolled_back_count"),
+				RegisteredByThisCall.Num());
+			ErrorResult->SetArrayField(TEXT("mount_points"), Rows);
+			ErrorResult->SetArrayField(TEXT("preflight_errors"), PreflightErrors);
+			ErrorResult->SetNumberField(TEXT("preflight_error_count"), PreflightErrors.Num());
+			return FMonolithActionResult::Error(
+				TEXT("register_content_mount_points failed to register every requested root; this invocation's registrations were rolled back"),
+				ErrInternal)
+				.WithErrorData(ErrorResult);
 		}
 	}
 

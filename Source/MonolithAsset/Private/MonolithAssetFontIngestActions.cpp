@@ -10,6 +10,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "HAL/UnrealMemory.h"
+#include "HAL/FileManager.h"                 // IFileManager
 #include "Misc/FileHelper.h"                    // FFileHelper::LoadFileToArray
 #include "Misc/PackageName.h"                   // FPackageName::LongPackageNameToFilename / GetAssetPackageExtension
 #include "Misc/Paths.h"                         // FPaths::FileExists
@@ -35,6 +36,139 @@
 
 namespace MonolithAsset::FontIngestInternal
 {
+    /**
+     * Validates the sfnt container header of a font payload.
+     *
+     * A .ttf suffix and a nonzero byte count are not evidence that a file is a
+     * font: arbitrary data renamed to .ttf would otherwise be wrapped in
+     * FFontFaceData and saved as a family whose faces cannot render. This checks
+     * the sfnt version tag and that the declared table directory actually fits in
+     * the payload, which rejects truncated and non-font files before any package
+     * is created.
+     */
+    static bool IsSupportedFontPayload(const TArray<uint8>& Bytes, FString& OutError)
+    {
+        // sfnt header: 4-byte version tag, uint16 numTables, then 6 reserved
+        // bytes, followed by numTables * 16-byte table records.
+        constexpr int32 SfntHeaderSize = 12;
+        constexpr int32 SfntTableRecordSize = 16;
+        if (Bytes.Num() < SfntHeaderSize)
+        {
+            OutError = TEXT("file is smaller than an sfnt header");
+            return false;
+        }
+
+        auto ReadU32 = [&Bytes](int32 Offset)
+        {
+            return (static_cast<uint32>(Bytes[Offset]) << 24)
+                | (static_cast<uint32>(Bytes[Offset + 1]) << 16)
+                | (static_cast<uint32>(Bytes[Offset + 2]) << 8)
+                | static_cast<uint32>(Bytes[Offset + 3]);
+        };
+
+        const uint32 Version = ReadU32(0);
+        const bool bTrueType = Version == 0x00010000u;            // TrueType outlines
+        const bool bTrueTypeTag = Version == 0x74727565u;         // 'true'
+        const bool bOpenType = Version == 0x4F54544Fu;            // 'OTTO', CFF outlines
+        if (Version == 0x74746366u)                               // 'ttcf'
+        {
+            OutError = TEXT("TrueType Collection (.ttc) payloads are not supported");
+            return false;
+        }
+        if (!bTrueType && !bTrueTypeTag && !bOpenType)
+        {
+            OutError = TEXT("missing a TrueType or OpenType sfnt version tag");
+            return false;
+        }
+
+        const int32 NumTables =
+            (static_cast<int32>(Bytes[4]) << 8) | static_cast<int32>(Bytes[5]);
+        if (NumTables <= 0)
+        {
+            OutError = TEXT("sfnt header declares no tables");
+            return false;
+        }
+        const int64 RequiredSize =
+            static_cast<int64>(SfntHeaderSize)
+            + static_cast<int64>(NumTables) * SfntTableRecordSize;
+        if (static_cast<int64>(Bytes.Num()) < RequiredSize)
+        {
+            OutError = FString::Printf(
+                TEXT("file is truncated: %d tables need at least %lld bytes, file has %d"),
+                NumTables,
+                RequiredSize,
+                Bytes.Num());
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Removes every package this invocation created unless Commit() runs.
+     *
+     * A multi-face import creates and optionally saves each face before the
+     * family exists, so a later face failure - or a family create/save failure -
+     * previously left a partial font family behind on disk and in the Asset
+     * Registry. Registering each created package here makes every failure path
+     * clean up without threading rollback code through a dozen early returns.
+     */
+    class FFontIngestRollbackScope
+    {
+    public:
+        void Track(UPackage* Package, UObject* Asset)
+        {
+            if (Package && Asset)
+            {
+                CreatedPackages.Add(Package);
+                CreatedAssets.Add(Asset);
+            }
+        }
+
+        void Commit() { bCommitted = true; }
+
+        ~FFontIngestRollbackScope()
+        {
+            if (bCommitted)
+            {
+                return;
+            }
+
+            for (int32 Index = CreatedAssets.Num() - 1; Index >= 0; --Index)
+            {
+                UObject* Asset = CreatedAssets[Index];
+                UPackage* Package = CreatedPackages[Index];
+                if (!IsValid(Asset) || !IsValid(Package))
+                {
+                    continue;
+                }
+
+                FAssetRegistryModule::AssetDeleted(Asset);
+                Asset->ClearFlags(RF_Public | RF_Standalone);
+                Asset->MarkAsGarbage();
+
+                // Remove any file this invocation already wrote, so a partially
+                // saved family does not survive on disk.
+                FString Filename;
+                if (FPackageName::TryConvertLongPackageNameToFilename(
+                        Package->GetName(),
+                        Filename,
+                        FPackageName::GetAssetPackageExtension())
+                    && IFileManager::Get().FileExists(*Filename))
+                {
+                    IFileManager::Get().Delete(*Filename, false, true);
+                }
+
+                Package->SetDirtyFlag(false);
+                Package->MarkAsGarbage();
+            }
+        }
+
+    private:
+        TArray<UPackage*> CreatedPackages;
+        TArray<UObject*> CreatedAssets;
+        bool bCommitted = false;
+    };
+
     /** Map a loading-policy string to the enum without accepting unknown values. */
     static bool ParseLoadingPolicy(const FString& S, EFontLoadingPolicy& Out)
     {
@@ -326,11 +460,31 @@ FMonolithActionResult MonolithAsset::FFontIngestActions::HandleImportFontFamily(
                     *Spec.SourcePath),
                 -32602);
         }
+
+        // A .ttf suffix and a nonzero length were the only checks, so arbitrary
+        // data renamed to .ttf was wrapped in FFontFaceData and saved as a family
+        // whose faces cannot render. Validate the sfnt container header before any
+        // package is created.
+        FString FontFormatError;
+        if (!IsSupportedFontPayload(SourceBytes, FontFormatError))
+        {
+            return FMonolithActionResult::Error(
+                FString::Printf(
+                    TEXT("faces[%d] ('%s').source_path is not a valid font payload: %s ('%s')"),
+                    i,
+                    *Spec.Typeface,
+                    *FontFormatError,
+                    *Spec.SourcePath),
+                -32602);
+        }
     }
 
     // --- Per-face import ---
     FAssetToolsModule& AssetToolsModule =
         FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+
+    // Cleans up every package created below unless the whole import succeeds.
+    FontIngestInternal::FFontIngestRollbackScope RollbackScope;
 
     TArray<FFaceResult> FaceResults;
     FaceResults.Reserve(FaceSpecs.Num());
@@ -418,6 +572,7 @@ FMonolithActionResult MonolithAsset::FFontIngestActions::HandleImportFontFamily(
             FaceAsset->PostEditChange();
         }
         FAssetRegistryModule::AssetCreated(FaceAsset);
+        RollbackScope.Track(FacePackage, FaceAsset);
         FacePackage->MarkPackageDirty();
 
         if (bSave)
@@ -512,6 +667,7 @@ FMonolithActionResult MonolithAsset::FFontIngestActions::HandleImportFontFamily(
         FamilyFont->PostEditChange();
     }
     FAssetRegistryModule::AssetCreated(FamilyFont);
+    RollbackScope.Track(FamilyPackage, FamilyFont);
     FamilyPackage->MarkPackageDirty();
 
     if (bSave)
@@ -531,6 +687,9 @@ FMonolithActionResult MonolithAsset::FFontIngestActions::HandleImportFontFamily(
                 -32603);
         }
     }
+
+    // Every package created above is now final; keep them.
+    RollbackScope.Commit();
 
     // --- Success payload ---
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();

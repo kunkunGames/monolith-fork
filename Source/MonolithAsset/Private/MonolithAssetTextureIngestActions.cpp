@@ -2066,7 +2066,21 @@ FMonolithActionResult MonolithAsset::FTextureIngestActions::HandleImportTextureF
     if (Format == EImageFormat::Invalid)
     {
         return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Unknown format_hint '%s' (supported: png, jpg, jpeg, bmp, exr, tga, hdr, tif, tiff, dds)"), *FormatHint),
+            FString::Printf(TEXT("Unknown format_hint '%s' (supported: png, jpg, jpeg, bmp, tga, tif, tiff, dds)"), *FormatHint),
+            -32602);
+    }
+
+    // This importer decodes through GetRaw(BGRA, 8) and stores TSF_BGRA8, which
+    // cannot represent the floating-point range these formats exist to carry.
+    // Accepting them produced a successful import whose values were silently
+    // clamped and quantised, giving wrong lighting and emissive data. Reject them
+    // rather than report success over destroyed precision.
+    if (Format == EImageFormat::EXR || Format == EImageFormat::HDR)
+    {
+        return FMonolithActionResult::Error(
+            FString::Printf(
+                TEXT("format_hint '%s' is a high-dynamic-range format; this action decodes to 8-bit BGRA and would silently lose precision. Import HDR sources through the Interchange pipeline instead."),
+                *FormatHint),
             -32602);
     }
 
@@ -2530,10 +2544,11 @@ void MonolithAsset::FTextureIngestActions::Register(FMonolithToolRegistry& Regis
     Registry.RegisterAction(
         TEXT("asset"),
         TEXT("import_texture_from_bytes"),
-        TEXT("Decode a base64-encoded image (PNG / JPEG / BMP / EXR / TGA / HDR / TIFF / DDS) and import it as a UTexture2D asset. "
+        TEXT("Decode a base64-encoded image (PNG / JPEG / BMP / TGA / TIFF / DDS) and import it as a UTexture2D asset. "
+             "High-dynamic-range EXR and HDR inputs are rejected because this path decodes to 8-bit BGRA. "
              "Params: destination (string, required, /Game/... path without .uasset), "
              "bytes_b64 (string, required, base64 image bytes), "
-             "format_hint (string, required, one of png|jpg|jpeg|bmp|exr|tga|hdr|tif|tiff|dds), "
+             "format_hint (string, required, one of png|jpg|jpeg|bmp|tga|tif|tiff|dds), "
              "texture_role (string, optional: ui_icon|sprite|decal|basecolor|world_tile|normal|orm_mask|height|emissive), "
              "settings (object, optional: compression_settings, srgb, mip_gen_settings, lod_group, address_x, address_y, alpha_bleed, alpha_from_edge_background, tile_seam_harmonize), "
              "conflict_policy (string, optional: fail|replace|unique, default fail), "
@@ -2542,7 +2557,7 @@ void MonolithAsset::FTextureIngestActions::Register(FMonolithToolRegistry& Regis
         FParamSchemaBuilder()
             .Required(TEXT("destination"), TEXT("string"), TEXT("Output texture path without .uasset"))
             .Required(TEXT("bytes_b64"), TEXT("string"), TEXT("Base64-encoded image bytes"))
-            .Required(TEXT("format_hint"), TEXT("string"), TEXT("png, jpg, jpeg, bmp, exr, tga, hdr, tif, tiff, or dds"))
+            .Required(TEXT("format_hint"), TEXT("string"), TEXT("png, jpg, jpeg, bmp, tga, tif, tiff, or dds"))
             .Optional(
                 TEXT("texture_role"),
                 TEXT("string"),

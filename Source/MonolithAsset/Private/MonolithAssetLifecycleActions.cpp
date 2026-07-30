@@ -1132,7 +1132,44 @@ FMonolithActionResult FMonolithAssetLifecycleActions::ImportTextureFromFile(cons
 	Texture->MarkPackageDirty();
 	if (!UEditorAssetLibrary::SaveLoadedAsset(Texture, false))
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to save imported texture asset: %s"), *FinalAssetPath));
+		// The import already replaced or created the destination object and this
+		// code already mutated its texture settings, so a bare error would let the
+		// caller assume nothing happened.
+		if (!bExpectedAssetExists)
+		{
+			// Nothing was there before, so the new asset can be removed outright
+			// and the failed action really is a no-op.
+			const bool bRemoved = UEditorAssetLibrary::DeleteAsset(FinalAssetPath);
+			TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+			ErrorData->SetStringField(TEXT("asset_path"), FinalAssetPath);
+			ErrorData->SetBoolField(TEXT("destination_pre_existed"), false);
+			ErrorData->SetBoolField(TEXT("created_asset_removed"), bRemoved);
+			ErrorData->SetBoolField(TEXT("partial_mutation"), !bRemoved);
+			return FMonolithActionResult::Error(
+				FString::Printf(
+					bRemoved
+						? TEXT("Failed to save imported texture asset '%s'; the newly created asset was removed.")
+						: TEXT("Failed to save imported texture asset '%s', and the newly created asset could not be removed."),
+					*FinalAssetPath),
+				-32603)
+				.WithErrorData(ErrorData);
+		}
+
+		// replace_existing overwrote a pre-existing asset in memory. Its previous
+		// content is not recoverable here, so report the committed mutation
+		// explicitly instead of implying the action did nothing.
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("asset_path"), FinalAssetPath);
+		ErrorData->SetBoolField(TEXT("destination_pre_existed"), true);
+		ErrorData->SetBoolField(TEXT("mutation_committed"), true);
+		ErrorData->SetBoolField(TEXT("partial_mutation"), true);
+		ErrorData->SetBoolField(TEXT("saved"), false);
+		return FMonolithActionResult::Error(
+			FString::Printf(
+				TEXT("Failed to save imported texture asset '%s'. The existing asset was already replaced in memory and is left dirty and unsaved; do not retry blindly."),
+				*FinalAssetPath),
+			-32603)
+			.WithErrorData(ErrorData);
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();

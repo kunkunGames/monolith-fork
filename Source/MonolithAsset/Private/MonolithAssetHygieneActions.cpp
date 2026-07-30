@@ -206,6 +206,7 @@ FMonolithActionResult FMonolithAssetHygieneActions::BatchRenameAssets(const TSha
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
 
+	TSet<FString> ClaimedDestinations;
 	TArray<FAssetRenameData> RenameData;
 	TArray<TSharedPtr<FJsonValue>> PreviewArr;
 
@@ -264,6 +265,37 @@ FMonolithActionResult FMonolithAssetHygieneActions::BatchRenameAssets(const TSha
 		}
 
 		const FString PackagePath = FPackageName::GetLongPackagePath(AssetData.PackageName.ToString());
+
+		// A generated destination can already be occupied - removing A_ from
+		// A_Foo when Foo exists - or can collide with another row in this same
+		// batch. Without this the dry run advertised a rename that cannot apply,
+		// and a committed batch returned partial_failure after attempting
+		// unrelated rows. Both checks are case-insensitive, matching package
+		// name semantics.
+		const FString DestinationObjectPath =
+			FString::Printf(TEXT("%s/%s.%s"), *PackagePath, *NewName, *NewName);
+		const FString DestinationKey = DestinationObjectPath.ToLower();
+		if (ClaimedDestinations.Contains(DestinationKey))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(
+					TEXT("Rename of '%s' targets '%s', which another row in this batch already claims"),
+					*AssetPath,
+					*DestinationObjectPath),
+				-32602);
+		}
+		if (AssetRegistry.GetAssetByObjectPath(
+				FSoftObjectPath(DestinationObjectPath),
+				/*bIncludeOnlyOnDiskAssets=*/false).IsValid())
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(
+					TEXT("Rename of '%s' targets '%s', which already exists"),
+					*AssetPath,
+					*DestinationObjectPath),
+				-32602);
+		}
+		ClaimedDestinations.Add(DestinationKey);
 
 		FAssetRenameData Data;
 		Data.Asset = AssetData.GetAsset();
