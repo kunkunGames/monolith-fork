@@ -63,6 +63,45 @@ namespace
 		return nullptr;
 	}
 
+	TSharedPtr<FJsonObject> FindObjectByTwoStringFields(
+		const TSharedPtr<FJsonObject>& Result,
+		const TCHAR* ArrayField,
+		const TCHAR* FirstStringField,
+		const FString& FirstExpected,
+		const TCHAR* SecondStringField,
+		const FString& SecondExpected)
+	{
+		if (!Result.IsValid())
+		{
+			return nullptr;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+		if (!Result->TryGetArrayField(ArrayField, Rows) || !Rows)
+		{
+			return nullptr;
+		}
+
+		for (const TSharedPtr<FJsonValue>& Value : *Rows)
+		{
+			const TSharedPtr<FJsonObject>* Row = nullptr;
+			if (Value.IsValid()
+				&& Value->TryGetObject(Row)
+				&& Row
+				&& Row->IsValid()
+				&& (*Row)->GetStringField(FirstStringField).Equals(
+					FirstExpected,
+					ESearchCase::CaseSensitive)
+				&& (*Row)->GetStringField(SecondStringField).Equals(
+					SecondExpected,
+					ESearchCase::CaseSensitive))
+			{
+				return *Row;
+			}
+		}
+		return nullptr;
+	}
+
 	bool HasIssueCode(
 		const TSharedPtr<FJsonObject>& Result,
 		const FString& ExpectedCode)
@@ -298,6 +337,188 @@ bool FMonolithGameplayMessageTraceTest::RunTest(const FString& Parameters)
 			FString(TEXT("FMonolithGameplayMessageRootPayload")));
 	}
 
+	FMonolithActionResult ChildTag = RunFilteredFixtureTrace(
+		TEXT("Message.Child"));
+	TestTrue(
+		TEXT("child channel trace with an ancestor partial listener succeeds"),
+		ChildTag.bSuccess);
+	TSharedPtr<FJsonObject> ChildBroadcaster = FindObjectByTwoStringFields(
+		ChildTag.Result,
+		TEXT("matches"),
+		TEXT("channel"),
+		TEXT("Message.Child"),
+		TEXT("role"),
+		TEXT("broadcaster"));
+	TSharedPtr<FJsonObject> AncestorPartialListener =
+		FindObjectByTwoStringFields(
+			ChildTag.Result,
+			TEXT("matches"),
+			TEXT("channel"),
+			TEXT("Message"),
+			TEXT("role"),
+			TEXT("listener"));
+	TestTrue(
+		TEXT("filtered child trace keeps its broadcaster"),
+		ChildBroadcaster.IsValid());
+	TestTrue(
+		TEXT("filtered child trace keeps the relevant ancestor listener"),
+		AncestorPartialListener.IsValid());
+	if (AncestorPartialListener.IsValid())
+	{
+		TestEqual(
+			TEXT("ancestor listener preserves PartialMatch"),
+			AncestorPartialListener->GetStringField(TEXT("match_type")),
+			FString(TEXT("PartialMatch")));
+	}
+	if (ChildTag.Result.IsValid())
+	{
+		const TSharedPtr<FJsonObject>* Summary = nullptr;
+		TestTrue(
+			TEXT("filtered child trace has a summary"),
+			ChildTag.Result->TryGetObjectField(TEXT("summary"), Summary)
+				&& Summary);
+		if (Summary && Summary->IsValid())
+		{
+			TestTrue(
+				TEXT("filtered child trace completes absence analysis"),
+				(*Summary)->GetBoolField(TEXT("orphan_analysis_complete")));
+			TestEqual(
+				TEXT("ancestor partial listener prevents a false orphan broadcaster"),
+				static_cast<int32>((*Summary)->GetNumberField(
+					TEXT("orphan_broadcaster_candidate_count"))),
+				0);
+			TestEqual(
+				TEXT("child broadcaster prevents a false orphan listener"),
+				static_cast<int32>((*Summary)->GetNumberField(
+					TEXT("orphan_listener_candidate_count"))),
+				0);
+		}
+	}
+
+	TSharedPtr<FJsonObject> UnfilteredParams = MakeShared<FJsonObject>();
+	UnfilteredParams->SetStringField(TEXT("source_root"), FixtureDirectory());
+	UnfilteredParams->SetBoolField(TEXT("include_monolith_source"), true);
+	UnfilteredParams->SetNumberField(TEXT("max_files"), 10);
+	UnfilteredParams->SetNumberField(TEXT("max_results"), 100);
+	FMonolithActionResult Unfiltered = Registry.ExecuteAction(
+		TEXT("gameplay_message"),
+		TEXT("trace_channel_usage"),
+		UnfilteredParams);
+	TestTrue(TEXT("unfiltered fixture trace succeeds"), Unfiltered.bSuccess);
+	TestTrue(
+		TEXT("qualified gameplay-tag constant keeps its namespace"),
+		FindObjectByStringField(
+			Unfiltered.Result,
+			TEXT("matches"),
+			TEXT("channel"),
+			TEXT("Combat::TAG_Event")).IsValid());
+	TestTrue(
+		TEXT("same leaf constant in another namespace remains distinct"),
+		FindObjectByStringField(
+			Unfiltered.Result,
+			TEXT("matches"),
+			TEXT("channel"),
+			TEXT("UI::TAG_Event")).IsValid());
+	TestFalse(
+		TEXT("inline-comment call is ignored"),
+		FindObjectByStringField(
+			Unfiltered.Result,
+			TEXT("matches"),
+			TEXT("channel"),
+			TEXT("Message.CommentedInline")).IsValid());
+	TestFalse(
+		TEXT("block-comment call is ignored"),
+		FindObjectByStringField(
+			Unfiltered.Result,
+			TEXT("matches"),
+			TEXT("channel"),
+			TEXT("Message.CommentedBlock")).IsValid());
+	TestFalse(
+		TEXT("identifier-prefixed BroadcastMessage token is ignored"),
+		FindObjectByStringField(
+			Unfiltered.Result,
+			TEXT("matches"),
+			TEXT("channel"),
+			TEXT("Message.PrefixedBroadcast")).IsValid());
+	TestFalse(
+		TEXT("identifier-prefixed RegisterListener token is ignored"),
+		FindObjectByStringField(
+			Unfiltered.Result,
+			TEXT("matches"),
+			TEXT("channel"),
+			TEXT("Message.PrefixedListener")).IsValid());
+	TSharedPtr<FJsonObject> CallbackListener = FindObjectByTwoStringFields(
+		Unfiltered.Result,
+		TEXT("matches"),
+		TEXT("channel"),
+		TEXT("Message.Callback"),
+		TEXT("role"),
+		TEXT("listener"));
+	TestTrue(
+		TEXT("callback-named listener is still discovered"),
+		CallbackListener.IsValid());
+	if (CallbackListener.IsValid())
+	{
+		TestEqual(
+			TEXT("callback name does not masquerade as a PartialMatch argument"),
+			CallbackListener->GetStringField(TEXT("match_type")),
+			FString(TEXT("ExactMatch(default)")));
+	}
+
+	TSharedPtr<FJsonObject> DeterministicParams = MakeShared<FJsonObject>();
+	DeterministicParams->SetStringField(TEXT("source_root"), FixtureDirectory());
+	DeterministicParams->SetBoolField(TEXT("include_monolith_source"), true);
+	DeterministicParams->SetNumberField(TEXT("max_files"), 1);
+	DeterministicParams->SetNumberField(TEXT("max_results"), 10);
+	FMonolithActionResult Deterministic = Registry.ExecuteAction(
+		TEXT("gameplay_message"),
+		TEXT("trace_channel_usage"),
+		DeterministicParams);
+	TestTrue(
+		TEXT("deterministic max_files fixture trace succeeds"),
+		Deterministic.bSuccess);
+	TestTrue(
+		TEXT("max_files selects the lexically first eligible file"),
+		FindObjectByStringField(
+			Deterministic.Result,
+			TEXT("matches"),
+			TEXT("channel"),
+			TEXT("Message.DeterministicFirst")).IsValid());
+	TestFalse(
+		TEXT("max_files excludes the lexically last eligible file"),
+		FindObjectByStringField(
+			Deterministic.Result,
+			TEXT("matches"),
+			TEXT("channel"),
+			TEXT("Message.DeterministicLast")).IsValid());
+	if (Deterministic.Result.IsValid())
+	{
+		TestEqual(
+			TEXT("deterministic scan selected one file"),
+			static_cast<int32>(
+				Deterministic.Result->GetNumberField(TEXT("files_selected"))),
+			1);
+		TestEqual(
+			TEXT("deterministic scan actually loaded one file"),
+			static_cast<int32>(
+				Deterministic.Result->GetNumberField(TEXT("files_scanned"))),
+			1);
+		const TSharedPtr<FJsonObject>* Limits = nullptr;
+		TestTrue(
+			TEXT("deterministic scan has limit metadata"),
+			Deterministic.Result->TryGetObjectField(TEXT("limits"), Limits)
+				&& Limits);
+		if (Limits && Limits->IsValid())
+		{
+			TestTrue(
+				TEXT("deterministic scan reports file truncation"),
+				(*Limits)->GetBoolField(TEXT("file_limit_reached")));
+			TestTrue(
+				TEXT("deterministic scan reports every eligible fixture file"),
+				(*Limits)->GetNumberField(TEXT("eligible_files_enumerated")) >= 3);
+		}
+	}
+
 	TSharedPtr<FJsonObject> LimitedParams = MakeShared<FJsonObject>();
 	LimitedParams->SetStringField(TEXT("source_root"), FixtureDirectory());
 	LimitedParams->SetBoolField(TEXT("include_monolith_source"), true);
@@ -312,6 +533,16 @@ bool FMonolithGameplayMessageTraceTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("limited fixture trace returns JSON"), Limited.Result.IsValid());
 	if (Limited.Result.IsValid())
 	{
+		TestEqual(
+			TEXT("result-limited scan reports every selected file"),
+			static_cast<int32>(
+				Limited.Result->GetNumberField(TEXT("files_selected"))),
+			3);
+		TestEqual(
+			TEXT("result-limited scan reports only the file it loaded"),
+			static_cast<int32>(
+				Limited.Result->GetNumberField(TEXT("files_scanned"))),
+			1);
 		TestEqual(
 			TEXT("limited fixture trace returns exactly one result"),
 			static_cast<int32>(Limited.Result->GetNumberField(TEXT("match_count"))),
