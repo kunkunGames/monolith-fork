@@ -218,12 +218,16 @@ public:
 		checkf(Param.IsValid(), TEXT("Schema param '%s' is invalid"), *Name);
 		Param->SetNumberField(TEXT("minimum"), MinValue);
 		Param->SetNumberField(TEXT("maximum"), MaxValue);
+		return *this;
+	}
+
 	/**
 	 * Require exact JSON array/object types for every complex parameter in this
 	 * action schema. This prevents the registry's legacy client-compatibility
 	 * parser from silently converting JSON-encoded strings before dispatch.
 	 */
 	FParamSchemaBuilder& StrictComplexTypes()
+	{
 		bStrictComplexTypes = true;
 		return *this;
 	}
