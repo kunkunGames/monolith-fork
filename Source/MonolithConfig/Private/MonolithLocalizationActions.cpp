@@ -362,6 +362,17 @@ namespace
 				*ProjectDir);
 			return false;
 		}
+		// The contract describes file_path as a CSV destination, and export
+		// overwrites the target. Without an extension check a confirmed export
+		// could replace Config/DefaultEngine.ini or the .uproject with CSV text.
+		const FString Extension = FPaths::GetExtension(OutFilePath);
+		if (!Extension.Equals(TEXT("csv"), ESearchCase::IgnoreCase))
+		{
+			OutError = FString::Printf(
+				TEXT("CSV file path '%s' must use the .csv extension; refusing to read or overwrite a non-CSV file"),
+				*OutFilePath);
+			return false;
+		}
 		return true;
 	}
 
@@ -406,15 +417,57 @@ namespace
 		Result->SetBoolField(TEXT("saved"), bSaved);
 	}
 
+	/**
+	 * These exports are opened directly by translators in Excel or LibreOffice,
+	 * which evaluate any cell starting with one of these characters as a formula
+	 * regardless of CSV quoting. Localization source strings are attacker
+	 * influenced content, so a leading formula character is neutralized with a
+	 * single quote prefix - the prefix spreadsheet applications strip on display
+	 * and, unlike dropping the character, it stays reversible on import.
+	 */
+	bool CellStartsSpreadsheetFormula(const FString& Cell)
+	{
+		if (Cell.IsEmpty())
+		{
+			return false;
+		}
+		const TCHAR First = Cell[0];
+		return First == TEXT('=')
+			|| First == TEXT('+')
+			|| First == TEXT('-')
+			|| First == TEXT('@')
+			|| First == TEXT('\t')
+			|| First == TEXT('\r');
+	}
+
 	FString EscapeCsvCell(const FString& Cell)
 	{
 		FString Escaped = Cell;
+		if (CellStartsSpreadsheetFormula(Escaped))
+		{
+			Escaped.InsertAt(0, TEXT('\''));
+		}
 		Escaped.ReplaceInline(TEXT("\""), TEXT("\"\""));
 		if (Escaped.Contains(TEXT(",")) || Escaped.Contains(TEXT("\"")) || Escaped.Contains(TEXT("\r")) || Escaped.Contains(TEXT("\n")))
 		{
 			return FString::Printf(TEXT("\"%s\""), *Escaped);
 		}
 		return Escaped;
+	}
+
+	/**
+	 * Reverses the formula-neutralizing prefix added by EscapeCsvCell so an
+	 * export/import round trip is lossless.
+	 */
+	FString UnescapeCsvFormulaGuard(const FString& Cell)
+	{
+		if (Cell.Len() >= 2
+			&& Cell[0] == TEXT('\'')
+			&& CellStartsSpreadsheetFormula(Cell.Mid(1)))
+		{
+			return Cell.Mid(1);
+		}
+		return Cell;
 	}
 
 	FString CsvCellAt(const FCsvParser::FRows::ElementType& Row, int32 Index)
@@ -561,16 +614,25 @@ namespace
 				return ParsedRows;
 			}
 
+			// An unnamed column was previously ignored, so every value beneath it was
+			// silently discarded while its row still reported "accepted" - a
+			// translator's data could be lost without any signal.
+			if (HeaderName.IsEmpty())
+			{
+				OutError = FString::Printf(
+					TEXT("CSV header column %d has no name; every column must be 'key', 'source_string', %s, or a metadata key"),
+					ColumnIndex + 1,
+					MetadataPresenceCsvHeader);
+				return ParsedRows;
+			}
+
 			const FName HeaderId(*HeaderName);
-			if (!HeaderName.IsEmpty() && HeaderIds.Contains(HeaderId))
+			if (HeaderIds.Contains(HeaderId))
 			{
 				OutError = FString::Printf(TEXT("CSV header '%s' is duplicated"), *HeaderName);
 				return ParsedRows;
 			}
-			if (!HeaderName.IsEmpty())
-			{
-				HeaderIds.Add(HeaderId);
-			}
+			HeaderIds.Add(HeaderId);
 			if (HeaderName.Equals(TEXT("key"), ESearchCase::IgnoreCase))
 			{
 				KeyIndex = ColumnIndex;
@@ -583,7 +645,7 @@ namespace
 			{
 				MetadataPresenceIndex = ColumnIndex;
 			}
-			else if (!HeaderName.IsEmpty())
+			else
 			{
 				if (!ValidateMetadataKeyText(HeaderName, OutError))
 				{
@@ -600,12 +662,14 @@ namespace
 			return ParsedRows;
 		}
 
+		TSet<FTextKey> SeenEntryKeys;
 		for (int32 RowIndex = 1; RowIndex < Rows.Num(); ++RowIndex)
 		{
 			const TArray<const TCHAR*>& Row = Rows[RowIndex];
 			FStringTableCsvRow ParsedRow;
-			ParsedRow.Key = CsvCellAt(Row, KeyIndex);
-			ParsedRow.SourceString = CsvCellAt(Row, SourceIndex);
+			ParsedRow.Key = UnescapeCsvFormulaGuard(CsvCellAt(Row, KeyIndex));
+			ParsedRow.SourceString =
+				UnescapeCsvFormulaGuard(CsvCellAt(Row, SourceIndex));
 
 			TSharedPtr<FJsonObject> RowResult = MakeShared<FJsonObject>();
 			RowResult->SetNumberField(TEXT("row"), RowIndex + 1);
@@ -623,6 +687,21 @@ namespace
 				continue;
 			}
 
+			// Accepting the same key twice produces an entry that no single CSV row
+			// represents: with replace_existing the table is cleared once, so the
+			// later row wins the source string while the earlier row's metadata
+			// survives. Reject the ambiguity rather than defining a merge.
+			bool bKeyAlreadySeen = false;
+			SeenEntryKeys.Add(FTextKey(ParsedRow.Key), &bKeyAlreadySeen);
+			if (bKeyAlreadySeen)
+			{
+				OutError = FString::Printf(
+					TEXT("CSV row %d repeats entry key '%s'; entry keys must be unique"),
+					RowIndex + 1,
+					*ParsedRow.Key);
+				return TArray<FStringTableCsvRow>();
+			}
+
 			TSet<FName> PresentMetadataIds;
 			if (MetadataPresenceIndex != INDEX_NONE &&
 				!ParseMetadataPresence(
@@ -637,7 +716,8 @@ namespace
 
 			for (const TPair<FString, int32>& MetadataColumn : MetadataColumns)
 			{
-				const FString Value = CsvCellAt(Row, MetadataColumn.Value);
+				const FString Value =
+					UnescapeCsvFormulaGuard(CsvCellAt(Row, MetadataColumn.Value));
 				const bool bMetadataIsPresent = MetadataPresenceIndex != INDEX_NONE
 					? PresentMetadataIds.Contains(FName(*MetadataColumn.Key))
 					: !Value.IsEmpty();
@@ -667,6 +747,106 @@ namespace
 		return ParsedRows;
 	}
 
+	/**
+	 * Returns true when applying Rows would actually alter the table.
+	 *
+	 * Treating "at least one accepted row" as a change meant re-importing an
+	 * unchanged export still called Modify, dirtied the package, reported
+	 * changed=true, and rewrote the .uasset under save=true - pure source-control
+	 * churn for a no-op.
+	 */
+	bool ImportWouldChangeStringTable(
+		const UStringTable* Table,
+		const TArray<FStringTableCsvRow>& Rows,
+		bool bReplaceExisting)
+	{
+		if (!Table)
+		{
+			return false;
+		}
+		const FStringTableConstRef TableRef = Table->GetStringTable();
+
+		if (bReplaceExisting)
+		{
+			// Replacement drops every entry the CSV does not carry.
+			TSet<FTextKey> IncomingKeys;
+			IncomingKeys.Reserve(Rows.Num());
+			for (const FStringTableCsvRow& Row : Rows)
+			{
+				IncomingKeys.Add(FTextKey(Row.Key));
+			}
+
+			bool bHasRemovedEntry = false;
+			TableRef->EnumerateKeysAndSourceStrings(
+				[&IncomingKeys, &bHasRemovedEntry](const FTextKey& Key, const FString&)
+				{
+					if (!IncomingKeys.Contains(Key))
+					{
+						bHasRemovedEntry = true;
+						return false;
+					}
+					return true;
+				});
+			if (bHasRemovedEntry)
+			{
+				return true;
+			}
+		}
+
+		for (const FStringTableCsvRow& Row : Rows)
+		{
+			const FTextKey TextKey(Row.Key);
+			FString ExistingSource;
+			if (!TableRef->GetSourceString(TextKey, ExistingSource))
+			{
+				return true;
+			}
+			if (!ExistingSource.Equals(Row.SourceString, ESearchCase::CaseSensitive))
+			{
+				return true;
+			}
+
+			// Metadata identity is an FName, so compare by id rather than by the
+			// display spelling used in the CSV header.
+			TSet<FName> IncomingMetadataIds;
+			IncomingMetadataIds.Reserve(Row.Metadata.Num());
+			for (const TPair<FString, FString>& MetadataPair : Row.Metadata)
+			{
+				const FName MetadataId(*MetadataPair.Key);
+				IncomingMetadataIds.Add(MetadataId);
+				if (!TableRef->GetMetaData(TextKey, MetadataId).Equals(
+					MetadataPair.Value,
+					ESearchCase::CaseSensitive))
+				{
+					return true;
+				}
+			}
+
+			if (bReplaceExisting)
+			{
+				bool bHasRemovedMetadata = false;
+				TableRef->EnumerateMetaData(
+					TextKey,
+					[&IncomingMetadataIds, &bHasRemovedMetadata](
+						FName MetadataId, const FString&)
+					{
+						if (!IncomingMetadataIds.Contains(MetadataId))
+						{
+							bHasRemovedMetadata = true;
+							return false;
+						}
+						return true;
+					});
+				if (bHasRemovedMetadata)
+				{
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
 	void CollectStringTableRows(UStringTable* Table, bool bIncludeMetadata, TArray<FStringTableCsvRow>& OutRows, TArray<FString>& OutMetadataKeys)
 	{
 		if (!Table)
@@ -674,10 +854,15 @@ namespace
 			return;
 		}
 
-		TSet<FString> MetadataKeySet;
+		// Metadata identity is an FName, so Owner and owner are the same column.
+		// Collecting display strings in a case-sensitive TSet emitted both, and the
+		// importer - which compares headers as FName - then rejected the export it
+		// had just produced as having duplicate columns. Key the set by FName and
+		// keep the first display spelling encountered.
+		TMap<FName, FString> MetadataKeysById;
 		FStringTableConstRef TableRef = Table->GetStringTable();
 		TableRef->EnumerateKeysAndSourceStrings(
-			[TableRef, bIncludeMetadata, &OutRows, &MetadataKeySet](const FTextKey& Key, const FString& SourceString)
+			[TableRef, bIncludeMetadata, &OutRows, &MetadataKeysById](const FTextKey& Key, const FString& SourceString)
 			{
 				FStringTableCsvRow Row;
 				Row.Key = Key.ToString();
@@ -685,11 +870,13 @@ namespace
 				if (bIncludeMetadata)
 				{
 					TableRef->EnumerateMetaData(Key,
-						[&Row, &MetadataKeySet](FName MetadataId, const FString& MetadataValue)
+						[&Row, &MetadataKeysById](FName MetadataId, const FString& MetadataValue)
 						{
-							const FString MetadataKey = MetadataId.ToString();
-							Row.Metadata.Add(MetadataKey, MetadataValue);
-							MetadataKeySet.Add(MetadataKey);
+							const FString& CanonicalKey =
+								MetadataKeysById.FindOrAdd(
+									MetadataId,
+									MetadataId.ToString());
+							Row.Metadata.Add(CanonicalKey, MetadataValue);
 							return true;
 						});
 				}
@@ -702,9 +889,9 @@ namespace
 			return A.Key < B.Key;
 		});
 
-		for (const FString& MetadataKey : MetadataKeySet)
+		for (const TPair<FName, FString>& MetadataKeyPair : MetadataKeysById)
 		{
-			OutMetadataKeys.Add(MetadataKey);
+			OutMetadataKeys.Add(MetadataKeyPair.Value);
 		}
 		OutMetadataKeys.Sort();
 	}
@@ -818,6 +1005,21 @@ namespace
 		}
 
 		const FStringTableConstRef StringTable = Table->GetStringTable();
+
+		if (Limit <= 0)
+		{
+			// A summary-only caller needs the total and no rows. Snapshotting and
+			// sorting every entry just to discard the result made list_string_tables
+			// cost O(n log n) per table for a count it can get directly.
+			StringTable->EnumerateKeysAndSourceStrings(
+				[&OutTotalCount](const FTextKey&, const FString&)
+				{
+					++OutTotalCount;
+					return true;
+				});
+			return Rows;
+		}
+
 		TArray<FStringTableCsvRow> EntrySnapshots;
 		StringTable->EnumerateKeysAndSourceStrings(
 			[&EntrySnapshots](const FTextKey& Key, const FString& SourceString)
@@ -878,7 +1080,7 @@ namespace
 		Obj->SetStringField(TEXT("namespace"), Table->GetStringTable()->GetNamespace());
 
 		int32 EntryCount = 0;
-		TArray<TSharedPtr<FJsonValue>> Entries = StringTableEntriesToJson(Table, bIncludeEntries ? Limit : 1, bIncludeMetadata, EntryCount);
+		TArray<TSharedPtr<FJsonValue>> Entries = StringTableEntriesToJson(Table, bIncludeEntries ? Limit : 0, bIncludeMetadata, EntryCount);
 		Obj->SetNumberField(TEXT("entry_count"), EntryCount);
 		if (bIncludeEntries)
 		{
@@ -1239,30 +1441,46 @@ FMonolithActionResult FMonolithLocalizationActions::ValidateStringTable(const TS
 		Issues.Add(MakeShared<FJsonValueObject>(Issue));
 	};
 
-	TSet<FString> LowerKeys;
-	int32 EntryCount = 0;
+	// EnumerateKeysAndSourceStrings has no stable order, so capping issues at
+	// MaxValidationIssueRows during enumeration made an unchanged table return
+	// different issue keys across loads or map rehashes. Snapshot and sort by key
+	// first so both the issue selection and the duplicate-key report reproduce.
+	TArray<FStringTableCsvRow> EntrySnapshots;
 	Table->GetStringTable()->EnumerateKeysAndSourceStrings(
-		[&EntryCount, &LowerKeys, &AddIssue](const FTextKey& Key, const FString& SourceString)
+		[&EntrySnapshots](const FTextKey& Key, const FString& SourceString)
 		{
-			++EntryCount;
-			const FString KeyString = Key.ToString();
-			if (KeyString.TrimStartAndEnd().IsEmpty())
-			{
-				AddIssue(TEXT("empty_key"), TEXT("StringTable entry has an empty key."));
-			}
-			if (SourceString.IsEmpty())
-			{
-				AddIssue(TEXT("empty_source_string"), TEXT("StringTable entry has an empty source string."), KeyString);
-			}
-
-			const FString Lower = KeyString.ToLower();
-			if (LowerKeys.Contains(Lower))
-			{
-				AddIssue(TEXT("case_insensitive_duplicate_key"), TEXT("Another key differs only by case."), KeyString);
-			}
-			LowerKeys.Add(Lower);
+			FStringTableCsvRow Entry;
+			Entry.Key = Key.ToString();
+			Entry.SourceString = SourceString;
+			EntrySnapshots.Add(MoveTemp(Entry));
 			return true;
 		});
+	EntrySnapshots.Sort([](const FStringTableCsvRow& A, const FStringTableCsvRow& B)
+	{
+		return A.Key < B.Key;
+	});
+
+	TSet<FString> LowerKeys;
+	const int32 EntryCount = EntrySnapshots.Num();
+	for (const FStringTableCsvRow& Entry : EntrySnapshots)
+	{
+		const FString& KeyString = Entry.Key;
+		if (KeyString.TrimStartAndEnd().IsEmpty())
+		{
+			AddIssue(TEXT("empty_key"), TEXT("StringTable entry has an empty key."));
+		}
+		if (Entry.SourceString.IsEmpty())
+		{
+			AddIssue(TEXT("empty_source_string"), TEXT("StringTable entry has an empty source string."), KeyString);
+		}
+
+		const FString Lower = KeyString.ToLower();
+		if (LowerKeys.Contains(Lower))
+		{
+			AddIssue(TEXT("case_insensitive_duplicate_key"), TEXT("Another key differs only by case."), KeyString);
+		}
+		LowerKeys.Add(Lower);
+	}
 
 	if (EntryCount == 0)
 	{
@@ -1329,10 +1547,20 @@ FMonolithActionResult FMonolithLocalizationActions::CreateStringTable(const TSha
 	}
 
 	const FName TableId = MakeStringTableAssetId(PackagePath, AssetName);
-	bool bUnregisteredStaleTable = false;
-	if (!Options.bDryRun && FStringTableRegistry::Get().FindStringTable(TableId).IsValid())
+	// A live registry entry under this asset-style id was previously unregistered
+	// before CreateAsset was attempted. That destroyed a registration which was
+	// never proven stale, the dry run neither performed nor previewed the removal,
+	// and a factory failure left the original entry permanently lost. Treat it as
+	// a collision instead; the caller can choose a different path or unregister
+	// the table deliberately.
+	const bool bRegistryIdInUse =
+		FStringTableRegistry::Get().FindStringTable(TableId).IsValid();
+	if (bRegistryIdInUse)
 	{
-		bUnregisteredStaleTable = FStringTableRegistry::Get().UnregisterStringTable(TableId);
+		return InvalidParams(FString::Printf(
+			TEXT("A StringTable is already registered with id '%s'; refusing to unregister a live table to create '%s'"),
+			*TableId.ToString(),
+			*AssetPath));
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -1340,7 +1568,7 @@ FMonolithActionResult FMonolithLocalizationActions::CreateStringTable(const TSha
 	Result->SetStringField(TEXT("package_path"), PackagePath);
 	Result->SetStringField(TEXT("name"), AssetName);
 	Result->SetStringField(TEXT("namespace"), Namespace);
-	Result->SetBoolField(TEXT("unregistered_stale_string_table"), bUnregisteredStaleTable);
+	Result->SetBoolField(TEXT("string_table_id_available"), true);
 	if (Options.bDryRun)
 	{
 		Result->SetBoolField(TEXT("would_create"), true);
@@ -1753,11 +1981,37 @@ FMonolithActionResult FMonolithLocalizationActions::ImportStringTableCsv(const T
 		return FMonolithActionResult::Success(Result);
 	}
 
-	const bool bChanged = Rows.Num() > 0 || bReplaceExisting;
+	const bool bChanged =
+		ImportWouldChangeStringTable(Table, Rows, bReplaceExisting);
 	bool bSaved = false;
 	FString SavedPath;
 	if (bChanged)
 	{
+		// Snapshot the current contents so a save failure after a destructive
+		// replace can restore them instead of leaving a dirty, rebuilt table that
+		// the caller believes was untouched.
+		TArray<FStringTableCsvRow> RollbackRows;
+		TArray<FString> RollbackMetadataKeys;
+		CollectStringTableRows(Table, true, RollbackRows, RollbackMetadataKeys);
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8 && WITH_EDITORONLY_DATA
+		// Developer notes live outside the CSV projection, so they are snapshotted
+		// separately or a rollback would silently drop translator context.
+		TMap<FString, FString> RollbackDevNotes;
+		{
+			const FStringTableConstRef SnapshotTable = Table->GetStringTable();
+			for (const FStringTableCsvRow& RollbackRow : RollbackRows)
+			{
+				if (const FStringTableEntryConstPtr ExistingEntry =
+					SnapshotTable->FindEntry(FTextKey(RollbackRow.Key)))
+				{
+					RollbackDevNotes.Add(
+						RollbackRow.Key,
+						ExistingEntry->GetDevNotes());
+				}
+			}
+		}
+#endif
+
 		Table->Modify();
 		FStringTableRef MutableTable = Table->GetMutableStringTable();
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8 && WITH_EDITORONLY_DATA
@@ -1794,6 +2048,33 @@ FMonolithActionResult FMonolithLocalizationActions::ImportStringTableCsv(const T
 
 		if (!SaveAssetIfRequested(Table, Options.bSave, bSaved, SavedPath, Error))
 		{
+			// Restore the snapshot so the failed action is a genuine no-op rather
+			// than a committed in-memory mutation waiting to be saved later.
+			FStringTableRef RollbackTable = Table->GetMutableStringTable();
+			RollbackTable->ClearSourceStrings();
+			for (const FStringTableCsvRow& RollbackRow : RollbackRows)
+			{
+				const FTextKey RollbackKey(RollbackRow.Key);
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8 && WITH_EDITORONLY_DATA
+				SetSourceStringCompat(
+					RollbackTable,
+					RollbackKey,
+					RollbackRow.SourceString,
+					RollbackDevNotes.Find(RollbackRow.Key));
+#else
+				SetSourceStringCompat(
+					RollbackTable,
+					RollbackKey,
+					RollbackRow.SourceString);
+#endif
+				for (const TPair<FString, FString>& MetadataPair : RollbackRow.Metadata)
+				{
+					RollbackTable->SetMetaData(
+						RollbackKey,
+						FName(*MetadataPair.Key),
+						MetadataPair.Value);
+				}
+			}
 			return FMonolithActionResult::Error(Error);
 		}
 	}
