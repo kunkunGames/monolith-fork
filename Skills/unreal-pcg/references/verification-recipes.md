@@ -1,4 +1,4 @@
-# UE 5.8 PCG verification recipes
+# UE 5.7/5.8 PCG verification recipes
 
 Use the smallest recipe that proves the requested outcome. Every recipe starts from live catalog/schema discovery; the checked-in 28-action table is a compatibility expectation, not permission to call a missing action. These recipes compose existing typed actions and do not add per-node execution tracing or profiling capabilities.
 
@@ -122,7 +122,7 @@ Use only when PCG changes presentation, gameplay, actor placement, VFX, material
 4. Inspect the image or GIF and state what visible acceptance condition passed or failed.
 5. Upload/notify through the repository's explicit artifact path and report the command result.
 
-For Speed, follow the checkout's PC 1920x1080 screenshot and explicit Discord `--files` contract. A source-only or documentation-only change does not need a fabricated visual artifact; mark visual verification and Discord upload `N/A` with the reason.
+Follow the consuming repository's required resolution, camera, artifact, and notification contract. A source-only or documentation-only change does not need a fabricated visual artifact; mark visual verification and any upload/notification step `N/A` with the reason.
 
 ## Failure classification
 
@@ -150,5 +150,5 @@ Stop at the first unproven required layer and classify it accurately:
 - [ ] Output/resource claims use complete bounded evidence.
 - [ ] Determinism claims include cleanup/regeneration and controlled-input comparison.
 - [ ] Final changelist/asset containment was checked after asynchronous completion.
-- [ ] Required visual and Discord evidence exists, or is correctly marked `N/A`.
+- [ ] Required visual and artifact-notification evidence exists, or is correctly marked `N/A`.
 - [ ] No graph user-parameter schema capability, per-node trace, or runtime profiler result was claimed beyond the live surface.

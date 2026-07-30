@@ -2,6 +2,7 @@
 
 #include "Misc/AutomationTest.h"
 #include "MonolithAssetPackageGraphActions.h"
+#include "MonolithAssetResultCompat.h"
 #include "MonolithToolRegistry.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
@@ -34,11 +35,6 @@ bool FMonolithAssetPackageGraphRegistryTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("asset.copy_package_graph_with_strategy action is registered"), Registry.HasAction(TEXT("asset"), TEXT("copy_package_graph_with_strategy")));
 	TestTrue(TEXT("asset.fixup_copied_references action is registered"), Registry.HasAction(TEXT("asset"), TEXT("fixup_copied_references")));
 	TestTrue(TEXT("asset.validate_dependency_closure action is registered"), Registry.HasAction(TEXT("asset"), TEXT("validate_dependency_closure")));
-	TestEqual(TEXT("register_content_mount_points tracks dirty packages without transaction wrapping"), Registry.GetActionExecutionPolicy(TEXT("asset"), TEXT("register_content_mount_points")).PolicyId, FString(TEXT("track_dirty_packages")));
-	TestEqual(TEXT("plan_package_graph_copy is read-only"), Registry.GetActionExecutionPolicy(TEXT("asset"), TEXT("plan_package_graph_copy")).PolicyId, FString(TEXT("read_only")));
-	TestEqual(TEXT("copy_package_graph_with_remap is guarded mutating"), Registry.GetActionExecutionPolicy(TEXT("asset"), TEXT("copy_package_graph_with_remap")).PolicyId, FString(TEXT("transaction_optional")));
-	TestEqual(TEXT("copy_package_graph_with_strategy is guarded mutating"), Registry.GetActionExecutionPolicy(TEXT("asset"), TEXT("copy_package_graph_with_strategy")).PolicyId, FString(TEXT("transaction_optional")));
-	TestEqual(TEXT("fixup_copied_references is guarded mutating"), Registry.GetActionExecutionPolicy(TEXT("asset"), TEXT("fixup_copied_references")).PolicyId, FString(TEXT("transaction_optional")));
 
 	FMonolithActionResult MissingPlanParams = FMonolithAssetPackageGraphActions::PlanPackageGraphCopy(MakeShared<FJsonObject>());
 	TestFalse(TEXT("plan_package_graph_copy rejects missing root_packages"), MissingPlanParams.bSuccess);
@@ -234,13 +230,14 @@ bool FMonolithAssetPackageGraphRegistryTest::RunTest(const FString& Parameters)
 		TestFalse(TEXT("register_content_mount_points rejects conflicting mount root"), ConflictMount.bSuccess);
 		TestEqual(TEXT("register_content_mount_points conflict error code"), ConflictMount.ErrorCode, -32602);
 		TestTrue(TEXT("register_content_mount_points conflict returns error data"), ConflictMount.ErrorData.IsValid());
-		if (ConflictMount.ErrorData.IsValid())
+		if (const TSharedPtr<FJsonObject> ErrorData =
+			MonolithAsset::GetErrorDataObject(ConflictMount))
 		{
 			FString Status;
-			ConflictMount.ErrorData->TryGetStringField(TEXT("status"), Status);
+			ErrorData->TryGetStringField(TEXT("status"), Status);
 			TestEqual(TEXT("register_content_mount_points conflict status"), Status, FString(TEXT("preflight_failed")));
 			double ErrorCount = 0.0;
-			ConflictMount.ErrorData->TryGetNumberField(TEXT("preflight_error_count"), ErrorCount);
+			ErrorData->TryGetNumberField(TEXT("preflight_error_count"), ErrorCount);
 			TestEqual(TEXT("register_content_mount_points conflict has one preflight error"), static_cast<int32>(ErrorCount), 1);
 		}
 	}

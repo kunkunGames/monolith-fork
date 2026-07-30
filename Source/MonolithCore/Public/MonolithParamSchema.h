@@ -401,14 +401,45 @@ public:
 		return *this;
 	}
 
+	/**
+	 * Require exact JSON array/object types for every complex parameter in this
+	 * action schema. This prevents the registry's client-compatibility parser
+	 * (RecoverStringEncodedComplexParams) from converting JSON-encoded strings
+	 * before dispatch. Use RequiredExactType / OptionalExactType to opt out one
+	 * parameter instead of the whole schema.
+	 */
+	FParamSchemaBuilder& StrictComplexTypes()
+	{
+		bStrictComplexTypes = true;
+		return *this;
+	}
+
 	TSharedPtr<FJsonObject> Build()
 	{
+		if (bStrictComplexTypes)
+		{
+			for (const TPair<FString, TSharedPtr<FJsonObject>>& Pair : ParamsByName)
+			{
+				if (!Pair.Value.IsValid())
+				{
+					continue;
+				}
+
+				FString Type;
+				if (Pair.Value->TryGetStringField(TEXT("type"), Type)
+					&& (Type == TEXT("array") || Type == TEXT("object")))
+				{
+					DisableStringEncodedComplexRecovery(Pair.Key);
+				}
+			}
+		}
 		return Schema;
 	}
 
 private:
 	TSharedPtr<FJsonObject> Schema = MakeShared<FJsonObject>();
 	TMap<FString, TSharedPtr<FJsonObject>> ParamsByName;
+	bool bStrictComplexTypes = false;
 
 	static bool EnsureNonEmpty(const FString& Value, const FString& ParamName, const TCHAR* FieldLabel)
 	{

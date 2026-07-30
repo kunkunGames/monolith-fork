@@ -271,7 +271,9 @@ FMonolithActionResult FMonolithAssetFindActions::FindAssets(const TSharedPtr<FJs
 		return FMonolithActionResult::Error(TEXT("Invalid parameter 'path': must be a string."), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
-	if (Params->HasField(TEXT("recursive")) && !Params->TryGetBoolField(TEXT("recursive"), Request.bRecursive))
+	if (Params->HasField(TEXT("recursive"))
+		&& (!Params->HasTypedField<EJson::Boolean>(TEXT("recursive"))
+			|| !Params->TryGetBoolField(TEXT("recursive"), Request.bRecursive)))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid parameter 'recursive': must be a boolean."), FMonolithJsonUtils::ErrInvalidParams);
 	}
@@ -310,30 +312,46 @@ FMonolithActionResult FMonolithAssetFindActions::FindAssets(const TSharedPtr<FJs
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid parameter 'limit': must be an integer."), FMonolithJsonUtils::ErrInvalidParams);
 		}
-		Request.Limit = FMath::Clamp(static_cast<int32>(LimitValue), 1, 100);
+		const int32 ParsedLimit = FMath::RoundToInt(LimitValue);
+		if (!FMath::IsNearlyEqual(LimitValue, static_cast<double>(ParsedLimit))
+			|| ParsedLimit < 1
+			|| ParsedLimit > 100)
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid parameter 'limit': must be an integer from 1 through 100."), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		Request.Limit = ParsedLimit;
 	}
 
 	if (Params->HasField(TEXT("threshold")))
 	{
 		double ThresholdValue = 0.0;
-		if (!Params->TryGetNumberField(TEXT("threshold"), ThresholdValue) || ThresholdValue < 0.0)
+		if (!Params->TryGetNumberField(TEXT("threshold"), ThresholdValue)
+			|| ThresholdValue < 0.0
+			|| ThresholdValue > static_cast<double>(MAX_int32)
+			|| !FMath::IsNearlyEqual(ThresholdValue, static_cast<double>(FMath::RoundToInt(ThresholdValue))))
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid parameter 'threshold': must be a non-negative integer."), FMonolithJsonUtils::ErrInvalidParams);
 		}
-		Request.Threshold = static_cast<int32>(ThresholdValue);
+		Request.Threshold = FMath::RoundToInt(ThresholdValue);
 	}
 
-	if (Params->HasField(TEXT("include_tags")) && !Params->TryGetBoolField(TEXT("include_tags"), Request.bIncludeTags))
+	if (Params->HasField(TEXT("include_tags"))
+		&& (!Params->HasTypedField<EJson::Boolean>(TEXT("include_tags"))
+			|| !Params->TryGetBoolField(TEXT("include_tags"), Request.bIncludeTags)))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid parameter 'include_tags': must be a boolean."), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
-	if (Params->HasField(TEXT("include_score_breakdown")) && !Params->TryGetBoolField(TEXT("include_score_breakdown"), Request.bIncludeScoreBreakdown))
+	if (Params->HasField(TEXT("include_score_breakdown"))
+		&& (!Params->HasTypedField<EJson::Boolean>(TEXT("include_score_breakdown"))
+			|| !Params->TryGetBoolField(TEXT("include_score_breakdown"), Request.bIncludeScoreBreakdown)))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid parameter 'include_score_breakdown': must be a boolean."), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
-	if (Params->HasField(TEXT("allow_transposition")) && !Params->TryGetBoolField(TEXT("allow_transposition"), Request.bAllowTransposition))
+	if (Params->HasField(TEXT("allow_transposition"))
+		&& (!Params->HasTypedField<EJson::Boolean>(TEXT("allow_transposition"))
+			|| !Params->TryGetBoolField(TEXT("allow_transposition"), Request.bAllowTransposition)))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid parameter 'allow_transposition': must be a boolean."), FMonolithJsonUtils::ErrInvalidParams);
 	}
@@ -416,21 +434,15 @@ void FMonolithAssetFindActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Fuzzy, scored, typo-tolerant search over the live AssetRegistry. Ranks assets by name/path/class with edit-distance typo tolerance; sees unsaved assets created this session. Results feed asset.inspect_asset. Distinct from offline project search."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAssetFindActions::FindAssets),
 		FParamSchemaBuilder()
-			.EnableValidation()
 			.Required(TEXT("query"), TEXT("string"), TEXT("Asset name or task text to search for."))
 			.Optional(TEXT("path"), TEXT("string"), TEXT("Content path scope, e.g. /Game or /Game/Characters."), TEXT("/Game"))
 			.Optional(TEXT("recursive"), TEXT("boolean"), TEXT("Recurse subfolders under path."), TEXT("true"))
 			.Optional(TEXT("class_names"), TEXT("array"), TEXT("Filter by asset class names (e.g. Texture2D, Blueprint) or /Script/Module.ClassName paths."), { TEXT("class") })
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum ranked rows to return."), TEXT("20"))
-			.Range(TEXT("limit"), 1, 100)
 			.Optional(TEXT("threshold"), TEXT("integer"), TEXT("Minimum raw asset_fuzzy_v1 score to keep a match."), TEXT(""))
 			.Optional(TEXT("include_tags"), TEXT("boolean"), TEXT("Also score selected AssetRegistry tag values."), TEXT("false"))
 			.Optional(TEXT("include_score_breakdown"), TEXT("boolean"), TEXT("Include reason, matched_tokens, distance, and per-field score breakdown."), TEXT("false"))
 			.Optional(TEXT("allow_transposition"), TEXT("boolean"), TEXT("Count adjacent character swaps as one typo edit for fuzzy token matching."), TEXT("true"), { TEXT("bAllowTransposition") })
+			.StrictComplexTypes()
 			.Build());
-
-	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("asset"), TEXT("find_assets"),
-		{ TEXT("locate asset by name"), TEXT("fuzzy asset search"), TEXT("typo tolerant search"), TEXT("search content browser"), TEXT("asset registry lookup") },
-		{ TEXT("find asset"), TEXT("search assets"), TEXT("lookup asset"), TEXT("where is asset") },
-		{ TEXT("find the rock texture under /Game"), TEXT("search for a blueprint named BP_Player") });
 }

@@ -52,8 +52,18 @@ namespace
 			|| (Alternate && Params->TryGetStringField(Alternate, OutValue));
 	}
 
-	bool ParseSettingsObject(const TSharedPtr<FJsonObject>& Params, TSharedPtr<FJsonObject>& OutSettings)
+	bool ParseSettingsObject(
+		const TSharedPtr<FJsonObject>& Params,
+		TSharedPtr<FJsonObject>& OutSettings,
+		FString& OutError)
 	{
+		OutSettings.Reset();
+		OutError.Reset();
+		if (!Params->HasField(TEXT("settings")))
+		{
+			return true;
+		}
+
 		const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
 		if (Params->TryGetObjectField(TEXT("settings"), SettingsObj) && SettingsObj && SettingsObj->IsValid())
 		{
@@ -61,48 +71,95 @@ namespace
 			return true;
 		}
 
-		FString SettingsJson;
-		if (Params->TryGetStringField(TEXT("settings"), SettingsJson) && !SettingsJson.IsEmpty())
-		{
-			OutSettings = FMonolithJsonUtils::Parse(SettingsJson);
-			return OutSettings.IsValid();
-		}
-
+		OutError = TEXT("settings must be a JSON object");
 		return false;
 	}
 
-	bool ReadBoolSetting(const TSharedPtr<FJsonObject>& Params, const TSharedPtr<FJsonObject>& Settings, const TCHAR* Name, bool& InOutValue)
+	TSharedPtr<FJsonValue> FindSettingValue(
+		const TSharedPtr<FJsonObject>& Params,
+		const TSharedPtr<FJsonObject>& Settings,
+		const TCHAR* Name,
+		FString& OutError)
 	{
-		if (Settings.IsValid() && Settings->TryGetBoolField(Name, InOutValue))
+		OutError.Reset();
+		const bool bNestedPresent = Settings.IsValid() && Settings->HasField(Name);
+		const bool bTopLevelPresent = Params->HasField(Name);
+		if (bNestedPresent && bTopLevelPresent)
 		{
-			return true;
+			OutError = FString::Printf(
+				TEXT("Setting '%s' was provided both at the top level and inside settings; provide exactly one"),
+				Name);
+			return nullptr;
 		}
-		return Params->TryGetBoolField(Name, InOutValue);
+
+		return bNestedPresent ? Settings->TryGetField(Name) : Params->TryGetField(Name);
 	}
 
-	bool ReadStringSetting(const TSharedPtr<FJsonObject>& Params, const TSharedPtr<FJsonObject>& Settings, const TCHAR* Name, FString& OutValue)
+	bool ReadBoolSetting(
+		const TSharedPtr<FJsonObject>& Params,
+		const TSharedPtr<FJsonObject>& Settings,
+		const TCHAR* Name,
+		bool& InOutValue,
+		FString& OutError)
 	{
-		if (Settings.IsValid() && Settings->TryGetStringField(Name, OutValue))
+		TSharedPtr<FJsonValue> Value = FindSettingValue(Params, Settings, Name, OutError);
+		if (!OutError.IsEmpty() || !Value.IsValid())
 		{
-			return true;
+			return OutError.IsEmpty();
 		}
-		return Params->TryGetStringField(Name, OutValue);
+		if (Value->Type != EJson::Boolean || !Value->TryGetBool(InOutValue))
+		{
+			OutError = FString::Printf(TEXT("Setting '%s' must be a boolean"), Name);
+			return false;
+		}
+		return true;
 	}
 
-	bool ReadIntSetting(const TSharedPtr<FJsonObject>& Params, const TSharedPtr<FJsonObject>& Settings, const TCHAR* Name, int32& OutValue)
+	bool ReadStringSetting(
+		const TSharedPtr<FJsonObject>& Params,
+		const TSharedPtr<FJsonObject>& Settings,
+		const TCHAR* Name,
+		FString& OutValue,
+		FString& OutError)
 	{
-		double Value = 0.0;
-		if (Settings.IsValid() && Settings->TryGetNumberField(Name, Value))
+		TSharedPtr<FJsonValue> Value = FindSettingValue(Params, Settings, Name, OutError);
+		if (!OutError.IsEmpty() || !Value.IsValid())
 		{
-			OutValue = static_cast<int32>(Value);
-			return true;
+			return OutError.IsEmpty();
 		}
-		if (Params->TryGetNumberField(Name, Value))
+		if (!Value->TryGetString(OutValue) || OutValue.IsEmpty())
 		{
-			OutValue = static_cast<int32>(Value);
-			return true;
+			OutError = FString::Printf(TEXT("Setting '%s' must be a non-empty string"), Name);
+			return false;
 		}
-		return false;
+		return true;
+	}
+
+	bool ReadIntSetting(
+		const TSharedPtr<FJsonObject>& Params,
+		const TSharedPtr<FJsonObject>& Settings,
+		const TCHAR* Name,
+		int32& OutValue,
+		FString& OutError)
+	{
+		TSharedPtr<FJsonValue> Value = FindSettingValue(Params, Settings, Name, OutError);
+		if (!OutError.IsEmpty() || !Value.IsValid())
+		{
+			return OutError.IsEmpty();
+		}
+
+		double Number = 0.0;
+		if (!Value->TryGetNumber(Number)
+			|| Number < 0.0
+			|| Number > static_cast<double>(MAX_int32)
+			|| !FMath::IsNearlyEqual(Number, static_cast<double>(FMath::RoundToInt(Number))))
+		{
+			OutError = FString::Printf(TEXT("Setting '%s' must be a non-negative integer"), Name);
+			return false;
+		}
+
+		OutValue = FMath::RoundToInt(Number);
+		return true;
 	}
 
 	bool ParseTextureCompression(const FString& Str, TextureCompressionSettings& OutSetting)
@@ -456,6 +513,9 @@ namespace
 		bool bHadRegisteredAsset = false;
 		bool bHadLoadedPackage = false;
 		bool bFoundObject = false;
+		// True when the package holds only assets this request asked to delete.
+		// Residual package files are only removed under that proof.
+		bool bPackageExclusivelyRequested = false;
 		bool bResidualRemoved = false;
 		bool bSourceControlFailure = false;
 		bool bFinalRegisteredAsset = false;
@@ -781,6 +841,7 @@ void FMonolithAssetLifecycleActions::RegisterActions(FMonolithToolRegistry& Regi
 			.Optional(TEXT("settings"), TEXT("object"), TEXT("{compression, srgb, tiling, max_size, lod_group}. compression accepts TC_* names plus UI/UserInterface2D aliases."))
 			.Optional(TEXT("replace_existing"), TEXT("bool"), TEXT("Overwrite existing destination asset"), TEXT("false"))
 			.Optional(TEXT("overwrite_policy"), TEXT("string"), TEXT("Compatibility alias for replace_existing: overwrite/replace -> true; fail/unique -> false."))
+			.StrictComplexTypes()
 			.Build());
 
 	Registry.RegisterAction(TEXT("asset"), TEXT("save_asset"),
@@ -789,6 +850,7 @@ void FMonolithAssetLifecycleActions::RegisterActions(FMonolithToolRegistry& Regi
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to save"))
 			.Optional(TEXT("verify_reload"), TEXT("bool"), TEXT("Reload the clean package non-interactively and resolve the asset again to prove persistence"), TEXT("false"))
+			.StrictComplexTypes()
 			.Build());
 
 	Registry.RegisterAction(TEXT("asset"), TEXT("delete_assets"),
@@ -800,26 +862,19 @@ void FMonolithAssetLifecycleActions::RegisterActions(FMonolithToolRegistry& Regi
 			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Validate and report targets without deleting"), TEXT("false"))
 			.Optional(TEXT("force"), TEXT("bool"), TEXT("Force-delete referenced assets after closing open editors. Default false"), TEXT("false"))
 			.Optional(TEXT("require_source_control"), TEXT("bool"), TEXT("Require an available provider plus per-file state preflight and verified delete/revert-add postconditions"), TEXT("false"))
+			.StrictComplexTypes()
 			.Build());
-
-	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("asset"), TEXT("import_texture_from_file"),
-		{ TEXT("import image"), TEXT("png to texture"), TEXT("load texture from disk"), TEXT("ingest external image"), TEXT("texture2d from file") },
-		{ TEXT("import texture"), TEXT("add texture"), TEXT("create texture from image") },
-		{ TEXT("import D:/art/rock.png as a Texture2D under /Game/Textures"), TEXT("bring this PNG into the project as a texture") });
-
-	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("asset"), TEXT("save_asset"),
-		{ TEXT("write to disk"), TEXT("persist asset"), TEXT("flush package"), TEXT("commit changes"), TEXT("unsaved asset") },
-		{ TEXT("save package"), TEXT("save"), TEXT("save changes") },
-		{ TEXT("save /Game/Textures/T_Rock to disk"), TEXT("persist my edits to this asset") });
-
-	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("asset"), TEXT("delete_assets"),
-		{ TEXT("remove asset"), TEXT("erase asset"), TEXT("force delete referenced"), TEXT("clean up assets"), TEXT("delete multiple") },
-		{ TEXT("delete asset"), TEXT("remove"), TEXT("trash asset") },
-		{ TEXT("delete /Game/Old/T_Unused"), TEXT("remove these unreferenced assets safely") });
 }
 
 FMonolithActionResult FMonolithAssetLifecycleActions::ImportTextureFromFile(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(
+			TEXT("params must be an object"),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString SourcePath;
 	FString Destination;
 	if (!ReadStringAlias(Params, TEXT("source_path"), TEXT("source_file"), SourcePath) || SourcePath.IsEmpty())
@@ -834,7 +889,13 @@ FMonolithActionResult FMonolithAssetLifecycleActions::ImportTextureFromFile(cons
 		Params->TryGetStringField(TEXT("destination_path"), Destination);
 	}
 	FString AssetName;
-	Params->TryGetStringField(TEXT("asset_name"), AssetName);
+	if (Params->HasField(TEXT("asset_name"))
+		&& (!Params->TryGetStringField(TEXT("asset_name"), AssetName) || AssetName.IsEmpty()))
+	{
+		return FMonolithActionResult::Error(
+			TEXT("asset_name must be a non-empty string"),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (!AssetName.IsEmpty() && !Destination.IsEmpty())
 	{
 		Destination = Destination / AssetName;
@@ -843,6 +904,13 @@ FMonolithActionResult FMonolithAssetLifecycleActions::ImportTextureFromFile(cons
 	if (SourcePath.IsEmpty() || Destination.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("source_path and destination are required. Aliases: file_path/source_file/path and destination_path/dest_path; destination_path may be paired with asset_name."));
+	}
+
+	if (FPaths::IsRelative(SourcePath))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("source_path must be absolute: %s"), *SourcePath),
+			FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	if (!FPlatformFileManager::Get().GetPlatformFile().FileExists(*SourcePath))
@@ -859,51 +927,135 @@ FMonolithActionResult FMonolithAssetLifecycleActions::ImportTextureFromFile(cons
 	}
 
 	TSharedPtr<FJsonObject> Settings;
-	ParseSettingsObject(Params, Settings);
+	FString SettingError;
+	if (!ParseSettingsObject(Params, Settings, SettingError))
+	{
+		return FMonolithActionResult::Error(
+			SettingError,
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+	if (Settings.IsValid())
+	{
+		static const TSet<FString> AllowedSettingNames = {
+			TEXT("compression"),
+			TEXT("srgb"),
+			TEXT("tiling"),
+			TEXT("max_size"),
+			TEXT("lod_group")
+		};
+		for (const auto& Pair : Settings->Values)
+		{
+			const FString Key = MonolithKeyToString(Pair.Key);
+			if (!AllowedSettingNames.Contains(Key))
+			{
+				return FMonolithActionResult::Error(
+					FString::Printf(TEXT("Unknown texture setting '%s'"), *Key),
+					FMonolithJsonUtils::ErrInvalidParams);
+			}
+		}
+	}
 
 	bool bReplaceExisting = false;
-	Params->TryGetBoolField(TEXT("replace_existing"), bReplaceExisting);
-	FString OverwritePolicy;
-	if (!bReplaceExisting && Params->TryGetStringField(TEXT("overwrite_policy"), OverwritePolicy))
+	if (Params->HasField(TEXT("replace_existing"))
+		&& (!Params->HasTypedField<EJson::Boolean>(TEXT("replace_existing"))
+			|| !Params->TryGetBoolField(TEXT("replace_existing"), bReplaceExisting)))
 	{
+		return FMonolithActionResult::Error(
+			TEXT("replace_existing must be a boolean"),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString OverwritePolicy;
+	if (Params->HasField(TEXT("overwrite_policy")))
+	{
+		if (!Params->TryGetStringField(TEXT("overwrite_policy"), OverwritePolicy)
+			|| OverwritePolicy.IsEmpty())
+		{
+			return FMonolithActionResult::Error(
+				TEXT("overwrite_policy must be a non-empty string"),
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
 		const FString Policy = OverwritePolicy.ToLower();
 		if (Policy == TEXT("overwrite") || Policy == TEXT("replace") || Policy == TEXT("replace_existing"))
 		{
 			bReplaceExisting = true;
 		}
+		else if (Policy != TEXT("fail") && Policy != TEXT("unique"))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(
+					TEXT("Unsupported overwrite_policy '%s'; expected fail, unique, overwrite, replace, or replace_existing"),
+					*OverwritePolicy),
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 
 	TextureCompressionSettings Compression = TC_Default;
 	FString CompressionStr;
-	if (ReadStringSetting(Params, Settings, TEXT("compression"), CompressionStr)
-		&& !ParseTextureCompression(CompressionStr, Compression))
+	if (!ReadStringSetting(Params, Settings, TEXT("compression"), CompressionStr, SettingError))
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid compression setting: '%s'"), *CompressionStr));
+		return FMonolithActionResult::Error(SettingError, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	if (!CompressionStr.IsEmpty() && !ParseTextureCompression(CompressionStr, Compression))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Invalid compression setting: '%s'"), *CompressionStr),
+			FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	bool bSRGB = true;
-	ReadBoolSetting(Params, Settings, TEXT("srgb"), bSRGB);
+	if (!ReadBoolSetting(Params, Settings, TEXT("srgb"), bSRGB, SettingError))
+	{
+		return FMonolithActionResult::Error(SettingError, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	bool bTiling = false;
-	ReadBoolSetting(Params, Settings, TEXT("tiling"), bTiling);
+	if (!ReadBoolSetting(Params, Settings, TEXT("tiling"), bTiling, SettingError))
+	{
+		return FMonolithActionResult::Error(SettingError, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	TextureGroup LODGroup = TEXTUREGROUP_World;
 	FString LODGroupStr;
-	if (ReadStringSetting(Params, Settings, TEXT("lod_group"), LODGroupStr)
-		&& !ParseTextureLODGroup(LODGroupStr, LODGroup))
+	if (!ReadStringSetting(Params, Settings, TEXT("lod_group"), LODGroupStr, SettingError))
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid lod_group: '%s'"), *LODGroupStr));
+		return FMonolithActionResult::Error(SettingError, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	if (!LODGroupStr.IsEmpty() && !ParseTextureLODGroup(LODGroupStr, LODGroup))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Invalid lod_group: '%s'"), *LODGroupStr),
+			FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	int32 MaxSize = 0;
-	ReadIntSetting(Params, Settings, TEXT("max_size"), MaxSize);
+	if (!ReadIntSetting(Params, Settings, TEXT("max_size"), MaxSize, SettingError))
+	{
+		return FMonolithActionResult::Error(SettingError, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	const FString FinalAssetPath = DestinationPackagePath / DestinationName;
-	if (!bReplaceExisting && UEditorAssetLibrary::DoesAssetExist(FinalAssetPath))
+	const bool bExpectedAssetExists = UEditorAssetLibrary::DoesAssetExist(FinalAssetPath);
+	if (!bReplaceExisting && bExpectedAssetExists)
 	{
 		return FMonolithActionResult::Error(FString::Printf(
 			TEXT("Asset already exists at '%s'. Set replace_existing=true to overwrite."),
 			*FinalAssetPath));
+	}
+
+	TSet<FString> PreexistingDestinationPackages;
+	{
+		TArray<FAssetData> ExistingAssets;
+		FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"))
+			.Get()
+			.GetAssetsByPath(
+				FName(*DestinationPackagePath),
+				ExistingAssets,
+				/*bRecursive=*/false,
+				/*bIncludeOnlyOnDiskAssets=*/false);
+		for (const FAssetData& ExistingAsset : ExistingAssets)
+		{
+			PreexistingDestinationPackages.Add(ExistingAsset.PackageName.ToString());
+		}
 	}
 
 	UAssetImportTask* ImportTask = NewObject<UAssetImportTask>();
@@ -911,27 +1063,49 @@ FMonolithActionResult FMonolithAssetLifecycleActions::ImportTextureFromFile(cons
 	ImportTask->DestinationPath = DestinationPackagePath;
 	ImportTask->DestinationName = DestinationName;
 	ImportTask->bAutomated = true;
-	ImportTask->bReplaceExisting = bReplaceExisting;
+	ImportTask->bReplaceExisting = bReplaceExisting && bExpectedAssetExists;
 	ImportTask->bSave = true;
 
 	TArray<UAssetImportTask*> Tasks;
 	Tasks.Add(ImportTask);
 	FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get().ImportAssetTasks(Tasks);
 
-	UObject* ImportedObject = FMonolithAssetUtils::LoadAssetByPath(FinalAssetPath);
-	UTexture2D* Texture = ImportedObject ? Cast<UTexture2D>(ImportedObject) : nullptr;
-	FString ResolvedAssetPath = FinalAssetPath;
-
-	if (!Texture)
+	TArray<FString> UnexpectedImportedPackages;
+	for (const FString& ImportedObjectPath : ImportTask->ImportedObjectPaths)
 	{
-		const FString FallbackPath = DestinationPackagePath / FPaths::GetBaseFilename(SourcePath);
-		ImportedObject = FMonolithAssetUtils::LoadAssetByPath(FallbackPath);
-		Texture = ImportedObject ? Cast<UTexture2D>(ImportedObject) : nullptr;
-		if (Texture)
+		const FString ImportedPackagePath = FPackageName::ObjectPathToPackageName(ImportedObjectPath);
+		if (!ImportedPackagePath.IsEmpty() && ImportedPackagePath != FinalAssetPath)
 		{
-			ResolvedAssetPath = FallbackPath;
+			UnexpectedImportedPackages.AddUnique(ImportedPackagePath);
 		}
 	}
+	if (UnexpectedImportedPackages.Num() > 0)
+	{
+		TArray<FString> ResidualPackages;
+		for (const FString& UnexpectedPackage : UnexpectedImportedPackages)
+		{
+			if (PreexistingDestinationPackages.Contains(UnexpectedPackage))
+			{
+				ResidualPackages.Add(UnexpectedPackage);
+			}
+			else if (UEditorAssetLibrary::DoesAssetExist(UnexpectedPackage)
+				&& !UEditorAssetLibrary::DeleteAsset(UnexpectedPackage))
+			{
+				ResidualPackages.Add(UnexpectedPackage);
+			}
+		}
+
+		return FMonolithActionResult::Error(
+			FString::Printf(
+				TEXT("Import did not honor the exact destination '%s'. Unexpected packages: [%s]. Residual packages after cleanup: [%s]."),
+				*FinalAssetPath,
+				*FString::Join(UnexpectedImportedPackages, TEXT(", ")),
+				*FString::Join(ResidualPackages, TEXT(", "))),
+			FMonolithJsonUtils::ErrInternalError);
+	}
+
+	UObject* ImportedObject = FMonolithAssetUtils::LoadAssetByPath(FinalAssetPath);
+	UTexture2D* Texture = ImportedObject ? Cast<UTexture2D>(ImportedObject) : nullptr;
 
 	if (!Texture)
 	{
@@ -958,12 +1132,49 @@ FMonolithActionResult FMonolithAssetLifecycleActions::ImportTextureFromFile(cons
 	Texture->MarkPackageDirty();
 	if (!UEditorAssetLibrary::SaveLoadedAsset(Texture, false))
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to save imported texture asset: %s"), *ResolvedAssetPath));
+		// The import already replaced or created the destination object and this
+		// code already mutated its texture settings, so a bare error would let the
+		// caller assume nothing happened.
+		if (!bExpectedAssetExists)
+		{
+			// Nothing was there before, so the new asset can be removed outright
+			// and the failed action really is a no-op.
+			const bool bRemoved = UEditorAssetLibrary::DeleteAsset(FinalAssetPath);
+			TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+			ErrorData->SetStringField(TEXT("asset_path"), FinalAssetPath);
+			ErrorData->SetBoolField(TEXT("destination_pre_existed"), false);
+			ErrorData->SetBoolField(TEXT("created_asset_removed"), bRemoved);
+			ErrorData->SetBoolField(TEXT("partial_mutation"), !bRemoved);
+			return FMonolithActionResult::Error(
+				FString::Printf(
+					bRemoved
+						? TEXT("Failed to save imported texture asset '%s'; the newly created asset was removed.")
+						: TEXT("Failed to save imported texture asset '%s', and the newly created asset could not be removed."),
+					*FinalAssetPath),
+				-32603)
+				.WithErrorData(ErrorData);
+		}
+
+		// replace_existing overwrote a pre-existing asset in memory. Its previous
+		// content is not recoverable here, so report the committed mutation
+		// explicitly instead of implying the action did nothing.
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("asset_path"), FinalAssetPath);
+		ErrorData->SetBoolField(TEXT("destination_pre_existed"), true);
+		ErrorData->SetBoolField(TEXT("mutation_committed"), true);
+		ErrorData->SetBoolField(TEXT("partial_mutation"), true);
+		ErrorData->SetBoolField(TEXT("saved"), false);
+		return FMonolithActionResult::Error(
+			FString::Printf(
+				TEXT("Failed to save imported texture asset '%s'. The existing asset was already replaced in memory and is left dirty and unsaved; do not retry blindly."),
+				*FinalAssetPath),
+			-32603)
+			.WithErrorData(ErrorData);
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("success"), true);
-	Result->SetStringField(TEXT("asset_path"), ResolvedAssetPath);
+	Result->SetStringField(TEXT("asset_path"), FinalAssetPath);
 	int32 ResultSizeX = Texture->GetSizeX();
 	int32 ResultSizeY = Texture->GetSizeY();
 	FString FormatName = GPixelFormats[Texture->GetPixelFormat()].Name;
@@ -1014,7 +1225,9 @@ FMonolithActionResult FMonolithAssetLifecycleActions::SaveAsset(const TSharedPtr
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
 	}
 	bool bVerifyReload = false;
-	if (Params->HasField(TEXT("verify_reload")) && !Params->TryGetBoolField(TEXT("verify_reload"), bVerifyReload))
+	if (Params->HasField(TEXT("verify_reload"))
+		&& (!Params->HasTypedField<EJson::Boolean>(TEXT("verify_reload"))
+			|| !Params->TryGetBoolField(TEXT("verify_reload"), bVerifyReload)))
 	{
 		return FMonolithActionResult::Error(TEXT("verify_reload must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 	}
@@ -1408,7 +1621,53 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 		}
 	}
 
+	// Establish, per package, whether this request covers every asset it holds.
+	// Removing package files is only safe under that proof.
+	{
+		TMap<FString, TSet<FString>> RequestedObjectPathsByPackage;
+		for (int32 PathIndex = 0; PathIndex < AssetPaths.Num(); ++PathIndex)
+		{
+			FDeleteAssetTarget& Target = Targets[AssetPathTargetIndices[PathIndex]];
+			RequestedObjectPathsByPackage
+				.FindOrAdd(Target.PackageName)
+				.Add(MakeCanonicalAssetObjectPath(AssetPaths[PathIndex], Target.PackageName)
+					.ToLower());
+		}
+
+		for (FDeleteAssetTarget& Target : Targets)
+		{
+			const TSet<FString>* RequestedForPackage =
+				RequestedObjectPathsByPackage.Find(Target.PackageName);
+			if (!RequestedForPackage)
+			{
+				Target.bPackageExclusivelyRequested = false;
+				continue;
+			}
+
+			TArray<FAssetData> PackageAssets;
+			AssetRegistry.GetAssetsByPackageName(
+				FName(*Target.PackageName),
+				PackageAssets,
+				/*bIncludeOnlyOnDiskAssets=*/false);
+
+			bool bAllRequested = PackageAssets.Num() > 0;
+			for (const FAssetData& PackageAsset : PackageAssets)
+			{
+				if (!RequestedForPackage->Contains(
+					PackageAsset.GetSoftObjectPath().ToString().ToLower()))
+				{
+					bAllRequested = false;
+					break;
+				}
+			}
+			Target.bPackageExclusivelyRequested = bAllRequested;
+		}
+	}
+
 	TArray<FString> UnregisteredStringTables;
+	// Package -> dirty flag as it was before this action cleared it, so a refused
+	// deletion can restore the user's unsaved state.
+	TMap<UPackage*, bool> PreDeleteDirtyPackages;
 	for (UObject* Asset : ObjectsToDelete)
 	{
 		if (!Asset)
@@ -1418,8 +1677,14 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 
 		if (!bDryRun)
 		{
+			// Record the dirty flag before clearing it. DeleteObjects can refuse a
+			// non-forced delete (for example while the asset is still referenced),
+			// and the package then survives in a clean state with its editor
+			// closed, so a user's unsaved edits could be discarded later without a
+			// save prompt.
 			if (UPackage* Package = Asset->GetOutermost())
 			{
+				PreDeleteDirtyPackages.Add(Package, Package->IsDirty());
 				Package->SetDirtyFlag(false);
 			}
 			if (GEditor)
@@ -1448,6 +1713,18 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 	{
 		TGuardValue<bool> UnattendedGuard(GIsRunningUnattendedScript, true);
 		NumObjectDeletesReported = ObjectTools::DeleteObjects(ObjectsToDelete, /*bShowConfirmation=*/false);
+
+		// Restore the dirty flag on every package that survived the delete. A
+		// surviving package still holds the user's unsaved edits, and leaving it
+		// clean would let them be dropped without a save prompt.
+		for (const TPair<UPackage*, bool>& DirtyPair : PreDeleteDirtyPackages)
+		{
+			UPackage* Package = DirtyPair.Key;
+			if (DirtyPair.Value && IsValid(Package))
+			{
+				Package->SetDirtyFlag(true);
+			}
+		}
 	}
 
 	TArray<FString> EvictedPackages;
@@ -1474,7 +1751,13 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 				EvictLoadedPackageForDelete(Target.PackageName, EvictedPackages, StalePackages);
 			}
 
-			if (bForce)
+			// force=true previously removed the package file for every normalized
+			// package, even when the exact object was never found. A typo such as
+			// /Game/Hero.Hreo normalizes to package /Game/Hero and would destroy
+			// the valid package; selecting one asset in a multi-asset package
+			// would likewise take its unrequested siblings. Require both an exact
+			// hit and proof that nothing unrequested lives in the package.
+			if (bForce && Target.bFoundObject && Target.bPackageExclusivelyRequested)
 			{
 				const int32 DeletedResidualFilesBefore = DeletedResidualFiles.Num();
 				const int32 SourceControlFailuresBefore = SourceControlFailures.Num();

@@ -2,6 +2,7 @@
 #include "MonolithAssetTextureIngestActions.h"
 
 // Monolith registry
+#include "MonolithJsonUtils.h"
 #include "MonolithPackagePathValidator.h"
 #include "MonolithParamSchema.h"
 #include "MonolithToolRegistry.h"
@@ -1100,87 +1101,84 @@ namespace MonolithAsset::TextureIngestInternal
     }
 
     // Map a "TC_Default" / "TC_Grayscale" / ... string to TextureCompressionSettings.
-    // Unrecognised strings fall back to TC_Default.
-    static TextureCompressionSettings ParseCompression(const FString& S)
+    static bool ParseCompression(const FString& S, TextureCompressionSettings& Out)
     {
-        if (S == TEXT("TC_Default"))                 { return TC_Default;                 }
-        if (S == TEXT("TC_Normalmap"))               { return TC_Normalmap;               }
-        if (S == TEXT("TC_Masks"))                   { return TC_Masks;                   }
-        if (S == TEXT("TC_Grayscale"))               { return TC_Grayscale;               }
-        if (S == TEXT("TC_Displacementmap"))         { return TC_Displacementmap;         }
-        if (S == TEXT("TC_VectorDisplacementmap"))   { return TC_VectorDisplacementmap;   }
-        if (S == TEXT("TC_HDR"))                     { return TC_HDR;                     }
-        if (S == TEXT("TC_EditorIcon"))              { return TC_EditorIcon;              }
-        if (S == TEXT("TC_Alpha"))                   { return TC_Alpha;                   }
-        if (S == TEXT("TC_DistanceFieldFont"))       { return TC_DistanceFieldFont;       }
-        if (S == TEXT("TC_HDR_Compressed"))          { return TC_HDR_Compressed;          }
-        if (S == TEXT("TC_BC7"))                     { return TC_BC7;                     }
-        if (S == TEXT("TC_HalfFloat"))               { return TC_HalfFloat;               }
-        if (S == TEXT("TC_LQ"))                      { return TC_LQ;                      }
-        if (S == TEXT("TC_EncodedReflectionCapture")){ return TC_EncodedReflectionCapture;}
-        if (S == TEXT("TC_SingleFloat"))             { return TC_SingleFloat;             }
-        return TC_Default;
+        if (S == TEXT("TC_Default"))                  { Out = TC_Default;                  return true; }
+        if (S == TEXT("TC_Normalmap"))                { Out = TC_Normalmap;                return true; }
+        if (S == TEXT("TC_Masks"))                    { Out = TC_Masks;                    return true; }
+        if (S == TEXT("TC_Grayscale"))                { Out = TC_Grayscale;                return true; }
+        if (S == TEXT("TC_Displacementmap"))          { Out = TC_Displacementmap;          return true; }
+        if (S == TEXT("TC_VectorDisplacementmap"))    { Out = TC_VectorDisplacementmap;    return true; }
+        if (S == TEXT("TC_HDR"))                      { Out = TC_HDR;                      return true; }
+        if (S == TEXT("TC_EditorIcon"))               { Out = TC_EditorIcon;               return true; }
+        if (S == TEXT("TC_Alpha"))                    { Out = TC_Alpha;                    return true; }
+        if (S == TEXT("TC_DistanceFieldFont"))        { Out = TC_DistanceFieldFont;        return true; }
+        if (S == TEXT("TC_HDR_Compressed"))           { Out = TC_HDR_Compressed;           return true; }
+        if (S == TEXT("TC_BC7"))                      { Out = TC_BC7;                      return true; }
+        if (S == TEXT("TC_HalfFloat"))                { Out = TC_HalfFloat;                return true; }
+        if (S == TEXT("TC_LQ"))                       { Out = TC_LQ;                       return true; }
+        if (S == TEXT("TC_EncodedReflectionCapture")) { Out = TC_EncodedReflectionCapture; return true; }
+        if (S == TEXT("TC_SingleFloat"))              { Out = TC_SingleFloat;              return true; }
+        return false;
     }
 
     // Map a "TMGS_FromTextureGroup" / "TMGS_NoMipmaps" / ... string to TextureMipGenSettings.
-    // Unrecognised strings fall back to TMGS_NoMipmaps (UI default -- matches spec).
-    static TextureMipGenSettings ParseMipGen(const FString& S)
+    static bool ParseMipGen(const FString& S, TextureMipGenSettings& Out)
     {
-        if (S == TEXT("TMGS_FromTextureGroup"))  { return TMGS_FromTextureGroup;  }
-        if (S == TEXT("TMGS_SimpleAverage"))     { return TMGS_SimpleAverage;     }
-        if (S == TEXT("TMGS_Sharpen0"))          { return TMGS_Sharpen0;          }
-        if (S == TEXT("TMGS_Sharpen1"))          { return TMGS_Sharpen1;          }
-        if (S == TEXT("TMGS_Sharpen2"))          { return TMGS_Sharpen2;          }
-        if (S == TEXT("TMGS_Sharpen3"))          { return TMGS_Sharpen3;          }
-        if (S == TEXT("TMGS_Sharpen4"))          { return TMGS_Sharpen4;          }
-        if (S == TEXT("TMGS_Sharpen5"))          { return TMGS_Sharpen5;          }
-        if (S == TEXT("TMGS_Sharpen6"))          { return TMGS_Sharpen6;          }
-        if (S == TEXT("TMGS_Sharpen7"))          { return TMGS_Sharpen7;          }
-        if (S == TEXT("TMGS_Sharpen8"))          { return TMGS_Sharpen8;          }
-        if (S == TEXT("TMGS_Sharpen9"))          { return TMGS_Sharpen9;          }
-        if (S == TEXT("TMGS_Sharpen10"))         { return TMGS_Sharpen10;         }
-        if (S == TEXT("TMGS_NoMipmaps"))         { return TMGS_NoMipmaps;         }
-        if (S == TEXT("TMGS_LeaveExistingMips")) { return TMGS_LeaveExistingMips; }
-        if (S == TEXT("TMGS_Blur1"))             { return TMGS_Blur1;             }
-        if (S == TEXT("TMGS_Blur2"))             { return TMGS_Blur2;             }
-        if (S == TEXT("TMGS_Blur3"))             { return TMGS_Blur3;             }
-        if (S == TEXT("TMGS_Blur4"))             { return TMGS_Blur4;             }
-        if (S == TEXT("TMGS_Blur5"))             { return TMGS_Blur5;             }
-        return TMGS_NoMipmaps;
+        if (S == TEXT("TMGS_FromTextureGroup"))  { Out = TMGS_FromTextureGroup;  return true; }
+        if (S == TEXT("TMGS_SimpleAverage"))     { Out = TMGS_SimpleAverage;     return true; }
+        if (S == TEXT("TMGS_Sharpen0"))          { Out = TMGS_Sharpen0;          return true; }
+        if (S == TEXT("TMGS_Sharpen1"))          { Out = TMGS_Sharpen1;          return true; }
+        if (S == TEXT("TMGS_Sharpen2"))          { Out = TMGS_Sharpen2;          return true; }
+        if (S == TEXT("TMGS_Sharpen3"))          { Out = TMGS_Sharpen3;          return true; }
+        if (S == TEXT("TMGS_Sharpen4"))          { Out = TMGS_Sharpen4;          return true; }
+        if (S == TEXT("TMGS_Sharpen5"))          { Out = TMGS_Sharpen5;          return true; }
+        if (S == TEXT("TMGS_Sharpen6"))          { Out = TMGS_Sharpen6;          return true; }
+        if (S == TEXT("TMGS_Sharpen7"))          { Out = TMGS_Sharpen7;          return true; }
+        if (S == TEXT("TMGS_Sharpen8"))          { Out = TMGS_Sharpen8;          return true; }
+        if (S == TEXT("TMGS_Sharpen9"))          { Out = TMGS_Sharpen9;          return true; }
+        if (S == TEXT("TMGS_Sharpen10"))         { Out = TMGS_Sharpen10;         return true; }
+        if (S == TEXT("TMGS_NoMipmaps"))         { Out = TMGS_NoMipmaps;         return true; }
+        if (S == TEXT("TMGS_LeaveExistingMips")) { Out = TMGS_LeaveExistingMips; return true; }
+        if (S == TEXT("TMGS_Blur1"))             { Out = TMGS_Blur1;             return true; }
+        if (S == TEXT("TMGS_Blur2"))             { Out = TMGS_Blur2;             return true; }
+        if (S == TEXT("TMGS_Blur3"))             { Out = TMGS_Blur3;             return true; }
+        if (S == TEXT("TMGS_Blur4"))             { Out = TMGS_Blur4;             return true; }
+        if (S == TEXT("TMGS_Blur5"))             { Out = TMGS_Blur5;             return true; }
+        return false;
     }
 
     // Map a "TEXTUREGROUP_UI" / "TEXTUREGROUP_World" / ... string to a TextureGroup enum.
-    // Unrecognised strings fall back to TEXTUREGROUP_UI (spec default).
-    static TextureGroup ParseLODGroup(const FString& S)
+    static bool ParseLODGroup(const FString& S, TextureGroup& Out)
     {
-        if (S == TEXT("TEXTUREGROUP_World"))                { return TEXTUREGROUP_World;                }
-        if (S == TEXT("TEXTUREGROUP_WorldNormalMap"))       { return TEXTUREGROUP_WorldNormalMap;       }
-        if (S == TEXT("TEXTUREGROUP_WorldSpecular"))        { return TEXTUREGROUP_WorldSpecular;        }
-        if (S == TEXT("TEXTUREGROUP_Character"))            { return TEXTUREGROUP_Character;            }
-        if (S == TEXT("TEXTUREGROUP_CharacterNormalMap"))   { return TEXTUREGROUP_CharacterNormalMap;   }
-        if (S == TEXT("TEXTUREGROUP_CharacterSpecular"))    { return TEXTUREGROUP_CharacterSpecular;    }
-        if (S == TEXT("TEXTUREGROUP_Weapon"))               { return TEXTUREGROUP_Weapon;               }
-        if (S == TEXT("TEXTUREGROUP_WeaponNormalMap"))      { return TEXTUREGROUP_WeaponNormalMap;      }
-        if (S == TEXT("TEXTUREGROUP_WeaponSpecular"))       { return TEXTUREGROUP_WeaponSpecular;       }
-        if (S == TEXT("TEXTUREGROUP_Vehicle"))              { return TEXTUREGROUP_Vehicle;              }
-        if (S == TEXT("TEXTUREGROUP_VehicleNormalMap"))     { return TEXTUREGROUP_VehicleNormalMap;     }
-        if (S == TEXT("TEXTUREGROUP_VehicleSpecular"))      { return TEXTUREGROUP_VehicleSpecular;      }
-        if (S == TEXT("TEXTUREGROUP_Cinematic"))            { return TEXTUREGROUP_Cinematic;            }
-        if (S == TEXT("TEXTUREGROUP_Effects"))              { return TEXTUREGROUP_Effects;              }
-        if (S == TEXT("TEXTUREGROUP_EffectsNotFiltered"))   { return TEXTUREGROUP_EffectsNotFiltered;   }
-        if (S == TEXT("TEXTUREGROUP_Skybox"))               { return TEXTUREGROUP_Skybox;               }
-        if (S == TEXT("TEXTUREGROUP_UI"))                   { return TEXTUREGROUP_UI;                   }
-        if (S == TEXT("TEXTUREGROUP_Lightmap"))             { return TEXTUREGROUP_Lightmap;             }
-        if (S == TEXT("TEXTUREGROUP_Shadowmap"))            { return TEXTUREGROUP_Shadowmap;            }
-        return TEXTUREGROUP_UI;
+        if (S == TEXT("TEXTUREGROUP_World"))              { Out = TEXTUREGROUP_World;              return true; }
+        if (S == TEXT("TEXTUREGROUP_WorldNormalMap"))     { Out = TEXTUREGROUP_WorldNormalMap;     return true; }
+        if (S == TEXT("TEXTUREGROUP_WorldSpecular"))      { Out = TEXTUREGROUP_WorldSpecular;      return true; }
+        if (S == TEXT("TEXTUREGROUP_Character"))          { Out = TEXTUREGROUP_Character;          return true; }
+        if (S == TEXT("TEXTUREGROUP_CharacterNormalMap")) { Out = TEXTUREGROUP_CharacterNormalMap; return true; }
+        if (S == TEXT("TEXTUREGROUP_CharacterSpecular"))  { Out = TEXTUREGROUP_CharacterSpecular;  return true; }
+        if (S == TEXT("TEXTUREGROUP_Weapon"))             { Out = TEXTUREGROUP_Weapon;             return true; }
+        if (S == TEXT("TEXTUREGROUP_WeaponNormalMap"))    { Out = TEXTUREGROUP_WeaponNormalMap;    return true; }
+        if (S == TEXT("TEXTUREGROUP_WeaponSpecular"))     { Out = TEXTUREGROUP_WeaponSpecular;     return true; }
+        if (S == TEXT("TEXTUREGROUP_Vehicle"))            { Out = TEXTUREGROUP_Vehicle;            return true; }
+        if (S == TEXT("TEXTUREGROUP_VehicleNormalMap"))   { Out = TEXTUREGROUP_VehicleNormalMap;   return true; }
+        if (S == TEXT("TEXTUREGROUP_VehicleSpecular"))    { Out = TEXTUREGROUP_VehicleSpecular;    return true; }
+        if (S == TEXT("TEXTUREGROUP_Cinematic"))          { Out = TEXTUREGROUP_Cinematic;          return true; }
+        if (S == TEXT("TEXTUREGROUP_Effects"))            { Out = TEXTUREGROUP_Effects;            return true; }
+        if (S == TEXT("TEXTUREGROUP_EffectsNotFiltered")) { Out = TEXTUREGROUP_EffectsNotFiltered; return true; }
+        if (S == TEXT("TEXTUREGROUP_Skybox"))             { Out = TEXTUREGROUP_Skybox;             return true; }
+        if (S == TEXT("TEXTUREGROUP_UI"))                 { Out = TEXTUREGROUP_UI;                 return true; }
+        if (S == TEXT("TEXTUREGROUP_Lightmap"))           { Out = TEXTUREGROUP_Lightmap;           return true; }
+        if (S == TEXT("TEXTUREGROUP_Shadowmap"))          { Out = TEXTUREGROUP_Shadowmap;          return true; }
+        return false;
     }
 
-    static TextureAddress ParseAddress(const FString& S)
+    static bool ParseAddress(const FString& S, TextureAddress& Out)
     {
-        if (S == TEXT("TA_Wrap") || S.Equals(TEXT("wrap"), ESearchCase::IgnoreCase))       { return TA_Wrap; }
-        if (S == TEXT("TA_Clamp") || S.Equals(TEXT("clamp"), ESearchCase::IgnoreCase))     { return TA_Clamp; }
-        if (S == TEXT("TA_Mirror") || S.Equals(TEXT("mirror"), ESearchCase::IgnoreCase))   { return TA_Mirror; }
-        return TA_Clamp;
+        if (S == TEXT("TA_Wrap") || S.Equals(TEXT("wrap"), ESearchCase::IgnoreCase))     { Out = TA_Wrap;   return true; }
+        if (S == TEXT("TA_Clamp") || S.Equals(TEXT("clamp"), ESearchCase::IgnoreCase))   { Out = TA_Clamp;  return true; }
+        if (S == TEXT("TA_Mirror") || S.Equals(TEXT("mirror"), ESearchCase::IgnoreCase)) { Out = TA_Mirror; return true; }
+        return false;
     }
 
     static FString CompressionToString(TextureCompressionSettings Compression)
@@ -1278,14 +1276,38 @@ namespace MonolithAsset::TextureIngestInternal
     static bool GetTextureRole(const TSharedPtr<FJsonObject>& Params, const TSharedPtr<FJsonObject>* SettingsObj, FString& OutRole, FString& OutError)
     {
         FString Role;
-        Params->TryGetStringField(TEXT("texture_role"), Role);
-        if (Role.IsEmpty())
+        int32 ProvidedRoleCount = 0;
+        if (Params->HasField(TEXT("texture_role")))
         {
-            Params->TryGetStringField(TEXT("role"), Role);
+            ++ProvidedRoleCount;
+            if (!Params->TryGetStringField(TEXT("texture_role"), Role) || Role.IsEmpty())
+            {
+                OutError = TEXT("texture_role must be a non-empty string");
+                return false;
+            }
         }
-        if (Role.IsEmpty() && SettingsObj && SettingsObj->IsValid())
+        if (Params->HasField(TEXT("role")))
         {
-            (*SettingsObj)->TryGetStringField(TEXT("texture_role"), Role);
+            ++ProvidedRoleCount;
+            if (!Params->TryGetStringField(TEXT("role"), Role) || Role.IsEmpty())
+            {
+                OutError = TEXT("role must be a non-empty string");
+                return false;
+            }
+        }
+        if (SettingsObj && SettingsObj->IsValid() && (*SettingsObj)->HasField(TEXT("texture_role")))
+        {
+            ++ProvidedRoleCount;
+            if (!(*SettingsObj)->TryGetStringField(TEXT("texture_role"), Role) || Role.IsEmpty())
+            {
+                OutError = TEXT("settings.texture_role must be a non-empty string");
+                return false;
+            }
+        }
+        if (ProvidedRoleCount > 1)
+        {
+            OutError = TEXT("Texture role was provided more than once; use exactly one of texture_role, role, or settings.texture_role");
+            return false;
         }
 
         OutRole = NormalizeTextureRole(Role);
@@ -1957,7 +1979,7 @@ FMonolithActionResult MonolithAsset::FTextureIngestActions::HandleImportTextureF
         Destination = Destination.LeftChop(7);
     }
 
-    const FString RequestedAssetPath = Destination;
+    FString RequestedAssetPath = Destination;
     if (const FString ValidationError = MonolithCore::ValidatePackagePath(RequestedAssetPath); !ValidationError.IsEmpty())
     {
         return FMonolithActionResult::Error(ValidationError, -32602);
@@ -2044,14 +2066,38 @@ FMonolithActionResult MonolithAsset::FTextureIngestActions::HandleImportTextureF
     if (Format == EImageFormat::Invalid)
     {
         return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Unknown format_hint '%s' (supported: png, jpg, jpeg, bmp, exr, tga, hdr, tif, tiff, dds)"), *FormatHint),
+            FString::Printf(TEXT("Unknown format_hint '%s' (supported: png, jpg, jpeg, bmp, tga, tif, tiff, dds)"), *FormatHint),
+            -32602);
+    }
+
+    // This importer decodes through GetRaw(BGRA, 8) and stores TSF_BGRA8, which
+    // cannot represent the floating-point range these formats exist to carry.
+    // Accepting them produced a successful import whose values were silently
+    // clamped and quantised, giving wrong lighting and emissive data. Reject them
+    // rather than report success over destroyed precision.
+    if (Format == EImageFormat::EXR || Format == EImageFormat::HDR)
+    {
+        return FMonolithActionResult::Error(
+            FString::Printf(
+                TEXT("format_hint '%s' is a high-dynamic-range format; this action decodes to 8-bit BGRA and would silently lose precision. Import HDR sources through the Interchange pipeline instead."),
+                *FormatHint),
             -32602);
     }
 
     bool bSave = true;
-    Params->TryGetBoolField(TEXT("save"), bSave);
+    if (Params->HasField(TEXT("save"))
+        && (!Params->HasTypedField<EJson::Boolean>(TEXT("save"))
+            || !Params->TryGetBoolField(TEXT("save"), bSave)))
+    {
+        return FMonolithActionResult::Error(TEXT("save must be a boolean"), -32602);
+    }
     bool bReturnProcessedPng = false;
-    Params->TryGetBoolField(TEXT("return_processed_png"), bReturnProcessedPng);
+    if (Params->HasField(TEXT("return_processed_png"))
+        && (!Params->HasTypedField<EJson::Boolean>(TEXT("return_processed_png"))
+            || !Params->TryGetBoolField(TEXT("return_processed_png"), bReturnProcessedPng)))
+    {
+        return FMonolithActionResult::Error(TEXT("return_processed_png must be a boolean"), -32602);
+    }
 
     TextureCompressionSettings Compression = TC_Default;
     bool bSRGB = true;
@@ -2064,7 +2110,47 @@ FMonolithActionResult MonolithAsset::FTextureIngestActions::HandleImportTextureF
     bool bHarmonizeTileEdges = false;
 
     const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
-    Params->TryGetObjectField(TEXT("settings"), SettingsObj);
+    if (Params->HasField(TEXT("settings"))
+        && (!Params->TryGetObjectField(TEXT("settings"), SettingsObj)
+            || !SettingsObj
+            || !SettingsObj->IsValid()))
+    {
+        return FMonolithActionResult::Error(TEXT("settings must be an object"), -32602);
+    }
+
+    if (SettingsObj && SettingsObj->IsValid())
+    {
+        static const TSet<FString> AllowedSettings = {
+            TEXT("compression_settings"),
+            TEXT("srgb"),
+            TEXT("mip_gen_settings"),
+            TEXT("lod_group"),
+            TEXT("address_x"),
+            TEXT("address_y"),
+            TEXT("alpha_bleed"),
+            TEXT("alpha_from_edge_background"),
+            TEXT("tile_seam_harmonize"),
+            TEXT("seam_harmonize"),
+            TEXT("texture_role")
+        };
+        for (const auto& Pair : (*SettingsObj)->Values)
+        {
+            const FString Key = MonolithKeyToString(Pair.Key);
+            if (!AllowedSettings.Contains(Key))
+            {
+                return FMonolithActionResult::Error(
+                    FString::Printf(TEXT("Unknown texture setting '%s'"), *Key),
+                    -32602);
+            }
+        }
+        if ((*SettingsObj)->HasField(TEXT("tile_seam_harmonize"))
+            && (*SettingsObj)->HasField(TEXT("seam_harmonize")))
+        {
+            return FMonolithActionResult::Error(
+                TEXT("Use exactly one of settings.tile_seam_harmonize or settings.seam_harmonize"),
+                -32602);
+        }
+    }
 
     FString TextureRole;
     FString TextureRoleError;
@@ -2089,57 +2175,103 @@ FMonolithActionResult MonolithAsset::FTextureIngestActions::HandleImportTextureF
     if (SettingsObj && SettingsObj->IsValid())
     {
         FString CompressionStr;
-        if ((*SettingsObj)->TryGetStringField(TEXT("compression_settings"), CompressionStr))
+        if ((*SettingsObj)->HasField(TEXT("compression_settings"))
+            && (!(*SettingsObj)->TryGetStringField(TEXT("compression_settings"), CompressionStr)
+                || !ParseCompression(CompressionStr, Compression)))
         {
-            Compression = ParseCompression(CompressionStr);
+            return FMonolithActionResult::Error(
+                FString::Printf(
+                    TEXT("settings.compression_settings is invalid: '%s'"),
+                    *CompressionStr),
+                -32602);
         }
 
         bool bSRGBValue = true;
-        if ((*SettingsObj)->TryGetBoolField(TEXT("srgb"), bSRGBValue))
+        if ((*SettingsObj)->HasField(TEXT("srgb")))
         {
+            if (!(*SettingsObj)->HasTypedField<EJson::Boolean>(TEXT("srgb"))
+                || !(*SettingsObj)->TryGetBoolField(TEXT("srgb"), bSRGBValue))
+            {
+                return FMonolithActionResult::Error(TEXT("settings.srgb must be a boolean"), -32602);
+            }
             bSRGB = bSRGBValue;
         }
 
         FString MipGenStr;
-        if ((*SettingsObj)->TryGetStringField(TEXT("mip_gen_settings"), MipGenStr))
+        if ((*SettingsObj)->HasField(TEXT("mip_gen_settings"))
+            && (!(*SettingsObj)->TryGetStringField(TEXT("mip_gen_settings"), MipGenStr)
+                || !ParseMipGen(MipGenStr, MipGen)))
         {
-            MipGen = ParseMipGen(MipGenStr);
+            return FMonolithActionResult::Error(
+                FString::Printf(TEXT("settings.mip_gen_settings is invalid: '%s'"), *MipGenStr),
+                -32602);
         }
 
         FString LODGroupStr;
-        if ((*SettingsObj)->TryGetStringField(TEXT("lod_group"), LODGroupStr))
+        if ((*SettingsObj)->HasField(TEXT("lod_group"))
+            && (!(*SettingsObj)->TryGetStringField(TEXT("lod_group"), LODGroupStr)
+                || !ParseLODGroup(LODGroupStr, LODGroup)))
         {
-            LODGroup = ParseLODGroup(LODGroupStr);
+            return FMonolithActionResult::Error(
+                FString::Printf(TEXT("settings.lod_group is invalid: '%s'"), *LODGroupStr),
+                -32602);
         }
 
         FString AddressXStr;
-        if ((*SettingsObj)->TryGetStringField(TEXT("address_x"), AddressXStr))
+        if ((*SettingsObj)->HasField(TEXT("address_x"))
+            && (!(*SettingsObj)->TryGetStringField(TEXT("address_x"), AddressXStr)
+                || !ParseAddress(AddressXStr, AddressX)))
         {
-            AddressX = ParseAddress(AddressXStr);
+            return FMonolithActionResult::Error(
+                FString::Printf(TEXT("settings.address_x is invalid: '%s'"), *AddressXStr),
+                -32602);
         }
 
         FString AddressYStr;
-        if ((*SettingsObj)->TryGetStringField(TEXT("address_y"), AddressYStr))
+        if ((*SettingsObj)->HasField(TEXT("address_y"))
+            && (!(*SettingsObj)->TryGetStringField(TEXT("address_y"), AddressYStr)
+                || !ParseAddress(AddressYStr, AddressY)))
         {
-            AddressY = ParseAddress(AddressYStr);
+            return FMonolithActionResult::Error(
+                FString::Printf(TEXT("settings.address_y is invalid: '%s'"), *AddressYStr),
+                -32602);
         }
 
         bool bAlphaBleedValue = false;
-        if ((*SettingsObj)->TryGetBoolField(TEXT("alpha_bleed"), bAlphaBleedValue))
+        if ((*SettingsObj)->HasField(TEXT("alpha_bleed")))
         {
+            if (!(*SettingsObj)->HasTypedField<EJson::Boolean>(TEXT("alpha_bleed"))
+                || !(*SettingsObj)->TryGetBoolField(TEXT("alpha_bleed"), bAlphaBleedValue))
+            {
+                return FMonolithActionResult::Error(TEXT("settings.alpha_bleed must be a boolean"), -32602);
+            }
             bAlphaBleed = bAlphaBleedValue;
         }
 
         bool bAlphaFromBackgroundValue = false;
-        if ((*SettingsObj)->TryGetBoolField(TEXT("alpha_from_edge_background"), bAlphaFromBackgroundValue))
+        if ((*SettingsObj)->HasField(TEXT("alpha_from_edge_background")))
         {
+            if (!(*SettingsObj)->HasTypedField<EJson::Boolean>(TEXT("alpha_from_edge_background"))
+                || !(*SettingsObj)->TryGetBoolField(TEXT("alpha_from_edge_background"), bAlphaFromBackgroundValue))
+            {
+                return FMonolithActionResult::Error(TEXT("settings.alpha_from_edge_background must be a boolean"), -32602);
+            }
             bAlphaFromEdgeBackground = bAlphaFromBackgroundValue;
         }
 
         bool bHarmonizeTileEdgesValue = false;
-        if ((*SettingsObj)->TryGetBoolField(TEXT("tile_seam_harmonize"), bHarmonizeTileEdgesValue)
-            || (*SettingsObj)->TryGetBoolField(TEXT("seam_harmonize"), bHarmonizeTileEdgesValue))
+        const TCHAR* HarmonizeField = (*SettingsObj)->HasField(TEXT("tile_seam_harmonize"))
+            ? TEXT("tile_seam_harmonize")
+            : ((*SettingsObj)->HasField(TEXT("seam_harmonize")) ? TEXT("seam_harmonize") : nullptr);
+        if (HarmonizeField)
         {
+            if (!(*SettingsObj)->HasTypedField<EJson::Boolean>(HarmonizeField)
+                || !(*SettingsObj)->TryGetBoolField(HarmonizeField, bHarmonizeTileEdgesValue))
+            {
+                return FMonolithActionResult::Error(
+                    FString::Printf(TEXT("settings.%s must be a boolean"), HarmonizeField),
+                    -32602);
+            }
             bHarmonizeTileEdges = bHarmonizeTileEdgesValue;
         }
     }
@@ -2412,10 +2544,11 @@ void MonolithAsset::FTextureIngestActions::Register(FMonolithToolRegistry& Regis
     Registry.RegisterAction(
         TEXT("asset"),
         TEXT("import_texture_from_bytes"),
-        TEXT("Decode a base64-encoded image (PNG / JPEG / BMP / EXR / TGA / HDR / TIFF / DDS) and import it as a UTexture2D asset. "
+        TEXT("Decode a base64-encoded image (PNG / JPEG / BMP / TGA / TIFF / DDS) and import it as a UTexture2D asset. "
+             "High-dynamic-range EXR and HDR inputs are rejected because this path decodes to 8-bit BGRA. "
              "Params: destination (string, required, /Game/... path without .uasset), "
              "bytes_b64 (string, required, base64 image bytes), "
-             "format_hint (string, required, one of png|jpg|jpeg|bmp|exr|tga|hdr|tif|tiff|dds), "
+             "format_hint (string, required, one of png|jpg|jpeg|bmp|tga|tif|tiff|dds), "
              "texture_role (string, optional: ui_icon|sprite|decal|basecolor|world_tile|normal|orm_mask|height|emissive), "
              "settings (object, optional: compression_settings, srgb, mip_gen_settings, lod_group, address_x, address_y, alpha_bleed, alpha_from_edge_background, tile_seam_harmonize), "
              "conflict_policy (string, optional: fail|replace|unique, default fail), "
@@ -2424,12 +2557,16 @@ void MonolithAsset::FTextureIngestActions::Register(FMonolithToolRegistry& Regis
         FParamSchemaBuilder()
             .Required(TEXT("destination"), TEXT("string"), TEXT("Output texture path without .uasset"))
             .Required(TEXT("bytes_b64"), TEXT("string"), TEXT("Base64-encoded image bytes"))
-            .Required(TEXT("format_hint"), TEXT("string"), TEXT("png, jpg, jpeg, bmp, exr, tga, hdr, tif, tiff, or dds"))
-            .Optional(TEXT("texture_role"), TEXT("string"), TEXT("Unreal texture role preset: ui_icon, sprite, decal, basecolor, world_tile, normal, orm_mask, height, or emissive"))
+            .Required(TEXT("format_hint"), TEXT("string"), TEXT("png, jpg, jpeg, bmp, tga, tif, tiff, or dds"))
+            .Optional(
+                TEXT("texture_role"),
+                TEXT("string"),
+                TEXT("Unreal texture role preset: ui_icon, sprite, decal, basecolor, world_tile, normal, orm_mask, height, or emissive"),
+                { TEXT("role") })
             .Optional(TEXT("settings"), TEXT("object"), TEXT("Texture settings such as compression_settings, srgb, mip_gen_settings, lod_group, address_x, address_y, alpha_bleed, alpha_from_edge_background, tile_seam_harmonize"))
             .Optional(TEXT("conflict_policy"), TEXT("string"), TEXT("Existing destination handling: fail, replace, or unique"), TEXT("fail"))
-            .Enum(TEXT("conflict_policy"), { TEXT("fail"), TEXT("replace"), TEXT("unique") })
             .Optional(TEXT("save"), TEXT("bool"), TEXT("Save the texture asset"), TEXT("true"))
             .Optional(TEXT("return_processed_png"), TEXT("bool"), TEXT("Return postprocessed imported pixels re-encoded as PNG"), TEXT("false"))
+            .StrictComplexTypes()
             .Build());
 }

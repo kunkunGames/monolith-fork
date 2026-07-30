@@ -3,6 +3,8 @@
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
+#include "MonolithPCGPropertyBagUtils.h"
+#include "MonolithPCGResultUtils.h"
 #include "MonolithSourceControlUtils.h"
 
 #include "PCGCommon.h"
@@ -30,6 +32,7 @@
 #include "JsonObjectConverter.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "Misc/EngineVersionComparison.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "String/LexFromString.h"
@@ -38,6 +41,43 @@
 #include "UObject/SavePackage.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UnrealType.h"
+
+#if WITH_DEV_AUTOMATION_TESTS
+namespace UE::MonolithPCG::Private
+{
+namespace
+{
+FString GComponentLevelSaveFaultActorPath;
+}
+
+void ConfigureComponentLevelSaveTestFault(const FString& ExactActorPath)
+{
+	GComponentLevelSaveFaultActorPath = ExactActorPath;
+}
+
+void ResetComponentLevelSaveTestFault()
+{
+	GComponentLevelSaveFaultActorPath.Reset();
+}
+
+bool IsComponentLevelSaveTestFaultTarget(const AActor* Actor)
+{
+	return Actor &&
+		!GComponentLevelSaveFaultActorPath.IsEmpty() &&
+		GComponentLevelSaveFaultActorPath.Equals(Actor->GetPathName(), ESearchCase::CaseSensitive);
+}
+
+bool ConsumeComponentLevelSaveTestFault(const AActor* Actor)
+{
+	if (!IsComponentLevelSaveTestFaultTarget(Actor))
+	{
+		return false;
+	}
+	GComponentLevelSaveFaultActorPath.Reset();
+	return true;
+}
+}
+#endif
 
 namespace MonolithPCGComponent
 {
@@ -48,33 +88,6 @@ static constexpr int32 MaxManagedObjectsPerResource = 500;
 static constexpr int32 MaxTagsPerOutput = 500;
 static constexpr int32 MaxUserParameterValueChars = 4096;
 static constexpr double MaxExactJsonInteger = 9007199254740991.0; // 2^53 - 1
-
-FMonolithActionExecutionPolicy TransactionPolicy()
-{
-	FMonolithActionExecutionPolicy Policy;
-	Policy.PolicyId = TEXT("transaction_optional");
-	Policy.bDefaulted = false;
-	Policy.bDirtyPackageTracking = true;
-	Policy.bTransactionWrapping = true;
-	Policy.bPostEditValidation = false;
-	Policy.bEnforced = true;
-	return Policy;
-}
-
-FMonolithActionExecutionPolicy AsyncMutationPolicy()
-{
-	FMonolithActionExecutionPolicy Policy;
-	Policy.PolicyId = TEXT("track_dirty_packages");
-	Policy.bDefaulted = false;
-	Policy.bDirtyPackageTracking = true;
-	// Generation, refresh, cancellation, and cleanup continue after this handler
-	// returns. Wrapping only the scheduling call in an undo transaction would be
-	// misleading because the async work would run outside that transaction.
-	Policy.bTransactionWrapping = false;
-	Policy.bPostEditValidation = false;
-	Policy.bEnforced = true;
-	return Policy;
-}
 
 TSharedPtr<FJsonObject> ErrorData(const FString& Field, const FString& Detail)
 {
@@ -94,7 +107,8 @@ bool ReadRequiredString(const TSharedPtr<FJsonObject>& Params, const TCHAR* Fiel
 	FMonolithActionResult& OutError)
 {
 	OutValue.Reset();
-	if (!Params.IsValid() || !Params->TryGetStringField(Field, OutValue))
+	const TSharedPtr<FJsonValue> JsonValue = Params.IsValid() ? Params->TryGetField(Field) : nullptr;
+	if (!JsonValue.IsValid() || JsonValue->Type != EJson::String || !JsonValue->TryGetString(OutValue))
 	{
 		OutError = InvalidParam(Field, FString::Printf(TEXT("%s must be a string"), Field));
 		return false;
@@ -291,6 +305,21 @@ bool LoadGraphInterface(const FString& AssetPath, UPCGGraphInterface*& OutGraph,
 			FString::Printf(TEXT("Could not load UPCGGraphInterface '%s': %s"), *AssetPath, *LoadError));
 		return false;
 	}
+
+	// A redirector or case-only variant loads to the destination object, so
+	// without this the action assigned a different canonical asset while
+	// reporting the alias as resolved_graph_asset_path. The exact-path contract
+	// requires the loaded object's own path to match.
+	if (OutGraph && !OutGraph->GetPathName().Equals(OutResolvedPath, ESearchCase::CaseSensitive))
+	{
+		OutError = InvalidParam(TEXT("graph_asset_path"),
+			FString::Printf(
+				TEXT("'%s' resolves to a different canonical asset '%s'; pass the exact object path"),
+				*AssetPath,
+				*OutGraph->GetPathName()));
+		OutGraph = nullptr;
+		return false;
+	}
 	return true;
 }
 
@@ -312,6 +341,22 @@ bool ResolveBlueprintPCGComponentTemplate(
 		OutError = InvalidParam(
 			TEXT("blueprint_asset_path"),
 			FString::Printf(TEXT("Could not load Blueprint '%s': %s"), *BlueprintAssetPath, *LoadError));
+		return false;
+	}
+
+	// Same exact-path requirement as the graph loader: a redirector or case-only
+	// alias would otherwise let a confirmed call compile and save a different
+	// Blueprint than the one named.
+	if (OutBlueprint
+		&& !OutBlueprint->GetPathName().Equals(OutResolvedBlueprintPath, ESearchCase::CaseSensitive))
+	{
+		OutError = InvalidParam(
+			TEXT("blueprint_asset_path"),
+			FString::Printf(
+				TEXT("'%s' resolves to a different canonical Blueprint '%s'; pass the exact object path"),
+				*BlueprintAssetPath,
+				*OutBlueprint->GetPathName()));
+		OutBlueprint = nullptr;
 		return false;
 	}
 	if (!OutBlueprint || !OutBlueprint->SimpleConstructionScript)
@@ -539,7 +584,25 @@ bool HasGeneratedState(const UPCGComponent* Component)
 	{
 		return true;
 	}
-	return !Component->GetGeneratedGraphOutput().TaggedData.IsEmpty();
+	if (!Component->GetGeneratedGraphOutput().TaggedData.IsEmpty())
+	{
+		return true;
+	}
+
+	// A partitioned original component can hold subsystem partition-actor
+	// mappings while every local indicator above is empty. cleanup_component
+	// already treats those mappings as work to be done, so authoring in that
+	// state would leave generated partition output built from the previous
+	// configuration.
+	if (const UPCGSubsystem* Subsystem = Component->GetSubsystem())
+	{
+		if (!Subsystem->GetPCGComponentPartitionActorMappings(
+				const_cast<UPCGComponent*>(Component)).IsEmpty())
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 bool RequireIdleUngenerated(const UPCGComponent* Component, const FString& Action, FMonolithActionResult& OutError)
@@ -789,11 +852,8 @@ FMonolithActionResult AttachSourceControlPrepare(
 	}
 	else
 	{
-		if (!Result.ErrorData.IsValid())
-		{
-			Result.ErrorData = MakeShared<FJsonObject>();
-		}
-		Result.ErrorData->SetObjectField(TEXT("source_control_prepare"), Prepare);
+		MonolithPCGResultUtils::EnsureErrorDataObject(Result)->SetObjectField(
+			TEXT("source_control_prepare"), Prepare);
 	}
 	return Result;
 }
@@ -805,6 +865,12 @@ bool PreflightLevelSave(const AActor* Actor, FString& OutError)
 		OutError = TEXT("The target actor has no owning level");
 		return false;
 	}
+#if WITH_DEV_AUTOMATION_TESTS
+	if (UE::MonolithPCG::Private::IsComponentLevelSaveTestFaultTarget(Actor))
+	{
+		return true;
+	}
+#endif
 	if (Actor->HasAnyFlags(RF_Transient) || Actor->GetLevel()->HasAnyFlags(RF_Transient))
 	{
 		OutError = TEXT("save=true is not valid for a transient actor or level; use save=false for temporary test actors");
@@ -835,10 +901,19 @@ bool SaveOwningLevel(AActor* Actor, FString& OutFilename, FString& OutError)
 		OutError = TEXT("The target actor has no owning level");
 		return false;
 	}
+#if WITH_DEV_AUTOMATION_TESTS
+	if (UE::MonolithPCG::Private::ConsumeComponentLevelSaveTestFault(Actor))
+	{
+		OutError = FString::Printf(
+			TEXT("Injected FEditorFileUtils::SaveLevel failure for %s"),
+			*Actor->GetLevel()->GetOutermost()->GetName());
+		return false;
+	}
+#endif
 	if (!FEditorFileUtils::SaveLevel(Actor->GetLevel(), FString(), &OutFilename))
 	{
 		OutError = FString::Printf(
-			TEXT("FEditorFileUtils::SaveLevel failed for %s; the verified live mutation remains dirty for an explicit retry"),
+			TEXT("FEditorFileUtils::SaveLevel failed for %s"),
 			*Actor->GetLevel()->GetOutermost()->GetName());
 		return false;
 	}
@@ -864,9 +939,11 @@ FString UserParameterTypeToString(EPropertyBagPropertyType Type)
 	case EPropertyBagPropertyType::SoftObject: return TEXT("soft_object");
 	case EPropertyBagPropertyType::Class: return TEXT("class");
 	case EPropertyBagPropertyType::SoftClass: return TEXT("soft_class");
+#if UE_VERSION_NEWER_THAN_OR_EQUAL(5, 8, 0)
 	case EPropertyBagPropertyType::Int8: return TEXT("int8");
 	case EPropertyBagPropertyType::Int16: return TEXT("int16");
 	case EPropertyBagPropertyType::UInt16: return TEXT("uint16");
+#endif
 	case EPropertyBagPropertyType::UInt32: return TEXT("uint32");
 	case EPropertyBagPropertyType::UInt64: return TEXT("uint64");
 	default: return TEXT("unsupported");
@@ -883,7 +960,9 @@ TArray<TSharedPtr<FJsonValue>> ContainerTypesToJson(const FPropertyBagContainerT
 		{
 		case EPropertyBagContainerType::Array: Name = TEXT("array"); break;
 		case EPropertyBagContainerType::Set: Name = TEXT("set"); break;
+#if UE_VERSION_NEWER_THAN_OR_EQUAL(5, 8, 0)
 		case EPropertyBagContainerType::Map: Name = TEXT("map"); break;
+#endif
 		default: Name = TEXT("none"); break;
 		}
 		Values.Add(MakeShared<FJsonValueString>(Name));
@@ -1074,9 +1153,16 @@ TSharedPtr<FJsonObject> BuildUserParameterRow(const UPCGGraphInstance* Instance,
 	Row->SetStringField(TEXT("id"), Desc.ID.ToString(EGuidFormats::DigitsWithHyphensLower));
 	Row->SetStringField(TEXT("value_type"), UserParameterTypeToString(Desc.ValueType));
 	Row->SetArrayField(TEXT("container_types"), ContainerTypesToJson(Desc.ContainerTypes));
+#if UE_VERSION_NEWER_THAN_OR_EQUAL(5, 8, 0)
+	Row->SetBoolField(TEXT("key_type_supported"), true);
 	Row->SetStringField(TEXT("key_type"), UserParameterTypeToString(Desc.KeyType));
+#else
+	Row->SetBoolField(TEXT("key_type_supported"), false);
+#endif
 	Row->SetStringField(TEXT("value_type_object_path"), Desc.ValueTypeObject ? Desc.ValueTypeObject->GetPathName() : FString());
+#if UE_VERSION_NEWER_THAN_OR_EQUAL(5, 8, 0)
 	Row->SetStringField(TEXT("key_type_object_path"), Desc.KeyTypeObject ? Desc.KeyTypeObject->GetPathName() : FString());
+#endif
 	Row->SetStringField(TEXT("property_flags_hex"), FString::Printf(TEXT("0x%016llx"),
 		static_cast<unsigned long long>(Desc.PropertyFlags)));
 
@@ -1291,7 +1377,12 @@ TSharedPtr<FJsonObject> BuildComponentJson(const UPCGComponent* Component, bool 
 	Result->SetStringField(TEXT("component_class_path"), Component->GetClass()->GetPathName());
 	Result->SetBoolField(TEXT("local_component"), Component->IsLocalComponent());
 	const APCGPartitionActor* PartitionActor = Cast<APCGPartitionActor>(Actor);
-	const UPCGComponent* OriginalComponent = Component->IsLocalComponent() && PartitionActor
+	// The mutation guards classify partition-actor ownership independently of the
+	// transient local-component flag, and they tell the caller to use the
+	// original component. Gating this lookup on that flag meant inspection
+	// withheld the very path the caller was told to use, so query the partition
+	// actor whenever one owns the component.
+	const UPCGComponent* OriginalComponent = PartitionActor
 		? PartitionActor->GetOriginalComponent(Component) : nullptr;
 	Result->SetStringField(TEXT("original_component_path"),
 		OriginalComponent ? OriginalComponent->GetPathName() : FString());
@@ -1317,9 +1408,19 @@ TSharedPtr<FJsonObject> BuildComponentJson(const UPCGComponent* Component, bool 
 	Result->SetBoolField(TEXT("refresh_in_progress"), false);
 	Result->SetBoolField(TEXT("generated_this_session"), false);
 #endif
+#if UE_VERSION_NEWER_THAN_OR_EQUAL(5, 8, 0)
+	Result->SetBoolField(TEXT("generated_offline_supported"), true);
 	Result->SetBoolField(TEXT("generated_offline"), Component->IsGeneratedOffline());
+#else
+	Result->SetBoolField(TEXT("generated_offline_supported"), false);
+#endif
 	AddTaskFields(Result, TEXT("generation"), Component->GetGenerationTaskId());
+#if UE_VERSION_NEWER_THAN_OR_EQUAL(5, 8, 0)
+	Result->SetBoolField(TEXT("cleanup_task_id_supported"), true);
 	AddTaskFields(Result, TEXT("cleanup"), Component->GetCleanupTaskId());
+#else
+	Result->SetBoolField(TEXT("cleanup_task_id_supported"), false);
+#endif
 
 	const bool bOutputAccessible = !Component->IsGenerating() && !Component->IsCleaningUp()
 #if WITH_EDITOR
@@ -1642,7 +1743,7 @@ void FMonolithPCGComponentActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Create a persistent editor-instance UPCGComponent on an exact actor path, optionally assign a graph, and optionally save the owning level."),
 		FMonolithActionHandler::CreateStatic(&CreateComponent),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("actor_path"), TEXT("string"), TEXT("Exact actor object path from the active editor world"))
 			.Optional(TEXT("component_name"), TEXT("string"), TEXT("Requested component object name"), TEXT("PCGComponent"))
 			.Optional(TEXT("existing_policy"), TEXT("string"), TEXT("fail or return_existing"), TEXT("fail"))
@@ -1654,14 +1755,14 @@ void FMonolithPCGComponentActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Optional(TEXT("generate_on_drop_when_on_demand"), TEXT("bool"), TEXT("Generate on actor drop when trigger is on_demand"), TEXT("false"))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save the owning level after verified creation"), TEXT("true"))
 			.Build(),
-		TEXT("Component Lifecycle"), TransactionPolicy());
+		TEXT("Component Lifecycle"));
 
 	Registry.RegisterAction(
 		TEXT("pcg"), TEXT("get_component"),
 		TEXT("Inspect one typed UPCGComponent by exact component path, including lifecycle state, graph assignment, task IDs, and user-parameter overrides."),
 		FMonolithActionHandler::CreateStatic(&GetComponent),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("component_path"), TEXT("string"), TEXT("Exact UPCGComponent object path from pcg.list_components"))
 			.Optional(TEXT("include_user_parameters"), TEXT("bool"), TEXT("Include bounded graph-instance user parameters"), TEXT("true"))
 			.Optional(TEXT("user_parameter_limit"), TEXT("integer"), TEXT("Maximum user-parameter rows (1-256)"), TEXT("256"))
@@ -1674,19 +1775,19 @@ void FMonolithPCGComponentActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Assign a UPCGGraphInterface asset to an idle, ungenerated component by exact path and optionally save the owning level."),
 		FMonolithActionHandler::CreateStatic(&SetComponentGraph),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("component_path"), TEXT("string"), TEXT("Exact UPCGComponent object path"))
 			.RequiredAssetPath(TEXT("graph_asset_path"), TEXT("UPCGGraphInterface asset path"))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save the owning level after verified assignment"), TEXT("true"))
 			.Build(),
-		TEXT("Component Lifecycle"), TransactionPolicy());
+		TEXT("Component Lifecycle"));
 
 	Registry.RegisterAction(
 		TEXT("pcg"), TEXT("set_blueprint_component_graph"),
 		TEXT("Assign a UPCGGraphInterface to one exact UPCGComponent template in a project-owned Actor Blueprint. Dry-run defaults true; commit requires confirm=true."),
 		FMonolithActionHandler::CreateStatic(&SetBlueprintComponentGraph),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.RequiredAssetPath(TEXT("blueprint_asset_path"), TEXT("Project-owned Actor Blueprint asset path"))
 			.Required(TEXT("component_name"), TEXT("string"), TEXT("Exact SCS variable name of one UPCGComponent template"))
 			.RequiredAssetPath(TEXT("graph_asset_path"), TEXT("UPCGGraphInterface asset path"))
@@ -1694,14 +1795,14 @@ void FMonolithPCGComponentActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Optional(TEXT("confirm"), TEXT("bool"), TEXT("Required for a mutating commit"), TEXT("false"))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save the Blueprint package after verified assignment"), TEXT("true"))
 			.Build(),
-		TEXT("Component Lifecycle"), TransactionPolicy());
+		TEXT("Component Lifecycle"));
 
 	Registry.RegisterAction(
 		TEXT("pcg"), TEXT("set_component_settings"),
 		TEXT("Atomically validate and edit explicit UPCGComponent settings on an idle, ungenerated component, then optionally save its level."),
 		FMonolithActionHandler::CreateStatic(&SetComponentSettings),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("component_path"), TEXT("string"), TEXT("Exact UPCGComponent object path"))
 			.Optional(TEXT("seed"), TEXT("integer"), TEXT("32-bit component seed"))
 			.Optional(TEXT("activated"), TEXT("bool"), TEXT("Component activation state"))
@@ -1710,56 +1811,56 @@ void FMonolithPCGComponentActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Optional(TEXT("generate_on_drop_when_on_demand"), TEXT("bool"), TEXT("Generate on actor drop when trigger is on_demand"))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save the owning level after verified edits"), TEXT("true"))
 			.Build(),
-		TEXT("Component Lifecycle"), TransactionPolicy());
+		TEXT("Component Lifecycle"));
 
 	Registry.RegisterAction(
 		TEXT("pcg"), TEXT("generate_component"),
 		TEXT("Schedule non-blocking on-demand generation for one exact component and return its uint64 task ID as a decimal string."),
 		FMonolithActionHandler::CreateStatic(&GenerateComponent),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("component_path"), TEXT("string"), TEXT("Exact UPCGComponent object path"))
 			.Optional(TEXT("force"), TEXT("bool"), TEXT("Force regeneration even when already generated"), TEXT("false"))
 			.Build(),
-		TEXT("Component Lifecycle"), AsyncMutationPolicy());
+		TEXT("Component Lifecycle"));
 
 	Registry.RegisterAction(
 		TEXT("pcg"), TEXT("refresh_component"),
 		TEXT("Schedule or coalesce a non-blocking editor refresh for a previously generated exact component; poll get_component for completion."),
 		FMonolithActionHandler::CreateStatic(&RefreshComponent),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("component_path"), TEXT("string"), TEXT("Exact UPCGComponent object path"))
 			.Build(),
-		TEXT("Component Lifecycle"), AsyncMutationPolicy());
+		TEXT("Component Lifecycle"));
 
 	Registry.RegisterAction(
 		TEXT("pcg"), TEXT("cancel_component"),
 		TEXT("Cancel in-progress generation for one exact component without blocking the editor thread."),
 		FMonolithActionHandler::CreateStatic(&CancelComponent),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("component_path"), TEXT("string"), TEXT("Exact UPCGComponent object path"))
 			.Build(),
-		TEXT("Component Lifecycle"), AsyncMutationPolicy());
+		TEXT("Component Lifecycle"));
 
 	Registry.RegisterAction(
 		TEXT("pcg"), TEXT("cleanup_component"),
 		TEXT("Schedule non-blocking cleanup of generated resources for one exact component and return the uint64 task ID as a decimal string."),
 		FMonolithActionHandler::CreateStatic(&CleanupComponent),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("component_path"), TEXT("string"), TEXT("Exact UPCGComponent object path"))
 			.Optional(TEXT("remove_components"), TEXT("bool"), TEXT("Remove generated components instead of retaining them for reuse"), TEXT("true"))
 			.Build(),
-		TEXT("Component Lifecycle"), AsyncMutationPolicy());
+		TEXT("Component Lifecycle"));
 
 	Registry.RegisterAction(
 		TEXT("pcg"), TEXT("get_component_output"),
 		TEXT("Inspect bounded generated data and managed resources for an idle exact component without computing new CRCs or loading soft references."),
 		FMonolithActionHandler::CreateStatic(&GetComponentOutput),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("component_path"), TEXT("string"), TEXT("Exact UPCGComponent object path"))
 			.Optional(TEXT("output_limit"), TEXT("integer"), TEXT("Maximum tagged output rows (1-500)"), TEXT("100"))
 			.Optional(TEXT("tag_limit"), TEXT("integer"), TEXT("Maximum sorted tags returned per output row (1-500)"), TEXT("100"))
@@ -1774,27 +1875,14 @@ void FMonolithPCGComponentActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Atomically stage, validate, apply, reset, and read back scalar graph-instance user-parameter overrides on an idle exact component."),
 		FMonolithActionHandler::CreateStatic(&SetComponentUserParameters),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("component_path"), TEXT("string"), TEXT("Exact UPCGComponent object path"))
 			.Optional(TEXT("values"), TEXT("object"), TEXT("Map of parameter names to strict JSON scalar values"))
 			.Optional(TEXT("reset"), TEXT("array"), TEXT("Parameter names whose overrides should be removed"))
 			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Validate and report without mutation"), TEXT("false"))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save the owning level after verified mutation"), TEXT("true"))
 			.Build(),
-		TEXT("Component Lifecycle"), TransactionPolicy());
-
-	Registry.SetActionSearchMetadata(TEXT("pcg"), TEXT("create_component"),
-		{TEXT("PCG component creation"), TEXT("attach graph to actor"), TEXT("persistent instance component")},
-		{TEXT("add PCG component"), TEXT("create procedural component")},
-		{TEXT("create an on-demand PCG component on an actor and assign a graph")});
-	Registry.SetActionPlanningMetadata(TEXT("pcg"), TEXT("generate_component"), TEXT("unreal-pcg"),
-		{TEXT("Component is registered, active, idle, has a graph, and is not runtime-scheduler managed")},
-		{TEXT("Scheduled task ID string followed by bounded get_component polling")},
-		{TEXT("pcg.get_component"), TEXT("pcg.get_component_output"), TEXT("pcg.cleanup_component")});
-	Registry.SetActionPlanningMetadata(TEXT("pcg"), TEXT("set_component_user_parameters"), TEXT("unreal-pcg"),
-		{TEXT("Assign a graph first and cleanup generated state before changing overrides")},
-		{TEXT("Atomic staged validation, canonical readback, and override flags")},
-		{TEXT("pcg.get_component"), TEXT("pcg.generate_component")});
+		TEXT("Component Lifecycle"));
 }
 
 namespace MonolithPCGComponent
@@ -1881,6 +1969,99 @@ FMonolithActionResult SaveComponentMutation(UPCGComponent* Component, const FStr
 	return FMonolithActionResult::Success(BuildMutationResult(Component, Operation, bChanged, true, SavedFilename));
 }
 
+struct FComponentRollbackOutcome
+{
+	UPCGComponent* Component = nullptr;
+	bool bComplete = false;
+	FString Error;
+};
+
+FMonolithActionResult BuildComponentSaveRollbackFailure(
+	const FMonolithActionResult& SaveFailure,
+	const FString& Operation,
+	const FString& ExactComponentPath,
+	const FComponentRollbackOutcome& Rollback)
+{
+	UPCGComponent* SafeComponent = IsValid(Rollback.Component) ? Rollback.Component : nullptr;
+	TSharedPtr<FJsonObject> Data = BuildMutationResult(
+		SafeComponent,
+		Operation,
+		/*bChanged=*/!Rollback.bComplete);
+	Data->SetBoolField(TEXT("mutation_attempted"), true);
+	Data->SetBoolField(TEXT("rollback_complete"), Rollback.bComplete);
+	Data->SetStringField(TEXT("component_path"), ExactComponentPath);
+	Data->SetStringField(TEXT("save_error"), SaveFailure.ErrorMessage);
+	if (!Rollback.Error.IsEmpty())
+	{
+		Data->SetStringField(TEXT("rollback_error"), Rollback.Error);
+	}
+
+	const FString SaveError = SaveFailure.ErrorMessage.IsEmpty()
+		? TEXT("The owning level save failed")
+		: SaveFailure.ErrorMessage;
+	FString Message = FString::Printf(
+		TEXT("%s; rollback_complete=%s"),
+		*SaveError,
+		Rollback.bComplete ? TEXT("true") : TEXT("false"));
+	if (!Rollback.Error.IsEmpty())
+	{
+		Message += TEXT("; rollback_error=") + Rollback.Error;
+	}
+	return FMonolithActionResult::Error(
+		Message,
+		SaveFailure.ErrorCode != 0 ? SaveFailure.ErrorCode : FMonolithJsonUtils::ErrInternalError)
+		.WithErrorData(Data);
+}
+
+FComponentRollbackOutcome RollbackComponentGraph(
+	AActor* Actor,
+	const FString& ComponentPath,
+	UPCGGraphInterface* PreviousGraph,
+	const FDirtySnapshot& DirtySnapshot)
+{
+	FComponentRollbackOutcome Outcome;
+	FMonolithActionResult ResolveError;
+	Outcome.Component = ResolveComponentExact(ComponentPath, ResolveError);
+	if (!Outcome.Component)
+	{
+		Outcome.Error = ResolveError.ErrorMessage.IsEmpty()
+			? TEXT("The exact PCG component could not be resolved for graph rollback")
+			: ResolveError.ErrorMessage;
+		FinalizeRollbackDirtyState(false, Actor, nullptr, DirtySnapshot);
+		return Outcome;
+	}
+
+	UPCGGraphInstance* GraphInstance = Outcome.Component->GetGraphInstance();
+	if (!GraphInstance || !GraphInstance->CanGraphInterfaceBeSet(PreviousGraph))
+	{
+		Outcome.Error = TEXT("The previous graph interface cannot be restored on the exact PCG component");
+		FinalizeRollbackDirtyState(false, Actor, Outcome.Component, DirtySnapshot);
+		return Outcome;
+	}
+
+	if (Actor)
+	{
+		Actor->Modify();
+	}
+	Outcome.Component->Modify();
+	GraphInstance->Modify();
+	Outcome.Component->SetGraphLocal(PreviousGraph);
+
+	FMonolithActionResult VerifyError;
+	Outcome.Component = ResolveComponentExact(ComponentPath, VerifyError);
+	Outcome.bComplete = Outcome.Component &&
+		Outcome.Component->GetGraphInstance() &&
+		Outcome.Component->GetGraphInstance()->Graph.Get() == PreviousGraph;
+	if (!Outcome.bComplete)
+	{
+		Outcome.Error = VerifyError.ErrorMessage.IsEmpty()
+			? TEXT("Graph rollback failed exact read-back validation")
+			: VerifyError.ErrorMessage;
+	}
+	FinalizeRollbackDirtyState(Outcome.bComplete, Actor, Outcome.Component, DirtySnapshot);
+	return Outcome;
+}
+
 struct FComponentSettingsSnapshot
 {
 	int32 Seed = 42;
@@ -1948,6 +2129,117 @@ bool ApplySettingsSnapshot(UPCGComponent*& Component, const FString& ComponentPa
 		return false;
 	}
 	return Target.Matches(Component);
+}
+
+FComponentRollbackOutcome RollbackComponentSettings(
+	AActor* Actor,
+	const FString& ComponentPath,
+	const FComponentSettingsSnapshot& Original,
+	const FDirtySnapshot& DirtySnapshot)
+{
+	FComponentRollbackOutcome Outcome;
+	FMonolithActionResult ResolveError;
+	Outcome.Component = ResolveComponentExact(ComponentPath, ResolveError);
+	if (!Outcome.Component)
+	{
+		Outcome.Error = ResolveError.ErrorMessage.IsEmpty()
+			? TEXT("The exact PCG component could not be resolved for settings rollback")
+			: ResolveError.ErrorMessage;
+		FinalizeRollbackDirtyState(false, Actor, nullptr, DirtySnapshot);
+		return Outcome;
+	}
+
+	if (Actor)
+	{
+		Actor->Modify();
+	}
+	Outcome.Component->Modify();
+	Outcome.bComplete =
+		ApplySettingsSnapshot(Outcome.Component, ComponentPath, Original, Outcome.Error) &&
+		Original.Matches(Outcome.Component);
+	if (!Outcome.bComplete && Outcome.Error.IsEmpty())
+	{
+		Outcome.Error = TEXT("Settings rollback failed exact read-back validation");
+	}
+	FinalizeRollbackDirtyState(Outcome.bComplete, Actor, Outcome.Component, DirtySnapshot);
+	return Outcome;
+}
+
+FComponentRollbackOutcome RollbackComponentUserParameters(
+	AActor* Actor,
+	const FString& ComponentPath,
+	const FPCGOverrideInstancedPropertyBag& OriginalOverrides,
+	const TArray<FName>& ValueNames,
+	const TArray<FName>& ResetNames,
+	const FDirtySnapshot& DirtySnapshot)
+{
+	FComponentRollbackOutcome Outcome;
+	FMonolithActionResult ResolveError;
+	Outcome.Component = ResolveComponentExact(ComponentPath, ResolveError);
+	UPCGGraphInstance* RollbackInstance =
+		Outcome.Component ? Outcome.Component->GetGraphInstance() : nullptr;
+	if (!RollbackInstance || !IsValid(RollbackInstance))
+	{
+		Outcome.Error = ResolveError.ErrorMessage.IsEmpty()
+			? TEXT("The exact PCG graph instance could not be resolved for user-parameter rollback")
+			: ResolveError.ErrorMessage;
+		FinalizeRollbackDirtyState(false, Actor, Outcome.Component, DirtySnapshot);
+		return Outcome;
+	}
+
+	if (Actor)
+	{
+		Actor->Modify();
+	}
+	Outcome.Component->Modify();
+	RollbackInstance->Modify();
+	RollbackInstance->ParametersOverrides = OriginalOverrides;
+	for (const FName Name : ValueNames)
+	{
+		RollbackInstance->OnGraphParametersChanged(EPCGGraphParameterEvent::UndoRedo, Name);
+	}
+	for (const FName Name : ResetNames)
+	{
+		RollbackInstance->OnGraphParametersChanged(EPCGGraphParameterEvent::UndoRedo, Name);
+	}
+
+	FMonolithActionResult VerifyError;
+	Outcome.Component = ResolveComponentExact(ComponentPath, VerifyError);
+	RollbackInstance = Outcome.Component ? Outcome.Component->GetGraphInstance() : nullptr;
+	if (!RollbackInstance || !IsValid(RollbackInstance))
+	{
+		Outcome.Error = VerifyError.ErrorMessage.IsEmpty()
+			? TEXT("The exact PCG graph instance could not be re-resolved after user-parameter rollback")
+			: VerifyError.ErrorMessage;
+		FinalizeRollbackDirtyState(false, Actor, Outcome.Component, DirtySnapshot);
+		return Outcome;
+	}
+
+	const TSet<FGuid>& RestoredOverrideIds =
+		RollbackInstance->ParametersOverrides.PropertiesIDsOverridden;
+	const TSet<FGuid>& OriginalOverrideIds =
+		OriginalOverrides.PropertiesIDsOverridden;
+	Outcome.bComplete = RestoredOverrideIds.Num() == OriginalOverrideIds.Num();
+	for (const FGuid& OriginalOverrideId : OriginalOverrideIds)
+	{
+		Outcome.bComplete =
+			Outcome.bComplete && RestoredOverrideIds.Contains(OriginalOverrideId);
+	}
+
+	const FInstancedPropertyBag* RestoredValues =
+		RollbackInstance->GetUserParametersStruct();
+	Outcome.bComplete =
+		Outcome.bComplete &&
+		MonolithPCGPropertyBagUtils::AreExactlyEquivalent(
+			OriginalOverrides.Parameters,
+			RestoredValues);
+
+	if (!Outcome.bComplete)
+	{
+		Outcome.Error = TEXT("User-parameter rollback failed exact override/value read-back validation");
+	}
+	FinalizeRollbackDirtyState(Outcome.bComplete, Actor, Outcome.Component, DirtySnapshot);
+	return Outcome;
 }
 } // namespace MonolithPCGComponent
 
@@ -2170,7 +2462,25 @@ FMonolithActionResult FMonolithPCGComponentActions::CreateComponent(const TShare
 	}
 
 	MarkComponentMutationDirty(Component);
+	const FString CreatedComponentPath = Component->GetPathName();
 	FMonolithActionResult Result = SaveComponentMutation(Component, TEXT("create_component"), true, bSave);
+	if (!Result.bSuccess)
+	{
+		FComponentRollbackOutcome Rollback;
+		Rollback.bComplete = RollbackNewComponent(Actor, Component, DirtySnapshot);
+		if (!Rollback.bComplete)
+		{
+			Rollback.Component = IsValid(Component) ? Component : nullptr;
+			Rollback.Error = TEXT("New PCG component removal failed exact actor-membership validation");
+		}
+		return AttachSourceControlPrepare(
+			BuildComponentSaveRollbackFailure(
+				Result,
+				TEXT("create_component"),
+				CreatedComponentPath,
+				Rollback),
+			SourceControlPrepare);
+	}
 	if (Result.bSuccess && Result.Result.IsValid())
 	{
 		Result.Result->SetBoolField(TEXT("created"), true);
@@ -2308,30 +2618,40 @@ FMonolithActionResult FMonolithPCGComponentActions::SetComponentGraph(const TSha
 		Component->GetGraphInstance()->Graph.Get() == NewGraph;
 	if (!bVerified)
 	{
-		UPCGComponent* RollbackComponent = Component;
-		if (!RollbackComponent)
-		{
-			RollbackComponent = ResolveComponentExact(ComponentPath, ResolveError);
-		}
-		bool bRollbackComplete = false;
-		if (RollbackComponent && RollbackComponent->GetGraphInstance() &&
-			RollbackComponent->GetGraphInstance()->CanGraphInterfaceBeSet(PreviousGraph))
-		{
-			RollbackComponent->SetGraphLocal(PreviousGraph);
-			FMonolithActionResult RollbackResolveError;
-			RollbackComponent = ResolveComponentExact(ComponentPath, RollbackResolveError);
-			bRollbackComplete = RollbackComponent && RollbackComponent->GetGraphInstance() &&
-				RollbackComponent->GetGraphInstance()->Graph.Get() == PreviousGraph;
-		}
-		FinalizeRollbackDirtyState(bRollbackComplete, Actor, RollbackComponent, DirtySnapshot);
+		const FComponentRollbackOutcome Rollback =
+			RollbackComponentGraph(Actor, ComponentPath, PreviousGraph, DirtySnapshot);
 		return AttachSourceControlPrepare(FMonolithActionResult::Error(FString::Printf(
-			TEXT("PCG graph assignment failed read-back validation; rollback_complete=%s"),
-			bRollbackComplete ? TEXT("true") : TEXT("false")))
-			.WithErrorData(BuildComponentJson(RollbackComponent, false)), SourceControlPrepare);
+			TEXT("PCG graph assignment failed read-back validation; rollback_complete=%s%s%s"),
+			Rollback.bComplete ? TEXT("true") : TEXT("false"),
+			Rollback.Error.IsEmpty() ? TEXT("") : TEXT("; rollback_error="),
+			*Rollback.Error))
+			.WithErrorData(BuildComponentJson(
+				IsValid(Rollback.Component) ? Rollback.Component : nullptr,
+				false)), SourceControlPrepare);
 	}
 
 	MarkComponentMutationDirty(Component);
 	FMonolithActionResult Result = SaveComponentMutation(Component, TEXT("set_component_graph"), true, bSave);
+	if (!Result.bSuccess)
+	{
+		const FComponentRollbackOutcome Rollback =
+			RollbackComponentGraph(Actor, ComponentPath, PreviousGraph, DirtySnapshot);
+		FMonolithActionResult Failure = BuildComponentSaveRollbackFailure(
+			Result,
+			TEXT("set_component_graph"),
+			ComponentPath,
+			Rollback);
+		const TSharedPtr<FJsonObject> FailureData =
+			MonolithPCGResultUtils::GetErrorDataObject(Failure);
+		if (FailureData.IsValid())
+		{
+			FailureData->SetStringField(
+				TEXT("previous_graph_asset_path"),
+				PreviousGraph ? PreviousGraph->GetPathName() : FString());
+			FailureData->SetStringField(TEXT("resolved_graph_asset_path"), ResolvedGraphPath);
+		}
+		return AttachSourceControlPrepare(MoveTemp(Failure), SourceControlPrepare);
+	}
 	if (Result.bSuccess && Result.Result.IsValid())
 	{
 		Result.Result->SetStringField(TEXT("previous_graph_asset_path"), PreviousGraph ? PreviousGraph->GetPathName() : FString());
@@ -2614,28 +2934,31 @@ FMonolithActionResult FMonolithPCGComponentActions::SetComponentSettings(const T
 	FString ApplyError;
 	if (!ApplySettingsSnapshot(Component, ComponentPath, Target, ApplyError) || !Target.Matches(Component))
 	{
-		UPCGComponent* RollbackComponent = Component;
-		if (!RollbackComponent)
-		{
-			FMonolithActionResult ResolveError;
-			RollbackComponent = ResolveComponentExact(ComponentPath, ResolveError);
-		}
-		FString RollbackError;
-		const bool bRollbackComplete = RollbackComponent &&
-			ApplySettingsSnapshot(RollbackComponent, ComponentPath, Original, RollbackError) &&
-			Original.Matches(RollbackComponent);
-		FinalizeRollbackDirtyState(bRollbackComplete, Actor, RollbackComponent, DirtySnapshot);
+		const FComponentRollbackOutcome Rollback =
+			RollbackComponentSettings(Actor, ComponentPath, Original, DirtySnapshot);
 		return AttachSourceControlPrepare(FMonolithActionResult::Error(FString::Printf(
 			TEXT("PCG component settings failed read-back validation: %s; rollback_complete=%s%s%s"),
-			*ApplyError, bRollbackComplete ? TEXT("true") : TEXT("false"),
-			RollbackError.IsEmpty() ? TEXT("") : TEXT("; rollback_error="), *RollbackError))
-			.WithErrorData(BuildComponentJson(RollbackComponent, false)), SourceControlPrepare);
+			*ApplyError, Rollback.bComplete ? TEXT("true") : TEXT("false"),
+			Rollback.Error.IsEmpty() ? TEXT("") : TEXT("; rollback_error="), *Rollback.Error))
+			.WithErrorData(BuildComponentJson(
+				IsValid(Rollback.Component) ? Rollback.Component : nullptr,
+				false)), SourceControlPrepare);
 	}
 
 	MarkComponentMutationDirty(Component);
-	return AttachSourceControlPrepare(
-		SaveComponentMutation(Component, TEXT("set_component_settings"), true, bSave),
-		SourceControlPrepare);
+	FMonolithActionResult Result =
+		SaveComponentMutation(Component, TEXT("set_component_settings"), true, bSave);
+	if (!Result.bSuccess)
+	{
+		const FComponentRollbackOutcome Rollback =
+			RollbackComponentSettings(Actor, ComponentPath, Original, DirtySnapshot);
+		Result = BuildComponentSaveRollbackFailure(
+			Result,
+			TEXT("set_component_settings"),
+			ComponentPath,
+			Rollback);
+	}
+	return AttachSourceControlPrepare(MoveTemp(Result), SourceControlPrepare);
 }
 
 FMonolithActionResult FMonolithPCGComponentActions::GenerateComponent(const TSharedPtr<FJsonObject>& Params)
@@ -2902,7 +3225,7 @@ FMonolithActionResult FMonolithPCGComponentActions::CleanupComponent(const TShar
 	if (Component->IsRefreshInProgress())
 	{
 		return FMonolithActionResult::Error(
-			TEXT("Refresh is active and cannot be cancelled through the UE 5.8 public PCG API; poll pcg.get_component until idle before cleanup"));
+			TEXT("Refresh is active and cannot be cancelled through the public PCG API; poll pcg.get_component until idle before cleanup"));
 	}
 #endif
 	if (Component->IsCleaningUp())
@@ -2913,7 +3236,11 @@ FMonolithActionResult FMonolithPCGComponentActions::CleanupComponent(const TShar
 		Result->SetBoolField(TEXT("requested_remove_components"), bRemoveComponents);
 		Result->SetBoolField(TEXT("inflight_remove_components_known"), false);
 		Result->SetStringField(TEXT("coalescing_status"), TEXT("already_cleaning_mode_not_observable"));
+#if UE_VERSION_NEWER_THAN_OR_EQUAL(5, 8, 0)
 		AddTaskFields(Result, TEXT("scheduled"), Component->GetCleanupTaskId());
+#else
+		Result->SetBoolField(TEXT("scheduled_task_id_supported"), false);
+#endif
 		return FMonolithActionResult::Success(Result);
 	}
 	UPCGSubsystem* Subsystem = Component->GetSubsystem();
@@ -3511,70 +3838,43 @@ FMonolithActionResult FMonolithPCGComponentActions::SetComponentUserParameters(
 
 	if (!CommitError.IsEmpty())
 	{
-		UPCGGraphInstance* RollbackInstance = VerifiedInstance ? VerifiedInstance : Instance;
-		UPCGComponent* RollbackComponent = VerifiedComponent;
-		bool bRollbackComplete = false;
-		if (RollbackInstance && IsValid(RollbackInstance))
-		{
-			RollbackInstance->ParametersOverrides = OriginalOverrides;
-			for (const FName Name : ValueNames)
-			{
-				RollbackInstance->OnGraphParametersChanged(EPCGGraphParameterEvent::UndoRedo, Name);
-			}
-			for (const FName Name : ResetNames)
-			{
-				RollbackInstance->OnGraphParametersChanged(EPCGGraphParameterEvent::UndoRedo, Name);
-			}
-
-			FMonolithActionResult RollbackResolveError;
-			RollbackComponent = ResolveComponentExact(ComponentPath, RollbackResolveError);
-			RollbackInstance = RollbackComponent ? RollbackComponent->GetGraphInstance() : nullptr;
-		}
-		if (RollbackInstance && IsValid(RollbackInstance))
-		{
-			const TSet<FGuid>& RestoredOverrideIds =
-				RollbackInstance->ParametersOverrides.PropertiesIDsOverridden;
-			const TSet<FGuid>& OriginalOverrideIds = OriginalOverrides.PropertiesIDsOverridden;
-			bRollbackComplete = RestoredOverrideIds.Num() == OriginalOverrideIds.Num();
-			for (const FGuid& OriginalOverrideId : OriginalOverrideIds)
-			{
-				bRollbackComplete = bRollbackComplete && RestoredOverrideIds.Contains(OriginalOverrideId);
-			}
-
-			const FInstancedPropertyBag* RestoredValues = RollbackInstance->GetUserParametersStruct();
-			auto VerifyRestoredParameter = [&](const FName Name)
-			{
-				const FPropertyBagPropertyDesc* RestoredDesc =
-					RestoredValues ? RestoredValues->FindPropertyDescByName(Name) : nullptr;
-				const TValueOrError<FString, EPropertyBagResult> RestoredSerialized = RestoredDesc
-					? RestoredValues->GetValueSerializedString(RestoredDesc->Name)
-					: MakeError(EPropertyBagResult::PropertyNotFound);
-				bRollbackComplete = bRollbackComplete && RestoredDesc && RestoredDesc->CachedProperty &&
-					RestoredSerialized.IsValid() &&
-					RestoredSerialized.GetValue() == BeforeSerialized.FindChecked(Name) &&
-					RollbackInstance->IsPropertyOverridden(RestoredDesc->CachedProperty) ==
-						BeforeOverridden.FindChecked(Name);
-			};
-			for (const FName Name : ValueNames)
-			{
-				VerifyRestoredParameter(Name);
-			}
-			for (const FName Name : ResetNames)
-			{
-				VerifyRestoredParameter(Name);
-			}
-		}
-		FinalizeRollbackDirtyState(bRollbackComplete, Actor, RollbackComponent, DirtySnapshot);
+		const FComponentRollbackOutcome Rollback = RollbackComponentUserParameters(
+			Actor,
+			ComponentPath,
+			OriginalOverrides,
+			ValueNames,
+			ResetNames,
+			DirtySnapshot);
 		return AttachSourceControlPrepare(FMonolithActionResult::Error(FString::Printf(
-			TEXT("Atomic user-parameter commit failed: %s; rollback_complete=%s"),
-			*CommitError, bRollbackComplete ? TEXT("true") : TEXT("false")))
-			.WithErrorData(BuildComponentJson(RollbackComponent, false)), SourceControlPrepare);
+			TEXT("Atomic user-parameter commit failed: %s; rollback_complete=%s%s%s"),
+			*CommitError,
+			Rollback.bComplete ? TEXT("true") : TEXT("false"),
+			Rollback.Error.IsEmpty() ? TEXT("") : TEXT("; rollback_error="),
+			*Rollback.Error))
+			.WithErrorData(BuildComponentJson(
+				IsValid(Rollback.Component) ? Rollback.Component : nullptr,
+				false)), SourceControlPrepare);
 	}
 
 	Component = VerifiedComponent;
 	MarkComponentMutationDirty(Component);
 	FMonolithActionResult Result = SaveComponentMutation(
 		Component, TEXT("set_component_user_parameters"), true, bSave);
+	if (!Result.bSuccess)
+	{
+		const FComponentRollbackOutcome Rollback = RollbackComponentUserParameters(
+			Actor,
+			ComponentPath,
+			OriginalOverrides,
+			ValueNames,
+			ResetNames,
+			DirtySnapshot);
+		Result = BuildComponentSaveRollbackFailure(
+			Result,
+			TEXT("set_component_user_parameters"),
+			ComponentPath,
+			Rollback);
+	}
 	if (Result.bSuccess && Result.Result.IsValid())
 	{
 		Result.Result->SetBoolField(TEXT("dry_run"), false);

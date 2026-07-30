@@ -13,8 +13,11 @@
 #include "GameFramework/Actor.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/EngineVersionComparison.h"
+#include "Misc/ScopeExit.h"
 
 #include "MonolithPCGComponentActions.h"
+#include "MonolithPCGResultUtils.h"
 #include "MonolithToolRegistry.h"
 
 #include "Grid/PCGPartitionActor.h"
@@ -688,9 +691,17 @@ bool FMonolithPCGComponentExactPathSettingsTest::RunTest(const FString& Paramete
 	TestTrue(
 		TEXT("Generation task id is serialized as a JSON string even when invalid"),
 		GenerationTaskId && GenerationTaskId->IsValid() && (*GenerationTaskId)->Type == EJson::String);
+#if UE_VERSION_NEWER_THAN_OR_EQUAL(5, 8, 0)
+	TestTrue(TEXT("UE 5.8 exposes cleanup task identity"),
+		GetResult.Result->GetBoolField(TEXT("cleanup_task_id_supported")));
 	TestTrue(
 		TEXT("Cleanup task id is serialized as a JSON string even when invalid"),
 		CleanupTaskId && CleanupTaskId->IsValid() && (*CleanupTaskId)->Type == EJson::String);
+#else
+	TestFalse(TEXT("UE 5.7 reports cleanup task identity as unsupported"),
+		GetResult.Result->GetBoolField(TEXT("cleanup_task_id_supported")));
+	TestNull(TEXT("UE 5.7 does not fabricate an unavailable cleanup task id"), CleanupTaskId);
+#endif
 
 	TSharedPtr<FJsonObject> InvalidOutputLimitParams = MakeShared<FJsonObject>();
 	InvalidOutputLimitParams->SetStringField(TEXT("component_path"), ComponentPath);
@@ -956,11 +967,12 @@ bool FMonolithPCGComponentUserParameterAtomicityTest::RunTest(const FString& Par
 	TestFalse(TEXT("Rejected batch does not mark Density overridden"), GraphInstance->IsPropertyOverridden(DensityDesc->CachedProperty));
 	TestFalse(TEXT("Rejected batch does not mark Count overridden"), GraphInstance->IsPropertyOverridden(CountDesc->CachedProperty));
 	TestFalse(TEXT("Rejected batch does not mark LargeCount overridden"), GraphInstance->IsPropertyOverridden(LargeCountDesc->CachedProperty));
-	if (InvalidResult.ErrorData.IsValid())
+	if (const TSharedPtr<FJsonObject> InvalidErrorData =
+			MonolithPCGResultUtils::GetErrorDataObject(InvalidResult))
 	{
 		TestFalse(
 			TEXT("Rejected validation path does not prepare source control"),
-			InvalidResult.ErrorData->HasField(TEXT("source_control_prepare")));
+			InvalidErrorData->HasField(TEXT("source_control_prepare")));
 	}
 
 	for (const FString& InvalidInt64 : {FString(TEXT("01")), FString(TEXT("9223372036854775808"))})
@@ -1319,11 +1331,12 @@ bool FMonolithPCGPartitionActorOwnedMutationGuardTest::RunTest(const FString& Pa
 		TestTrue(
 			*FString::Printf(TEXT("pcg.%s reports the partition-actor ownership boundary"), *Action),
 			Result.ErrorMessage.Contains(TEXT("partition"), ESearchCase::IgnoreCase));
-		if (Result.ErrorData.IsValid())
+		if (const TSharedPtr<FJsonObject> ResultErrorData =
+				MonolithPCGResultUtils::GetErrorDataObject(Result))
 		{
 			TestTrue(
 				*FString::Printf(TEXT("pcg.%s marks the owner as a partition actor"), *Action),
-				Result.ErrorData->GetBoolField(TEXT("partition_actor_owned")));
+				ResultErrorData->GetBoolField(TEXT("partition_actor_owned")));
 		}
 
 		Component = FindComponentExactOnActor(PartitionActor, ComponentPath);
@@ -1566,7 +1579,8 @@ bool FMonolithPCGRollbackFailurePreservesDirtyStateTest::RunTest(const FString& 
 		TEXT("Failure explicitly reports incomplete rollback"),
 		Result.ErrorMessage.Contains(TEXT("rollback_complete=false"), ESearchCase::IgnoreCase));
 	if (!RequireTransientSourceControlPrepare(
-			*this, TEXT("Incomplete rollback path"), Result.ErrorData))
+			*this, TEXT("Incomplete rollback path"),
+			MonolithPCGResultUtils::GetErrorDataObject(Result)))
 	{
 		return false;
 	}
@@ -1583,6 +1597,258 @@ bool FMonolithPCGRollbackFailurePreservesDirtyStateTest::RunTest(const FString& 
 	TestTrue(TEXT("Incomplete rollback leaves the actor package dirty"), ActorPackage->IsDirty());
 	TestTrue(TEXT("Incomplete rollback leaves the owning level package dirty"), LevelPackage->IsDirty());
 
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithPCGComponentSaveFailureAtomicityTest,
+	"Monolith.PCG.Component.SaveFailureAtomicity",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithPCGComponentSaveFailureAtomicityTest::RunTest(const FString& Parameters)
+{
+	using namespace MonolithPCGComponentActionsTests;
+	RegisterActions();
+
+	UWorld* World = GetEditorWorld();
+	if (!TestNotNull(TEXT("Editor world is available"), World))
+	{
+		return false;
+	}
+	FScopedActorFixture Fixture(World);
+	if (!TestNotNull(TEXT("Host actor spawned"), Fixture.Actor) ||
+		!AddValidBoundsRoot(*this, Fixture.Actor))
+	{
+		return false;
+	}
+	FScopedGraphAssetFixture OriginalGraphFixture;
+	FScopedGraphAssetFixture ReplacementGraphFixture;
+	if (!TestNotNull(TEXT("Original graph fixture exists"), OriginalGraphFixture.Graph) ||
+		!TestNotNull(TEXT("Replacement graph fixture exists"), ReplacementGraphFixture.Graph))
+	{
+		return false;
+	}
+
+	const FName CountName(TEXT("RollbackCount"));
+	TArray<FPropertyBagPropertyDesc> Descriptors;
+	Descriptors.Emplace(CountName, EPropertyBagPropertyType::Int32);
+	if (!TestEqual(
+			TEXT("Original graph accepts the rollback parameter schema"),
+			OriginalGraphFixture.Graph->AddUserParameters(Descriptors),
+			EPropertyBagAlterationResult::Success))
+	{
+		return false;
+	}
+	FInstancedPropertyBag* OriginalGraphBag =
+		OriginalGraphFixture.Graph->GetMutableUserParametersStruct_Unsafe();
+	if (!TestNotNull(TEXT("Original graph exposes its parameter bag"), OriginalGraphBag) ||
+		!TestEqual(
+			TEXT("RollbackCount default is initialized"),
+			OriginalGraphBag->SetValueInt32(CountName, 7),
+			EPropertyBagResult::Success))
+	{
+		return false;
+	}
+
+	FString ComponentPath;
+	UPCGComponent* Component = CreateComponent(*this, Fixture.Actor, ComponentPath);
+	if (!TestNotNull(TEXT("PCG component created"), Component))
+	{
+		return false;
+	}
+#if WITH_EDITORONLY_DATA
+	Component->bRegenerateInEditor = false;
+#endif
+	Component->SetGraphLocal(OriginalGraphFixture.Graph);
+	if (!TestTrue(
+			TEXT("Fixture assigns the original graph"),
+			Component->GetGraphInstance() &&
+				Component->GetGraphInstance()->Graph.Get() == OriginalGraphFixture.Graph))
+	{
+		return false;
+	}
+
+	UPackage* ActorPackage = Fixture.Actor->GetPackage();
+	UPackage* LevelPackage =
+		Fixture.Actor->GetLevel() ? Fixture.Actor->GetLevel()->GetOutermost() : nullptr;
+	if (!TestNotNull(TEXT("Actor package is available"), ActorPackage) ||
+		!TestNotNull(TEXT("Level package is available"), LevelPackage))
+	{
+		return false;
+	}
+	auto MarkFixtureClean = [&]()
+	{
+		ActorPackage->SetDirtyFlag(false);
+		if (LevelPackage != ActorPackage)
+		{
+			LevelPackage->SetDirtyFlag(false);
+		}
+	};
+	auto TestFixtureClean = [&](const FString& Context)
+	{
+		TestFalse(*(Context + TEXT(" restores the actor package dirty state")), ActorPackage->IsDirty());
+		TestFalse(*(Context + TEXT(" restores the level package dirty state")), LevelPackage->IsDirty());
+	};
+	auto ExecuteInjectedSaveFailure = [&](const FString& Action, const TSharedPtr<FJsonObject>& Params)
+	{
+#if WITH_DEV_AUTOMATION_TESTS
+		UE::MonolithPCG::Private::ConfigureComponentLevelSaveTestFault(
+			Fixture.Actor->GetPathName());
+#endif
+		return ExecuteAction(Action, Params);
+	};
+	ON_SCOPE_EXIT
+	{
+#if WITH_DEV_AUTOMATION_TESTS
+		UE::MonolithPCG::Private::ResetComponentLevelSaveTestFault();
+#endif
+	};
+	auto RequireCompleteRollback = [&](const FString& Context, const FMonolithActionResult& Result)
+	{
+		TestFalse(*(Context + TEXT(" reports the injected save failure")), Result.bSuccess);
+		TestTrue(
+			*(Context + TEXT(" reports complete rollback")),
+			Result.ErrorMessage.Contains(TEXT("rollback_complete=true"), ESearchCase::CaseSensitive));
+		const TSharedPtr<FJsonObject> ErrorData =
+			MonolithPCGResultUtils::GetErrorDataObject(Result);
+		bool bMutationAttempted = false;
+		bool bRollbackComplete = false;
+		bool bChanged = true;
+		TestTrue(
+			*(Context + TEXT(" returns structured mutation_attempted")),
+			ErrorData.IsValid() &&
+				ErrorData->TryGetBoolField(TEXT("mutation_attempted"), bMutationAttempted) &&
+				bMutationAttempted);
+		TestTrue(
+			*(Context + TEXT(" returns structured rollback_complete")),
+			ErrorData.IsValid() &&
+				ErrorData->TryGetBoolField(TEXT("rollback_complete"), bRollbackComplete) &&
+				bRollbackComplete);
+		TestTrue(
+			*(Context + TEXT(" reports no remaining live change")),
+			ErrorData.IsValid() &&
+				ErrorData->TryGetBoolField(TEXT("changed"), bChanged) &&
+				!bChanged);
+		return RequireTransientSourceControlPrepare(*this, Context, ErrorData);
+	};
+
+	MarkFixtureClean();
+	const int32 OriginalInstanceComponentCount =
+		Fixture.Actor->GetInstanceComponents().Num();
+	TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+	CreateParams->SetStringField(TEXT("actor_path"), Fixture.Actor->GetPathName());
+	CreateParams->SetStringField(
+		TEXT("component_name"),
+		TEXT("MonolithPCGSaveFailureCreatedComponent"));
+	CreateParams->SetBoolField(TEXT("save"), true);
+	const FMonolithActionResult CreateFailure =
+		ExecuteInjectedSaveFailure(TEXT("create_component"), CreateParams);
+	if (!RequireCompleteRollback(TEXT("create_component save failure"), CreateFailure))
+	{
+		return false;
+	}
+	UPCGComponent* CreatedComponentRemnant = nullptr;
+	for (UActorComponent* InstanceComponent : Fixture.Actor->GetInstanceComponents())
+	{
+		if (InstanceComponent &&
+			InstanceComponent->GetFName() == TEXT("MonolithPCGSaveFailureCreatedComponent"))
+		{
+			CreatedComponentRemnant = Cast<UPCGComponent>(InstanceComponent);
+			break;
+		}
+	}
+	TestNull(
+		TEXT("Create rollback removes the new exact actor component"),
+		CreatedComponentRemnant);
+	TestEqual(
+		TEXT("Create rollback restores actor instance-component membership"),
+		Fixture.Actor->GetInstanceComponents().Num(),
+		OriginalInstanceComponentCount);
+	TestFixtureClean(TEXT("create_component save failure"));
+
+	MarkFixtureClean();
+	TSharedPtr<FJsonObject> GraphParams = MakeShared<FJsonObject>();
+	GraphParams->SetStringField(TEXT("component_path"), ComponentPath);
+	GraphParams->SetStringField(
+		TEXT("graph_asset_path"),
+		ReplacementGraphFixture.ObjectPath);
+	GraphParams->SetBoolField(TEXT("save"), true);
+	const FMonolithActionResult GraphFailure =
+		ExecuteInjectedSaveFailure(TEXT("set_component_graph"), GraphParams);
+	if (!RequireCompleteRollback(TEXT("set_component_graph save failure"), GraphFailure))
+	{
+		return false;
+	}
+	Component = FindComponentExactOnActor(Fixture.Actor, ComponentPath);
+	if (!TestNotNull(TEXT("Graph rollback preserves exact component identity"), Component))
+	{
+		return false;
+	}
+	TestTrue(
+		TEXT("Graph rollback restores the previous graph"),
+		Component->GetGraphInstance() &&
+			Component->GetGraphInstance()->Graph.Get() == OriginalGraphFixture.Graph);
+	TestFixtureClean(TEXT("set_component_graph save failure"));
+
+	MarkFixtureClean();
+	const int32 OriginalSeed = Component->Seed;
+	TSharedPtr<FJsonObject> SettingsParams = MakeShared<FJsonObject>();
+	SettingsParams->SetStringField(TEXT("component_path"), ComponentPath);
+	SettingsParams->SetNumberField(TEXT("seed"), OriginalSeed + 101);
+	SettingsParams->SetBoolField(TEXT("save"), true);
+	const FMonolithActionResult SettingsFailure =
+		ExecuteInjectedSaveFailure(TEXT("set_component_settings"), SettingsParams);
+	if (!RequireCompleteRollback(TEXT("set_component_settings save failure"), SettingsFailure))
+	{
+		return false;
+	}
+	Component = FindComponentExactOnActor(Fixture.Actor, ComponentPath);
+	if (!TestNotNull(TEXT("Settings rollback preserves exact component identity"), Component))
+	{
+		return false;
+	}
+	TestEqual(TEXT("Settings rollback restores the original seed"), Component->Seed, OriginalSeed);
+	TestFixtureClean(TEXT("set_component_settings save failure"));
+
+	MarkFixtureClean();
+	TSharedPtr<FJsonObject> Values = MakeShared<FJsonObject>();
+	Values->SetNumberField(TEXT("RollbackCount"), 99);
+	TSharedPtr<FJsonObject> UserParameterParams = MakeShared<FJsonObject>();
+	UserParameterParams->SetStringField(TEXT("component_path"), ComponentPath);
+	UserParameterParams->SetObjectField(TEXT("values"), Values);
+	UserParameterParams->SetBoolField(TEXT("save"), true);
+	const FMonolithActionResult UserParameterFailure =
+		ExecuteInjectedSaveFailure(
+			TEXT("set_component_user_parameters"),
+			UserParameterParams);
+	if (!RequireCompleteRollback(
+			TEXT("set_component_user_parameters save failure"),
+			UserParameterFailure))
+	{
+		return false;
+	}
+	Component = FindComponentExactOnActor(Fixture.Actor, ComponentPath);
+	UPCGGraphInstance* RestoredInstance =
+		Component ? Component->GetGraphInstance() : nullptr;
+	const FInstancedPropertyBag* RestoredBag =
+		RestoredInstance ? RestoredInstance->GetUserParametersStruct() : nullptr;
+	const FPropertyBagPropertyDesc* RestoredDesc =
+		RestoredBag ? RestoredBag->FindPropertyDescByName(CountName) : nullptr;
+	int32 RestoredCount = 0;
+	if (!TestNotNull(TEXT("User-parameter rollback preserves the graph instance"), RestoredInstance) ||
+		!TestNotNull(TEXT("User-parameter rollback preserves the parameter bag"), RestoredBag) ||
+		!TestNotNull(TEXT("User-parameter rollback preserves the descriptor"), RestoredDesc) ||
+		!ReadInt32Parameter(*this, *RestoredBag, CountName, RestoredCount))
+	{
+		return false;
+	}
+	TestEqual(TEXT("User-parameter rollback restores the inherited value"), RestoredCount, 7);
+	TestFalse(
+		TEXT("User-parameter rollback restores the inherited override flag"),
+		RestoredInstance->IsPropertyOverridden(RestoredDesc->CachedProperty));
+	TestFixtureClean(TEXT("set_component_user_parameters save failure"));
+
+	Component->SetGraphLocal(nullptr);
 	return true;
 }
 
@@ -1639,6 +1905,9 @@ bool FMonolithPCGCleanupCoalescingMetadataTest::RunTest(const FString& Parameter
 	}
 	const FString FirstCleanupTaskId =
 		FirstResult.Result->GetStringField(TEXT("scheduled_task_id"));
+	TestFalse(
+		TEXT("Initial cleanup reports the task id returned by CleanupLocal"),
+		FirstCleanupTaskId.IsEmpty());
 
 	TSharedPtr<FJsonObject> CoalescedParams = MakeShared<FJsonObject>();
 	CoalescedParams->SetStringField(TEXT("component_path"), ComponentPath);
@@ -1651,10 +1920,19 @@ bool FMonolithPCGCleanupCoalescingMetadataTest::RunTest(const FString& Parameter
 	TestTrue(
 		TEXT("Second cleanup request reports that work was already in flight"),
 		CoalescedResult.Result->GetBoolField(TEXT("already_cleaning")));
+#if UE_VERSION_NEWER_THAN_OR_EQUAL(5, 8, 0)
 	TestEqual(
 		TEXT("Coalesced cleanup preserves the actual in-flight task identity"),
 		CoalescedResult.Result->GetStringField(TEXT("scheduled_task_id")),
 		FirstCleanupTaskId);
+#else
+	TestFalse(
+		TEXT("UE 5.7 reports in-flight cleanup task identity as unsupported"),
+		CoalescedResult.Result->GetBoolField(TEXT("scheduled_task_id_supported")));
+	TestFalse(
+		TEXT("UE 5.7 does not fabricate an in-flight cleanup task id"),
+		CoalescedResult.Result->HasField(TEXT("scheduled_task_id")));
+#endif
 	TestTrue(
 		TEXT("Response preserves the second request mode as requested-only metadata"),
 		CoalescedResult.Result->GetBoolField(TEXT("requested_remove_components")));

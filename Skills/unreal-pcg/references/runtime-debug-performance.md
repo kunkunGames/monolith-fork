@@ -1,4 +1,4 @@
-# UE 5.8 PCG runtime, determinism, debugging, and cost
+# UE 5.7/5.8 PCG runtime, determinism, debugging, and cost
 
 Use this reference when a request crosses from graph topology into component execution, partitioning, repeatability, output diagnosis, or performance risk. It describes what the current Monolith PCG surface can prove. It does not replace live Unreal Insights, PCG editor debugging, or a profiler, and it must not turn a static estimate into a measured engine cost.
 

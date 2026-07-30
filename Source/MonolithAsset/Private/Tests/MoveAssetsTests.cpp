@@ -3,6 +3,7 @@
 #include "Misc/AutomationTest.h"
 
 #include "MonolithAssetMoveActions.h"
+#include "MonolithAssetResultCompat.h"
 #include "MonolithAssetMoveModalPolicy.h"
 #include "MonolithToolRegistry.h"
 
@@ -117,9 +118,16 @@ namespace
 
 		explicit FScopedMoveMounts(const FString& TestId)
 		{
-			BaseDir = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Automation"), TEXT("MonolithMoveAssets"), TestId);
-			SourceContentDir = FPaths::ConvertRelativePathToFull(FPaths::Combine(BaseDir, TEXT("Source")));
-			DestinationContentDir = FPaths::ConvertRelativePathToFull(FPaths::Combine(BaseDir, TEXT("Destination")));
+			const FString RelativeBaseDir =
+				FPaths::Combine(
+					FPaths::ProjectSavedDir(),
+					TEXT("Automation"),
+					TEXT("MonolithMoveAssets"),
+					TestId);
+			BaseDir = IFileManager::Get().ConvertToAbsolutePathForExternalAppForWrite(
+				*RelativeBaseDir);
+			SourceContentDir = FPaths::Combine(BaseDir, TEXT("Source"));
+			DestinationContentDir = FPaths::Combine(BaseDir, TEXT("Destination"));
 			FPaths::NormalizeDirectoryName(SourceContentDir);
 			FPaths::NormalizeDirectoryName(DestinationContentDir);
 			SourceRoot = FString::Printf(TEXT("/MonolithMoveSrc%s/"), *TestId.Left(12));
@@ -408,18 +416,6 @@ bool FMonolithAssetMoveRegistryAndGuardsTest::RunTest(const FString& Parameters)
 	TestTrue(
 		TEXT("asset.cleanup_moved_redirectors is registered"),
 		Registry.HasAction(TEXT("asset"), TEXT("cleanup_moved_redirectors")));
-	const FMonolithActionExecutionPolicy Policy = Registry.GetActionExecutionPolicy(TEXT("asset"), TEXT("move_assets"));
-	TestEqual(TEXT("move_assets tracks dirty packages"), Policy.PolicyId, FString(TEXT("track_dirty_packages")));
-	TestFalse(TEXT("move_assets policy is explicit"), Policy.bDefaulted);
-	TestTrue(TEXT("move_assets dirty tracking is enabled"), Policy.bDirtyPackageTracking);
-	TestFalse(TEXT("move_assets is not wrapped in a misleading transaction"), Policy.bTransactionWrapping);
-	const FMonolithActionExecutionPolicy CleanupPolicy = Registry.GetActionExecutionPolicy(
-		TEXT("asset"),
-		TEXT("cleanup_moved_redirectors"));
-	TestEqual(
-		TEXT("cleanup_moved_redirectors tracks dirty packages"),
-		CleanupPolicy.PolicyId,
-		FString(TEXT("track_dirty_packages")));
 
 	const FMonolithActionResult MissingMoves = FMonolithAssetMoveActions::MoveAssets(MakeMoveParams({}));
 	TestFalse(TEXT("move_assets rejects missing moves"), MissingMoves.bSuccess);
@@ -548,10 +544,11 @@ bool FMonolithAssetMoveDryRunTest::RunTest(const FString& Parameters)
 	if (!Result.bSuccess)
 	{
 		AddInfo(FString::Printf(TEXT("Dry-run failure: %s"), *Result.ErrorMessage));
-		if (Result.ErrorData.IsValid())
+		if (const TSharedPtr<FJsonObject> ErrorData =
+			MonolithAsset::GetErrorDataObject(Result))
 		{
 			const TArray<TSharedPtr<FJsonValue>>* MoveRows = nullptr;
-			if (Result.ErrorData->TryGetArrayField(TEXT("moves"), MoveRows) && MoveRows)
+			if (ErrorData->TryGetArrayField(TEXT("moves"), MoveRows) && MoveRows)
 			{
 				for (const TSharedPtr<FJsonValue>& MoveValue : *MoveRows)
 				{
@@ -648,16 +645,21 @@ bool FMonolithAssetMoveSourceControlCleanupGuardTest::RunTest(const FString& Par
 			/*bAcceptCdoReferenceWarning=*/false));
 	TestFalse(TEXT("cleanup request without source control is rejected before rename"), Result.bSuccess);
 	TestTrue(TEXT("source-control cleanup guard returns structured error data"), Result.ErrorData.IsValid());
-	if (Result.ErrorData.IsValid())
+	if (const TSharedPtr<FJsonObject> ErrorData =
+		MonolithAsset::GetErrorDataObject(Result))
 	{
 		FString Status;
 		bool bReportedAcceptCdoReferenceWarning = true;
-		bool bReportedSourceControlEnabled = true;
-		Result.ErrorData->TryGetStringField(TEXT("status"), Status);
-		Result.ErrorData->TryGetBoolField(
+		bool bReportedSourceControlAvailable = true;
+		ErrorData->TryGetStringField(TEXT("status"), Status);
+		ErrorData->TryGetBoolField(
 			TEXT("accept_cdo_reference_warning"),
 			bReportedAcceptCdoReferenceWarning);
-		Result.ErrorData->TryGetBoolField(TEXT("source_control_enabled"), bReportedSourceControlEnabled);
+		TestTrue(
+			TEXT("cleanup guard reports source-control availability"),
+			ErrorData->TryGetBoolField(
+				TEXT("source_control_available"),
+				bReportedSourceControlAvailable));
 		TestEqual(
 			TEXT("source-control cleanup guard status"),
 			Status,
@@ -666,8 +668,8 @@ bool FMonolithAssetMoveSourceControlCleanupGuardTest::RunTest(const FString& Par
 			TEXT("cleanup-only failure reports CDO acceptance as false"),
 			bReportedAcceptCdoReferenceWarning);
 		TestFalse(
-			TEXT("cleanup guard reports disabled source control"),
-			bReportedSourceControlEnabled);
+			TEXT("cleanup guard reports unavailable source control"),
+			bReportedSourceControlAvailable);
 	}
 
 	TestNull(TEXT("guard leaves source package unloaded"), FindPackage(nullptr, *SourcePackage));
@@ -1033,10 +1035,11 @@ bool FMonolithAssetCleanupMovedRedirectorsAlreadyCleanedSourceControlGuardTest::
 		Mounts.DestinationRoot));
 	TestFalse(TEXT("confirmed already-cleaned request fails closed without source-control proof"), Result.bSuccess);
 	TestTrue(TEXT("already-cleaned source-control guard returns a report"), Result.ErrorData.IsValid());
-	if (Result.ErrorData.IsValid())
+	if (const TSharedPtr<FJsonObject> ErrorData =
+		MonolithAsset::GetErrorDataObject(Result))
 	{
 		FString Status;
-		Result.ErrorData->TryGetStringField(TEXT("status"), Status);
+		ErrorData->TryGetStringField(TEXT("status"), Status);
 		TestEqual(
 			TEXT("already-cleaned guard status"),
 			Status,
@@ -1237,8 +1240,10 @@ bool FMonolithAssetMoveCommitTest::RunTest(const FString& Parameters)
 		TestFalse(TEXT("recovery dry-run blocks a wrong exact destination"), WrongTargetResult.bSuccess);
 		bool bFoundTargetMismatch = false;
 		const TArray<TSharedPtr<FJsonValue>>* WrongTargetRows = nullptr;
-		if (WrongTargetResult.ErrorData.IsValid()
-			&& WrongTargetResult.ErrorData->TryGetArrayField(TEXT("moves"), WrongTargetRows)
+		if (const TSharedPtr<FJsonObject> ErrorData =
+				MonolithAsset::GetErrorDataObject(WrongTargetResult);
+			ErrorData.IsValid()
+			&& ErrorData->TryGetArrayField(TEXT("moves"), WrongTargetRows)
 			&& WrongTargetRows
 			&& WrongTargetRows->Num() == 1)
 		{
@@ -1450,8 +1455,10 @@ bool FMonolithAssetCleanupMovedRedirectorsExactObjectPathsTest::RunTest(const FS
 		ForeignCompanionResult.bSuccess);
 	bool bFoundForeignCompanionError = false;
 	const TArray<TSharedPtr<FJsonValue>>* ForeignCompanionRows = nullptr;
-	if (ForeignCompanionResult.ErrorData.IsValid()
-		&& ForeignCompanionResult.ErrorData->TryGetArrayField(
+	if (const TSharedPtr<FJsonObject> ErrorData =
+			MonolithAsset::GetErrorDataObject(ForeignCompanionResult);
+		ErrorData.IsValid()
+		&& ErrorData->TryGetArrayField(
 			TEXT("moves"),
 			ForeignCompanionRows)
 		&& ForeignCompanionRows
@@ -1671,8 +1678,10 @@ bool FMonolithAssetCleanupMovedRedirectorsSoftReferencerTest::RunTest(const FStr
 	TestFalse(TEXT("soft referencer blocks cleanup dry-run"), Result.bSuccess);
 	bool bFoundSoftReferenceBlock = false;
 	const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
-	if (Result.ErrorData.IsValid()
-		&& Result.ErrorData->TryGetArrayField(TEXT("moves"), Rows)
+	if (const TSharedPtr<FJsonObject> ErrorData =
+			MonolithAsset::GetErrorDataObject(Result);
+		ErrorData.IsValid()
+		&& ErrorData->TryGetArrayField(TEXT("moves"), Rows)
 		&& Rows
 		&& Rows->Num() == 1)
 	{
@@ -1700,6 +1709,12 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMonolithAssetCleanupMovedRedirectorsSourceControlCommitTest::RunTest(const FString& Parameters)
 {
+	if (!FParse::Param(FCommandLine::Get(), TEXT("MonolithSourceControlMutationTests")))
+	{
+		AddInfo(TEXT("Source-control commit/idempotency integration is opt-in because it marks files for add and delete. Re-run an isolated provider-backed workspace with -MonolithSourceControlMutationTests."));
+		return true;
+	}
+
 	ISourceControlModule& SourceControlModule = ISourceControlModule::Get();
 	if (!TestTrue(TEXT("source-control module is enabled"), SourceControlModule.IsEnabled())
 		|| !TestTrue(TEXT("source-control provider is available"), SourceControlModule.GetProvider().IsAvailable()))

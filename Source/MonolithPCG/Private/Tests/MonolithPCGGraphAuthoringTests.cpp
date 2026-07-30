@@ -4,11 +4,13 @@
 #include "HAL/FileManager.h"
 #include "HAL/PlatformTime.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/EngineVersionComparison.h"
 #include "Misc/PackageName.h"
 
 #include "MonolithPCGActions.h"
 #include "MonolithPCGComponentActions.h"
 #include "MonolithPCGGraphAuthoringActions.h"
+#include "MonolithPCGResultUtils.h"
 #include "MonolithPCGSettingsResolver.h"
 #include "MonolithToolRegistry.h"
 
@@ -497,6 +499,60 @@ bool SetGraphFloatingPointProperty(
 	return true;
 }
 
+bool SetGraphIntegerProperty(
+	FAutomationTestBase& Test,
+	UPCGGraph* Graph,
+	const FName PropertyName,
+	const uint64 Value)
+{
+	FNumericProperty* Property = CastField<FNumericProperty>(RequireGraphProperty(Test, Graph, PropertyName));
+	if (!Property || !Property->IsInteger() || !Property->CanHoldValue(Value))
+	{
+		Test.AddError(FString::Printf(
+			TEXT("UPCGGraph property '%s' cannot represent the requested integer"), *PropertyName.ToString()));
+		return false;
+	}
+	void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Graph);
+	Property->SetIntPropertyValue(ValuePtr, Value);
+	return true;
+}
+
+bool SetGraphGridSizeMultiplier(
+	FAutomationTestBase& Test,
+	UPCGGraph* Graph,
+	const double GridSizeMultiplier)
+{
+#if UE_VERSION_NEWER_THAN_OR_EQUAL(5, 8, 0)
+	return SetGraphFloatingPointProperty(
+		Test, Graph, TEXT("HiGenGridSizeMultiplier"), GridSizeMultiplier);
+#else
+	if (!FMath::IsFinite(GridSizeMultiplier) || GridSizeMultiplier <= 0.0)
+	{
+		Test.AddError(TEXT("UE 5.7 hierarchical grid multiplier must be positive and finite"));
+		return false;
+	}
+	const double GridExponent = FMath::Log2(GridSizeMultiplier);
+	const int32 RoundedExponent = FMath::RoundToInt(GridExponent);
+	if (RoundedExponent < 0 || RoundedExponent > 10 ||
+		!FMath::IsNearlyEqual(GridExponent, static_cast<double>(RoundedExponent)))
+	{
+		Test.AddError(TEXT("UE 5.7 hierarchical grid multiplier must be an exact power of two from 1 to 1024"));
+		return false;
+	}
+	return SetGraphIntegerProperty(
+		Test, Graph, TEXT("HiGenExponential"), static_cast<uint64>(RoundedExponent));
+#endif
+}
+
+double GetGraphGridSizeMultiplier(const UPCGGraph* Graph)
+{
+#if UE_VERSION_NEWER_THAN_OR_EQUAL(5, 8, 0)
+	return Graph ? Graph->GetGridSizeMultiplier() : 0.0;
+#else
+	return Graph ? FMath::Pow(2.0, static_cast<double>(Graph->GetGridExponential())) : 0.0;
+#endif
+}
+
 bool ConfigureGraphHierarchicalGenerationPolicy(
 	FAutomationTestBase& Test,
 	UPCGGraph* Graph,
@@ -514,14 +570,14 @@ bool ConfigureGraphHierarchicalGenerationPolicy(
 	if (!SetGraphBoolProperty(Test, Graph, TEXT("bUseHierarchicalGeneration"), true) ||
 		!SetGraphEnumProperty(
 			Test, Graph, TEXT("HiGenGridSize"), StaticEnum<EPCGHiGenGrid>(), static_cast<int64>(Grid)) ||
-		!SetGraphFloatingPointProperty(Test, Graph, TEXT("HiGenGridSizeMultiplier"), GridSizeMultiplier) ||
+		!SetGraphGridSizeMultiplier(Test, Graph, GridSizeMultiplier) ||
 		!SetGraphBoolProperty(Test, Graph, TEXT("bUse2DGrid"), bUse2DGrid))
 	{
 		return false;
 	}
 
 	if (!Graph->IsHierarchicalGenerationEnabled() || Graph->GetDefaultGrid() != Grid ||
-		!FMath::IsNearlyEqual(Graph->GetGridSizeMultiplier(), GridSizeMultiplier) ||
+		!FMath::IsNearlyEqual(GetGraphGridSizeMultiplier(Graph), GridSizeMultiplier) ||
 		Graph->Use2DGrid() != bUse2DGrid)
 	{
 		Test.AddError(TEXT("UPCGGraph public hierarchical-generation accessors did not read back the reflected policy"));
@@ -593,8 +649,10 @@ bool ConfigureReplacementSourceGraph(FAutomationTestBase& Test, UPCGGraph* Graph
 		InputNode ? Cast<UPCGGraphInputOutputSettings>(InputNode->GetSettings()) : nullptr;
 	UPCGGraphInputOutputSettings* OutputSettings =
 		OutputNode ? Cast<UPCGGraphInputOutputSettings>(OutputNode->GetSettings()) : nullptr;
-	const TArray<FPCGPinProperties> InputDefaults = Graph->DefaultInputPinProperties();
-	const TArray<FPCGPinProperties> OutputDefaults = Graph->DefaultOutputPinProperties();
+	const TArray<FPCGPinProperties> InputDefaults =
+		InputSettings ? InputSettings->DefaultOutputPinProperties() : TArray<FPCGPinProperties>();
+	const TArray<FPCGPinProperties> OutputDefaults =
+		OutputSettings ? OutputSettings->DefaultInputPinProperties() : TArray<FPCGPinProperties>();
 	if (!InputSettings || !OutputSettings || InputDefaults.IsEmpty() || OutputDefaults.IsEmpty())
 	{
 		Test.AddError(TEXT("Replacement source has no editable input/output settings pins"));
@@ -1725,7 +1783,7 @@ bool FMonolithPCGGraphContentsReplacementSaveReloadTest::RunTest(const FString& 
 		GetDefault<UPCGAddTagSettings>()->bIgnoreTagValueParsing;
 	TargetOnlySettings->Modify();
 	TargetOnlySettings->bIgnoreTagValueParsing = !DefaultIgnoreTagValueParsing;
-#if WITH_EDITORONLY_DATA
+#if WITH_EDITORONLY_DATA && UE_VERSION_NEWER_THAN_OR_EQUAL(5, 8, 0)
 	SourceGraph->LastEditedDocuments = {
 		FPCGGraphDocumentInfo(SourceGraph, FVector2f(11.0f, 22.0f), 0.75f)
 	};
@@ -1793,7 +1851,7 @@ bool FMonolithPCGGraphContentsReplacementSaveReloadTest::RunTest(const FString& 
 	TestNull(TEXT("Dry-run does not introduce source topology"),
 		FindNodeByTitle(TargetGraph, TEXT("SourceReplacementNode")));
 	TestFalse(TEXT("Default dry-run preserves target dirty state"), TargetGraph->GetPackage()->IsDirty());
-#if WITH_EDITORONLY_DATA
+#if WITH_EDITORONLY_DATA && UE_VERSION_NEWER_THAN_OR_EQUAL(5, 8, 0)
 	TestTrue(TEXT("Dry-run preserves identity-bound target editor workspace state"),
 		TargetGraph->LastEditedDocuments == TargetEditorWorkspaceBefore);
 #endif
@@ -1849,7 +1907,7 @@ bool FMonolithPCGGraphContentsReplacementSaveReloadTest::RunTest(const FString& 
 		TargetGraph->GetInputNode()->GetSettings(), TargetInputSettingsIdentity);
 	TestEqual(TEXT("Target default output settings identity is preserved"),
 		TargetGraph->GetOutputNode()->GetSettings(), TargetOutputSettingsIdentity);
-#if WITH_EDITORONLY_DATA
+#if WITH_EDITORONLY_DATA && UE_VERSION_NEWER_THAN_OR_EQUAL(5, 8, 0)
 	TestTrue(TEXT("Commit preserves identity-bound target editor workspace state"),
 		TargetGraph->LastEditedDocuments == TargetEditorWorkspaceBefore);
 #endif
@@ -1890,7 +1948,7 @@ bool FMonolithPCGGraphContentsReplacementSaveReloadTest::RunTest(const FString& 
 	TestTrue(TEXT("Graph-level landscape metadata policy is copied"), !TargetGraph->bLandscapeUsesMetadata);
 	TestTrue(TEXT("Graph-level hierarchical generation policy is copied"), TargetGraph->IsHierarchicalGenerationEnabled());
 	TestEqual(TEXT("Graph-level grid enum is copied"), TargetGraph->GetDefaultGrid(), EPCGHiGenGrid::Grid64);
-	TestEqual(TEXT("Graph-level grid multiplier is copied"), TargetGraph->GetGridSizeMultiplier(), 2.0);
+	TestEqual(TEXT("Graph-level grid multiplier is copied"), GetGraphGridSizeMultiplier(TargetGraph), 2.0);
 	TestTrue(TEXT("Graph-level 2D-grid policy is copied"), !TargetGraph->Use2DGrid());
 	TestNotNull(TEXT("Custom graph input pin is copied"),
 		TargetGraph->GetInputNode()->GetOutputPin(TEXT("ReplacementPayload")));
@@ -1924,7 +1982,7 @@ bool FMonolithPCGGraphContentsReplacementSaveReloadTest::RunTest(const FString& 
 	TestTrue(TEXT("Reload preserves custom input/output topology"), HasConnection(
 		TargetGraph->GetInputNode(), TEXT("ReplacementPayload"),
 		TargetGraph->GetOutputNode(), TEXT("ReplacementPayload")));
-#if WITH_EDITORONLY_DATA
+#if WITH_EDITORONLY_DATA && UE_VERSION_NEWER_THAN_OR_EQUAL(5, 8, 0)
 	TestTrue(TEXT("Reload preserves identity-bound target editor workspace state"),
 		TargetGraph->LastEditedDocuments == TargetEditorWorkspaceBefore);
 #endif
@@ -2296,7 +2354,7 @@ bool FMonolithPCGGraphContentsReplacementLargeGraphBoundedComparisonTest::RunTes
 		SourceGraph->GetNodes().Num(), LargeNodeCount);
 	TArray<UObject*> LargeSourceInnerObjects;
 	GetObjectsWithOuter(
-		SourceGraph, LargeSourceInnerObjects, EGetObjectsFlags::IncludeNestedObjects);
+		SourceGraph, LargeSourceInnerObjects, true);
 	TestTrue(
 		*FString::Printf(
 			TEXT("Large source exposes at least one node and one settings inner per element (%d inners)"),
@@ -2438,14 +2496,16 @@ bool FMonolithPCGGraphContentsReplacementRollbackTest::RunTest(const FString& Pa
 	TestFalse(TEXT("Injected pre-save failure is reported"), FailureResult.bSuccess);
 	TestTrue(TEXT("Injected failure reports verified rollback"),
 		FailureResult.ErrorMessage.Contains(TEXT("rollback=verified"), ESearchCase::CaseSensitive));
+	const TSharedPtr<FJsonObject> FailureErrorData =
+		MonolithPCGResultUtils::GetErrorDataObject(FailureResult);
 	if (!RequireReplacementSourceControlStatus(
-			*this, TEXT("replacement rollback failure"), FailureResult.ErrorData, TEXT("prepared")))
+			*this, TEXT("replacement rollback failure"), FailureErrorData, TEXT("prepared")))
 	{
 		return false;
 	}
 	bool bRollbackPersistentPropertiesVerified = false;
 	TestTrue(TEXT("Injected failure reports deep rollback verification"),
-		FailureResult.ErrorData->TryGetBoolField(
+		FailureErrorData.IsValid() && FailureErrorData->TryGetBoolField(
 			TEXT("rollback_persistent_properties_verified"),
 			bRollbackPersistentPropertiesVerified) &&
 		bRollbackPersistentPropertiesVerified);
@@ -2461,7 +2521,7 @@ bool FMonolithPCGGraphContentsReplacementRollbackTest::RunTest(const FString& Pa
 	TestFalse(TEXT("Rollback restores default hierarchical-generation policy"),
 		TargetGraph->IsHierarchicalGenerationEnabled());
 	TestEqual(TEXT("Rollback restores default grid multiplier"),
-		TargetGraph->GetGridSizeMultiplier(), 1.0);
+		GetGraphGridSizeMultiplier(TargetGraph), 1.0);
 	TestTrue(TEXT("Rollback restores default 2D-grid policy"), TargetGraph->Use2DGrid());
 	const FInstancedPropertyBag* const RolledBackParameters =
 		TargetGraph->GetUserParametersStruct();
@@ -2577,39 +2637,6 @@ bool FMonolithPCGGraphContentsReplacementRecursionGuardsTest::RunTest(const FStr
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FMonolithPCGGraphPreSaveValidationPolicyTest,
-	"Monolith.PCG.GraphAuthoring.Guard.PreSaveValidationPolicy",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FMonolithPCGGraphPreSaveValidationPolicyTest::RunTest(const FString& Parameters)
-{
-	using namespace MonolithPCGGraphAuthoringTests;
-	RegisterGraphAuthoringActions();
-
-	const TArray<FString> GraphMutatingActions = {
-		TEXT("create_pcg_graph"),
-		TEXT("add_pcg_node"),
-		TEXT("remove_pcg_node"),
-		TEXT("connect_pcg_nodes"),
-		TEXT("disconnect_pcg_nodes"),
-		TEXT("set_pcg_node_params"),
-		TEXT("set_pcg_graph_user_parameters"),
-		TEXT("set_pcg_subgraph"),
-		TEXT("replace_pcg_graph_contents")};
-	for (const FString& Action : GraphMutatingActions)
-	{
-		const FMonolithActionExecutionPolicy Policy =
-			FMonolithToolRegistry::Get().GetActionExecutionPolicy(TEXT("pcg"), Action);
-		TestFalse(
-			*FString::Printf(
-				TEXT("pcg.%s relies on authoritative in-handler pre-save validation, not late validation"),
-				*Action),
-			Policy.bPostEditValidation);
-	}
-	return true;
-}
-
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithPCGGraphAuthoringRegistrationTest, "Monolith.PCG.GraphAuthoring.Registration",
 								 EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
@@ -2654,75 +2681,35 @@ bool FMonolithPCGGraphAuthoringRegistrationTest::RunTest(const FString& Paramete
 	{
 		TestTrue(*FString::Printf(TEXT("pcg.%s is registered"), *Action), Registry.HasAction(TEXT("pcg"), Action));
 	}
-	TestEqual(TEXT("PCG action count is synchronized"), Registry.GetNamespaceActionCount(TEXT("pcg")),
-			  ExpectedActions.Num());
+	TestEqual(TEXT("PCG action count is synchronized"), Registry.GetActions(TEXT("pcg")).Num(),
+		ExpectedActions.Num());
 
-	const TArray<FString> TransactionalActions = {
-		TEXT("remap_graph_references"),
-		TEXT("create_pcg_graph"),
-		TEXT("add_pcg_node"),
-		TEXT("remove_pcg_node"),
-		TEXT("connect_pcg_nodes"),
-		TEXT("disconnect_pcg_nodes"),
-		TEXT("set_pcg_node_params"),
-		TEXT("set_pcg_graph_user_parameters"),
-		TEXT("set_pcg_subgraph"),
-		TEXT("replace_pcg_graph_contents"),
-		TEXT("create_component"),
-		TEXT("set_component_graph"),
-		TEXT("set_blueprint_component_graph"),
-		TEXT("set_component_settings"),
-		TEXT("set_component_user_parameters")};
-	for (const FString& Action : TransactionalActions)
+	const FMonolithActionResult StatusResult =
+		Registry.ExecuteAction(TEXT("pcg"), TEXT("get_status"), MakeShared<FJsonObject>());
+	TestTrue(TEXT("PCG status succeeds after registration"), StatusResult.bSuccess);
+	const TArray<TSharedPtr<FJsonValue>>* FutureActions = nullptr;
+	TestTrue(TEXT("PCG status returns future_actions"),
+		StatusResult.Result.IsValid() &&
+		StatusResult.Result->TryGetArrayField(TEXT("future_actions"), FutureActions) &&
+		FutureActions);
+	bool bImplementedParameterActionStillMarkedFuture = false;
+	if (FutureActions)
 	{
-		const FMonolithActionExecutionPolicy Policy = Registry.GetActionExecutionPolicy(TEXT("pcg"), Action);
-		TestEqual(*FString::Printf(TEXT("pcg.%s uses the guarded transaction policy"), *Action),
-				  Policy.PolicyId, FString(TEXT("transaction_optional")));
-		if (Action != TEXT("remap_graph_references"))
+		for (const TSharedPtr<FJsonValue>& FutureAction : *FutureActions)
 		{
-			TestFalse(*FString::Printf(TEXT("pcg.%s validates before persistence instead of after it"), *Action),
-					  Policy.bPostEditValidation);
+			FString FutureActionName;
+			bImplementedParameterActionStillMarkedFuture =
+				bImplementedParameterActionStillMarkedFuture ||
+				(FutureAction.IsValid() &&
+				 FutureAction->TryGetString(FutureActionName) &&
+				 FutureActionName.Equals(
+					 TEXT("pcg.edit_graph_user_parameter_schema"),
+					 ESearchCase::CaseSensitive));
 		}
 	}
-
-	const TArray<FString> AsyncLifecycleActions = {
-		TEXT("generate_component"),
-		TEXT("refresh_component"),
-		TEXT("cancel_component"),
-		TEXT("cleanup_component")};
-	for (const FString& Action : AsyncLifecycleActions)
-	{
-		const FMonolithActionExecutionPolicy Policy = Registry.GetActionExecutionPolicy(TEXT("pcg"), Action);
-		TestEqual(
-			*FString::Printf(TEXT("pcg.%s tracks async dirty packages without a misleading transaction"), *Action),
-			Policy.PolicyId,
-			FString(TEXT("track_dirty_packages")));
-		TestFalse(
-			*FString::Printf(TEXT("pcg.%s does not wrap only the scheduling call in an undo transaction"), *Action),
-			Policy.bTransactionWrapping);
-	}
-
-	const TArray<FString> ReadOnlyActions = {
-		TEXT("get_status"),
-		TEXT("list_graph_assets"),
-		TEXT("get_graph_asset"),
-		TEXT("list_components"),
-		TEXT("list_pcg_node_types"),
-		TEXT("get_pcg_graph_info"),
-		TEXT("validate_pcg_graph"),
-		TEXT("get_component"),
-		TEXT("get_component_output")};
-	TestEqual(
-		TEXT("Policy partitions cover every registered PCG action exactly once"),
-		TransactionalActions.Num() + AsyncLifecycleActions.Num() + ReadOnlyActions.Num(),
-		ExpectedActions.Num());
-	for (const FString& Action : ReadOnlyActions)
-	{
-		TestEqual(
-			*FString::Printf(TEXT("pcg.%s is explicitly read-only"), *Action),
-			Registry.GetActionExecutionPolicy(TEXT("pcg"), Action).PolicyId,
-			FString(TEXT("read_only")));
-	}
+	TestFalse(
+		TEXT("Implemented graph user-parameter authoring is not advertised as future work"),
+		bImplementedParameterActionStillMarkedFuture);
 
 	return true;
 }

@@ -1,8 +1,11 @@
-// Copyright tumourlove. All Rights Reserved.
+// SPDX-License-Identifier: MIT
+
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Containers/Array.h"
 #include "Containers/ArrayView.h"
+#include "Containers/UnrealString.h"
 
 /** Per-field token-scoring weights. Fuzzy=0 disables typo tolerance for the field. */
 struct FMonolithFuzzyWeights
@@ -41,49 +44,45 @@ struct FMonolithFuzzyScore
 };
 
 /**
- * Shared fuzzy text-matching primitives used by monolith.find, FindSimilarActions,
- * and asset.find_assets. Pure (Core-only); no editor/asset dependencies.
+ * Shared fuzzy text-matching primitives used by domain search actions.
  *
- * Design rule: this owns only the genuinely identical primitives — normalization,
- * tokenization, bounded edit distance, typo gating, weighted token scoring, and a
- * per-field composition convenience. Callers keep their own corpus, field set,
- * weights, thresholds, cross-field bonuses, and output shape.
+ * This owns only the genuinely identical primitives: normalization,
+ * tokenization, bounded edit distance, typo gating, weighted token scoring,
+ * and per-field composition. Callers retain corpus, field, threshold,
+ * cross-field bonus, and output policy.
  */
 class MONOLITHCORE_API FMonolithFuzzyMatch
 {
 public:
-	/** Lowercase, fold a few code tokens (c++/c#), strip non-alnum to spaces, collapse whitespace. */
+	/** Lowercase, fold a few code tokens, strip non-alphanumeric characters, and collapse whitespace. */
 	static FString NormalizeText(FString Text);
 
 	/**
-	 * Normalize + split + drop stopwords / <2-char tokens + dedupe. When AliasTable is
-	 * non-null, each base token present as a key expands to its values (deduped, snapshot
-	 * based so expansions are not themselves re-expanded).
+	 * Normalize, split, drop stopwords and short tokens, then deduplicate.
+	 * Optional aliases expand from the original token snapshot only.
 	 */
-	static TArray<FString> Tokenize(const FString& Text, const TMap<FString, TArray<FString>>* AliasTable = nullptr);
+	static TArray<FString> Tokenize(
+		const FString& Text,
+		const TMap<FString, TArray<FString>>* AliasTable = nullptr);
 
 	/**
-	 * Banded Levenshtein with early-out once the running row minimum exceeds MaxDistance
-	 * (returns MaxDistance+1). For unbounded-style use pass a MaxDistance at least as large
-	 * as the threshold you compare against (callers do this; keep MaxDistance small to stay
-	 * well clear of INT32 overflow). bCaseInsensitive lowercases per character before compare.
-	 *
-	 * bAllowTransposition switches to the optimal-string-alignment (restricted Damerau) variant:
-	 * an adjacent transposition counts as one edit instead of two (e.g. "form" <-> "from").
-	 * Default false preserves plain Levenshtein for existing callers. With transposition on the
-	 * row-minimum early-out is disabled (a transposition can skip a row, making that bound unsafe);
-	 * the length-difference early-out still applies.
+	 * Banded Levenshtein distance with an early-out above MaxDistance.
+	 * bAllowTransposition switches to the optimal-string-alignment variant.
 	 */
-	static int32 EditDistanceBounded(const FString& A, const FString& B, int32 MaxDistance, bool bCaseInsensitive = false, bool bAllowTransposition = false);
+	static int32 EditDistanceBounded(
+		const FString& A,
+		const FString& B,
+		int32 MaxDistance,
+		bool bCaseInsensitive = false,
+		bool bAllowTransposition = false);
 
-	/** Typo gate: both >=4 chars, same first char, edit distance <= (2 if either >=7 else 1). bAllowTransposition counts an adjacent swap as one edit. */
-	static bool IsTypoMatch(const FString& QueryToken, const FString& FieldToken, bool bAllowTransposition = false);
+	/** Typo gate for tokens of at least four characters with the same first character. */
+	static bool IsTypoMatch(
+		const FString& QueryToken,
+		const FString& FieldToken,
+		bool bAllowTransposition = false);
 
-	/**
-	 * Score one field's tokens against the query tokens: exact/prefix/contains/fuzzy weighted,
-	 * capturing reasons and matched tokens. When OutBestDistance is non-null, records the
-	 * smallest contributing typo distance. Returns the field's score contribution.
-	 */
+	/** Score query tokens against one field and append deterministic match evidence. */
 	static int32 ScoreTokens(
 		const TArray<FString>& QueryTokens,
 		const TArray<FString>& FieldTokens,
@@ -95,14 +94,28 @@ public:
 		int32* OutBestDistance = nullptr,
 		bool bAllowTransposition = false);
 
-	/**
-	 * Per-field composition convenience for Search callers: for each field applies the
-	 * whole-query phrase bonus (exact > prefix > contains) then ScoreTokens. Cross-field
-	 * bonuses remain caller policy and are NOT applied here.
-	 */
+	/** Compose phrase and token scores across fields; cross-field bonuses remain caller policy. */
 	static FMonolithFuzzyScore ScoreCandidate(
 		const FString& QueryNormalized,
 		const TArray<FString>& QueryTokens,
 		TArrayView<const FMonolithFuzzyField> Fields,
 		bool bAllowTransposition = false);
 };
+
+/**
+ * Registry-oriented edit-distance scorer retained for unknown namespace/action
+ * suggestions. Callers must release the registry lock before invoking it.
+ */
+namespace MonolithFuzzyMatchDetail
+{
+	struct FFuzzyCandidate
+	{
+		FString Key;
+		float Score = 0.0f;
+	};
+
+	MONOLITHCORE_API TArray<FFuzzyCandidate> ScoreFuzzyMatches(
+		const FString& Needle,
+		const TArray<FString>& KeysSnapshot,
+		int32 TopN);
+}

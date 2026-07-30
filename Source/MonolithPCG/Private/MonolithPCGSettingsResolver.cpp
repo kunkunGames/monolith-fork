@@ -130,14 +130,43 @@ UClass* FMonolithPCGSettingsResolver::Resolve(const FString& TypeToken, TArray<F
 	}
 
 	const TArray<FMonolithPCGSettingsTypeInfo> Types = ListTypes();
+
+	// An exact class path is unambiguous by construction, so it still resolves
+	// immediately.
 	for (const FMonolithPCGSettingsTypeInfo& Type : Types)
 	{
-		if (Type.ClassName.Equals(TrimmedToken, ESearchCase::IgnoreCase) ||
-			(TEXT("U") + Type.ClassName).Equals(TrimmedToken, ESearchCase::IgnoreCase) ||
-			Type.ClassPath.Equals(TrimmedToken, ESearchCase::IgnoreCase))
+		if (Type.ClassPath.Equals(TrimmedToken, ESearchCase::IgnoreCase))
 		{
 			return Type.SettingsClass;
 		}
+	}
+
+	// A short class name is not unique: two loaded modules can each define a
+	// UPCGSettings subclass with the same name. Returning the first sorted match
+	// created a node of the wrong project/plugin class, so collect every
+	// short-name match and only resolve when exactly one exists. Otherwise fall
+	// through to the ambiguity reporting below, which requires an exact path.
+	TArray<UClass*> ShortNameMatches;
+	for (const FMonolithPCGSettingsTypeInfo& Type : Types)
+	{
+		if (Type.ClassName.Equals(TrimmedToken, ESearchCase::IgnoreCase) ||
+			(TEXT("U") + Type.ClassName).Equals(TrimmedToken, ESearchCase::IgnoreCase))
+		{
+			ShortNameMatches.AddUnique(Type.SettingsClass);
+		}
+	}
+	if (ShortNameMatches.Num() == 1)
+	{
+		return ShortNameMatches[0];
+	}
+	if (ShortNameMatches.Num() > 1)
+	{
+		for (const UClass* Match : ShortNameMatches)
+		{
+			OutCandidates.AddUnique(Match->GetClassPathName().ToString());
+		}
+		OutCandidates.Sort();
+		return nullptr;
 	}
 
 	const FString CanonicalToken = Canonicalize(TrimmedToken);

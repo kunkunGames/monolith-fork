@@ -18,11 +18,6 @@ void FMonolithAssetHygieneActions::RegisterActions(FMonolithToolRegistry& Regist
 {
 	RegisterValidateNamingConventions(Registry);
 	RegisterBatchRenameAssets(Registry);
-
-	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("asset"), TEXT("batch_rename_assets"),
-		{ TEXT("rename many assets"), TEXT("find and replace names"), TEXT("add prefix to assets"), TEXT("strip suffix"), TEXT("bulk rename") },
-		{ TEXT("rename assets"), TEXT("mass rename"), TEXT("rename in bulk") },
-		{ TEXT("add the T_ prefix to these texture assets"), TEXT("rename all assets replacing Old with New") });
 }
 
 void FMonolithAssetHygieneActions::RegisterValidateNamingConventions(FMonolithToolRegistry& Registry)
@@ -34,6 +29,7 @@ void FMonolithAssetHygieneActions::RegisterValidateNamingConventions(FMonolithTo
 			.Optional(TEXT("scan_path"), TEXT("string"), TEXT("Content path to scan (e.g. /Game/Environment)"), TEXT("/Game"))
 			.Optional(TEXT("max_results"), TEXT("integer"), TEXT("Maximum violations to return"), TEXT("100"))
 			.Optional(TEXT("custom_rules"), TEXT("object"), TEXT("Custom prefix rules: {\"ClassName\": \"Prefix_\", ...}"))
+			.StrictComplexTypes()
 			.Build());
 }
 
@@ -51,6 +47,7 @@ void FMonolithAssetHygieneActions::RegisterBatchRenameAssets(FMonolithToolRegist
 			.Optional(TEXT("add_suffix"), TEXT("string"), TEXT("Suffix to add"))
 			.Optional(TEXT("remove_suffix"), TEXT("string"), TEXT("Suffix to remove"))
 			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Preview renames without applying"), TEXT("false"))
+			.StrictComplexTypes()
 			.Build());
 }
 
@@ -88,7 +85,7 @@ FMonolithActionResult FMonolithAssetHygieneActions::ValidateNamingConventions(co
 			FString Prefix;
 			if (Pair.Value->TryGetString(Prefix))
 			{
-				PrefixRules.Add(FMonolithJsonUtils::FieldKeyToString(Pair.Key), Prefix);
+				PrefixRules.Add(MonolithKeyToString(Pair.Key), Prefix);
 			}
 		}
 	}
@@ -106,13 +103,9 @@ FMonolithActionResult FMonolithAssetHygieneActions::ValidateNamingConventions(co
 	int32 TotalScanned = 0;
 	int32 TotalPassed = 0;
 
+	int32 TotalViolations = 0;
 	for (const FAssetData& Asset : AllAssets)
 	{
-		if (Violations.Num() >= MaxResults)
-		{
-			break;
-		}
-
 		const FString ClassName = Asset.AssetClassPath.GetAssetName().ToString();
 		const FString* ExpectedPrefix = PrefixRules.Find(ClassName);
 		if (!ExpectedPrefix)
@@ -135,15 +128,25 @@ FMonolithActionResult FMonolithAssetHygieneActions::ValidateNamingConventions(co
 		Violation->SetStringField(TEXT("asset_class"), ClassName);
 		Violation->SetStringField(TEXT("expected_prefix"), *ExpectedPrefix);
 		Violation->SetStringField(TEXT("suggested_name"), *ExpectedPrefix + AssetName);
-		Violations.Add(MakeShared<FJsonValueObject>(Violation));
+		// Keep scanning past the cap so total_assets_scanned, passed, and the
+		// violation total describe the whole requested content path. Breaking
+		// early made those aggregates describe only a prefix.
+		++TotalViolations;
+		if (Violations.Num() < MaxResults)
+		{
+			Violations.Add(MakeShared<FJsonValueObject>(Violation));
+		}
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("scan_path"), ScanPath);
 	Result->SetNumberField(TEXT("total_assets_scanned"), TotalScanned);
 	Result->SetNumberField(TEXT("passed"), TotalPassed);
-	Result->SetNumberField(TEXT("violations"), Violations.Num());
-	Result->SetBoolField(TEXT("truncated"), Violations.Num() >= MaxResults);
+	Result->SetNumberField(TEXT("violations"), TotalViolations);
+	Result->SetNumberField(TEXT("violations_returned"), Violations.Num());
+	// Only a genuinely dropped violation is truncation; a count that merely
+	// equals the cap is complete.
+	Result->SetBoolField(TEXT("truncated"), TotalViolations > Violations.Num());
 	Result->SetArrayField(TEXT("violations_list"), Violations);
 
 	TArray<TSharedPtr<FJsonValue>> RulesArr;
@@ -186,7 +189,14 @@ FMonolithActionResult FMonolithAssetHygieneActions::BatchRenameAssets(const TSha
 	Params->TryGetStringField(TEXT("remove_suffix"), RemoveSuffix);
 
 	bool bDryRun = false;
-	Params->TryGetBoolField(TEXT("dry_run"), bDryRun);
+	if (Params->HasField(TEXT("dry_run"))
+		&& (!Params->HasTypedField<EJson::Boolean>(TEXT("dry_run"))
+			|| !Params->TryGetBoolField(TEXT("dry_run"), bDryRun)))
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Invalid parameter 'dry_run': must be a boolean."),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	if (FindStr.IsEmpty() && AddPrefix.IsEmpty() && RemovePrefix.IsEmpty() && AddSuffix.IsEmpty() && RemoveSuffix.IsEmpty())
 	{
@@ -196,6 +206,7 @@ FMonolithActionResult FMonolithAssetHygieneActions::BatchRenameAssets(const TSha
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
 
+	TSet<FString> ClaimedDestinations;
 	TArray<FAssetRenameData> RenameData;
 	TArray<TSharedPtr<FJsonValue>> PreviewArr;
 
@@ -254,6 +265,37 @@ FMonolithActionResult FMonolithAssetHygieneActions::BatchRenameAssets(const TSha
 		}
 
 		const FString PackagePath = FPackageName::GetLongPackagePath(AssetData.PackageName.ToString());
+
+		// A generated destination can already be occupied - removing A_ from
+		// A_Foo when Foo exists - or can collide with another row in this same
+		// batch. Without this the dry run advertised a rename that cannot apply,
+		// and a committed batch returned partial_failure after attempting
+		// unrelated rows. Both checks are case-insensitive, matching package
+		// name semantics.
+		const FString DestinationObjectPath =
+			FString::Printf(TEXT("%s/%s.%s"), *PackagePath, *NewName, *NewName);
+		const FString DestinationKey = DestinationObjectPath.ToLower();
+		if (ClaimedDestinations.Contains(DestinationKey))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(
+					TEXT("Rename of '%s' targets '%s', which another row in this batch already claims"),
+					*AssetPath,
+					*DestinationObjectPath),
+				-32602);
+		}
+		if (AssetRegistry.GetAssetByObjectPath(
+				FSoftObjectPath(DestinationObjectPath),
+				/*bIncludeOnlyOnDiskAssets=*/false).IsValid())
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(
+					TEXT("Rename of '%s' targets '%s', which already exists"),
+					*AssetPath,
+					*DestinationObjectPath),
+				-32602);
+		}
+		ClaimedDestinations.Add(DestinationKey);
 
 		FAssetRenameData Data;
 		Data.Asset = AssetData.GetAsset();

@@ -2,6 +2,7 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Misc/AutomationTest.h"
 #include "MonolithPCGActions.h"
+#include "MonolithPCGGraphAuthoringActions.h"
 #include "MonolithToolRegistry.h"
 #include "PCGGraph.h"
 #include "Elements/IO/PCGLoadAssetElement.h"
@@ -91,10 +92,17 @@ bool FMonolithPCGRemapGraphReferenceContractTest::RunTest(const FString& Paramet
 	FMonolithPCGActions::RegisterActions(Registry);
 
 	TestTrue(TEXT("pcg.remap_graph_references action is registered"), Registry.HasAction(TEXT("pcg"), TEXT("remap_graph_references")));
-	TestEqual(
-		TEXT("pcg.remap_graph_references uses a guarded transaction policy"),
-		Registry.GetActionExecutionPolicy(TEXT("pcg"), TEXT("remap_graph_references")).PolicyId,
-		FString(TEXT("transaction_optional")));
+	const FMonolithActionInfo* RemapAction = Registry.GetActions(TEXT("pcg")).FindByPredicate(
+		[](const FMonolithActionInfo& Action)
+		{
+			return Action.Action == TEXT("remap_graph_references");
+		});
+	const TSharedPtr<FJsonObject>* RootRemapsSchema = nullptr;
+	TestTrue(
+		TEXT("pcg.remap_graph_references requires an exact JSON object for root_remaps"),
+		RemapAction && RemapAction->ParamSchema.IsValid()
+			&& RemapAction->ParamSchema->TryGetObjectField(TEXT("root_remaps"), RootRemapsSchema)
+			&& RootRemapsSchema && (*RootRemapsSchema)->GetBoolField(TEXT("allow_string_encoded_complex")) == false);
 
 	TSharedPtr<FJsonObject> RootRemaps = MakeShared<FJsonObject>();
 	RootRemaps->SetStringField(TEXT("/Game/Wall"), TEXT("/Game/Remapped/Wall"));
@@ -300,6 +308,138 @@ bool FMonolithParamGuardPCGGetGraphAssetParamsTest::RunTest(const FString& Param
 		TestFalse(TEXT("Rejects string tag_limit"), Result.bSuccess);
 		TestTrue(TEXT("Error mentions numeric type"),
 			Result.ErrorMessage.Contains(TEXT("number")) || Result.ErrorMessage.Contains(TEXT("integer")));
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithParamGuardPCGNativeScalarTypesTest,
+	"Monolith.ParamGuard.MonolithPCG.NativeScalarTypes",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardPCGNativeScalarTypesTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	FMonolithPCGActions::RegisterActions(Registry);
+	FMonolithPCGGraphAuthoringActions::RegisterActions(Registry);
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("include_properties"), TEXT("true"));
+		const FMonolithActionResult Result = Registry.ExecuteAction(
+			TEXT("pcg"), TEXT("list_pcg_node_types"), Params);
+		TestFalse(TEXT("Graph authoring rejects a string include_properties boolean"), Result.bSuccess);
+		TestTrue(TEXT("Graph authoring names the boolean contract"),
+			Result.ErrorMessage.Contains(TEXT("boolean"), ESearchCase::IgnoreCase));
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetBoolField(TEXT("query"), true);
+		const FMonolithActionResult Result = Registry.ExecuteAction(
+			TEXT("pcg"), TEXT("list_pcg_node_types"), Params);
+		TestFalse(TEXT("Graph authoring rejects a boolean query string"), Result.bSuccess);
+		TestTrue(TEXT("Graph authoring names the string contract"),
+			Result.ErrorMessage.Contains(TEXT("string"), ESearchCase::IgnoreCase));
+	}
+
+	{
+		TSharedPtr<FJsonObject> RootRemaps = MakeShared<FJsonObject>();
+		RootRemaps->SetStringField(TEXT("/Game/Old"), TEXT("/Game/New"));
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetBoolField(TEXT("asset_path"), true);
+		Params->SetObjectField(TEXT("root_remaps"), RootRemaps);
+		const FMonolithActionResult Result = Registry.ExecuteAction(
+			TEXT("pcg"), TEXT("remap_graph_references"), Params);
+		TestFalse(TEXT("Reference remap rejects a boolean asset_path string"), Result.bSuccess);
+		TestTrue(TEXT("Reference remap names the string contract"),
+			Result.ErrorMessage.Contains(TEXT("string"), ESearchCase::IgnoreCase));
+	}
+
+	{
+		TSharedPtr<FJsonObject> RootRemaps = MakeShared<FJsonObject>();
+		RootRemaps->SetBoolField(TEXT("/Game/Old"), true);
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Missing/PCG_Graph"));
+		Params->SetObjectField(TEXT("root_remaps"), RootRemaps);
+		const FMonolithActionResult Result = Registry.ExecuteAction(
+			TEXT("pcg"), TEXT("remap_graph_references"), Params);
+		TestFalse(TEXT("Reference remap rejects a boolean root_remaps destination"), Result.bSuccess);
+		TestTrue(TEXT("Reference remap names the string mapping contract"),
+			Result.ErrorMessage.Contains(TEXT("package roots"), ESearchCase::IgnoreCase));
+	}
+
+	{
+		TSharedPtr<FJsonObject> RootRemaps = MakeShared<FJsonObject>();
+		RootRemaps->SetStringField(TEXT("/Game/Old"), TEXT("/Game/New"));
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Missing/PCG_Graph"));
+		Params->SetObjectField(TEXT("root_remaps"), RootRemaps);
+		Params->SetStringField(TEXT("dry_run"), TEXT("true"));
+		const FMonolithActionResult Result = Registry.ExecuteAction(
+			TEXT("pcg"), TEXT("remap_graph_references"), Params);
+		TestFalse(TEXT("Reference remap rejects a string dry_run boolean"), Result.bSuccess);
+		TestTrue(TEXT("Reference remap names the boolean contract"),
+			Result.ErrorMessage.Contains(TEXT("boolean"), ESearchCase::IgnoreCase));
+	}
+
+	for (const double InvalidLimit : {0.0, 50001.0, 1.5, 1.000000001, 1.0e100})
+	{
+		TSharedPtr<FJsonObject> RootRemaps = MakeShared<FJsonObject>();
+		RootRemaps->SetStringField(TEXT("/Game/Old"), TEXT("/Game/New"));
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Missing/PCG_Graph"));
+		Params->SetObjectField(TEXT("root_remaps"), RootRemaps);
+		Params->SetBoolField(TEXT("dry_run"), true);
+		Params->SetNumberField(TEXT("max_objects"), InvalidLimit);
+		const FMonolithActionResult Result = Registry.ExecuteAction(
+			TEXT("pcg"), TEXT("remap_graph_references"), Params);
+		TestFalse(
+			*FString::Printf(TEXT("Reference remap rejects max_objects=%g"), InvalidLimit),
+			Result.bSuccess);
+		TestTrue(
+			*FString::Printf(TEXT("max_objects=%g reports the bounded integer contract"), InvalidLimit),
+			Result.ErrorMessage.Contains(TEXT("integer"), ESearchCase::IgnoreCase) &&
+				Result.ErrorMessage.Contains(TEXT("range"), ESearchCase::IgnoreCase));
+	}
+
+	for (const double InvalidLimit : {1.000000001, 1.0e100})
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("limit"), InvalidLimit);
+		const FMonolithActionResult Result = Registry.ExecuteAction(
+			TEXT("pcg"), TEXT("list_pcg_node_types"), Params);
+		TestFalse(
+			*FString::Printf(TEXT("Node-type listing rejects non-integral or unbounded limit=%g"), InvalidLimit),
+			Result.bSuccess);
+		TestTrue(
+			*FString::Printf(TEXT("Node-type limit=%g reports the bounded integer contract"), InvalidLimit),
+			Result.ErrorMessage.Contains(TEXT("integer"), ESearchCase::IgnoreCase) &&
+				Result.ErrorMessage.Contains(TEXT("range"), ESearchCase::IgnoreCase));
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("limit"), 501);
+		const FMonolithActionResult Result = Registry.ExecuteAction(
+			TEXT("pcg"), TEXT("list_graph_assets"), Params);
+		TestFalse(TEXT("Graph listing rejects a limit above 500 instead of clamping"), Result.bSuccess);
+		TestTrue(TEXT("Graph listing reports the bounded integer contract"),
+			Result.ErrorMessage.Contains(TEXT("integer"), ESearchCase::IgnoreCase) &&
+				Result.ErrorMessage.Contains(TEXT("range"), ESearchCase::IgnoreCase));
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Missing/PCG_Graph"));
+		Params->SetNumberField(TEXT("tag_limit"), 201);
+		const FMonolithActionResult Result = Registry.ExecuteAction(
+			TEXT("pcg"), TEXT("get_graph_asset"), Params);
+		TestFalse(TEXT("Graph metadata rejects tag_limit above 200 instead of clamping"), Result.bSuccess);
+		TestTrue(TEXT("Graph metadata reports the bounded integer contract"),
+			Result.ErrorMessage.Contains(TEXT("integer"), ESearchCase::IgnoreCase) &&
+				Result.ErrorMessage.Contains(TEXT("range"), ESearchCase::IgnoreCase));
 	}
 
 	return true;

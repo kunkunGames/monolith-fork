@@ -317,6 +317,127 @@ bool FMonolithAssetImportTextureFromBytesBasicTest::RunTest(const FString& Param
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithAssetImportTextureFromBytesInvalidSettingsTest,
+    "MonolithAsset.ImportTextureFromBytes.InvalidSettings",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithAssetImportTextureFromBytesInvalidSettingsTest::RunTest(const FString& Parameters)
+{
+    const auto MakeBaseParams = []()
+    {
+        TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+        P->SetStringField(
+            TEXT("destination"),
+            TEXT("/Game/Tests/Monolith/Asset/Textures/T_InvalidSettings"));
+        P->SetStringField(TEXT("bytes_b64"), TEXT("AA=="));
+        P->SetStringField(TEXT("format_hint"), TEXT("png"));
+        P->SetBoolField(TEXT("save"), false);
+        return P;
+    };
+
+    const TArray<TPair<FString, FString>> InvalidStringSettings = {
+        { TEXT("compression_settings"), TEXT("TC_NotReal") },
+        { TEXT("mip_gen_settings"), TEXT("TMGS_NotReal") },
+        { TEXT("lod_group"), TEXT("TEXTUREGROUP_NotReal") },
+        { TEXT("address_x"), TEXT("TA_NotReal") },
+        { TEXT("address_y"), TEXT("TA_NotReal") }
+    };
+    for (const TPair<FString, FString>& InvalidSetting : InvalidStringSettings)
+    {
+        TSharedPtr<FJsonObject> Settings = MakeShared<FJsonObject>();
+        Settings->SetStringField(InvalidSetting.Key, InvalidSetting.Value);
+        TSharedPtr<FJsonObject> P = MakeBaseParams();
+        P->SetObjectField(TEXT("settings"), Settings);
+
+        const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("asset"),
+            TEXT("import_texture_from_bytes"),
+            P);
+        TestFalse(
+            *FString::Printf(TEXT("invalid %s is rejected"), *InvalidSetting.Key),
+            R.bSuccess);
+        TestEqual(
+            *FString::Printf(TEXT("invalid %s uses invalid-params code"), *InvalidSetting.Key),
+            R.ErrorCode,
+            -32602);
+    }
+
+    {
+        TSharedPtr<FJsonObject> Settings = MakeShared<FJsonObject>();
+        Settings->SetStringField(TEXT("srgb"), TEXT("true"));
+        TSharedPtr<FJsonObject> P = MakeBaseParams();
+        P->SetObjectField(TEXT("settings"), Settings);
+        const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("asset"), TEXT("import_texture_from_bytes"), P);
+        TestFalse(TEXT("non-boolean settings.srgb is rejected"), R.bSuccess);
+        TestEqual(TEXT("non-boolean settings.srgb uses invalid-params code"), R.ErrorCode, -32602);
+    }
+
+    {
+        TSharedPtr<FJsonObject> P = MakeBaseParams();
+        P->SetStringField(TEXT("save"), TEXT("false"));
+        const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("asset"), TEXT("import_texture_from_bytes"), P);
+        TestFalse(TEXT("string-valued save is rejected"), R.bSuccess);
+        TestEqual(TEXT("string-valued save uses invalid-params code"), R.ErrorCode, -32602);
+    }
+
+    for (const FString& BooleanSetting : {
+        FString(TEXT("alpha_bleed")),
+        FString(TEXT("alpha_from_edge_background")),
+        FString(TEXT("tile_seam_harmonize"))
+    })
+    {
+        TSharedPtr<FJsonObject> Settings = MakeShared<FJsonObject>();
+        Settings->SetStringField(BooleanSetting, TEXT("false"));
+        TSharedPtr<FJsonObject> P = MakeBaseParams();
+        P->SetObjectField(TEXT("settings"), Settings);
+        const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("asset"), TEXT("import_texture_from_bytes"), P);
+        TestFalse(
+            *FString::Printf(TEXT("string-valued settings.%s is rejected"), *BooleanSetting),
+            R.bSuccess);
+        TestEqual(
+            *FString::Printf(TEXT("string-valued settings.%s uses invalid-params code"), *BooleanSetting),
+            R.ErrorCode,
+            -32602);
+    }
+
+    {
+        TSharedPtr<FJsonObject> Settings = MakeShared<FJsonObject>();
+        Settings->SetBoolField(TEXT("tile_seam_harmonize"), true);
+        Settings->SetBoolField(TEXT("seam_harmonize"), true);
+        TSharedPtr<FJsonObject> P = MakeBaseParams();
+        P->SetObjectField(TEXT("settings"), Settings);
+        const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("asset"), TEXT("import_texture_from_bytes"), P);
+        TestFalse(TEXT("duplicate seam aliases are rejected"), R.bSuccess);
+        TestEqual(TEXT("duplicate seam aliases use invalid-params code"), R.ErrorCode, -32602);
+    }
+
+    {
+        TSharedPtr<FJsonObject> P = MakeBaseParams();
+        P->SetStringField(TEXT("settings"), TEXT("{}"));
+        const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("asset"), TEXT("import_texture_from_bytes"), P);
+        TestFalse(TEXT("string-encoded settings are rejected"), R.bSuccess);
+        TestEqual(TEXT("string-encoded settings use invalid-params code"), R.ErrorCode, -32602);
+    }
+
+    {
+        TSharedPtr<FJsonObject> P = MakeBaseParams();
+        P->SetStringField(TEXT("texture_role"), TEXT("normal"));
+        P->SetStringField(TEXT("role"), TEXT("normal"));
+        const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("asset"), TEXT("import_texture_from_bytes"), P);
+        TestFalse(TEXT("duplicate texture-role aliases are rejected"), R.bSuccess);
+        TestEqual(TEXT("duplicate texture-role aliases use invalid-params code"), R.ErrorCode, -32602);
+    }
+
+    return true;
+}
+
 /**
  * MonolithAsset.ImportTextureFromBytes.TextureRoleNormal
  *

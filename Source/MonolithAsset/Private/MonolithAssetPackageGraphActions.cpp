@@ -1,5 +1,6 @@
 #include "MonolithAssetPackageGraphActions.h"
 #include "MonolithAssetMoveActions.h"
+#include "MonolithAssetResultCompat.h"
 
 #include "MonolithParamSchema.h"
 
@@ -32,6 +33,7 @@
 namespace
 {
 	static constexpr int32 ErrInvalidParams = -32602;
+	static constexpr int32 ErrInternal = -32603;
 
 	struct FRootRemap
 	{
@@ -215,7 +217,8 @@ namespace
 		{
 			return true;
 		}
-		if (!Params->TryGetBoolField(FieldName, InOutValue))
+		if (!Params->HasTypedField<EJson::Boolean>(FieldName)
+			|| !Params->TryGetBoolField(FieldName, InOutValue))
 		{
 			OutError = FString::Printf(TEXT("Param '%s' must be a boolean"), FieldName);
 			return false;
@@ -461,7 +464,7 @@ namespace
 			}
 			else
 			{
-				OutError = FString::Printf(TEXT("Plugin '%s' is not loaded; use project_plugin_dir or content_dir for an explicit filesystem fallback"), *OutSpec.PluginName);
+				OutError = FString::Printf(TEXT("Plugin '%s' is not loaded; use project_plugin_dir or content_dir to select an explicit filesystem resolver"), *OutSpec.PluginName);
 				return false;
 			}
 		}
@@ -483,12 +486,13 @@ namespace
 		}
 
 		OutSpec.bDirectoryExists = FPaths::DirectoryExists(OutSpec.ContentDir);
-		const TRefCountPtr<UE::PackageName::IMountPoint> ExistingSame = FPackageName::FindMountPoint(OutSpec.MountPoint, OutSpec.ContentDir);
-		const TRefCountPtr<UE::PackageName::IMountPoint> ExistingForRoot = FPackageName::FindMountPointByRootPackageName(OutSpec.MountPoint);
-		OutSpec.bExistingSame = ExistingSame.IsValid() && ExistingSame->IsMounted();
-		OutSpec.bExistingDifferent = ExistingForRoot.IsValid()
-			&& ExistingForRoot->IsMounted()
-			&& !FString(ExistingForRoot->GetLocalPathAbsolute()).Equals(OutSpec.ContentDir, ESearchCase::IgnoreCase);
+		const bool bMountExists = FPackageName::MountPointExists(OutSpec.MountPoint);
+		const FString ExistingContentDir = bMountExists
+			? NormalizeContentDir(FPackageName::GetContentPathForPackageRoot(OutSpec.MountPoint))
+			: FString();
+		OutSpec.bExistingSame = bMountExists
+			&& ExistingContentDir.Equals(OutSpec.ContentDir, ESearchCase::IgnoreCase);
+		OutSpec.bExistingDifferent = bMountExists && !OutSpec.bExistingSame;
 		return true;
 	}
 
@@ -1069,37 +1073,6 @@ namespace
 			: UE::AssetRegistry::EDependencyQuery::Soft;
 	}
 
-	static FMonolithActionExecutionPolicy ExplicitReadOnlyPolicy()
-	{
-		FMonolithActionExecutionPolicy Policy = FMonolithActionExecutionPolicy::DefaultReadOnly();
-		Policy.bDefaulted = false;
-		return Policy;
-	}
-
-	static FMonolithActionExecutionPolicy MutatingAssetPolicy()
-	{
-		FMonolithActionExecutionPolicy Policy;
-		Policy.PolicyId = TEXT("transaction_optional");
-		Policy.bDefaulted = false;
-		Policy.bDirtyPackageTracking = true;
-		Policy.bTransactionWrapping = true;
-		Policy.bPostEditValidation = false;
-		Policy.bEnforced = true;
-		return Policy;
-	}
-
-	static FMonolithActionExecutionPolicy TrackDirtyPackagesPolicy()
-	{
-		FMonolithActionExecutionPolicy Policy;
-		Policy.PolicyId = TEXT("track_dirty_packages");
-		Policy.bDefaulted = false;
-		Policy.bDirtyPackageTracking = true;
-		Policy.bTransactionWrapping = false;
-		Policy.bPostEditValidation = false;
-		Policy.bEnforced = true;
-		return Policy;
-	}
-
 	static void AppendDependencies(
 		IAssetRegistry& AssetRegistry,
 		const FString& PackagePath,
@@ -1286,7 +1259,11 @@ namespace
 				return false;
 			}
 			return true;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
 		}, EGetObjectsFlags::IncludeNestedObjects);
+#else
+		}, /*bIncludeNestedObjects=*/true);
+#endif
 		return bContainsWorld;
 	}
 
@@ -1926,18 +1903,20 @@ namespace
 		{
 			CleanupReports.Add(MakeShared<FJsonValueObject>(CleanupResult.Result));
 		}
-		else if (CleanupResult.ErrorData.IsValid())
+		else if (const TSharedPtr<FJsonObject> CleanupErrorData =
+			MonolithAsset::GetErrorDataObject(CleanupResult))
 		{
-			CleanupReports.Add(MakeShared<FJsonValueObject>(CleanupResult.ErrorData));
+			CleanupReports.Add(MakeShared<FJsonValueObject>(CleanupErrorData));
 		}
 		Result->SetArrayField(TEXT("cleanup_reports"), CleanupReports);
 		if (!CleanupResult.bSuccess)
 		{
 			Result->SetBoolField(TEXT("ok"), false);
 			FString CleanupStatus = TEXT("failed");
-			if (CleanupResult.ErrorData.IsValid())
+			if (const TSharedPtr<FJsonObject> CleanupErrorData =
+				MonolithAsset::GetErrorDataObject(CleanupResult))
 			{
-				CleanupResult.ErrorData->TryGetStringField(TEXT("status"), CleanupStatus);
+				CleanupErrorData->TryGetStringField(TEXT("status"), CleanupStatus);
 			}
 			Result->SetStringField(TEXT("status"), CleanupStatus);
 			return FMonolithActionResult::Error(
@@ -2337,7 +2316,11 @@ namespace
 				Objects.Add(Object);
 			}
 			return true;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
 		}, EGetObjectsFlags::IncludeNestedObjects);
+#else
+		}, /*bIncludeNestedObjects=*/true);
+#endif
 
 		bool bPackageChanged = false;
 		for (UObject* Object : Objects)
@@ -2383,7 +2366,6 @@ void FMonolithAssetPackageGraphActions::RegisterActions(FMonolithToolRegistry& R
 		TEXT("Safely register explicit Unreal content mount points before package graph planning/copying. Defaults to dry-run; requires confirm=true for process mount-table mutation."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAssetPackageGraphActions::RegisterContentMountPoints),
 		FParamSchemaBuilder()
-			.EnableValidation()
 			.Required(TEXT("mount_points"), TEXT("array"), TEXT("Mount point specs with root/mount_point plus exactly one resolver: content_dir, plugin_name, or project_plugin_dir"))
 			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Preview mount registrations without mutating the process mount table"), TEXT("true"))
 			.Optional(TEXT("confirm"), TEXT("bool"), TEXT("Required when dry_run=false"), TEXT("false"))
@@ -2392,30 +2374,28 @@ void FMonolithAssetPackageGraphActions::RegisterActions(FMonolithToolRegistry& R
 			.Optional(TEXT("scan_asset_registry"), TEXT("bool"), TEXT("After confirmed registration, synchronously scan the mounted roots in AssetRegistry"), TEXT("true"))
 			.Optional(TEXT("force_rescan"), TEXT("bool"), TEXT("Force AssetRegistry rescan when scan_asset_registry=true"), TEXT("false"))
 			.Optional(TEXT("probe_packages"), TEXT("array"), TEXT("Optional packages to test with FPackageName::DoesPackageExist after preflight/registration"))
+			.StrictComplexTypes()
 			.Build(),
-		TEXT("PackageGraph"),
-		TrackDirtyPackagesPolicy());
+		TEXT("PackageGraph"));
 
 	Registry.RegisterAction(TEXT("asset"), TEXT("plan_package_graph_copy"),
 		TEXT("Plan a package graph copy/remap from AssetRegistry dependencies without loading, copying, or fixing up assets"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAssetPackageGraphActions::PlanPackageGraphCopy),
 		FParamSchemaBuilder()
-			.EnableValidation()
 			.Required(TEXT("root_packages"), TEXT("array"), TEXT("Source package roots to include in the plan"))
 			.Required(TEXT("root_remaps"), TEXT("object"), TEXT("Object mapping source roots to destination roots, e.g. {\"/Game/UI\":\"/SpeedMaps/UI\"}"))
 			.Optional(TEXT("dependency_kinds"), TEXT("array"), TEXT("Dependency kinds to follow: hard, soft. Default: both"))
 			.Optional(TEXT("max_packages"), TEXT("integer"), TEXT("Traversal safety cap"), TEXT("512"))
 			.Optional(TEXT("strategy"), TEXT("string"), TEXT("Explicit planning strategy; only registry_only_plan is currently implemented"), TEXT("registry_only_plan"))
 			.Optional(TEXT("check_collisions"), TEXT("bool"), TEXT("Report existing destination packages"), TEXT("true"))
+			.StrictComplexTypes()
 			.Build(),
-		TEXT("PackageGraph"),
-		ExplicitReadOnlyPolicy());
+		TEXT("PackageGraph"));
 
 	Registry.RegisterAction(TEXT("asset"), TEXT("copy_package_graph_with_remap"),
 		TEXT("Copy a planned package dependency graph by duplicating source assets to root-remapped destination packages. Requires dry_run=true or confirm=true; never overwrites existing destinations."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAssetPackageGraphActions::CopyPackageGraphWithRemap),
 		FParamSchemaBuilder()
-			.EnableValidation()
 			.Required(TEXT("root_packages"), TEXT("array"), TEXT("Source package roots to copy"))
 			.Required(TEXT("root_remaps"), TEXT("object"), TEXT("Object mapping source roots to destination roots"))
 			.Optional(TEXT("dependency_kinds"), TEXT("array"), TEXT("Dependency kinds to follow: hard, soft. Default: both"))
@@ -2425,15 +2405,14 @@ void FMonolithAssetPackageGraphActions::RegisterActions(FMonolithToolRegistry& R
 			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Return the copy plan without mutating assets"), TEXT("false"))
 			.Optional(TEXT("confirm"), TEXT("bool"), TEXT("Required for mutation when dry_run is false"), TEXT("false"))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save duplicated destination packages"), TEXT("true"))
+			.StrictComplexTypes()
 			.Build(),
-		TEXT("PackageGraph"),
-		MutatingAssetPolicy());
+		TEXT("PackageGraph"));
 
-		Registry.RegisterAction(TEXT("asset"), TEXT("copy_package_graph_with_strategy"),
-			TEXT("Orchestrate a guarded package graph copy strategy: plan-only, copy-only, copy+fixup, or copy+fixup+dependency-closure validation."),
-			FMonolithActionHandler::CreateStatic(&FMonolithAssetPackageGraphActions::CopyPackageGraphWithStrategy),
-			FParamSchemaBuilder()
-			.EnableValidation()
+	Registry.RegisterAction(TEXT("asset"), TEXT("copy_package_graph_with_strategy"),
+		TEXT("Orchestrate a guarded package graph copy strategy: plan-only, copy-only, copy+fixup, or copy+fixup+dependency-closure validation."),
+		FMonolithActionHandler::CreateStatic(&FMonolithAssetPackageGraphActions::CopyPackageGraphWithStrategy),
+		FParamSchemaBuilder()
 			.Required(TEXT("root_packages"), TEXT("array"), TEXT("Source package roots to copy or plan"))
 			.Required(TEXT("root_remaps"), TEXT("object"), TEXT("Object mapping source roots to destination roots"))
 			.Optional(TEXT("workflow"), TEXT("string"), TEXT("plan_only, copy_only, copy_fixup, or copy_fixup_validate"), TEXT("copy_fixup_validate"))
@@ -2448,12 +2427,12 @@ void FMonolithAssetPackageGraphActions::RegisterActions(FMonolithToolRegistry& R
 			.Optional(TEXT("header_patched_roots"), TEXT("array"), TEXT("Source roots that select header_patched_advanced_copy when copy_strategy=auto"))
 			.Optional(TEXT("header_patched_packages"), TEXT("array"), TEXT("Source packages that select header_patched_advanced_copy when copy_strategy=auto"))
 			.Optional(TEXT("raw_package_roots"), TEXT("array"), TEXT("Source roots that select raw_package_file_copy when copy_strategy=auto"))
-				.Optional(TEXT("raw_package_packages"), TEXT("array"), TEXT("Source packages that select raw_package_file_copy when copy_strategy=auto"))
-				.Optional(TEXT("manual_copy_roots"), TEXT("array"), TEXT("Source roots that are known to require manual single-object duplication"))
-				.Optional(TEXT("manual_copy_packages"), TEXT("array"), TEXT("Source packages that are known to require manual single-object duplication"))
-				.Optional(TEXT("allow_raw_package_copy"), TEXT("bool"), TEXT("Opt-in flag required before raw package file copy rows can execute"), TEXT("false"))
-				.Optional(TEXT("cleanup_redirectors"), TEXT("bool"), TEXT("Delete only exact affected copied redirectors with intact destinations and zero hard/soft referencers through asset.cleanup_moved_redirectors; never opens a modal fixup report"), TEXT("false"))
-				.Optional(TEXT("allowed_external_roots"), TEXT("array"), TEXT("External roots allowed during dependency-closure validation"))
+			.Optional(TEXT("raw_package_packages"), TEXT("array"), TEXT("Source packages that select raw_package_file_copy when copy_strategy=auto"))
+			.Optional(TEXT("manual_copy_roots"), TEXT("array"), TEXT("Source roots that are known to require manual single-object duplication"))
+			.Optional(TEXT("manual_copy_packages"), TEXT("array"), TEXT("Source packages that are known to require manual single-object duplication"))
+			.Optional(TEXT("allow_raw_package_copy"), TEXT("bool"), TEXT("Opt-in flag required before raw package file copy rows can execute"), TEXT("false"))
+			.Optional(TEXT("cleanup_redirectors"), TEXT("bool"), TEXT("Delete only exact affected copied redirectors with intact destinations and zero hard/soft referencers through asset.cleanup_moved_redirectors; never opens a modal fixup report"), TEXT("false"))
+			.Optional(TEXT("allowed_external_roots"), TEXT("array"), TEXT("External roots allowed during dependency-closure validation"))
 			.Optional(TEXT("legacy_source_roots"), TEXT("array"), TEXT("Source roots that should not remain referenced; defaults to root_remaps source roots when omitted"))
 			.Optional(TEXT("require_targets"), TEXT("bool"), TEXT("Fail fixup when a remapped reference target package is missing"), TEXT("true"))
 			.Optional(TEXT("run_fixup_on_dry_run"), TEXT("bool"), TEXT("Run fixup dry-run against existing destination packages instead of only reporting planned params"), TEXT("false"))
@@ -2462,15 +2441,14 @@ void FMonolithAssetPackageGraphActions::RegisterActions(FMonolithToolRegistry& R
 			.Optional(TEXT("confirm"), TEXT("bool"), TEXT("Required for mutation when dry_run is false"), TEXT("false"))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save duplicated or changed packages"), TEXT("true"))
 			.Optional(TEXT("strict"), TEXT("bool"), TEXT("Treat fixup blockers as errors"), TEXT("true"))
+			.StrictComplexTypes()
 			.Build(),
-		TEXT("PackageGraph"),
-		MutatingAssetPolicy());
+		TEXT("PackageGraph"));
 
 	Registry.RegisterAction(TEXT("asset"), TEXT("fixup_copied_references"),
 		TEXT("Rewrite reflected hard and soft references inside copied destination packages from source roots to root-remapped destination roots. Requires dry_run=true or confirm=true."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAssetPackageGraphActions::FixupCopiedReferences),
 		FParamSchemaBuilder()
-			.EnableValidation()
 			.Required(TEXT("root_remaps"), TEXT("object"), TEXT("Object mapping source roots to destination roots"))
 			.Optional(TEXT("destination_roots"), TEXT("array"), TEXT("Destination roots to scan; defaults to root_remaps destinations"))
 			.Optional(TEXT("package_paths"), TEXT("array"), TEXT("Specific destination packages to fix up"))
@@ -2480,79 +2458,23 @@ void FMonolithAssetPackageGraphActions::RegisterActions(FMonolithToolRegistry& R
 			.Optional(TEXT("confirm"), TEXT("bool"), TEXT("Required for mutation when dry_run is false"), TEXT("false"))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save changed packages"), TEXT("true"))
 			.Optional(TEXT("strict"), TEXT("bool"), TEXT("Treat load/fixup blockers as errors"), TEXT("true"))
+			.StrictComplexTypes()
 			.Build(),
-		TEXT("PackageGraph"),
-		MutatingAssetPolicy());
+		TEXT("PackageGraph"));
 
 	Registry.RegisterAction(TEXT("asset"), TEXT("validate_dependency_closure"),
 		TEXT("Validate that destination packages do not depend on disallowed package roots after a copy/remap plan"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAssetPackageGraphActions::ValidateDependencyClosure),
 		FParamSchemaBuilder()
-			.EnableValidation()
 			.Required(TEXT("destination_roots"), TEXT("array"), TEXT("Destination roots whose package closure should be validated"))
 			.Optional(TEXT("package_paths"), TEXT("array"), TEXT("Specific destination packages to validate; omitted scans destination_roots"))
 			.Optional(TEXT("allowed_external_roots"), TEXT("array"), TEXT("External roots allowed in dependencies, e.g. /Script, /Engine"))
 			.Optional(TEXT("legacy_source_roots"), TEXT("array"), TEXT("Source roots that should not remain referenced"))
 			.Optional(TEXT("dependency_kinds"), TEXT("array"), TEXT("Dependency kinds to validate: hard, soft. Default: both"))
 			.Optional(TEXT("max_packages"), TEXT("integer"), TEXT("Validation safety cap"), TEXT("1000"))
+			.StrictComplexTypes()
 			.Build(),
 		TEXT("PackageGraph"));
-
-	Registry.SetActionSearchMetadata(TEXT("asset"), TEXT("register_content_mount_points"),
-		{ TEXT("content mount point"), TEXT("package graph copy preflight"), TEXT("plugin content dir"), TEXT("RegisterMountPoint") },
-		{ TEXT("register content mount"), TEXT("mount plugin content root"), TEXT("prepare legacy package root") },
-		{ TEXT("dry-run registering /ShooterMaps/ to a GameFeature plugin Content directory before package copy") });
-	Registry.SetActionSearchMetadata(TEXT("asset"), TEXT("plan_package_graph_copy"),
-		{ TEXT("package graph copy"), TEXT("root remap"), TEXT("dependency closure"), TEXT("dry-run copy plan") },
-		{ TEXT("plan asset copy"), TEXT("plan package remap"), TEXT("copy dependency graph") },
-		{ TEXT("plan copying /Game/UI to /SpeedMaps/UI without copying assets") });
-	Registry.SetActionSearchMetadata(TEXT("asset"), TEXT("copy_package_graph_with_remap"),
-		{ TEXT("package graph copy"), TEXT("root remap"), TEXT("duplicate assets"), TEXT("guarded copy") },
-		{ TEXT("copy asset graph"), TEXT("duplicate package graph"), TEXT("execute copy plan") },
-		{ TEXT("copy /ShooterMaps frontend packages to /SpeedMaps with confirm=true") });
-	Registry.SetActionSearchMetadata(TEXT("asset"), TEXT("copy_package_graph_with_strategy"),
-		{ TEXT("package graph strategy"), TEXT("copy fixup validate"), TEXT("root remap pipeline"), TEXT("dependency closure") },
-		{ TEXT("orchestrate package graph copy"), TEXT("copy graph with strategy"), TEXT("copy fixup validate graph") },
-		{ TEXT("dry-run plan/copy/fixup/closure for /ShooterMaps to /SpeedMaps") });
-	Registry.SetActionSearchMetadata(TEXT("asset"), TEXT("fixup_copied_references"),
-		{ TEXT("fixup copied references"), TEXT("soft object path remap"), TEXT("hard object reference remap") },
-		{ TEXT("rewrite copied references"), TEXT("remap asset references") },
-		{ TEXT("fix references in /SpeedMaps copied assets from /ShooterMaps to /SpeedMaps") });
-	Registry.SetActionSearchMetadata(TEXT("asset"), TEXT("validate_dependency_closure"),
-		{ TEXT("dependency closure"), TEXT("legacy source root"), TEXT("copied package validation") },
-		{ TEXT("validate copied dependencies"), TEXT("find source-root dependencies") },
-		{ TEXT("validate that /SpeedMaps copied assets no longer depend on /ShooterMaps") });
-
-	Registry.SetActionPlanningMetadata(TEXT("asset"), TEXT("register_content_mount_points"),
-		TEXT("unreal-asset"),
-		{ TEXT("mount_points specs are required; dry_run=true is the default and confirm=true is required for registration") },
-		{ TEXT("Mount preflight report with registered, already_registered, missing_directory, and conflict rows") },
-		{ TEXT("asset.plan_package_graph_copy") });
-	Registry.SetActionPlanningMetadata(TEXT("asset"), TEXT("plan_package_graph_copy"),
-		TEXT("unreal-asset"),
-		{ TEXT("Root source packages and explicit source->destination root_remaps are required") },
-		{ TEXT("Read-only copy plan with package_map, dependency_edges, external_dependencies, and collisions") },
-		{ TEXT("asset.copy_package_graph_with_remap") });
-	Registry.SetActionPlanningMetadata(TEXT("asset"), TEXT("copy_package_graph_with_remap"),
-		TEXT("unreal-asset"),
-		{ TEXT("Run with dry_run=true first; confirm=true is required to duplicate packages; existing destinations are never overwritten") },
-		{ TEXT("Copy report with duplicated, skipped, saved, and failure rows") },
-		{ TEXT("asset.fixup_copied_references"), TEXT("asset.validate_dependency_closure") });
-	Registry.SetActionPlanningMetadata(TEXT("asset"), TEXT("copy_package_graph_with_strategy"),
-		TEXT("unreal-asset"),
-		{ TEXT("Pick an explicit strategy; plan_only is read-only, copy/copy_fixup/copy_fixup_validate require dry_run=true or confirm=true") },
-		{ TEXT("Orchestrated phase report with plan, copy, optional fixup, optional closure, and next recommended domain repairs") },
-		{ TEXT("material.repair_copied_material_instance_parameters"), TEXT("ui.repair_slate_font_references"), TEXT("asset.validate_dependency_closure") });
-	Registry.SetActionPlanningMetadata(TEXT("asset"), TEXT("fixup_copied_references"),
-		TEXT("unreal-asset"),
-		{ TEXT("Run after copying packages; root_remaps must describe source->destination roots; dry_run=true should precede confirm=true") },
-		{ TEXT("Reference rewrite report with hard/soft paths, missing targets, changed packages, and save status") },
-		{ TEXT("asset.validate_dependency_closure") });
-	Registry.SetActionPlanningMetadata(TEXT("asset"), TEXT("validate_dependency_closure"),
-		TEXT("unreal-asset"),
-		{ TEXT("Destination roots or explicit destination packages are required") },
-		{ TEXT("ok flag, violation rows, checked package count, and dependency edge count") },
-		{ TEXT("asset.plan_package_graph_copy") });
 }
 
 FMonolithActionResult FMonolithAssetPackageGraphActions::RegisterContentMountPoints(const TSharedPtr<FJsonObject>& Params)
@@ -2647,13 +2569,23 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::RegisterContentMountPoi
 			.WithErrorData(ErrorResult);
 	}
 
+	// Mount-point registration is process-global. A failure partway through the
+	// loop previously left the roots registered before it in place while the
+	// action still returned bSuccess=true, so callers continued into package
+	// planning against a half-mounted process. Track what this invocation
+	// registered so it can be undone.
+	TArray<TPair<FString, FString>> RegisteredByThisCall;
 	if (!Mutation.bDryRun)
 	{
 		for (const int32 Index : RegisterIndices)
 		{
 			FContentMountSpec& Spec = Specs[Index];
-			const TRefCountPtr<UE::PackageName::IMountPoint> MountPoint = FPackageName::RegisterMountPoint(Spec.MountPoint, Spec.ContentDir);
-			if (!MountPoint.IsValid() || !MountPoint->IsMounted())
+			FPackageName::RegisterMountPoint(Spec.MountPoint, Spec.ContentDir);
+			const bool bMounted = FPackageName::MountPointExists(Spec.MountPoint);
+			const FString RegisteredContentDir = bMounted
+				? NormalizeContentDir(FPackageName::GetContentPathForPackageRoot(Spec.MountPoint))
+				: FString();
+			if (!bMounted || !RegisteredContentDir.Equals(Spec.ContentDir, ESearchCase::IgnoreCase))
 			{
 				TSharedPtr<FJsonObject> Row = MakeMountPointRow(Spec, TEXT("failed"), TEXT("register_mount_point_failed"));
 				Rows.Add(MakeShared<FJsonValueObject>(Row));
@@ -2662,8 +2594,38 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::RegisterContentMountPoi
 			}
 
 			++RegisteredCount;
+			RegisteredByThisCall.Emplace(Spec.MountPoint, Spec.ContentDir);
 			RootsToScan.AddUnique(Spec.MountPoint);
 			Rows.Add(MakeShared<FJsonValueObject>(MakeMountPointRow(Spec, TEXT("registered"))));
+		}
+
+		if (PreflightErrors.Num() > 0)
+		{
+			// Undo this invocation's registrations so the process is left as it
+			// was found, then report the failure instead of a success the caller
+			// would build on.
+			for (int32 Index = RegisteredByThisCall.Num() - 1; Index >= 0; --Index)
+			{
+				FPackageName::UnRegisterMountPoint(
+					RegisteredByThisCall[Index].Key,
+					RegisteredByThisCall[Index].Value);
+			}
+
+			TSharedPtr<FJsonObject> ErrorResult = MakeShared<FJsonObject>();
+			ErrorResult->SetStringField(TEXT("namespace"), TEXT("asset"));
+			ErrorResult->SetStringField(TEXT("action"), TEXT("register_content_mount_points"));
+			ErrorResult->SetStringField(TEXT("status"), TEXT("register_failed"));
+			ErrorResult->SetBoolField(TEXT("rolled_back"), true);
+			ErrorResult->SetNumberField(
+				TEXT("rolled_back_count"),
+				RegisteredByThisCall.Num());
+			ErrorResult->SetArrayField(TEXT("mount_points"), Rows);
+			ErrorResult->SetArrayField(TEXT("preflight_errors"), PreflightErrors);
+			ErrorResult->SetNumberField(TEXT("preflight_error_count"), PreflightErrors.Num());
+			return FMonolithActionResult::Error(
+				TEXT("register_content_mount_points failed to register every requested root; this invocation's registrations were rolled back"),
+				ErrInternal)
+				.WithErrorData(ErrorResult);
 		}
 	}
 
@@ -2862,6 +2824,16 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::PlanPackageGraphCopy(co
 	Result->SetStringField(TEXT("strategy"), Strategy);
 	Result->SetBoolField(TEXT("read_only"), true);
 	Result->SetBoolField(TEXT("truncated"), bTruncated);
+	// A truncated plan omits dependencies queued after the cap, so copying from it
+	// would silently produce an incomplete graph. Consumers must treat the plan as
+	// non-executable unless the caller opts into a partial copy.
+	Result->SetBoolField(TEXT("executable"), !bTruncated);
+	if (bTruncated)
+	{
+		Result->SetStringField(
+			TEXT("not_executable_reason"),
+			TEXT("dependency traversal reached max_packages; raise max_packages or opt into allow_partial_copy"));
+	}
 	Result->SetNumberField(TEXT("max_packages"), MaxPackages);
 	Result->SetArrayField(TEXT("root_remaps"), RemapRows);
 	Result->SetArrayField(TEXT("root_packages"), StringsToJson(RootPackages));
@@ -3127,9 +3099,10 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::CopyPackageGraphWithStr
 		Result->SetBoolField(TEXT("ok"), false);
 		Result->SetStringField(TEXT("child_error_message"), ChildResult.ErrorMessage);
 		Result->SetNumberField(TEXT("child_error_code"), ChildResult.ErrorCode);
-		if (ChildResult.ErrorData.IsValid())
+		if (const TSharedPtr<FJsonObject> ChildErrorData =
+			MonolithAsset::GetErrorDataObject(ChildResult))
 		{
-			Result->SetObjectField(TEXT("child_error_data"), ChildResult.ErrorData);
+			Result->SetObjectField(TEXT("child_error_data"), ChildErrorData);
 		}
 		return FMonolithActionResult::Error(Message, Code).WithErrorData(Result);
 	};
@@ -3682,7 +3655,17 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::ValidateDependencyClosu
 	Result->SetStringField(TEXT("namespace"), TEXT("asset"));
 	Result->SetStringField(TEXT("action"), TEXT("validate_dependency_closure"));
 	Result->SetBoolField(TEXT("read_only"), true);
-	Result->SetBoolField(TEXT("ok"), bOk);
+	// A truncated scan never examined part of the graph, so a clean prefix is not
+	// proof of closure. Reporting ok=true here let copy_fixup_validate mark its
+	// closure phase and the whole workflow successful over an unchecked tail.
+	Result->SetBoolField(TEXT("ok"), bOk && !bTruncated);
+	Result->SetBoolField(TEXT("closure_proven"), bOk && !bTruncated);
+	if (bTruncated)
+	{
+		Result->SetStringField(
+			TEXT("incomplete_reason"),
+			TEXT("package scan reached max_packages; closure cannot be certified over an unchecked tail"));
+	}
 	Result->SetArrayField(TEXT("destination_roots"), StringsToJson(DestinationRoots));
 	Result->SetArrayField(TEXT("allowed_external_roots"), StringsToJson(AllowedExternalRoots));
 	Result->SetArrayField(TEXT("legacy_source_roots"), StringsToJson(LegacySourceRoots));

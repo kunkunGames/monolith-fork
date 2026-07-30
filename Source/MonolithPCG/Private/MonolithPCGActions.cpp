@@ -134,14 +134,39 @@ namespace MonolithPCG
 		return Row;
 	}
 
-	int32 ClampLimit(double Limit)
+	bool ReadBoundedIntegerParam(
+		const TSharedPtr<FJsonObject>& Params,
+		const TCHAR* FieldName,
+		int32 DefaultValue,
+		int32 MinValue,
+		int32 MaxValue,
+		int32& OutValue,
+		FString& OutError)
 	{
-		return FMath::Clamp(static_cast<int32>(Limit), 1, 500);
-	}
-
-	int32 ClampTagLimit(double Limit)
-	{
-		return FMath::Clamp(static_cast<int32>(Limit), 0, 200);
+		double Number = static_cast<double>(DefaultValue);
+		if (Params.IsValid() && Params->HasField(FieldName))
+		{
+			const TSharedPtr<FJsonValue> JsonValue = Params->TryGetField(FieldName);
+			if (!JsonValue.IsValid() || JsonValue->Type != EJson::Number || !JsonValue->TryGetNumber(Number))
+			{
+				OutError = FString::Printf(TEXT("%s must be a number"), FieldName);
+				return false;
+			}
+		}
+		if (!FMath::IsFinite(Number) ||
+			Number < static_cast<double>(MinValue) ||
+			Number > static_cast<double>(MaxValue) ||
+			FMath::TruncToDouble(Number) != Number)
+		{
+			OutError = FString::Printf(
+				TEXT("%s must be an integer in range %d..%d"),
+				FieldName,
+				MinValue,
+				MaxValue);
+			return false;
+		}
+		OutValue = static_cast<int32>(Number);
+		return true;
 	}
 
 	FString NormalizePackageRoot(FString Root)
@@ -169,7 +194,8 @@ namespace MonolithPCG
 		{
 			return true;
 		}
-		if (!Params->TryGetBoolField(FieldName, OutValue))
+		const TSharedPtr<FJsonValue> JsonValue = Params->TryGetField(FieldName);
+		if (!JsonValue.IsValid() || JsonValue->Type != EJson::Boolean || !JsonValue->TryGetBool(OutValue))
 		{
 			OutError = FString::Printf(TEXT("%s must be a boolean"), FieldName);
 			return false;
@@ -187,12 +213,28 @@ namespace MonolithPCG
 		FString& OutError)
 	{
 		double Number = static_cast<double>(DefaultValue);
-		if (Params.IsValid() && Params->HasField(FieldName) && !Params->TryGetNumberField(FieldName, Number))
+		if (Params.IsValid() && Params->HasField(FieldName))
 		{
-			OutError = FString::Printf(TEXT("%s must be a number"), FieldName);
+			const TSharedPtr<FJsonValue> JsonValue = Params->TryGetField(FieldName);
+			if (!JsonValue.IsValid() || JsonValue->Type != EJson::Number || !JsonValue->TryGetNumber(Number))
+			{
+				OutError = FString::Printf(TEXT("%s must be a number"), FieldName);
+				return false;
+			}
+		}
+		if (!FMath::IsFinite(Number) ||
+			Number < static_cast<double>(MinValue) ||
+			Number > static_cast<double>(MaxValue) ||
+			FMath::TruncToDouble(Number) != Number)
+		{
+			OutError = FString::Printf(
+				TEXT("%s must be an integer in range %d..%d"),
+				FieldName,
+				MinValue,
+				MaxValue);
 			return false;
 		}
-		OutValue = FMath::Clamp(static_cast<int32>(Number), MinValue, MaxValue);
+		OutValue = static_cast<int32>(Number);
 		return true;
 	}
 
@@ -209,17 +251,18 @@ namespace MonolithPCG
 			return false;
 		}
 
-		for (const auto& Pair : FMonolithJsonUtils::GetFields(*RemapObject))
+		for (const auto& Pair : (*RemapObject)->Values)
 		{
 			FString DestinationRoot;
-			if (!Pair.Value.IsValid() || !Pair.Value->TryGetString(DestinationRoot))
+			if (!Pair.Value.IsValid() || Pair.Value->Type != EJson::String ||
+				!Pair.Value->TryGetString(DestinationRoot))
 			{
 				OutError = TEXT("root_remaps must map source package roots to destination package roots");
 				return false;
 			}
 
 			FRootRemap Remap;
-			Remap.SourceRoot = NormalizePackageRoot(Pair.Key);
+			Remap.SourceRoot = NormalizePackageRoot(MonolithKeyToString(Pair.Key));
 			Remap.DestinationRoot = NormalizePackageRoot(DestinationRoot);
 			if (!FPackageName::IsValidLongPackageName(Remap.SourceRoot)
 				|| !FPackageName::IsValidLongPackageName(Remap.DestinationRoot))
@@ -230,12 +273,33 @@ namespace MonolithPCG
 					*Remap.DestinationRoot);
 				return false;
 			}
+			// IsUnderPackageRoot matches roots case-insensitively, so /Game/Foo
+			// and /game/foo are the same source root. Accepting both with
+			// different destinations made the winning migration depend on TMap
+			// iteration order, leaving dry runs and confirmed runs ambiguous.
+			for (const FRootRemap& Existing : OutRemaps)
+			{
+				if (Existing.SourceRoot.Equals(Remap.SourceRoot, ESearchCase::IgnoreCase))
+				{
+					OutError = FString::Printf(
+						TEXT("Duplicate root remap source '%s' (already mapped from '%s'); source roots are matched case-insensitively"),
+						*Remap.SourceRoot,
+						*Existing.SourceRoot);
+					return false;
+				}
+			}
 			OutRemaps.Add(MoveTemp(Remap));
 		}
 
+		// Longest source root wins; ties break on the source root so ordering is
+		// deterministic rather than dependent on input order.
 		OutRemaps.Sort([](const FRootRemap& A, const FRootRemap& B)
 		{
-			return A.SourceRoot.Len() > B.SourceRoot.Len();
+			if (A.SourceRoot.Len() != B.SourceRoot.Len())
+			{
+				return A.SourceRoot.Len() > B.SourceRoot.Len();
+			}
+			return A.SourceRoot < B.SourceRoot;
 		});
 		if (OutRemaps.IsEmpty())
 		{
@@ -720,6 +784,24 @@ namespace MonolithPCG
 		}
 	}
 
+	/**
+	 * Forces every package this remap touched to stay dirty.
+	 *
+	 * Used when a rollback could not be completed: the graph still carries part
+	 * of the remap, so restoring an original clean flag would hide a real
+	 * mutation from Save All and from operator reconciliation.
+	 */
+	void MarkTouchedPackagesDirty(FReferenceRemapStats& Stats)
+	{
+		for (const TPair<UPackage*, bool>& Pair : Stats.PackageDirtyBefore)
+		{
+			if (Pair.Key)
+			{
+				Pair.Key->SetDirtyFlag(true);
+			}
+		}
+	}
+
 	bool RemapOneSoftPath(
 		FSoftObjectPath& Value,
 		const FString& ObjectPath,
@@ -1183,7 +1265,7 @@ namespace MonolithPCG
 				Objects.Add(Object);
 			}
 			return true;
-		}, EGetObjectsFlags::IncludeNestedObjects);
+		}, true);
 
 		if (Objects.Num() > Options.MaxObjects)
 		{
@@ -1533,7 +1615,14 @@ namespace MonolithPCG
 			bEdgesRestored = RestoreGraphEdges(Graph, OriginalEdges, EdgeError);
 			NotificationBatch.MarkExternalModification();
 		}
-		RestorePackageDirtyState(Stats);
+		// Only a complete rollback restores the original dirty flags. Restoring
+		// them unconditionally left a partially remapped graph marked clean when
+		// the package started clean, so Save All and operator reconciliation
+		// would never surface the surviving mutation.
+		if (bValuesRestored && bEdgesRestored)
+		{
+			RestorePackageDirtyState(Stats);
+		}
 
 		if (!bValuesRestored || !bEdgesRestored)
 		{
@@ -1545,24 +1634,16 @@ namespace MonolithPCG
 			{
 				++Stats.RollbackErrorCount;
 			}
+
+			// Keep every touched package dirty so the incomplete rollback is
+			// visible to the user rather than silently discardable.
+			MarkTouchedPackagesDirty(Stats);
 			OutError = EdgeError.IsEmpty()
 				? TEXT("Reference remap rollback did not restore every staged value")
 				: EdgeError;
 			return false;
 		}
 		return true;
-	}
-
-	FMonolithActionExecutionPolicy MutatingPcgPolicy()
-	{
-		FMonolithActionExecutionPolicy Policy;
-		Policy.PolicyId = TEXT("transaction_optional");
-		Policy.bDefaulted = false;
-		Policy.bDirtyPackageTracking = true;
-		Policy.bTransactionWrapping = true;
-		Policy.bPostEditValidation = false;
-		Policy.bEnforced = true;
-		return Policy;
 	}
 
 	bool IsProjectAssetPath(const FString& AssetPath)
@@ -1600,6 +1681,13 @@ namespace MonolithPCG
 				OutAssetData = ExactAsset;
 				return true;
 			}
+
+			// The caller named an exact object. Falling through to the package
+			// scan below would select a different graph in the same package, so
+			// get_graph_asset reported another object's metadata and a confirmed
+			// remap_graph_references could mutate and save the wrong graph. The
+			// package fallback is only valid when no object name was supplied.
+			return false;
 		}
 
 		TArray<FAssetData> PackageAssets;
@@ -1780,7 +1868,7 @@ void FMonolithPCGActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Remap reflected and dynamic property-bag soft references inside a project-owned PCG graph. Defaults to dry-run and requires confirm=true for mutation."),
 		FMonolithActionHandler::CreateStatic(&FMonolithPCGActions::RemapGraphReferences),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Project-owned PCG graph package or object path"))
 			.Required(TEXT("root_remaps"), TEXT("object"), TEXT("Object mapping source package roots to destination package roots"))
 			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Report and validate rewrites without mutating the graph"), TEXT("true"))
@@ -1791,8 +1879,7 @@ void FMonolithPCGActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("max_objects"), TEXT("integer"), TEXT("Maximum nested graph objects to scan (1-50000)"), TEXT("10000"))
 			.Optional(TEXT("max_references"), TEXT("integer"), TEXT("Maximum matching references to report or rewrite (1-10000)"), TEXT("1000"))
 			.Build(),
-		TEXT("Graph Migration"),
-		MonolithPCG::MutatingPcgPolicy());
+		TEXT("Graph Migration"));
 
 	Registry.RegisterAction(TEXT("pcg"), TEXT("list_components"),
 		TEXT("List PCG-like components in the current editor world using reflected class names"),
@@ -1800,16 +1887,6 @@ void FMonolithPCGActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FParamSchemaBuilder()
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum rows to return (1-500)"), TEXT("100"))
 			.Build());
-
-	Registry.SetActionSearchMetadata(TEXT("pcg"), TEXT("remap_graph_references"),
-		{ TEXT("PCG graph reference remap"), TEXT("property bag soft object path"), TEXT("migrate PCG graph"), TEXT("fix copied PCG references") },
-		{ TEXT("remap PCG parameters"), TEXT("repair PCG graph dependencies"), TEXT("rewrite PCG soft references") },
-		{ TEXT("remap /Game/Wall references in a copied PCG graph to /SpeedMaps/Meshes/Wall") });
-	Registry.SetActionPlanningMetadata(TEXT("pcg"), TEXT("remap_graph_references"),
-		TEXT("unreal-pcg"),
-		{ TEXT("Run after the destination graph and every remap target exist; dry_run=true should precede confirm=true") },
-		{ TEXT("Bounded report of reflected and property-bag soft paths, target resolution, applied rewrites, and save status") },
-		{ TEXT("asset.validate_dependency_closure"), TEXT("pcg.get_graph_asset") });
 }
 
 FMonolithActionResult FMonolithPCGActions::GetStatus(const TSharedPtr<FJsonObject>& Params)
@@ -1818,7 +1895,8 @@ FMonolithActionResult FMonolithPCGActions::GetStatus(const TSharedPtr<FJsonObjec
 	Result->SetStringField(TEXT("namespace"), TEXT("pcg"));
 	Result->SetStringField(TEXT("status"), TEXT("component_lifecycle_available"));
 	Result->SetStringField(TEXT("sample_utc"), FDateTime::UtcNow().ToIso8601());
-	Result->SetBoolField(TEXT("pcg_namespace_registered"), FMonolithToolRegistry::Get().HasNamespace(TEXT("pcg")));
+	Result->SetBoolField(TEXT("pcg_namespace_registered"),
+		FMonolithToolRegistry::Get().GetActions(TEXT("pcg")).Num() > 0);
 
 	const TArray<FString> PcgModuleNames = MonolithPCG::GetPcgModuleNames();
 	TArray<TSharedPtr<FJsonValue>> ModuleRows;
@@ -1856,7 +1934,11 @@ FMonolithActionResult FMonolithPCGActions::GetStatus(const TSharedPtr<FJsonObjec
 	}
 	Result->SetArrayField(TEXT("reflected_types"), ReflectedTypes);
 
-	TArray<FString> RegisteredActions = FMonolithToolRegistry::Get().GetActionNames(TEXT("pcg"));
+	TArray<FString> RegisteredActions;
+	for (const FMonolithActionInfo& Action : FMonolithToolRegistry::Get().GetActions(TEXT("pcg")))
+	{
+		RegisteredActions.Add(Action.Action);
+	}
 	RegisteredActions.Sort();
 	TArray<TSharedPtr<FJsonValue>> CurrentActions;
 	CurrentActions.Reserve(RegisteredActions.Num());
@@ -1868,8 +1950,7 @@ FMonolithActionResult FMonolithPCGActions::GetStatus(const TSharedPtr<FJsonObjec
 	Result->SetNumberField(TEXT("action_count"), RegisteredActions.Num());
 
 	TArray<TSharedPtr<FJsonValue>> FutureActions;
-	FutureActions.Reserve(2);
-	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("pcg.edit_graph_user_parameter_schema")));
+	FutureActions.Reserve(1);
 	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("pcg.execute_standalone_graph")));
 	Result->SetArrayField(TEXT("future_actions"), FutureActions);
 
@@ -1878,7 +1959,7 @@ FMonolithActionResult FMonolithPCGActions::GetStatus(const TSharedPtr<FJsonObjec
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("Graph discovery, topology reads, and graph authoring use typed PCG APIs.")));
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("remap_graph_references is a guarded migration action for reflected and dynamic property-bag soft references.")));
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("Exact-path PCG component creation, graph assignment, settings, generation, refresh, cancellation, cleanup, bounded output inspection, and scalar graph-instance overrides are available.")));
-	Notes.Add(MakeShared<FJsonValueString>(TEXT("Graph user-parameter schema editing remains separate from component graph-instance override editing.")));
+	Notes.Add(MakeShared<FJsonValueString>(TEXT("set_pcg_graph_user_parameters owns graph schema/default authoring; set_component_user_parameters separately owns component graph-instance overrides.")));
 	Result->SetArrayField(TEXT("notes"), Notes);
 
 	return FMonolithActionResult::Success(Result);
@@ -1890,7 +1971,7 @@ FMonolithActionResult FMonolithPCGActions::ListGraphAssets(const TSharedPtr<FJso
 	TSharedPtr<FJsonValue> PackagePathField = Params->TryGetField(TEXT("package_path"));
 	if (PackagePathField.IsValid() && !PackagePathField->IsNull())
 	{
-		if (!PackagePathField->TryGetString(PackagePath))
+		if (PackagePathField->Type != EJson::String || !PackagePathField->TryGetString(PackagePath))
 		{
 			return FMonolithActionResult::Error(TEXT("package_path must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 		}
@@ -1905,16 +1986,13 @@ FMonolithActionResult FMonolithPCGActions::ListGraphAssets(const TSharedPtr<FJso
 		return FMonolithActionResult::Error(TEXT("package_path must resolve inside the current project or a project plugin"));
 	}
 
-	double LimitValue = 100.0;
-	TSharedPtr<FJsonValue> LimitField = Params->TryGetField(TEXT("limit"));
-	if (LimitField.IsValid() && !LimitField->IsNull())
+	int32 Limit = 100;
+	FString LimitError;
+	if (!MonolithPCG::ReadBoundedIntegerParam(
+			Params, TEXT("limit"), 100, 1, 500, Limit, LimitError))
 	{
-		if (!LimitField->TryGetNumber(LimitValue))
-		{
-			return FMonolithActionResult::Error(TEXT("limit must be a number"), FMonolithJsonUtils::ErrInvalidParams);
-		}
+		return FMonolithActionResult::Error(LimitError, FMonolithJsonUtils::ErrInvalidParams);
 	}
-	const int32 Limit = MonolithPCG::ClampLimit(LimitValue);
 
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 	FARFilter Filter;
@@ -1969,7 +2047,7 @@ FMonolithActionResult FMonolithPCGActions::GetGraphAsset(const TSharedPtr<FJsonO
 	TSharedPtr<FJsonValue> AssetPathField = Params->TryGetField(TEXT("asset_path"));
 	if (AssetPathField.IsValid() && !AssetPathField->IsNull())
 	{
-		if (!AssetPathField->TryGetString(AssetPath))
+		if (AssetPathField->Type != EJson::String || !AssetPathField->TryGetString(AssetPath))
 		{
 			return FMonolithActionResult::Error(TEXT("asset_path must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 		}
@@ -1979,22 +2057,19 @@ FMonolithActionResult FMonolithPCGActions::GetGraphAsset(const TSharedPtr<FJsonO
 	TSharedPtr<FJsonValue> IncludeTagsField = Params->TryGetField(TEXT("include_tags"));
 	if (IncludeTagsField.IsValid() && !IncludeTagsField->IsNull())
 	{
-		if (!IncludeTagsField->TryGetBool(bIncludeTags))
+		if (IncludeTagsField->Type != EJson::Boolean || !IncludeTagsField->TryGetBool(bIncludeTags))
 		{
 			return FMonolithActionResult::Error(TEXT("include_tags must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 	}
 
-	double TagLimitValue = 50.0;
-	TSharedPtr<FJsonValue> TagLimitField = Params->TryGetField(TEXT("tag_limit"));
-	if (TagLimitField.IsValid() && !TagLimitField->IsNull())
+	int32 TagLimit = 50;
+	FString TagLimitError;
+	if (!MonolithPCG::ReadBoundedIntegerParam(
+			Params, TEXT("tag_limit"), 50, 0, 200, TagLimit, TagLimitError))
 	{
-		if (!TagLimitField->TryGetNumber(TagLimitValue))
-		{
-			return FMonolithActionResult::Error(TEXT("tag_limit must be a number"), FMonolithJsonUtils::ErrInvalidParams);
-		}
+		return FMonolithActionResult::Error(TagLimitError, FMonolithJsonUtils::ErrInvalidParams);
 	}
-	const int32 TagLimit = MonolithPCG::ClampTagLimit(TagLimitValue);
 
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 	FAssetData AssetData;
@@ -2015,7 +2090,11 @@ FMonolithActionResult FMonolithPCGActions::GetGraphAsset(const TSharedPtr<FJsonO
 FMonolithActionResult FMonolithPCGActions::RemapGraphReferences(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	const TSharedPtr<FJsonValue> AssetPathField = Params.IsValid()
+		? Params->TryGetField(TEXT("asset_path"))
+		: nullptr;
+	if (!AssetPathField.IsValid() || AssetPathField->Type != EJson::String ||
+		!AssetPathField->TryGetString(AssetPath))
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
@@ -2297,16 +2376,13 @@ bool FMonolithPCGActions::RemapSoftObjectPathForTest(
 
 FMonolithActionResult FMonolithPCGActions::ListComponents(const TSharedPtr<FJsonObject>& Params)
 {
-	double LimitValue = 100.0;
-	TSharedPtr<FJsonValue> LimitField = Params->TryGetField(TEXT("limit"));
-	if (LimitField.IsValid() && !LimitField->IsNull())
+	int32 Limit = 100;
+	FString LimitError;
+	if (!MonolithPCG::ReadBoundedIntegerParam(
+			Params, TEXT("limit"), 100, 1, 500, Limit, LimitError))
 	{
-		if (!LimitField->TryGetNumber(LimitValue))
-		{
-			return FMonolithActionResult::Error(TEXT("limit must be a number"), FMonolithJsonUtils::ErrInvalidParams);
-		}
+		return FMonolithActionResult::Error(LimitError, FMonolithJsonUtils::ErrInvalidParams);
 	}
-	const int32 Limit = MonolithPCG::ClampLimit(LimitValue);
 
 	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
 	if (!World)

@@ -4,6 +4,7 @@
 // Core / test
 #include "CoreMinimal.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/Guid.h"
 #include "Misc/Paths.h"
 #include "HAL/FileManager.h"
 
@@ -42,8 +43,11 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 bool FMonolithAssetImportFontFamilyBasicTest::RunTest(const FString& Parameters)
 {
     // Primary fixture: project-bundled Atkinson at Content/UI/Fonts/Atkinson/.
-    const FString ProjectContentFixture =
+    const FString RelativeProjectContentFixture =
         FPaths::ProjectContentDir() / TEXT("UI/Fonts/Atkinson/AtkinsonHyperlegible-Regular.ttf");
+    const FString ProjectContentFixture =
+        IFileManager::Get().ConvertToAbsolutePathForExternalAppForRead(
+            *RelativeProjectContentFixture);
 
     FString FixturePath;
     if (FPaths::FileExists(ProjectContentFixture))
@@ -58,8 +62,10 @@ bool FMonolithAssetImportFontFamilyBasicTest::RunTest(const FString& Parameters)
         return true;
     }
 
-    const FString Destination = TEXT("/Game/Tests/Monolith/Asset/Fonts/TestFamily");
-    const FString FamilyName  = TEXT("TestFamily");
+    const FString TestSuffix = FGuid::NewGuid().ToString(EGuidFormats::Short);
+    const FString Destination =
+        FString::Printf(TEXT("/Game/Tests/Monolith/Asset/Fonts/TestFamily_%s"), *TestSuffix);
+    const FString FamilyName = FString::Printf(TEXT("TestFamily_%s"), *TestSuffix);
 
     TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
     Params->SetStringField(TEXT("destination"), Destination);
@@ -95,6 +101,10 @@ bool FMonolithAssetImportFontFamilyBasicTest::RunTest(const FString& Parameters)
     FString FamilyAssetPath;
     TestTrue(TEXT("family_asset_path in result"),
         Result.Result->TryGetStringField(TEXT("family_asset_path"), FamilyAssetPath));
+    TestEqual(
+        TEXT("default import preserves the exact requested family path"),
+        FamilyAssetPath,
+        Destination / FamilyName);
 
     const TArray<TSharedPtr<FJsonValue>>* FacePaths = nullptr;
     TestTrue(TEXT("face_asset_paths in result"),
@@ -110,6 +120,10 @@ bool FMonolithAssetImportFontFamilyBasicTest::RunTest(const FString& Parameters)
         return false;
     }
     const FString FacePath = (*FacePaths)[0]->AsString();
+    TestEqual(
+        TEXT("default import preserves the exact requested face path"),
+        FacePath,
+        Destination / TEXT("F_Regular"));
 
     if (!FacePath.IsEmpty())
     {
@@ -262,7 +276,78 @@ bool FMonolithAssetImportFontFamilyInvalidParamsTest::RunTest(const FString& Par
         const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
             TEXT("asset"), TEXT("import_font_family"), P);
         TestFalse(TEXT("all faces missing -> failure"), R.bSuccess);
-        TestEqual(TEXT("all faces missing -> -32603"), R.ErrorCode, -32603);
+        TestEqual(TEXT("all faces missing -> -32602"), R.ErrorCode, -32602);
+    }
+
+    {
+        TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+        P->SetStringField(TEXT("destination"), TEXT("/Game/Foo/Bar"));
+        P->SetStringField(TEXT("family_name"), TEXT("Fam"));
+        TArray<TSharedPtr<FJsonValue>> Faces;
+        TSharedPtr<FJsonObject> F = MakeShared<FJsonObject>();
+        F->SetStringField(TEXT("typeface"), TEXT("Regular"));
+        F->SetStringField(TEXT("source_path"), TEXT("C:/nonexistent.ttf"));
+        Faces.Add(MakeShared<FJsonValueObject>(F));
+        P->SetArrayField(TEXT("faces"), Faces);
+        P->SetStringField(TEXT("loading_policy"), TEXT("Maybe"));
+        const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("asset"), TEXT("import_font_family"), P);
+        TestFalse(TEXT("unknown loading_policy -> failure"), R.bSuccess);
+        TestEqual(TEXT("unknown loading_policy -> -32602"), R.ErrorCode, -32602);
+    }
+
+    {
+        TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+        P->SetStringField(TEXT("destination"), TEXT("/Game/Foo/Bar"));
+        P->SetStringField(TEXT("family_name"), TEXT("Fam"));
+        TArray<TSharedPtr<FJsonValue>> Faces;
+        TSharedPtr<FJsonObject> F = MakeShared<FJsonObject>();
+        F->SetStringField(TEXT("typeface"), TEXT("Regular"));
+        F->SetStringField(TEXT("source_path"), TEXT("C:/nonexistent.ttf"));
+        Faces.Add(MakeShared<FJsonValueObject>(F));
+        P->SetArrayField(TEXT("faces"), Faces);
+        P->SetStringField(TEXT("hinting"), TEXT("Maybe"));
+        const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("asset"), TEXT("import_font_family"), P);
+        TestFalse(TEXT("unknown hinting -> failure"), R.bSuccess);
+        TestEqual(TEXT("unknown hinting -> -32602"), R.ErrorCode, -32602);
+    }
+
+    {
+        const FString CollisionSuffix = FGuid::NewGuid().ToString(EGuidFormats::Short);
+        const FString Destination =
+            FString::Printf(TEXT("/Game/Tests/Monolith/Asset/Fonts/Collision_%s"), *CollisionSuffix);
+        const FString FamilyPackageName = Destination / TEXT("Fam");
+        UPackage* ExistingPackage = CreatePackage(*FamilyPackageName);
+        TestNotNull(TEXT("collision fixture package created"), ExistingPackage);
+
+        TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+        P->SetStringField(TEXT("destination"), Destination);
+        P->SetStringField(TEXT("family_name"), TEXT("Fam"));
+        TArray<TSharedPtr<FJsonValue>> Faces;
+        TSharedPtr<FJsonObject> F = MakeShared<FJsonObject>();
+        F->SetStringField(TEXT("typeface"), TEXT("Regular"));
+        F->SetStringField(TEXT("source_path"), TEXT("C:/nonexistent.ttf"));
+        Faces.Add(MakeShared<FJsonValueObject>(F));
+        P->SetArrayField(TEXT("faces"), Faces);
+        const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("asset"), TEXT("import_font_family"), P);
+        TestFalse(TEXT("default naming rejects an existing exact family path"), R.bSuccess);
+        TestEqual(TEXT("default exact-path collision -> -32602"), R.ErrorCode, -32602);
+        TestTrue(
+            TEXT("default exact-path collision explains explicit unique-name opt-in"),
+            R.ErrorMessage.Contains(TEXT("allow_unique_names=true")));
+
+        if (ExistingPackage)
+        {
+            ExistingPackage->Rename(
+                *FString::Printf(
+                    TEXT("/Temp/__monolith_font_collision_%s"),
+                    *FGuid::NewGuid().ToString(EGuidFormats::Short)),
+                nullptr,
+                REN_NonTransactional | REN_DoNotDirty);
+            ExistingPackage->MarkAsGarbage();
+        }
     }
 
     return true;
