@@ -63,16 +63,18 @@ Validation findings are returned as structured `checks` and `issues`. A syntacti
 | --- | --- |
 | Default roots | Current project `Source` plus every discovered `EPluginType::Project` source directory, including plugins nested below containers such as `Plugins/GameFeatures`. |
 | Explicit roots | Must exist lexically and physically under the current project's `Source` or `Plugins` directory. Junction/symlink targets outside the project boundary are rejected, and recursive traversal rechecks each physical path. |
-| Monolith source | Excluded unless `include_monolith_source=true`. |
+| Monolith source | Excluded unless `include_monolith_source=true`. The exclusion root is derived from the discovered Monolith plugin's base directory, so it holds when the plugin is installed below a grouping directory such as `Plugins/Developer/Monolith`. |
 | Engine source | Limited to the installed `GameplayMessageRouter/Source` directory and opt-in only. |
-| Roots | Maximum 256. Duplicate canonical roots are removed. |
+| Roots | Maximum 256. Duplicate canonical roots are removed, and a root nested inside another accepted root is dropped in favour of the outermost one, so overlapping inputs such as `Source` plus `Source/Game` cannot scan the same file twice. |
 | Files | Default 2,000; hard maximum 5,000; supported extensions are `.cpp`, `.h`, `.hpp`, `.inl`. |
 | File size | Files larger than 2 MiB are skipped and counted. |
 | Results | Default 500; hard maximum 1,000. |
-| Per-call candidates | Maximum 32 from the first call argument; truncation is counted. Multiple supported calls on one source line are parsed independently so channels do not inherit another call's payload or match type. |
+| Per-call candidates | Maximum 32 from the call's channel argument; truncation is counted. Each pattern declares which argument carries the channel, so the Blueprint async listener reads its second argument rather than the world context object. Multiple supported calls on one source line are parsed independently so channels do not inherit another call's payload or match type. |
 | Issues | Maximum 1,000; truncation is reported. |
 | Text output | Both `line_text` and `function_context` are omitted by default and bounded when explicitly requested with `include_line_text=true`. |
 | Absence claims | Orphan broadcaster/listener candidates are emitted only after a complete scan. File/result limits, skipped files, unreadable files, or candidate truncation set `orphan_analysis_complete=false`, mark channel rows `indeterminate`, zero orphan counts, and emit `absence_analysis_indeterminate`. |
+| Counterpart matching | A `PartialMatch` listener on an ancestor tag counts as the counterpart for every descendant broadcaster, matching router delivery, so neither side is reported as an orphan. |
+| Unresolved channels | Calls whose channel is held in a variable share the synthetic `<unresolved>` key. That key never participates in payload-mismatch, orphan, or match-ambiguity diagnostics, because those rows are unrelated to one another. |
 
 The response declares `analysis_mode="bounded_static_source"` and `runtime_execution="not_performed"`. Literal channel extraction validates the complete first argument and accepts a valid root tag such as `"Message"`; prefixed constants such as `TAG_...` remain lexical candidates. `channel_graph`, `broadcasters`, `listeners`, and `issues` are lexical candidates only; they do not prove branch reachability, listener lifetime, live registration, message delivery, or runtime payload compatibility.
 

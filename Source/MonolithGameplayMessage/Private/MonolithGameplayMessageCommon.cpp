@@ -482,9 +482,22 @@ namespace MonolithGameplayMessage
 
 	bool IsMonolithSourcePath(const FString& Path)
 	{
-		const FString MonolithSource = FPaths::Combine(
-			FPaths::ProjectPluginsDir(),
-			TEXT("Monolith/Source"));
+		// The plugin can be installed below a grouping directory such as
+		// Plugins/Developer/Monolith, so its base directory is discovered rather
+		// than assumed to be a direct child of the project plugins directory.
+		FString MonolithSource;
+		if (const TSharedPtr<IPlugin> MonolithPlugin =
+			IPluginManager::Get().FindPlugin(TEXT("Monolith")))
+		{
+			MonolithSource =
+				FPaths::Combine(MonolithPlugin->GetBaseDir(), TEXT("Source"));
+		}
+		else
+		{
+			MonolithSource = FPaths::Combine(
+				FPaths::ProjectPluginsDir(),
+				TEXT("Monolith/Source"));
+		}
 		if (!FPaths::DirectoryExists(MonolithSource))
 		{
 			return false;

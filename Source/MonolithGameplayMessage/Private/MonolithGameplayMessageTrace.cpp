@@ -18,6 +18,10 @@ namespace MonolithGameplayMessage
 			const TCHAR* Token;
 			const TCHAR* Role;
 			const TCHAR* Meaning;
+			// Zero-based index of the channel argument in the call expression.
+			// Most entrypoints take the channel first; the Blueprint async
+			// listener takes a world context object before it.
+			int32 ChannelArgumentIndex;
 		};
 
 		const FTracePattern TracePatterns[] =
@@ -26,37 +30,43 @@ namespace MonolithGameplayMessage
 				TEXT("broadcast_template"),
 				TEXT("BroadcastMessage<"),
 				TEXT("broadcaster"),
-				TEXT("Templated native broadcast call; the template argument is a payload candidate.")
+				TEXT("Templated native broadcast call; the template argument is a payload candidate."),
+				0
 			},
 			{
 				TEXT("broadcast_call"),
 				TEXT("BroadcastMessage("),
 				TEXT("broadcaster"),
-				TEXT("Native or reflected broadcast call; payload type may be implied by the expression.")
+				TEXT("Native or reflected broadcast call; payload type may be implied by the expression."),
+				0
 			},
 			{
 				TEXT("broadcast_blueprint"),
 				TEXT("K2_BroadcastMessage("),
 				TEXT("broadcaster"),
-				TEXT("Blueprint-facing broadcast call site.")
+				TEXT("Blueprint-facing broadcast call site."),
+				0
 			},
 			{
 				TEXT("register_listener_template"),
 				TEXT("RegisterListener<"),
 				TEXT("listener"),
-				TEXT("Templated native listener registration; the template argument is a payload candidate.")
+				TEXT("Templated native listener registration; the template argument is a payload candidate."),
+				0
 			},
 			{
 				TEXT("register_listener_call"),
 				TEXT("RegisterListener("),
 				TEXT("listener"),
-				TEXT("Native listener registration; payload type may be implied by the callback signature.")
+				TEXT("Native listener registration; payload type may be implied by the callback signature."),
+				0
 			},
 			{
 				TEXT("async_listener"),
 				TEXT("ListenForGameplayMessages("),
 				TEXT("listener"),
-				TEXT("Blueprint async listener registration call site.")
+				TEXT("Blueprint async listener registration call site."),
+				1
 			}
 		};
 
@@ -95,11 +105,21 @@ namespace MonolithGameplayMessage
 			TArray<FString>& Roots,
 			FString& OutError)
 		{
-			for (const FString& Existing : Roots)
+			// Roots are collected recursively, so a root nested inside an already
+			// accepted root would scan every file under it twice, producing
+			// duplicate call-site rows, inflated counts, and a premature
+			// max_results cutoff. Keep only the outermost root of any chain.
+			for (int32 Index = Roots.Num() - 1; Index >= 0; --Index)
 			{
-				if (Existing.Equals(Root, ESearchCase::IgnoreCase))
+				const FString& Existing = Roots[Index];
+				if (Existing.Equals(Root, ESearchCase::IgnoreCase)
+					|| MonolithGameplayMessage::IsPathWithinDirectory(Root, Existing))
 				{
 					return true;
+				}
+				if (MonolithGameplayMessage::IsPathWithinDirectory(Existing, Root))
+				{
+					Roots.RemoveAt(Index);
 				}
 			}
 			if (Roots.Num() >= MaxSourceRoots)
@@ -451,13 +471,21 @@ namespace MonolithGameplayMessage
 			return FString();
 		}
 
-		FString ExtractFirstArgument(const FString& Call)
+		/**
+		 * Returns the zero-based ArgumentIndex-th top-level argument of Call.
+		 * Nested parentheses, template angle brackets, subscripts, braced
+		 * initializers, and quoted text do not terminate an argument.
+		 */
+		FString ExtractArgument(const FString& Call, int32 ArgumentIndex)
 		{
 			const int32 OpenParenIndex = FindCallOpenParenthesis(Call, 0);
-			if (OpenParenIndex == INDEX_NONE)
+			if (OpenParenIndex == INDEX_NONE || ArgumentIndex < 0)
 			{
 				return FString();
 			}
+
+			int32 CurrentArgument = 0;
+			int32 ArgumentStartIndex = OpenParenIndex + 1;
 
 			int32 ParenthesisDepth = 1;
 			int32 AngleDepth = 0;
@@ -496,9 +524,14 @@ namespace MonolithGameplayMessage
 					--ParenthesisDepth;
 					if (ParenthesisDepth == 0)
 					{
+						if (CurrentArgument != ArgumentIndex)
+						{
+							// The call has fewer arguments than requested.
+							return FString();
+						}
 						FString Argument = Call.Mid(
-							OpenParenIndex + 1,
-							Index - OpenParenIndex - 1);
+							ArgumentStartIndex,
+							Index - ArgumentStartIndex);
 						Argument.TrimStartAndEndInline();
 						return Argument;
 					}
@@ -527,11 +560,16 @@ namespace MonolithGameplayMessage
 						&& BracketDepth == 0
 						&& BraceDepth == 0)
 					{
-						FString Argument = Call.Mid(
-							OpenParenIndex + 1,
-							Index - OpenParenIndex - 1);
-						Argument.TrimStartAndEndInline();
-						return Argument;
+						if (CurrentArgument == ArgumentIndex)
+						{
+							FString Argument = Call.Mid(
+								ArgumentStartIndex,
+								Index - ArgumentStartIndex);
+							Argument.TrimStartAndEndInline();
+							return Argument;
+						}
+						++CurrentArgument;
+						ArgumentStartIndex = Index + 1;
 					}
 					break;
 				default:
@@ -995,13 +1033,14 @@ FMonolithActionResult FMonolithGameplayMessageActions::TraceChannelUsage(
 
 					bool bCandidatesTruncated = false;
 					TArray<FString> Channels = ExtractChannelCandidates(
-						ExtractFirstArgument(Call),
+						ExtractArgument(Call, Pattern.ChannelArgumentIndex),
 						bCandidatesTruncated);
 					if (bCandidatesTruncated)
 					{
 						++Stats.CandidateListsTruncated;
 					}
-					if (Channels.Num() == 0)
+					const bool bChannelUnresolved = Channels.Num() == 0;
+					if (bChannelUnresolved)
 					{
 						Channels.Add(TEXT("<unresolved>"));
 					}
@@ -1133,6 +1172,67 @@ FMonolithActionResult FMonolithGameplayMessageActions::TraceChannelUsage(
 	int32 MatchAmbiguityCount = 0;
 	int32 UnresolvedChannelCount = 0;
 
+	// GameplayMessageRouter delivers a channel to any listener registered on an
+	// ancestor tag with PartialMatch, so counterpart analysis cannot use exact
+	// channel equality alone. These two indexes are built once and consulted
+	// below, and the synthetic <unresolved> key never participates.
+	const FString UnresolvedChannelKey = TEXT("<unresolved>");
+	TSet<FString> PartialListenerChannels;
+	TSet<FString> BroadcasterChannels;
+	for (const FString& Channel : Channels)
+	{
+		if (Channel == UnresolvedChannelKey)
+		{
+			continue;
+		}
+		for (const FTraceRow& Row : RowsByChannel[Channel])
+		{
+			if (Row.Role == TEXT("broadcaster"))
+			{
+				BroadcasterChannels.Add(Channel);
+			}
+			else if (Row.Role == TEXT("listener")
+				&& Row.MatchType.Contains(TEXT("PartialMatch")))
+			{
+				PartialListenerChannels.Add(Channel);
+			}
+		}
+	}
+
+	auto IsStrictDescendantOf =
+		[](const FString& Channel, const FString& Ancestor)
+	{
+		return Channel.Len() > Ancestor.Len()
+			&& Channel.StartsWith(Ancestor, ESearchCase::CaseSensitive)
+			&& Channel[Ancestor.Len()] == TEXT('.');
+	};
+
+	auto HasAncestorPartialListener =
+		[&PartialListenerChannels, &IsStrictDescendantOf](const FString& Channel)
+	{
+		for (const FString& Ancestor : PartialListenerChannels)
+		{
+			if (IsStrictDescendantOf(Channel, Ancestor))
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+
+	auto HasDescendantBroadcaster =
+		[&BroadcasterChannels, &IsStrictDescendantOf](const FString& Channel)
+	{
+		for (const FString& Descendant : BroadcasterChannels)
+		{
+			if (IsStrictDescendantOf(Descendant, Channel))
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+
 	for (const FString& Channel : Channels)
 	{
 		const TArray<FTraceRow>& Rows = RowsByChannel[Channel];
@@ -1161,18 +1261,29 @@ FMonolithActionResult FMonolithGameplayMessageActions::TraceChannelUsage(
 		Payloads.Sort();
 		MatchTypes.Sort();
 
+		// Every call whose channel is held in a variable shares the synthetic
+		// <unresolved> key, so those rows are unrelated to each other. Grouping
+		// them would fabricate payload mismatches and conceal orphan candidates.
+		const bool bUnresolvedChannel = Channel == UnresolvedChannelKey;
 		const bool bPayloadMismatch =
-			BroadcasterCount > 0 && ListenerCount > 0 && Payloads.Num() > 1;
+			!bUnresolvedChannel
+			&& BroadcasterCount > 0
+			&& ListenerCount > 0
+			&& Payloads.Num() > 1;
 		const bool bOrphanBroadcaster =
 			bAbsenceAnalysisComplete
+			&& !bUnresolvedChannel
 			&& BroadcasterCount > 0
-			&& ListenerCount == 0;
+			&& ListenerCount == 0
+			&& !HasAncestorPartialListener(Channel);
 		const bool bOrphanListener =
 			bAbsenceAnalysisComplete
+			&& !bUnresolvedChannel
 			&& ListenerCount > 0
-			&& BroadcasterCount == 0;
-		const bool bMatchAmbiguity = bHasPartialMatch && bHasExactMatch;
-		const bool bUnresolvedChannel = Channel == TEXT("<unresolved>");
+			&& BroadcasterCount == 0
+			&& !(bHasPartialMatch && HasDescendantBroadcaster(Channel));
+		const bool bMatchAmbiguity =
+			!bUnresolvedChannel && bHasPartialMatch && bHasExactMatch;
 
 		PayloadMismatchCount += bPayloadMismatch ? 1 : 0;
 		OrphanBroadcasterCount += bOrphanBroadcaster ? 1 : 0;
