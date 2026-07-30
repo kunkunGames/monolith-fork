@@ -20,6 +20,43 @@
 
 namespace MonolithCollection
 {
+	bool FDynamicCollectionMatchCounter::RecordMatch(
+		const FSoftObjectPath& AssetPath,
+		int32 FilterIndex,
+		int32 FilterCount)
+	{
+		checkf(
+			FilterIndex >= 0 && FilterIndex < FilterCount,
+			TEXT("Dynamic collection filter index %d is outside [0, %d)"),
+			FilterIndex,
+			FilterCount);
+
+		TBitArray<>& CountedFilters =
+			CountedFiltersByAsset.FindOrAdd(AssetPath);
+		if (CountedFilters.Num() == 0)
+		{
+			CountedFilters.Init(false, FilterCount);
+		}
+		else
+		{
+			checkf(
+				CountedFilters.Num() == FilterCount,
+				TEXT(
+					"Dynamic collection filter count changed from %d to %d "
+					"inside one resolution session"),
+				CountedFilters.Num(),
+				FilterCount);
+		}
+
+		if (CountedFilters[FilterIndex])
+		{
+			return false;
+		}
+
+		CountedFilters[FilterIndex] = true;
+		return true;
+	}
+
 	static const TSharedRef<ICollectionContainer>& Container()
 	{
 		FCollectionManagerModule& Module = FCollectionManagerModule::GetModule();
@@ -29,7 +66,7 @@ namespace MonolithCollection
 
 	static bool TryParseShareType(const FString& In, ECollectionShareType::Type& OutType, bool bAllowAll = false)
 	{
-		if (In.IsEmpty() || In.Equals(TEXT("local"), ESearchCase::IgnoreCase))
+		if (In.Equals(TEXT("local"), ESearchCase::IgnoreCase))
 		{
 			OutType = ECollectionShareType::CST_Local;
 			return true;
@@ -184,17 +221,27 @@ namespace MonolithCollection
 
 	static bool GetShareType(const TSharedPtr<FJsonObject>& Params, ECollectionShareType::Type& OutType, FString& OutError, bool bAllowAll = false)
 	{
-		FString ShareType;
-		if (Params.IsValid())
+		FString ShareType(TEXT("local"));
+		const bool bHasShareType =
+			Params.IsValid() && Params->HasField(TEXT("share_type"));
+		if (bHasShareType)
 		{
-			if (Params->HasField(TEXT("share_type")))
+			if (!Params->HasTypedField<EJson::String>(TEXT("share_type")))
 			{
-				if (!Params->HasTypedField<EJson::String>(TEXT("share_type")))
+				OutError = TEXT("share_type must be a string");
+				return false;
+			}
+			ShareType = Params->GetStringField(TEXT("share_type"));
+			if (ShareType.IsEmpty())
+			{
+				OutError = TEXT(
+					"share_type must be a non-empty string: "
+					"local, private, shared, or system");
+				if (bAllowAll)
 				{
-					OutError = TEXT("share_type must be a string");
-					return false;
+					OutError += TEXT(", or all");
 				}
-				ShareType = Params->GetStringField(TEXT("share_type"));
+				return false;
 			}
 		}
 		if (!TryParseShareType(ShareType, OutType, bAllowAll))
@@ -833,25 +880,16 @@ namespace MonolithCollection
 						return true;
 					}
 
-					if (bCountsOnly)
-					{
-						// One shared visited set replaces the per-collection sets, so
-						// an asset reachable under several virtual paths is still
-						// counted exactly once for every matching collection.
-						bool bAlreadyVisited = false;
-						VisitedAssets.Add(
-							AssetData.GetSoftObjectPath(),
-							&bAlreadyVisited);
-						if (bAlreadyVisited)
-						{
-							return true;
-						}
-					}
-
 					FDynamicCollectionExpressionContext Context(
 						Item, KnownCollections);
-					for (const FDynamicCollectionFilter& Filter : Filters)
+					const FSoftObjectPath AssetPath =
+						AssetData.GetSoftObjectPath();
+					for (int32 FilterIndex = 0;
+						FilterIndex < Filters.Num();
+						++FilterIndex)
 					{
+						const FDynamicCollectionFilter& Filter =
+							Filters[FilterIndex];
 						bool bMatches = false;
 						if (!Context.TestDynamicCollection(
 							Filter.Collection, bMatches))
@@ -866,12 +904,21 @@ namespace MonolithCollection
 								CollectionCache.FindChecked(Filter.Collection);
 							if (bCountsOnly)
 							{
-								++Resolution.MatchCount;
+								// Evaluate every virtual representation first:
+								// alias-sensitive text/path queries may match only a
+								// later representation of this logical asset.
+								if (CountedMatches.RecordMatch(
+									AssetPath,
+									FilterIndex,
+									Filters.Num()))
+								{
+									++Resolution.MatchCount;
+								}
 							}
 							else
 							{
 								Resolution.UniqueAssets.Add(
-									AssetData.GetSoftObjectPath());
+									AssetPath);
 							}
 						}
 					}
@@ -961,12 +1008,13 @@ namespace MonolithCollection
 			TArray<FSoftObjectPath> Assets;
 		};
 
+	public:
 		/**
 		 * Switches the session to counting mode. Callers that only need
 		 * asset_count - list_collections is the hot one - then never retain a
-		 * per-collection membership array, so peak memory stops growing with the
-		 * sum of all memberships. Deduplication moves to a single shared set,
-		 * which is bounded by the catalog rather than by catalog x collections.
+		 * per-collection membership array. Successful matches are represented by
+		 * one asset path plus a compact filter bitset, which preserves aliases
+		 * without retaining a full path object for every collection membership.
 		 */
 		void SetCountsOnly(bool bInCountsOnly)
 		{
@@ -1011,11 +1059,12 @@ namespace MonolithCollection
 			return true;
 		}
 
+	private:
 		bool bPrepared = false;
 		bool bCountsOnly = false;
 		FString PreparationError;
 		// Only populated in counting mode, where per-collection sets are not kept.
-		TSet<FSoftObjectPath> VisitedAssets;
+		FDynamicCollectionMatchCounter CountedMatches;
 		TMap<FCollectionNameType, FCachedResolution> CollectionCache;
 	};
 
@@ -1363,16 +1412,27 @@ void FAssetCollectionActions::Register(FMonolithToolRegistry& Registry)
 
 FMonolithActionResult FAssetCollectionActions::ListCollections(const TSharedPtr<FJsonObject>& Params)
 {
-	FString ShareTypeText;
-	if (Params.IsValid() && Params->HasField(TEXT("share_type")))
+	FString ShareTypeText(TEXT("all"));
+	const bool bHasShareType =
+		Params.IsValid() && Params->HasField(TEXT("share_type"));
+	if (bHasShareType)
 	{
 		if (!Params->HasTypedField<EJson::String>(TEXT("share_type")))
 		{
 			return FMonolithActionResult::Error(TEXT("share_type must be a string"), -32602);
 		}
 		ShareTypeText = Params->GetStringField(TEXT("share_type"));
+		if (ShareTypeText.IsEmpty())
+		{
+			return FMonolithActionResult::Error(
+				TEXT(
+					"share_type must be a non-empty string: local, private, "
+					"shared, system, or all"),
+				-32602);
+		}
 	}
-	const bool bFilter = !ShareTypeText.IsEmpty() && !ShareTypeText.Equals(TEXT("all"), ESearchCase::IgnoreCase);
+	const bool bFilter =
+		!ShareTypeText.Equals(TEXT("all"), ESearchCase::IgnoreCase);
 	ECollectionShareType::Type FilterType = ECollectionShareType::CST_All;
 	if (!MonolithCollection::TryParseShareType(ShareTypeText, FilterType, true))
 	{
@@ -1410,9 +1470,9 @@ FMonolithActionResult FAssetCollectionActions::ListCollections(const TSharedPtr<
 
 	MonolithCollection::FDynamicCollectionResolutionSession
 		DynamicResolutionSession;
-	// This endpoint reports asset_count and nothing else, so membership arrays are
-	// never retained: peak memory stays bounded by the catalog instead of growing
-	// with the sum of every listed dynamic collection's membership.
+	// This endpoint reports asset_count and nothing else, so full per-collection
+	// membership arrays are never retained. A compact per-asset filter bitset
+	// deduplicates successful alias matches without changing query semantics.
 	DynamicResolutionSession.SetCountsOnly(true);
 	FString DynamicResolutionError;
 	if (!DynamicResolutionSession.Prepare(

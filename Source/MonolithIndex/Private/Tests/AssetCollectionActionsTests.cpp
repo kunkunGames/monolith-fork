@@ -4,6 +4,8 @@
 
 #if WITH_DEV_AUTOMATION_TESTS && WITH_EDITOR
 
+#include "Actions/AssetCollectionActions.h"
+#include "ContentBrowserItemData.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
@@ -105,6 +107,24 @@ bool FMonolithCollectionRegistrationAndValidationTest::RunTest(const FString& /*
 		BadShareType,
 		TEXT("share_type"));
 
+	TSharedPtr<FJsonObject> EmptyListShareType =
+		MakeShared<FJsonObject>();
+	EmptyListShareType->SetStringField(TEXT("share_type"), TEXT(""));
+	bPassed &= ExpectInvalidParams(
+		TEXT("list_collections rejects explicitly empty share_type"),
+		TEXT("list_collections"),
+		EmptyListShareType,
+		TEXT("share_type"));
+
+	TSharedPtr<FJsonObject> EmptyDeleteShareType =
+		MakeNamedParams(TEXT("MonolithValidationOnly"));
+	EmptyDeleteShareType->SetStringField(TEXT("share_type"), TEXT(""));
+	bPassed &= ExpectInvalidParams(
+		TEXT("delete_collection rejects explicitly empty share_type"),
+		TEXT("delete_collection"),
+		EmptyDeleteShareType,
+		TEXT("share_type"));
+
 	TSharedPtr<FJsonObject> BadName = MakeShared<FJsonObject>();
 	BadName->SetNumberField(TEXT("name"), 7);
 	bPassed &= ExpectInvalidParams(
@@ -119,6 +139,15 @@ bool FMonolithCollectionRegistrationAndValidationTest::RunTest(const FString& /*
 		TEXT("create_collection rejects numeric storage_mode"),
 		TEXT("create_collection"),
 		BadStorageMode,
+		TEXT("storage_mode"));
+
+	TSharedPtr<FJsonObject> EmptyStorageMode =
+		MakeNamedParams(TEXT("MonolithValidationOnly"));
+	EmptyStorageMode->SetStringField(TEXT("storage_mode"), TEXT(""));
+	bPassed &= ExpectInvalidParams(
+		TEXT("create_collection rejects explicitly empty storage_mode"),
+		TEXT("create_collection"),
+		EmptyStorageMode,
 		TEXT("storage_mode"));
 
 	TSharedPtr<FJsonObject> BadForce = MakeNamedParams(TEXT("MonolithValidationOnly"));
@@ -155,6 +184,35 @@ bool FMonolithCollectionRegistrationAndValidationTest::RunTest(const FString& /*
 		TEXT("set_dynamic_query"),
 		EmptyQuery,
 		TEXT("query_text"));
+
+	const FContentBrowserItemDataAttributeValue NameAttribute(
+		FName(TEXT("NameBackedAttribute")));
+	bPassed &= TestEqual(
+		TEXT("name-backed Content Browser attributes convert safely to string"),
+		NameAttribute.GetValue<FString>(),
+		FString(TEXT("NameBackedAttribute")));
+	const FContentBrowserItemDataAttributeValue TextAttribute(
+		FText::FromString(TEXT("TextBackedAttribute")));
+	bPassed &= TestEqual(
+		TEXT("text-backed Content Browser attributes convert safely to string"),
+		TextAttribute.GetValue<FString>(),
+		FString(TEXT("TextBackedAttribute")));
+
+	MonolithCollection::FDynamicCollectionMatchCounter MatchCounter;
+	const FSoftObjectPath AliasedAsset(
+		TEXT("/Engine/EngineResources/DefaultTexture.DefaultTexture"));
+	bPassed &= TestTrue(
+		TEXT("first alias match increments the first dynamic count"),
+		MatchCounter.RecordMatch(AliasedAsset, 0, 2));
+	bPassed &= TestFalse(
+		TEXT("a second alias match does not duplicate the first dynamic count"),
+		MatchCounter.RecordMatch(AliasedAsset, 0, 2));
+	bPassed &= TestTrue(
+		TEXT("the same asset can increment another dynamic collection count"),
+		MatchCounter.RecordMatch(AliasedAsset, 1, 2));
+	bPassed &= TestFalse(
+		TEXT("the other dynamic collection also deduplicates later aliases"),
+		MatchCounter.RecordMatch(AliasedAsset, 1, 2));
 
 	const FString MissingName = FString::Printf(
 		TEXT("MonolithMissing_%s"),
@@ -609,6 +667,31 @@ bool FMonolithCollectionLocalLifecycleTest::RunTest(const FString& /*Parameters*
 		|| !CreateDynamicCollection(CycleBName, bCycleBExists))
 	{
 		return false;
+	}
+
+	TSharedPtr<FJsonObject> UnconfiguredChildQuery =
+		MakeNamedParams(CycleAName);
+	UnconfiguredChildQuery->SetStringField(
+		TEXT("query_text"),
+		FString::Printf(TEXT("Collection=%s"), *CycleBName));
+	TestTrue(
+		TEXT("a configured parent may reference an unconfigured dynamic child"),
+		Invoke(TEXT("set_dynamic_query"), UnconfiguredChildQuery).bSuccess);
+	const FMonolithActionResult UnconfiguredChildDetails =
+		Invoke(TEXT("get_collection"), MakeNamedParams(CycleAName));
+	TestTrue(
+		TEXT("an empty nested dynamic query resolves without an error"),
+		UnconfiguredChildDetails.bSuccess);
+	if (TestTrue(
+		TEXT("the empty nested dynamic result returns a payload"),
+		UnconfiguredChildDetails.Result.IsValid()))
+	{
+		TestEqual(
+			TEXT("an empty nested dynamic query matches zero assets"),
+			static_cast<int32>(
+				UnconfiguredChildDetails.Result->GetIntegerField(
+					TEXT("asset_count"))),
+			0);
 	}
 
 	for (const FString* Name : {&CycleAName, &CycleBName})
