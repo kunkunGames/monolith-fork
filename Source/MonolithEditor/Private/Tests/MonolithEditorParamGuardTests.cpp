@@ -95,6 +95,16 @@ bool FMonolithEditorGetBuildErrorsMalformedTest::RunTest(const FString& Paramete
 		TestTrue(TEXT("Error should name the parameter exclude_categories"), Result.ErrorMessage.Contains(TEXT("exclude_categories")));
 	}
 
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetNumberField(TEXT("clear_baseline"), 12345);
+
+		FMonolithActionResult Result = FMonolithEditorActions::HandleGetBuildErrors(Payload);
+
+		TestFalse(TEXT("Malformed clear_baseline should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should name the parameter clear_baseline"), Result.ErrorMessage.Contains(TEXT("clear_baseline")));
+	}
+
 	return true;
 }
 

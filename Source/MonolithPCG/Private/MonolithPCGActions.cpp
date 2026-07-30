@@ -24,6 +24,7 @@
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "UObject/SoftObjectPath.h"
+#include "UObject/UObjectHash.h"
 #include "UObject/UObjectIterator.h"
 #include "UObject/UnrealType.h"
 
@@ -1265,7 +1266,7 @@ namespace MonolithPCG
 				Objects.Add(Object);
 			}
 			return true;
-		}, true);
+		}, EGetObjectsFlags::IncludeNestedObjects);
 
 		if (Objects.Num() > Options.MaxObjects)
 		{

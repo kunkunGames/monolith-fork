@@ -44,6 +44,7 @@
 #include "UObject/SoftObjectPath.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UObjectHash.h"
+#include "UObject/UObjectHash.h"
 #include "UObject/UnrealType.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -2007,7 +2008,9 @@ bool BuildPersistentObjectIndex(
 
 	TArray<UObject*> NestedObjects;
 	GetObjectsWithOuter(
-		const_cast<UPCGGraph*>(Root), NestedObjects, true);
+		const_cast<UPCGGraph*>(Root),
+		NestedObjects,
+		EGetObjectsFlags::IncludeNestedObjects);
 	const int64 TotalObjectCount = static_cast<int64>(NestedObjects.Num()) + 1;
 	if (TotalObjectCount > MaxPersistentGraphObjects)
 	{
@@ -2444,7 +2447,7 @@ void PrepareGraphForUndo(UPCGGraph* Graph)
 	}
 	Graph->Modify();
 	TArray<UObject*> NestedObjects;
-	GetObjectsWithOuter(Graph, NestedObjects, true);
+	GetObjectsWithOuter(Graph, NestedObjects, EGetObjectsFlags::IncludeNestedObjects);
 	for (UObject* Object : NestedObjects)
 	{
 		if (Object && Object->HasAnyFlags(RF_Transactional))
@@ -2594,7 +2597,7 @@ void CollectReusableSeededDuplicationDestinations(
 	OutTargets.Add(Target);
 
 	TArray<UObject*> TargetObjects;
-	GetObjectsWithOuter(Target, TargetObjects, true);
+	GetObjectsWithOuter(Target, TargetObjects, EGetObjectsFlags::IncludeNestedObjects);
 	TMap<FString, UObject*> TargetsByRelativeLineage;
 	TargetsByRelativeLineage.Reserve(TargetObjects.Num());
 	for (UObject* const TargetObject : TargetObjects)
@@ -2607,7 +2610,7 @@ void CollectReusableSeededDuplicationDestinations(
 	}
 
 	TArray<UObject*> SourceObjects;
-	GetObjectsWithOuter(Source, SourceObjects, true);
+	GetObjectsWithOuter(Source, SourceObjects, EGetObjectsFlags::IncludeNestedObjects);
 	OutTargets.Reserve(FMath::Min(SourceObjects.Num(), TargetObjects.Num()) + 1);
 	for (const UObject* const SourceObject : SourceObjects)
 	{

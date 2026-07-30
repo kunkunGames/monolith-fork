@@ -12,7 +12,6 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithToolRegistry.h"
 #include "../../Public/MonolithFuzzyMatch.h"
-#include "../MonolithFuzzyMatch.h"
 #include "Async/Async.h"
 #include "Async/Future.h"
 #include "HAL/PlatformTime.h"

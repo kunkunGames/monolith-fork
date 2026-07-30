@@ -152,14 +152,7 @@ namespace MonolithGASInputAssetActionsTestDetail
 		{
 			return nullptr;
 		}
-		const TSharedPtr<FJsonObject>* ErrorObject = nullptr;
-		if (!ActionResult.ErrorData->TryGetObject(ErrorObject)
-			|| !ErrorObject
-			|| !ErrorObject->IsValid())
-		{
-			return nullptr;
-		}
-		return *ErrorObject;
+		return ActionResult.ErrorData;
 	}
 
 	static bool GetErrorBool(

@@ -2354,7 +2354,9 @@ bool FMonolithPCGGraphContentsReplacementLargeGraphBoundedComparisonTest::RunTes
 		SourceGraph->GetNodes().Num(), LargeNodeCount);
 	TArray<UObject*> LargeSourceInnerObjects;
 	GetObjectsWithOuter(
-		SourceGraph, LargeSourceInnerObjects, true);
+		SourceGraph,
+		LargeSourceInnerObjects,
+		EGetObjectsFlags::IncludeNestedObjects);
 	TestTrue(
 		*FString::Printf(
 			TEXT("Large source exposes at least one node and one settings inner per element (%d inners)"),

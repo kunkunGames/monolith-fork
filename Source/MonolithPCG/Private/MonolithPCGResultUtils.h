@@ -11,8 +11,7 @@ inline TSharedPtr<FJsonObject> GetErrorDataObject(const FMonolithActionResult& R
 		return nullptr;
 	}
 
-	const TSharedPtr<FJsonObject>* Object = nullptr;
-	return Result.ErrorData->TryGetObject(Object) && Object ? *Object : nullptr;
+	return Result.ErrorData;
 }
 
 inline TSharedPtr<FJsonObject> EnsureErrorDataObject(FMonolithActionResult& Result)
