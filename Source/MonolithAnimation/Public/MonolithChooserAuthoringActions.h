@@ -5,8 +5,8 @@
 
 /**
  * Chooser table AUTHORING actions for Monolith — registered under the existing
- * `chooser` namespace (alongside FMonolithChooserActions and
- * FMonolithChooserReadActions). These actions create a UChooserTable from
+ * `chooser` namespace (alongside FMonolithChooserActions, which owns the read /
+ * remap / validate side). These three actions create a UChooserTable from
  * scratch and grow it column-by-column / row-by-row, keeping every parallel
  * per-row array aligned.
  *

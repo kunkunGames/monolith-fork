@@ -1,103 +1,75 @@
 ---
 name: unreal-chooser
-description: Use for the Unreal Engine Chooser Table selection mechanism via the Monolith chooser namespace: discover, inspect, validate, create, and edit ChooserTable assets, rows, columns, context bindings, and result references.
+description: Use for the Chooser Table selection mechanism via Monolith MCP chooser namespace — create and inspect chooser/proxy tables, rows, columns, and evaluate which asset/animation a context selects. unreal-chooser owns the SELECTION MECHANISM (chooser/proxy tables, rows, columns, evaluate); to edit the animation assets a selection feeds use unreal-animation; if the data-driven logic belongs in a Blueprint or DataTable use unreal-blueprints. Triggers on chooser, chooser table, proxy table, selection table, chooser column, evaluate chooser, chooser proxy, select animation by state, pick asset by context, data-driven anim, selection logic, output objects, lookup table.
 ---
 
 # unreal-chooser
 
-Use this skill for the selection mechanism itself: ChooserTable assets, rows,
-columns, context bindings, nested chooser references, and selected result
-assets. Use `unreal-animation` when the selected result is an animation asset
-that must be edited, and `unreal-blueprints` when the logic belongs in a
-Blueprint or DataTable instead.
+**16 actions** via `chooser_query(action, params)`. Action names below are the live registry surface; call `monolith_discover` for exact parameter schemas.
 
-The namespace exposes **16 actions** through `chooser_query(action, params)`.
-The live catalog and per-action schema are authoritative:
+## Discovery
 
-```text
-monolith_discover({ namespace: "chooser" })
-monolith_discover({ namespace: "chooser", action: "<action>", mode: "schema" })
+```
+monolith_discover({ namespace: "chooser" })                      # all actions in this namespace
+monolith_discover({ namespace: "chooser", action: "<action>", mode: "schema" })  # exact params
 ```
 
-## Path contract
+The discover-first block is the authority. The inline signatures below are a snapshot of the live catalog (~1,900 actions across all namespaces) and can drift between versions — for the exact, full, current schema of any action call `monolith_discover` with `mode: "schema"`.
 
-The six discovery/readback/validation actions accept only canonical mounted
-Unreal package or top-level object paths:
+## When to use
 
-- accepted package form: `/Game/Choosers/CHT_Locomotion`
-- accepted object form:
-  `/Game/Choosers/CHT_Locomotion.CHT_Locomotion`
-- rejected: filesystem paths, relative paths, subobjects, redirectors,
-  case-only aliases, and object names that do not match the package asset name
+Use this skill for the **selection mechanism** — chooser/proxy tables, their rows and columns, and evaluating which asset or animation a runtime context selects.
 
-`path_filter` is also exact: use a mounted long package prefix such as
-`/Game/Choosers`. The read actions never compile, mutate, transact, save, or
-dirty a package.
+### Use a different skill for
 
-Reflected payloads have an independent serialization budget: depth 3, 128
-fields per full struct (16 for compact column summaries), and 256 entries per
-full container (8 compact). A container object always reports its full `count`
-and adds `truncated_after` when the returned `items` or `entries` array is only
-the bounded prefix. At the depth boundary, structs and containers return
-`serialization=depth_limit` metadata without expanding their contents.
-String, localized-text, and otherwise unsupported export values cap at 4,096
-characters; a longer value becomes an object with the bounded `value`,
-`serialization`, `original_char_count`, and `truncated_after`.
+- **unreal-animation** — when the selection result feeds animation but you actually need to edit the anim assets (sequences, montages, blend spaces, ABPs).
+- **unreal-blueprints** — when the data-driven logic should live in a Blueprint or DataTable instead of a chooser table.
 
-## Discovery and readback
+## Action Reference
 
-| Action | Parameters | Result and contract |
-|---|---|---|
-| `list_chooser_tables` | `path_filter?`, `offset=0`, `limit=200` | Deterministic AssetRegistry listing. `limit` is 1–1000; returns `count`, `total`, and `has_more`. |
-| `get_chooser_table` | `asset_path*`, `include_rows=false`, `row_limit=50` | Bounded summary of row/column/result/context counts, reflected columns, references, fallback result, and optional row/cell readback. `ResultsStructs` is the authoritative editor row count (with `CookedResults` used only when editor data is unavailable), and context counts follow the root Chooser view. `row_limit` is 1–500. |
-| `list_chooser_columns` | `asset_path*` | Reflected column type, input/output classification, disabled state, row-value property/type/count, and bounded fields. |
-| `list_chooser_rows` | `asset_path*`, `start_row=0`, `limit=100` | Bounded row page with result payload, disabled state, and per-column cell values. `limit` is 1–500. |
-| `list_chooser_references` | `asset_path*`, `offset=0`, `limit=200` | Stable, bounded hard/soft reference page with reflected source locations and exact loaded-object or AssetRegistry-object existence evidence. A loaded or on-disk package without the referenced export does not keep a missing asset valid; a Blueprint `…_C` path is accepted only for a soft-class property whose `GeneratedClassPath` tag matches exactly. Returns depth, visit-budget, and result-budget completeness evidence; an incomplete scan is never treated as complete validation. |
-| `validate_chooser_table` | `asset_path*` | Non-mutating structural validation: result/disabled/column row-array alignment, valid column structs, known result payload targets (`Asset`, `Chooser`, or `Class`), soft-reference asset resolution, and bounded-scan completeness. Warnings do not make `valid=false`; errors do. |
+Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed values, `[w]` mutates (its execution policy wraps a transaction / dirties the package). Signatures are a snapshot of the live catalog — for the exact, full, current schema of any action call `monolith_discover` with `mode: schema`.
 
-The read layer is reflection-first; when Chooser is enabled it uses the
-engine-owned `GetContextData()` view so root context inheritance stays exact.
-The dependency remains behind the existing `WITH_CHOOSER` gate, and actions
-remain visible when the optional Chooser plugin is disabled.
-Asset-dependent calls then return an explicit optional-dependency error;
-`list_chooser_tables` can still report any registry metadata that is visible.
+### Inspect / list (read-only)
 
-## Deep inspection and reference editing
+| Action | Params (req* opt? =default) | Purpose |
+|--------|-----------------------------|---------|
+| `list_chooser_tables` | `path_filter?` | List ChooserTable assets without hard-linking the Chooser plugin. `path_filter` restricts to a package prefix. |
+| `get_chooser_table` | `asset_path*`, `include_rows=false`, `row_limit=50` | Inspect a ChooserTable summary: rows, columns, results, context fields, references. |
+| `inspect_chooser` | `asset_path*`, `recursive?` | Read-only deep inspection: context-data params (class/struct reqs), result type+class, row/column counts+types, referenced assets, compile/validation status. `recursive=true` emits the full nested tree (asset / soft_asset / evaluate_chooser / nested_chooser kinds), output-object cells, fallback, parent_table/root_chooser. |
+| `list_chooser_columns` | `asset_path*` | Reflected columns with input/output type and row-value counts. |
+| `list_chooser_rows` | `asset_path*`, `start_row=0`, `limit=100` | Reflected rows, per-column cells, disabled state, and row result data. |
+| `list_chooser_references` | `asset_path*` | Object and soft-object references found in a ChooserTable. |
+| `validate_chooser_table` | `asset_path*` | Validate row/column consistency and unresolved reflected references. |
+| `validate_chooser` | `asset_path*`, `expected_context_class?`, `expected_result_type?` | Compile (`Compile(true)`) and validate: optional expected context class + expected result type (`ObjectResult`/`ClassResult`/`NoPrimaryResult`), plus null/stale result-row refs. Read-only apart from the compile pass. |
 
-These actions use the existing `WITH_CHOOSER`-gated implementation:
+### Create / edit (write)
 
-| Action | Parameters | Purpose |
-|---|---|---|
-| `inspect_chooser` | `asset_path*`, `include_cells=false`, `recursive=false` | Deep inspection of context data, result type/class, columns, referenced assets, compile status, and optionally the complete nested chooser tree. |
-| `duplicate_chooser_tree` | `source_assets*`, `destination_folder*`, `remap_rules?` | Duplicate tables, then remap root/parent/nested chooser and result references in a two-pass operation. |
-| `set_context_object_class` | `asset_path*`, `context_name_or_index*`, `class_path*` | Rewrite a class-typed context entry and recompile. |
-| `set_result_asset_reference` | `asset_path*`, `row_or_column*`, `asset_path_value*` | Rewrite an asset or soft-asset result row and recompile. |
-| `set_evaluate_chooser_result_reference` | `asset_path*`, `row*`, `child_chooser_path*` | Rewrite the child table referenced by an EvaluateChooser result and recompile. |
-| `validate_chooser` | `asset_path*`, `expected_context_class?`, `expected_result_type?` | Compile and validate expected context/result type plus result references. This differs from the non-mutating `validate_chooser_table`. |
+| Action | Params (req* opt? =default) | Purpose |
+|--------|-----------------------------|---------|
+| `[w] create_chooser_table` | `asset_path*`, `output_type=Object`, `output_class?`, `context_class?` | Create a new UChooserTable. `output_type`: `ObjectResult`(=Object, default) / `ClassResult` / `NoPrimaryResult`. `output_class` = Result Class; `context_class` = context object class param. |
+| `[w] add_chooser_column` | `asset_path*`, `column_kind*`, `binding_property?`, `enum_class?` | Append a column. `column_kind`: `Bool` / `Enum` / `GameplayTag` / `FloatRange` / `OutputObject`. `binding_property` = dotted input-binding path (input columns only); `enum_class` = UEnum path/short name (Enum columns only). New column's per-row array is grown to current row count. |
+| `[w] add_chooser_row` | `asset_path*`, `cells*`, `output_psd*` | Append a row. `cells` = one entry per INPUT column in order (Bool: `true`/`false`/`any`; Enum: int; FloatRange: `{min,max}`; GameplayTag: tag string). `output_psd` = asset this row selects (written as FAssetChooser). All parallel arrays grow by exactly 1 atomically. |
+| `[w] set_chooser_cell` | `asset_path*`, `column_index*`, `row_index*`, `bool_value?`, `enum_value?`, `comparison?`, `float_min?`, `float_max?`, `tags?` | Set a typed predicate into `(column_index,row_index)`. Bool→`bool_value` (or `'any'` string); Enum→`enum_value` int [+ `comparison`: `MatchEqual`(default)/`MatchNotEqual`/`MatchAny`]; FloatRange→`float_min`+`float_max`; GameplayTag→`tags` (string or array). |
+| `[w] set_context_object_class` | `asset_path*`, `context_name_or_index*`, `class_path*` | Rewrite the Class on a ContextData entry (FContextObjectTypeClass). `context_name_or_index` = 0-based index; non-numeric selects first class-typed entry. Recompiles. |
+| `[w] set_result_asset_reference` | `asset_path*`, `row_or_column*`, `asset_path_value*` | Rewrite the Asset ref on a result row (FAssetChooser/FSoftAssetChooser). `row_or_column` = 0-based result row index. Recompiles. |
+| `[w] set_evaluate_chooser_result_reference` | `asset_path*`, `row*`, `child_chooser_path*` | Rewrite the child UChooserTable an EvaluateChooser result row points at (FEvaluateChooser); use for root/nested rows that `set_result_asset_reference` cannot set. Recompiles. |
+| `[w] duplicate_chooser_tree` | `source_assets*`, `destination_folder*`, `remap_rules?` | Duplicate one or more chooser tables into `destination_folder` (sources untouched). `remap_rules` = map of old-path → new-path applied to RootChooser/ParentTable/NestedChoosers and result asset refs. |
 
-## Authoring
+## Common Workflows
 
-| Action | Parameters | Purpose |
-|---|---|---|
-| `create_chooser_table` | `asset_path*`, `output_type=Object`, `output_class?`, `context_class?` | Create an empty UChooserTable and configure its result/context contract. |
-| `add_chooser_column` | `asset_path*`, `column_kind*`, `binding_property?`, `enum_class?` | Append Bool, Enum, GameplayTag, FloatRange, or OutputObject column; back-fill its row-value array to the current row count. |
-| `add_chooser_row` | `asset_path*`, `cells*`, `output_psd*` | Append one result row and grow all parallel row arrays atomically. |
-| `set_chooser_cell` | `asset_path*`, `column_index*`, `row_index*`, typed value fields | Replace one typed predicate cell while preserving table alignment. |
+Numbered recipes use only the actions in the table above. Run `monolith_discover` with `mode: "schema"` for the exact params before each call. Scaffold a fresh table **columns before rows** — every `[w]` add grows all parallel arrays atomically, so a row added before its input columns has nowhere to put its cells.
 
-## Safe end-to-end workflow
+### Recipe 1 — Scaffold a new chooser table end-to-end
 
-1. Call `list_chooser_tables` or use a known exact object path.
-2. Call `get_chooser_table`, `list_chooser_columns`, and
-   `validate_chooser_table` before mutation.
-3. For a new table, create it and add every input column before adding rows.
-4. Add rows or make focused cell/reference edits.
-5. Call `validate_chooser` when a compile pass is required.
-6. Save through the `asset` namespace; Chooser has no separate save action.
-7. Re-read with `get_chooser_table`, `list_chooser_rows`,
-   `list_chooser_references`, and `validate_chooser_table`.
+1. `chooser_query("create_chooser_table", { asset_path, output_type: "ObjectResult", output_class, context_class })` — make the empty `UChooserTable`; set `context_class` to the object the runtime passes in and `output_class` to the asset class each row selects.
+2. `chooser_query("add_chooser_column", { asset_path, column_kind: "Enum", binding_property, enum_class })` — add each INPUT column first, one call per predicate (`Bool` / `Enum` / `GameplayTag` / `FloatRange`); `binding_property` is the dotted input-binding path, `enum_class` only for `Enum` columns.
+3. `chooser_query("add_chooser_row", { asset_path, cells, output_psd })` — append each row AFTER all input columns exist; `cells` is one entry per input column in order, `output_psd` is the asset that row selects.
+4. (optional) `chooser_query("set_chooser_cell", { asset_path, column_index, row_index, ... })` — overwrite a single typed predicate at `(column_index,row_index)` instead of re-adding the row; pass the field matching the column kind (`bool_value` / `enum_value`(+`comparison`) / `float_min`+`float_max` / `tags`).
+5. `chooser_query("validate_chooser", { asset_path, expected_context_class, expected_result_type })` — compile via `Compile(true)` and confirm row/column consistency, expected context class, and no null/stale result refs (use `validate_chooser_table` for the lighter consistency-only pass).
+6. Save the asset package (a chooser-namespace save action is **not** exposed today — confirm via `monolith_discover` and save through **unreal-asset**), then re-confirm selection wiring with `chooser_query("inspect_chooser", { asset_path, recursive: true })` to read the nested result tree the way a runtime context resolves it. There is no `chooser_query` evaluate-at-runtime action in this namespace; inspection is the read-only equivalent.
 
-Do not infer success from an action's mutation response alone. The final
-readback must show the intended row/column counts and references, and both
-validation actions must be interpreted according to their contracts:
-`validate_chooser` compiles, while `validate_chooser_table` is strictly
-non-mutating.
+## Notes
+
+- This reference is generated from the live `RegisterAction` surface. If an action is missing or renamed, re-run `monolith_discover({ namespace: "chooser" })` — the catalog is the source of truth.
+- Pass `mode: "schema"` to `monolith_discover` for required/optional params and types before calling an action.
+- `[w]` actions dirty the package and most recompile (`Compile(true)`); save the asset and validate (`validate_chooser`) after a batch of edits. Row/column add actions grow all parallel arrays atomically, so add columns before rows when scaffolding a fresh table.
