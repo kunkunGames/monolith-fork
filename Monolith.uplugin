@@ -76,6 +76,11 @@
 			"Enabled": true
 		},
 		{
+			"Name": "GameFeatures",
+			"Enabled": true,
+			"Optional": true
+		},
+		{
 			"Name": "StateTree",
 			"Enabled": true
 		},
@@ -202,6 +207,11 @@
 		},
 		{
 			"Name": "MonolithGAS",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "MonolithGameFeatures",
 			"Type": "Editor",
 			"LoadingPhase": "Default"
 		},
