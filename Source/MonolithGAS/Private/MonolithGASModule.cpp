@@ -29,8 +29,10 @@ void FMonolithGASModule::StartupModule()
 	const UMonolithSettings* Settings = GetDefault<UMonolithSettings>();
 	if (!Settings || !Settings->bEnableGAS)
 	{
+		const int32 InputActionCount = Registry.GetNamespaceActionCount(TEXT("input"));
 		UE_LOG(LogMonolithGAS, Log,
-			TEXT("MonolithGAS: GAS integration disabled in settings; input asset actions remain available"));
+			TEXT("MonolithGAS: GAS integration disabled in settings; %d input asset actions remain available"),
+			InputActionCount);
 		return;
 	}
 
@@ -52,14 +54,21 @@ void FMonolithGASModule::StartupModule()
 
 	FMonolithGASBulkFillAdapter::Register();
 
-	int32 ActionCount = Registry.GetNamespaceActionCount(TEXT("gas"));
+	const int32 GasActionCount = Registry.GetNamespaceActionCount(TEXT("gas"));
+	const int32 InputActionCount = Registry.GetNamespaceActionCount(TEXT("input"));
 	const TCHAR* GbaStatus =
 #if WITH_GBA
 		TEXT("available");
 #else
 		TEXT("not installed");
 #endif
-	UE_LOG(LogMonolithGAS, Log, TEXT("MonolithGAS: Loaded (%d actions, GBA=%s)"), ActionCount, GbaStatus);
+	UE_LOG(
+		LogMonolithGAS,
+		Log,
+		TEXT("MonolithGAS: Loaded (%d gas actions, %d input actions, GBA=%s)"),
+		GasActionCount,
+		InputActionCount,
+		GbaStatus);
 }
 
 void FMonolithGASModule::ShutdownModule()

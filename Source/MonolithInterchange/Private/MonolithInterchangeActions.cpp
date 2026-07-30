@@ -1,26 +1,93 @@
 #include "MonolithInterchangeActions.h"
 
 #include "MonolithAssetUtils.h"
+#include "MonolithInterchangeImportRollback.h"
 #include "MonolithParamSchema.h"
 
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetExportTask.h"
+#include "AssetImportTask.h"
 #include "AssetToolsModule.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Engine/SkeletalMesh.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/Texture.h"
 #include "EditorReimportHandler.h"
 #include "EditorFramework/AssetImportData.h"
 #include "Exporters/Exporter.h"
+#include "Factories/Factory.h"
+#include "Factories/FbxFactory.h"
+#include "Factories/FbxImportUI.h"
+#include "Factories/SceneImportFactory.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformFile.h"
+#include "HAL/PlatformFileManager.h"
 #include "IAssetTools.h"
+#include "InterchangeManager.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
+#include "Sound/SoundWave.h"
 #include "UObject/Package.h"
 #include "UObject/UnrealType.h"
-#include "AutomatedAssetImportData.h"
+#include "UObject/UObjectIterator.h"
 
 namespace
 {
+	enum class ERequestedImportKind : uint8
+	{
+		Any,
+		Scene,
+		StaticMesh,
+		SkeletalMesh,
+		Texture,
+		Audio
+	};
+
+	struct FImportBackendAvailability
+	{
+		bool bInterchangeTranslator = false;
+		UClass* LegacyFactoryClass = nullptr;
+
+		bool IsAvailable() const
+		{
+			return bInterchangeTranslator || LegacyFactoryClass != nullptr;
+		}
+	};
+
+	struct FDestinationContentInspection
+	{
+		bool bComplete = false;
+		bool bEmpty = false;
+		int32 AssetRegistryRows = 0;
+		int32 LoadedAssetsVisited = 0;
+		int32 FilesystemEntriesVisited = 0;
+		FString FirstConflict;
+	};
+
+	constexpr int32 MaxDestinationFilesystemEntries = 10000;
+	constexpr int32 MaxDestinationLoadedAssets = 1000000;
+
+	const TCHAR* ImportKindToString(ERequestedImportKind Kind)
+	{
+		switch (Kind)
+		{
+		case ERequestedImportKind::Scene:
+			return TEXT("scene");
+		case ERequestedImportKind::StaticMesh:
+			return TEXT("static_mesh");
+		case ERequestedImportKind::SkeletalMesh:
+			return TEXT("skeletal_mesh");
+		case ERequestedImportKind::Texture:
+			return TEXT("texture");
+		case ERequestedImportKind::Audio:
+			return TEXT("audio");
+		default:
+			return TEXT("any");
+		}
+	}
+
 	struct FInterchangeFormatDef
 	{
 		const TCHAR* Extension;
@@ -134,13 +201,69 @@ namespace
 		return FPaths::ConvertRelativePathToFull(Path);
 	}
 
-	bool IsUnderRoot(FString Path, FString Root)
+	bool IsLexicallyUnderRoot(FString Path, FString Root)
 	{
 		Path = FPaths::ConvertRelativePathToFull(Path);
 		Root = FPaths::ConvertRelativePathToFull(Root);
 		FPaths::NormalizeDirectoryName(Path);
 		FPaths::NormalizeDirectoryName(Root);
-		return Path.Equals(Root, ESearchCase::IgnoreCase) || FPaths::IsUnderDirectory(Path, Root);
+#if PLATFORM_WINDOWS
+		constexpr ESearchCase::Type PathCase = ESearchCase::IgnoreCase;
+#else
+		constexpr ESearchCase::Type PathCase = ESearchCase::CaseSensitive;
+#endif
+		return Path.Equals(Root, PathCase) || FPaths::IsUnderDirectory(Path, Root);
+	}
+
+	bool PathTraversesLinkBelowRoot(FString Path, FString Root)
+	{
+		Path = FPaths::ConvertRelativePathToFull(Path);
+		Root = FPaths::ConvertRelativePathToFull(Root);
+		FPaths::NormalizeFilename(Path);
+		FPaths::NormalizeDirectoryName(Root);
+		if (!IsLexicallyUnderRoot(Path, Root))
+		{
+			return false;
+		}
+
+		FString RelativePath = Path;
+		FString RelativeBase = Root;
+		if (!RelativeBase.EndsWith(TEXT("/")))
+		{
+			RelativeBase += TEXT("/");
+		}
+		if (!FPaths::MakePathRelativeTo(RelativePath, *RelativeBase))
+		{
+			return true;
+		}
+
+		FPaths::NormalizeFilename(RelativePath);
+		TArray<FString> Components;
+		RelativePath.ParseIntoArray(Components, TEXT("/"), true);
+		FString CurrentPath = Root;
+		for (const FString& Component : Components)
+		{
+			if (Component.IsEmpty() || Component == TEXT("."))
+			{
+				continue;
+			}
+			if (Component == TEXT(".."))
+			{
+				return true;
+			}
+
+			CurrentPath /= Component;
+			if (FPlatformFileManager::Get().GetPlatformPhysical().IsSymlink(*CurrentPath) == ESymlinkResult::Symlink)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool IsUnderRootWithoutLinkTraversal(const FString& Path, const FString& Root)
+	{
+		return IsLexicallyUnderRoot(Path, Root) && !PathTraversesLinkBelowRoot(Path, Root);
 	}
 
 	TArray<TSharedPtr<FJsonValue>> GetAllowedRootRows()
@@ -160,16 +283,411 @@ namespace
 		return Rows;
 	}
 
+	bool IsLexicallyUnderDefaultImportRoots(const FString& SourceFile)
+	{
+		return IsLexicallyUnderRoot(SourceFile, FPaths::ProjectDir()) ||
+			IsLexicallyUnderRoot(SourceFile, FPaths::ProjectContentDir()) ||
+			IsLexicallyUnderRoot(SourceFile, FPaths::ProjectSavedDir());
+	}
+
 	bool IsUnderDefaultImportRoots(const FString& SourceFile)
 	{
-		return IsUnderRoot(SourceFile, FPaths::ProjectDir()) ||
-			IsUnderRoot(SourceFile, FPaths::ProjectContentDir()) ||
-			IsUnderRoot(SourceFile, FPaths::ProjectSavedDir());
+		return IsUnderRootWithoutLinkTraversal(SourceFile, FPaths::ProjectDir()) ||
+			IsUnderRootWithoutLinkTraversal(SourceFile, FPaths::ProjectContentDir()) ||
+			IsUnderRootWithoutLinkTraversal(SourceFile, FPaths::ProjectSavedDir());
+	}
+
+	bool HasBlockedLinkTraversal(const FString& SourceFile)
+	{
+		return IsLexicallyUnderDefaultImportRoots(SourceFile) && !IsUnderDefaultImportRoots(SourceFile);
+	}
+
+	bool IsFormatCompatibleWithImportKind(const FInterchangeFormatDef* Format, ERequestedImportKind Kind)
+	{
+		if (!Format)
+		{
+			return false;
+		}
+
+		switch (Kind)
+		{
+		case ERequestedImportKind::Scene:
+			return Format->bSceneCapable;
+		case ERequestedImportKind::StaticMesh:
+			return FString(Format->Category) == TEXT("mesh");
+		case ERequestedImportKind::SkeletalMesh:
+			return FString(Format->Extension) == TEXT("fbx");
+		case ERequestedImportKind::Texture:
+			return FString(Format->Category) == TEXT("texture");
+		case ERequestedImportKind::Audio:
+			return FString(Format->Category) == TEXT("audio");
+		default:
+			return true;
+		}
+	}
+
+	bool IsFactoryClassCompatibleWithImportKind(UClass* FactoryClass, ERequestedImportKind Kind)
+	{
+		if (!FactoryClass)
+		{
+			return false;
+		}
+
+		switch (Kind)
+		{
+		case ERequestedImportKind::Scene:
+			return FactoryClass->IsChildOf(USceneImportFactory::StaticClass());
+		case ERequestedImportKind::StaticMesh:
+		case ERequestedImportKind::SkeletalMesh:
+			return FactoryClass->IsChildOf(UFbxFactory::StaticClass());
+		default:
+			return true;
+		}
+	}
+
+	UClass* FindLegacyFactoryClass(const FString& SourceFile, ERequestedImportKind Kind)
+	{
+		UClass* BestFactoryClass = nullptr;
+		int32 BestPriority = MIN_int32;
+		for (TObjectIterator<UClass> ClassIt; ClassIt; ++ClassIt)
+		{
+			UClass* FactoryClass = *ClassIt;
+			if (!FactoryClass ||
+				!FactoryClass->IsChildOf(UFactory::StaticClass()) ||
+				FactoryClass->HasAnyClassFlags(CLASS_Abstract | CLASS_Deprecated | CLASS_NewerVersionExists) ||
+				!IsFactoryClassCompatibleWithImportKind(FactoryClass, Kind))
+			{
+				continue;
+			}
+
+			UFactory* Factory = Cast<UFactory>(FactoryClass->GetDefaultObject());
+			if (!Factory || !Factory->bEditorImport || !Factory->FactoryCanImport(SourceFile))
+			{
+				continue;
+			}
+
+			if (!BestFactoryClass || Factory->ImportPriority > BestPriority)
+			{
+				BestFactoryClass = FactoryClass;
+				BestPriority = Factory->ImportPriority;
+			}
+		}
+		return BestFactoryClass;
+	}
+
+	bool CanUseInterchangeTranslator(const FString& SourceFile, ERequestedImportKind Kind)
+	{
+		if (Kind == ERequestedImportKind::Scene ||
+			Kind == ERequestedImportKind::StaticMesh ||
+			Kind == ERequestedImportKind::SkeletalMesh ||
+			!UInterchangeManager::IsInterchangeImportEnabled())
+		{
+			return false;
+		}
+
+		UE::Interchange::FScopedSourceData ScopedSourceData(SourceFile);
+		UInterchangeSourceData* SourceData = ScopedSourceData.GetSourceData();
+		return SourceData &&
+			UInterchangeManager::GetInterchangeManager().CanTranslateSourceData(SourceData, false);
+	}
+
+	FImportBackendAvailability GetImportBackendAvailability(const FString& SourceFile, ERequestedImportKind Kind)
+	{
+		FImportBackendAvailability Availability;
+		Availability.bInterchangeTranslator = CanUseInterchangeTranslator(SourceFile, Kind);
+		Availability.LegacyFactoryClass = FindLegacyFactoryClass(SourceFile, Kind);
+		return Availability;
+	}
+
+	UFactory* CreateConfiguredFactory(UObject* Outer, UClass* FactoryClass, ERequestedImportKind Kind, const FString& Extension)
+	{
+		if (!Outer || !FactoryClass)
+		{
+			return nullptr;
+		}
+
+		if ((Kind == ERequestedImportKind::StaticMesh || Kind == ERequestedImportKind::SkeletalMesh) &&
+			FactoryClass->IsChildOf(UFbxFactory::StaticClass()))
+		{
+			UFbxFactory* FbxFactory = NewObject<UFbxFactory>(Outer, FactoryClass);
+			FbxFactory->ImportUI = NewObject<UFbxImportUI>(FbxFactory);
+			FbxFactory->SetDetectImportTypeOnImport(false);
+			FbxFactory->ImportUI->bAutomatedImportShouldDetectType = false;
+			FbxFactory->ImportUI->bImportAsSkeletal = Kind == ERequestedImportKind::SkeletalMesh;
+			FbxFactory->ImportUI->MeshTypeToImport =
+				Kind == ERequestedImportKind::SkeletalMesh ? FBXIT_SkeletalMesh : FBXIT_StaticMesh;
+			FbxFactory->ImportUI->bImportMesh = true;
+			FbxFactory->ImportUI->bImportAnimations = false;
+			FbxFactory->ImportUI->bIsObjImport = Extension == TEXT("obj");
+			FbxFactory->ImportUI->bOverrideFullName = true;
+			return FbxFactory;
+		}
+
+		return NewObject<UFactory>(Outer, FactoryClass);
+	}
+
+	bool ImportedObjectMatchesKind(UObject* ImportedObject, ERequestedImportKind Kind)
+	{
+		if (!ImportedObject)
+		{
+			return false;
+		}
+
+		switch (Kind)
+		{
+		case ERequestedImportKind::StaticMesh:
+			return ImportedObject->IsA<UStaticMesh>();
+		case ERequestedImportKind::SkeletalMesh:
+			return ImportedObject->IsA<USkeletalMesh>();
+		case ERequestedImportKind::Texture:
+			return ImportedObject->IsA<UTexture>();
+		case ERequestedImportKind::Audio:
+			return ImportedObject->IsA<USoundWave>();
+		default:
+			return true;
+		}
+	}
+
+	ERequestedImportKind InferImportKindFromAsset(const UObject* Asset)
+	{
+		if (Asset && Asset->IsA<UStaticMesh>())
+		{
+			return ERequestedImportKind::StaticMesh;
+		}
+		if (Asset && Asset->IsA<USkeletalMesh>())
+		{
+			return ERequestedImportKind::SkeletalMesh;
+		}
+		if (Asset && Asset->IsA<UTexture>())
+		{
+			return ERequestedImportKind::Texture;
+		}
+		if (Asset && Asset->IsA<USoundWave>())
+		{
+			return ERequestedImportKind::Audio;
+		}
+		return ERequestedImportKind::Any;
+	}
+
+	bool ImportMayProduceSecondaryAssets(
+		const FInterchangeFormatDef* Format,
+		ERequestedImportKind RequestedKind)
+	{
+		if (RequestedKind == ERequestedImportKind::Texture ||
+			RequestedKind == ERequestedImportKind::Audio)
+		{
+			return false;
+		}
+
+		if (RequestedKind == ERequestedImportKind::Scene ||
+			RequestedKind == ERequestedImportKind::StaticMesh ||
+			RequestedKind == ERequestedImportKind::SkeletalMesh)
+		{
+			return true;
+		}
+
+		if (!Format)
+		{
+			return false;
+		}
+
+		const FString Category(Format->Category);
+		return Category == TEXT("mesh") || Category == TEXT("scene");
 	}
 
 	bool IsGamePackagePath(const FString& PackagePath)
 	{
 		return PackagePath == TEXT("/Game") || PackagePath.StartsWith(TEXT("/Game/"));
+	}
+
+	FDestinationContentInspection InspectDestinationContent(const FString& DestinationPath)
+	{
+		FDestinationContentInspection Inspection;
+		if (!FPackageName::IsValidLongPackageName(DestinationPath, false) ||
+			!IsGamePackagePath(DestinationPath))
+		{
+			return Inspection;
+		}
+
+		FAssetRegistryModule& AssetRegistryModule =
+			FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+		IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
+		TArray<FAssetData> AssetRows;
+		AssetRegistry.GetAssetsByPath(
+			FName(*DestinationPath),
+			AssetRows,
+			true,
+			false);
+		Inspection.AssetRegistryRows = AssetRows.Num();
+		if (AssetRows.Num() > 0)
+		{
+			const FAssetData& FirstAsset = AssetRows[0];
+			Inspection.bComplete = true;
+			Inspection.bEmpty = false;
+			Inspection.FirstConflict = FString::Printf(
+				TEXT("%s.%s"),
+				*FirstAsset.PackageName.ToString(),
+				*FirstAsset.AssetName.ToString());
+			return Inspection;
+		}
+		if (AssetRegistry.IsLoadingAssets())
+		{
+			return Inspection;
+		}
+
+		const FString DestinationPrefix = DestinationPath + TEXT("/");
+		for (TObjectIterator<UObject> ObjectIt; ObjectIt; ++ObjectIt)
+		{
+			++Inspection.LoadedAssetsVisited;
+			if (Inspection.LoadedAssetsVisited > MaxDestinationLoadedAssets)
+			{
+				return Inspection;
+			}
+
+			UObject* Object = *ObjectIt;
+			if (!Object || !Object->IsAsset() || !Object->GetOutermost())
+			{
+				continue;
+			}
+
+			const FString PackageName = Object->GetOutermost()->GetName();
+			if (PackageName == DestinationPath || PackageName.StartsWith(DestinationPrefix))
+			{
+				Inspection.bComplete = true;
+				Inspection.bEmpty = false;
+				Inspection.FirstConflict = Object->GetPathName();
+				return Inspection;
+			}
+		}
+
+		const FString DestinationDirectory =
+			FPackageName::LongPackageNameToFilename(DestinationPath);
+		if (!IFileManager::Get().DirectoryExists(*DestinationDirectory))
+		{
+			Inspection.bComplete = true;
+			Inspection.bEmpty = true;
+			return Inspection;
+		}
+
+		bool bBudgetExceeded = false;
+		bool bFoundPackageFile = false;
+		const bool bTraversalCompleted = IFileManager::Get().IterateDirectoryRecursively(
+			*DestinationDirectory,
+			[&Inspection, &bBudgetExceeded, &bFoundPackageFile](
+				const TCHAR* FilenameOrDirectory,
+				bool bIsDirectory)
+			{
+				++Inspection.FilesystemEntriesVisited;
+				if (Inspection.FilesystemEntriesVisited > MaxDestinationFilesystemEntries)
+				{
+					bBudgetExceeded = true;
+					return false;
+				}
+				if (bIsDirectory)
+				{
+					return true;
+				}
+
+				const FString Extension =
+					FPaths::GetExtension(FilenameOrDirectory, true).ToLower();
+				if (Extension == TEXT(".uasset") ||
+					Extension == TEXT(".umap") ||
+					Extension == TEXT(".utxt"))
+				{
+					bFoundPackageFile = true;
+					Inspection.FirstConflict = FilenameOrDirectory;
+					return false;
+				}
+				return true;
+			});
+
+		if (bFoundPackageFile)
+		{
+			Inspection.bComplete = true;
+			Inspection.bEmpty = false;
+			return Inspection;
+		}
+		if (bBudgetExceeded)
+		{
+			return Inspection;
+		}
+		if (!bTraversalCompleted)
+		{
+			return Inspection;
+		}
+
+		Inspection.bComplete = true;
+		Inspection.bEmpty = true;
+		return Inspection;
+	}
+
+	bool AreEquivalentSourceExtensions(const FString& A, const FString& B)
+	{
+		if (A.Equals(B, ESearchCase::IgnoreCase))
+		{
+			return true;
+		}
+		return (A.Equals(TEXT("jpg"), ESearchCase::IgnoreCase) &&
+				B.Equals(TEXT("jpeg"), ESearchCase::IgnoreCase)) ||
+			(A.Equals(TEXT("jpeg"), ESearchCase::IgnoreCase) &&
+				B.Equals(TEXT("jpg"), ESearchCase::IgnoreCase));
+	}
+
+	bool IsReplacementSourceCompatible(
+		UObject* Asset,
+		const FString& SourceFile,
+		const TArray<FString>& ExistingSources,
+		ERequestedImportKind& OutKind,
+		FString& OutReason)
+	{
+		OutKind = InferImportKindFromAsset(Asset);
+		const FString Extension = FPaths::GetExtension(SourceFile, false).ToLower();
+		const FInterchangeFormatDef* Format = FindFormatDef(Extension);
+		if (!Format)
+		{
+			OutReason = FString::Printf(
+				TEXT("No supported import format is registered for replacement extension '%s'."),
+				*Extension);
+			return false;
+		}
+
+		if (OutKind != ERequestedImportKind::Any)
+		{
+			if (!IsFormatCompatibleWithImportKind(Format, OutKind))
+			{
+				OutReason = FString::Printf(
+					TEXT("Replacement extension '%s' is incompatible with asset class %s."),
+					*Extension,
+					Asset ? *Asset->GetClass()->GetName() : TEXT("<null>"));
+				return false;
+			}
+			if (!GetImportBackendAvailability(SourceFile, OutKind).IsAvailable())
+			{
+				OutReason = FString::Printf(
+					TEXT("No registered import backend can consume replacement extension '%s' for asset class %s."),
+					*Extension,
+					Asset ? *Asset->GetClass()->GetName() : TEXT("<null>"));
+				return false;
+			}
+			return true;
+		}
+
+		for (const FString& ExistingSource : ExistingSources)
+		{
+			const FString ExistingExtension =
+				FPaths::GetExtension(ExistingSource, false).ToLower();
+			if (!ExistingExtension.IsEmpty() &&
+				AreEquivalentSourceExtensions(ExistingExtension, Extension))
+			{
+				return true;
+			}
+		}
+
+		OutReason = FString::Printf(
+			TEXT("Asset class %s has no typed compatibility contract and replacement extension '%s' does not match any stored source extension."),
+			Asset ? *Asset->GetClass()->GetName() : TEXT("<null>"),
+			*Extension);
+		return false;
 	}
 
 	TSharedPtr<FJsonObject> ValidateDestinationPackage(const FString& DestinationPath)
@@ -226,14 +744,15 @@ namespace
 
 	TArray<TSharedPtr<FJsonValue>> SourceFilesToJson(const UAssetImportData* ImportData)
 	{
-		TArray<TSharedPtr<FJsonValue>> Rows;
 		if (!ImportData)
 		{
-			return Rows;
+			return {};
 		}
 
 		TArray<FString> Files;
 		ImportData->ExtractFilenames(Files);
+		TArray<TSharedPtr<FJsonValue>> Rows;
+		Rows.Reserve(Files.Num());
 		for (const FString& File : Files)
 		{
 			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
@@ -242,6 +761,27 @@ namespace
 			Row->SetStringField(TEXT("full_path"), FullPath);
 			Row->SetStringField(TEXT("extension"), FPaths::GetExtension(File, false).ToLower());
 			Row->SetBoolField(TEXT("exists"), FPaths::FileExists(FullPath));
+			Rows.Add(MakeShared<FJsonValueObject>(Row));
+		}
+		return Rows;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> SourceFilesToJson(const TArray<FString>& Files)
+	{
+		TArray<TSharedPtr<FJsonValue>> Rows;
+		Rows.Reserve(Files.Num());
+		for (int32 Index = 0; Index < Files.Num(); ++Index)
+		{
+			const FString& File = Files[Index];
+			const FString FullPath = NormalizeSourceFile(File);
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetNumberField(TEXT("index"), Index);
+			Row->SetStringField(TEXT("filename"), File);
+			Row->SetStringField(TEXT("full_path"), FullPath);
+			Row->SetStringField(TEXT("extension"), FPaths::GetExtension(File, false).ToLower());
+			Row->SetBoolField(TEXT("exists"), FPaths::FileExists(FullPath));
+			Row->SetBoolField(TEXT("under_default_roots"), IsUnderDefaultImportRoots(FullPath));
+			Row->SetBoolField(TEXT("blocked_link_traversal"), HasBlockedLinkTraversal(FullPath));
 			Rows.Add(MakeShared<FJsonValueObject>(Row));
 		}
 		return Rows;
@@ -351,6 +891,45 @@ namespace
 		return true;
 	}
 
+	bool TryReadOptionalSourceFileIndex(
+		const TSharedPtr<FJsonObject>& Params,
+		int32& OutValue,
+		TArray<TSharedPtr<FJsonValue>>& Messages)
+	{
+		static const FString Field = TEXT("source_file_index");
+		OutValue = INDEX_NONE;
+		if (!Params.IsValid() || !Params->HasField(Field))
+		{
+			return true;
+		}
+
+		const TSharedPtr<FJsonValue> Value = Params->TryGetField(Field);
+		if (!Value.IsValid() || Value->Type != EJson::Number)
+		{
+			AddMessage(
+				Messages,
+				TEXT("invalid_source_file_index"),
+				FString::Printf(TEXT("%s must be an integer."), *Field));
+			return false;
+		}
+
+		const double Number = Value->AsNumber();
+		if (!FMath::IsFinite(Number) ||
+			Number != FMath::TruncToDouble(Number) ||
+			Number < static_cast<double>(MIN_int32) ||
+			Number > static_cast<double>(MAX_int32))
+		{
+			AddMessage(
+				Messages,
+				TEXT("invalid_source_file_index"),
+				FString::Printf(TEXT("%s must be a 32-bit integer."), *Field));
+			return false;
+		}
+
+		OutValue = static_cast<int32>(Number);
+		return true;
+	}
+
 	bool TryReadStringArray(const TSharedPtr<FJsonObject>& Params, const FString& Field, TArray<FString>& OutValues, FString& OutError)
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
@@ -403,12 +982,88 @@ namespace
 		return StringArrayToJson(Sorted);
 	}
 
+	/**
+	 * Loads a destination package that exists on disk but has not been indexed or
+	 * loaded yet, so its objects are visible to the rollback snapshot below.
+	 *
+	 * Without this, an overwrite target discovered only by DoesPackageExist (an
+	 * Asset Registry startup scan is still running, or the file was copied in out
+	 * of band) is absent from the snapshot. If typed validation then fails, the
+	 * overwritten object is classified as newly created and force-deleted,
+	 * destroying a pre-existing user asset.
+	 */
+	void EnsureDestinationPackageLoadedForSnapshot(const FString& PackageName)
+	{
+		if (PackageName.IsEmpty()
+			|| !FPackageName::IsValidLongPackageName(PackageName))
+		{
+			return;
+		}
+		if (FindPackage(nullptr, *PackageName) != nullptr)
+		{
+			return;
+		}
+		if (!FPackageName::DoesPackageExist(PackageName))
+		{
+			return;
+		}
+		LoadPackage(nullptr, *PackageName, LOAD_NoWarn | LOAD_Quiet);
+	}
+
+	TSet<FName> SnapshotAssetObjectPathsUnder(const FString& DestinationPath)
+	{
+		TSet<FName> ObjectPaths;
+		if (DestinationPath.IsEmpty())
+		{
+			return ObjectPaths;
+		}
+
+		FAssetRegistryModule& AssetRegistryModule =
+			FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+		TArray<FAssetData> AssetDataRows;
+		AssetRegistryModule.Get().GetAssetsByPath(
+			FName(*DestinationPath),
+			AssetDataRows,
+			true,
+			false);
+		for (const FAssetData& AssetData : AssetDataRows)
+		{
+			const FString ObjectPath = FString::Printf(
+				TEXT("%s.%s"),
+				*AssetData.PackageName.ToString(),
+				*AssetData.AssetName.ToString());
+			ObjectPaths.Add(FName(*ObjectPath));
+		}
+
+		const FString DestinationPrefix = DestinationPath + TEXT("/");
+		for (TObjectIterator<UObject> ObjectIt; ObjectIt; ++ObjectIt)
+		{
+			UObject* Object = *ObjectIt;
+			if (!Object || !Object->IsAsset() || !Object->GetOutermost())
+			{
+				continue;
+			}
+
+			const FString PackageName = Object->GetOutermost()->GetName();
+			if (PackageName == DestinationPath || PackageName.StartsWith(DestinationPrefix))
+			{
+				ObjectPaths.Add(FName(*Object->GetPathName()));
+			}
+		}
+		return ObjectPaths;
+	}
+
 	bool ValidateOutputFileRoot(const FString& FilePath, bool bAllowExternal)
 	{
 		return bAllowExternal || IsUnderDefaultImportRoots(FilePath);
 	}
 
-	TSharedPtr<FJsonObject> ImportOneSource(const FString& SourceFile, const TSharedPtr<FJsonObject>& Params)
+	TSharedPtr<FJsonObject> ImportOneSource(
+		const FString& SourceFile,
+		const TSharedPtr<FJsonObject>& Params,
+		ERequestedImportKind RequestedKind = ERequestedImportKind::Any,
+		TSet<FName>* ProspectivePackages = nullptr,
+		bool bMultiSourceBatch = false)
 	{
 		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
 		TArray<TSharedPtr<FJsonValue>> Messages;
@@ -419,6 +1074,7 @@ namespace
 		Row->SetStringField(TEXT("source_file"), SourceFile);
 		Row->SetStringField(TEXT("normalized_source_file"), NormalizedSource);
 		Row->SetStringField(TEXT("extension"), Extension);
+		Row->SetStringField(TEXT("requested_import_kind"), ImportKindToString(RequestedKind));
 
 		FString DestinationPath;
 		if (!Params.IsValid() || !Params->TryGetStringField(TEXT("destination_path"), DestinationPath) || DestinationPath.IsEmpty())
@@ -431,40 +1087,105 @@ namespace
 		FString ConflictPolicy;
 		if (!Params.IsValid() || !Params->TryGetStringField(TEXT("conflict_policy"), ConflictPolicy) || ConflictPolicy.IsEmpty())
 		{
-			AddMessage(Messages, TEXT("missing_conflict_policy"), TEXT("Missing required param 'conflict_policy'. Use fail, overwrite, rename, or reimport_only."));
+			AddMessage(Messages, TEXT("missing_conflict_policy"), TEXT("Missing required param 'conflict_policy'. Use fail, overwrite, or rename."));
 		}
 		ConflictPolicy = ConflictPolicy.ToLower();
 		Row->SetStringField(TEXT("conflict_policy"), ConflictPolicy);
 
 		bool bAllowExternal = false;
-		Params->TryGetBoolField(TEXT("allow_external"), bAllowExternal);
+		if (Params.IsValid())
+		{
+			Params->TryGetBoolField(TEXT("allow_external"), bAllowExternal);
+		}
 		Row->SetBoolField(TEXT("allow_external"), bAllowExternal);
 
 		bool bDryRun = false;
 		RequireConfirmOrDryRun(Params, Messages, bDryRun);
 		Row->SetBoolField(TEXT("dry_run"), bDryRun);
 
-		const bool bInterchangeAvailable = IsInterchangeAvailable();
 		const bool bFileExists = FPaths::FileExists(NormalizedSource);
+		const bool bLexicallyUnderRoots = IsLexicallyUnderDefaultImportRoots(NormalizedSource);
 		const bool bUnderRoots = IsUnderDefaultImportRoots(NormalizedSource);
-			const bool bDestinationValid = !DestinationPath.IsEmpty() &&
-				FPackageName::IsValidLongPackageName(DestinationPath, false) &&
-				IsGamePackagePath(DestinationPath);
+		const bool bBlockedLinkTraversal = HasBlockedLinkTraversal(NormalizedSource);
+		const bool bDestinationValid = !DestinationPath.IsEmpty() &&
+			FPackageName::IsValidLongPackageName(DestinationPath, false) &&
+			IsGamePackagePath(DestinationPath);
+		const bool bFormatCompatible = IsFormatCompatibleWithImportKind(Format, RequestedKind);
+		const bool bMayProduceSecondaryAssets =
+			ImportMayProduceSecondaryAssets(Format, RequestedKind);
+		const FDestinationContentInspection DestinationInspection =
+			bDestinationValid && bMayProduceSecondaryAssets
+				? InspectDestinationContent(DestinationPath)
+				: FDestinationContentInspection();
+		const FImportBackendAvailability Backend =
+			bFileExists && bFormatCompatible
+				? GetImportBackendAvailability(NormalizedSource, RequestedKind)
+				: FImportBackendAvailability();
 		const FString ExpectedAssetName = SanitizeAssetName(NormalizedSource);
 		const FString ExpectedPackage = !DestinationPath.IsEmpty() ? JoinPackagePath(DestinationPath, ExpectedAssetName) : FString();
-		const bool bLikelyConflict = !ExpectedPackage.IsEmpty() && FPackageName::DoesPackageExist(ExpectedPackage);
+		const bool bReservedConflict =
+			ProspectivePackages && ProspectivePackages->Contains(FName(*ExpectedPackage));
+		const bool bLikelyConflict = !ExpectedPackage.IsEmpty() &&
+			(FPackageName::DoesPackageExist(ExpectedPackage) ||
+				FindPackage(nullptr, *ExpectedPackage) != nullptr ||
+				bReservedConflict);
+		FString ResolvedPackage = ExpectedPackage;
+		FString ResolvedAssetName = ExpectedAssetName;
+		if (ConflictPolicy == TEXT("rename") && bLikelyConflict)
+		{
+			IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+			AssetTools.CreateUniqueAssetName(ExpectedPackage, FString(), ResolvedPackage, ResolvedAssetName);
+			for (int32 Suffix = 1;
+				ProspectivePackages && ProspectivePackages->Contains(FName(*ResolvedPackage));
+				++Suffix)
+			{
+				AssetTools.CreateUniqueAssetName(
+					ExpectedPackage,
+					FString::FromInt(Suffix),
+					ResolvedPackage,
+					ResolvedAssetName);
+			}
+		}
 
-		Row->SetBoolField(TEXT("interchange_available"), bInterchangeAvailable);
+		Row->SetBoolField(TEXT("interchange_available"), IsInterchangeAvailable());
+		Row->SetBoolField(TEXT("interchange_translator_available"), Backend.bInterchangeTranslator);
+		Row->SetStringField(
+			TEXT("legacy_factory_class"),
+			Backend.LegacyFactoryClass ? Backend.LegacyFactoryClass->GetPathName() : FString());
 		Row->SetBoolField(TEXT("source_exists"), bFileExists);
+		Row->SetBoolField(TEXT("lexically_under_default_roots"), bLexicallyUnderRoots);
 		Row->SetBoolField(TEXT("under_default_roots"), bUnderRoots);
+		Row->SetBoolField(TEXT("blocked_link_traversal"), bBlockedLinkTraversal);
 		Row->SetStringField(TEXT("expected_asset_name"), ExpectedAssetName);
 		Row->SetStringField(TEXT("expected_package"), ExpectedPackage);
+		Row->SetStringField(TEXT("resolved_asset_name"), ResolvedAssetName);
+		Row->SetStringField(TEXT("resolved_package"), ResolvedPackage);
 		Row->SetBoolField(TEXT("likely_package_conflict"), bLikelyConflict);
+		Row->SetBoolField(
+			TEXT("may_produce_secondary_assets"),
+			bMayProduceSecondaryAssets);
+		Row->SetBoolField(
+			TEXT("multi_source_batch"),
+			bMultiSourceBatch);
+		Row->SetBoolField(
+			TEXT("destination_inspection_complete"),
+			DestinationInspection.bComplete);
+		Row->SetBoolField(
+			TEXT("destination_proven_empty"),
+			DestinationInspection.bComplete && DestinationInspection.bEmpty);
+		Row->SetNumberField(
+			TEXT("destination_asset_registry_rows"),
+			DestinationInspection.AssetRegistryRows);
+		Row->SetNumberField(
+			TEXT("destination_loaded_objects_visited"),
+			DestinationInspection.LoadedAssetsVisited);
+		Row->SetNumberField(
+			TEXT("destination_filesystem_entries_visited"),
+			DestinationInspection.FilesystemEntriesVisited);
+		Row->SetStringField(
+			TEXT("destination_first_conflict"),
+			DestinationInspection.FirstConflict);
 
-		if (!bInterchangeAvailable)
-		{
-			AddMessage(Messages, TEXT("interchange_unavailable"), TEXT("No Interchange module was found in the current engine/project module set."));
-		}
 		if (!bFileExists)
 		{
 			AddMessage(Messages, TEXT("source_missing"), FString::Printf(TEXT("Source file does not exist: %s"), *NormalizedSource));
@@ -475,23 +1196,81 @@ namespace
 		}
 		if (!bUnderRoots && !bAllowExternal)
 		{
-			AddMessage(Messages, TEXT("external_source_blocked"), TEXT("Source file is outside project/content/saved roots. Pass allow_external=true only after caller-side policy allows it."));
+			AddMessage(
+				Messages,
+				bBlockedLinkTraversal ? TEXT("linked_source_blocked") : TEXT("external_source_blocked"),
+				bBlockedLinkTraversal
+					? TEXT("Source path traverses a symlink or junction below an allowed root. Use a direct path and allow_external=true only after caller-side policy allows it.")
+					: TEXT("Source file is outside project/content/saved roots. Pass allow_external=true only after caller-side policy allows it."));
 		}
 		if (!bDestinationValid)
 		{
-				AddMessage(Messages, TEXT("invalid_destination_path"), TEXT("destination_path must be a valid /Game long package path such as /Game/Imported."));
+			AddMessage(Messages, TEXT("invalid_destination_path"), TEXT("destination_path must be a valid /Game long package path such as /Game/Imported."));
 		}
-		if (ConflictPolicy != TEXT("fail") && ConflictPolicy != TEXT("overwrite") && ConflictPolicy != TEXT("rename") && ConflictPolicy != TEXT("reimport_only"))
+		if (ConflictPolicy != TEXT("fail") && ConflictPolicy != TEXT("overwrite") && ConflictPolicy != TEXT("rename"))
 		{
-			AddMessage(Messages, TEXT("invalid_conflict_policy"), TEXT("conflict_policy must be fail, overwrite, rename, or reimport_only."));
+			AddMessage(Messages, TEXT("invalid_conflict_policy"), TEXT("conflict_policy must be fail, overwrite, or rename."));
+		}
+		if (bMayProduceSecondaryAssets && bMultiSourceBatch)
+		{
+			AddMessage(
+				Messages,
+				TEXT("multi_output_batch_unsupported"),
+				TEXT("Scene and mesh sources can create secondary packages whose names are importer-defined. Import one such source at a time into a dedicated empty destination."));
+		}
+		if (bMayProduceSecondaryAssets &&
+			ConflictPolicy != TEXT("fail") &&
+			(ConflictPolicy == TEXT("overwrite") || ConflictPolicy == TEXT("rename")))
+		{
+			AddMessage(
+				Messages,
+				TEXT("multi_output_conflict_policy_unsupported"),
+				TEXT("Scene and mesh sources can create secondary packages, so overwrite and rename cannot be proven collision-safe. Use conflict_policy=fail with a dedicated empty destination."));
+		}
+		if (bMayProduceSecondaryAssets && bDestinationValid)
+		{
+			if (!DestinationInspection.bComplete)
+			{
+				AddMessage(
+					Messages,
+					TEXT("destination_emptiness_indeterminate"),
+					TEXT("Destination content could not be exhaustively inspected within the registry/object/filesystem bounds. Choose a new dedicated destination path."));
+			}
+			else if (!DestinationInspection.bEmpty)
+			{
+				AddMessage(
+					Messages,
+					TEXT("multi_output_destination_not_empty"),
+					FString::Printf(
+						TEXT("Scene and mesh imports require a dedicated empty destination; first conflict: %s"),
+						DestinationInspection.FirstConflict.IsEmpty()
+							? TEXT("<unknown>")
+							: *DestinationInspection.FirstConflict));
+			}
 		}
 		if (ConflictPolicy == TEXT("fail") && bLikelyConflict)
 		{
 			AddMessage(Messages, TEXT("destination_conflict"), FString::Printf(TEXT("Likely destination package already exists: %s"), *ExpectedPackage));
 		}
-		if (ConflictPolicy == TEXT("reimport_only"))
+		if (Format && !bFormatCompatible)
 		{
-			AddMessage(Messages, TEXT("reimport_only_not_supported_for_new_import"), TEXT("Use interchange.reimport_asset for reimport_only workflows."));
+			AddMessage(
+				Messages,
+				TEXT("typed_import_extension_mismatch"),
+				FString::Printf(
+					TEXT("Extension '%s' cannot satisfy requested import kind '%s'."),
+					*Extension,
+					ImportKindToString(RequestedKind)));
+		}
+		if (bFileExists && bFormatCompatible && !Backend.IsAvailable())
+		{
+			AddMessage(
+				Messages,
+				TEXT("importer_unavailable"),
+				FString::Printf(
+					TEXT("No registered Interchange translator or legacy factory can import '%s' as '%s'."),
+					*Extension,
+					ImportKindToString(RequestedKind)));
 		}
 
 		if (Messages.Num() > 0)
@@ -503,19 +1282,63 @@ namespace
 
 		if (bDryRun)
 		{
+			if (ProspectivePackages)
+			{
+				ProspectivePackages->Add(FName(*ResolvedPackage));
+			}
 			Row->SetStringField(TEXT("status"), TEXT("would_import"));
 			Row->SetArrayField(TEXT("messages"), Messages);
 			return Row;
 		}
 
-		UAutomatedAssetImportData* ImportData = NewObject<UAutomatedAssetImportData>();
-		ImportData->Filenames.Reset();
-		ImportData->Filenames.Add(NormalizedSource);
-		ImportData->DestinationPath = DestinationPath;
-		ImportData->bReplaceExisting = ConflictPolicy == TEXT("overwrite");
+		const bool bRequiresTypedResultValidation =
+			RequestedKind != ERequestedImportKind::Any &&
+			RequestedKind != ERequestedImportKind::Scene;
+		if (bRequiresTypedResultValidation)
+		{
+			// The snapshot only sees registry rows and loaded objects, so an
+			// existing-on-disk overwrite target must be loaded before it is taken
+			// or rollback would delete a pre-existing user asset.
+			EnsureDestinationPackageLoadedForSnapshot(ResolvedPackage);
+		}
+		const TSet<FName> PreExistingObjectPaths =
+			bRequiresTypedResultValidation
+				? SnapshotAssetObjectPathsUnder(DestinationPath)
+				: TSet<FName>();
 
+		UAssetImportTask* ImportTask = NewObject<UAssetImportTask>();
+		ImportTask->AddToRoot();
+		ImportTask->Filename = NormalizedSource;
+		ImportTask->DestinationPath = DestinationPath;
+		ImportTask->DestinationName = ResolvedAssetName;
+		ImportTask->bAutomated = true;
+		ImportTask->bAsync = false;
+		ImportTask->bSave = false;
+		ImportTask->bReplaceExisting = ConflictPolicy == TEXT("overwrite");
+		ImportTask->bReplaceExistingSettings = ConflictPolicy == TEXT("overwrite");
+		if (!Backend.bInterchangeTranslator && Backend.LegacyFactoryClass)
+		{
+			ImportTask->Factory = CreateConfiguredFactory(
+				ImportTask,
+				Backend.LegacyFactoryClass,
+				RequestedKind,
+				Extension);
+			if (UFbxFactory* FbxFactory = Cast<UFbxFactory>(ImportTask->Factory))
+			{
+				ImportTask->Options = FbxFactory->ImportUI;
+			}
+			if (ImportTask->Factory)
+			{
+				ImportTask->Factory->SetAssetImportTask(ImportTask);
+			}
+		}
+
+		TArray<UAssetImportTask*> ImportTasks;
+		ImportTasks.Add(ImportTask);
 		IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
-		TArray<UObject*> ImportedObjects = AssetTools.ImportAssetsAutomated(ImportData);
+		AssetTools.ImportAssetTasks(ImportTasks);
+		TArray<UObject*> ImportedObjects = ImportTask->GetObjects();
+		ImportTask->RemoveFromRoot();
 		if (ImportedObjects.Num() == 0)
 		{
 			AddMessage(Messages, TEXT("import_returned_no_objects"), TEXT("Unreal import returned no objects. Check file type, plugin availability, and import logs."));
@@ -525,15 +1348,101 @@ namespace
 		}
 
 		TArray<TSharedPtr<FJsonValue>> ImportedRows;
+		int32 MatchingKindCount = 0;
 		for (UObject* Imported : ImportedObjects)
 		{
 			ImportedRows.Add(MakeShared<FJsonValueObject>(AssetToJson(Imported)));
+			if (ImportedObjectMatchesKind(Imported, RequestedKind))
+			{
+				++MatchingKindCount;
+			}
 		}
-		Row->SetStringField(TEXT("status"), TEXT("imported"));
+		const TArray<TSharedPtr<FJsonValue>> DirtyPackagesBeforeValidation =
+			DirtyPackagesToJson(ImportedObjects);
+		if (bRequiresTypedResultValidation && MatchingKindCount == 0)
+		{
+			Row->SetArrayField(
+				TEXT("dirty_packages_before_rollback"),
+				DirtyPackagesBeforeValidation);
+			AddMessage(
+				Messages,
+				TEXT("typed_import_result_mismatch"),
+				FString::Printf(
+					TEXT("Importer returned objects but none satisfied requested kind '%s'."),
+					ImportKindToString(RequestedKind)));
+
+			const FMonolithInterchangeRollbackResult Rollback =
+				RollbackNewImportedObjects(ImportedObjects, PreExistingObjectPaths);
+			Row->SetBoolField(TEXT("rollback_attempted"), true);
+			Row->SetBoolField(TEXT("rollback_complete"), Rollback.IsComplete());
+			Row->SetNumberField(TEXT("rollback_candidate_count"), Rollback.CandidateCount);
+			Row->SetNumberField(TEXT("rollback_deleted_count"), Rollback.DeletedCount);
+			Row->SetArrayField(
+				TEXT("rollback_candidates"),
+				StringArrayToJson(Rollback.CandidateObjectPaths));
+			Row->SetArrayField(TEXT("rolled_back_assets"), StringArrayToJson(Rollback.DeletedObjectPaths));
+			Row->SetArrayField(
+				TEXT("pre_existing_import_results"),
+				StringArrayToJson(Rollback.PreExistingObjectPaths));
+			Row->SetArrayField(
+				TEXT("unmanaged_import_results"),
+				StringArrayToJson(Rollback.UnmanagedObjectPaths));
+
+			if (Rollback.IsComplete())
+			{
+				AddMessage(
+					Messages,
+					TEXT("typed_import_rollback_complete"),
+					TEXT("All newly imported assets were removed after typed result validation failed."));
+				Row->SetBoolField(TEXT("partial_mutation"), false);
+				Row->SetStringField(TEXT("status"), TEXT("error"));
+				Row->SetArrayField(
+					TEXT("dirty_packages"),
+					TArray<TSharedPtr<FJsonValue>>());
+			}
+			else
+			{
+				AddMessage(
+					Messages,
+					TEXT("typed_import_partial_mutation"),
+					TEXT("Typed result validation failed after Unreal returned pre-existing, unmanaged, or undeletable objects. The response is a partial mutation; inspect the reported assets before retrying."));
+				Row->SetBoolField(TEXT("partial_mutation"), true);
+				Row->SetStringField(TEXT("status"), TEXT("partial_import"));
+				Row->SetArrayField(TEXT("dirty_packages"), DirtyPackagesBeforeValidation);
+			}
+		}
+		else
+		{
+			Row->SetStringField(TEXT("status"), TEXT("imported"));
+			Row->SetArrayField(TEXT("dirty_packages"), DirtyPackagesBeforeValidation);
+		}
+		Row->SetNumberField(TEXT("matching_kind_count"), MatchingKindCount);
 		Row->SetArrayField(TEXT("imported_assets"), ImportedRows);
-		Row->SetArrayField(TEXT("dirty_packages"), DirtyPackagesToJson(ImportedObjects));
 		Row->SetArrayField(TEXT("messages"), Messages);
 		return Row;
+	}
+
+	FMonolithActionResult ImportSingleSource(
+		const TSharedPtr<FJsonObject>& Params,
+		ERequestedImportKind RequestedKind)
+	{
+		FString SourceFile;
+		if (!Params.IsValid() || !Params->TryGetStringField(TEXT("source_file"), SourceFile) || SourceFile.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("Missing required param 'source_file'"));
+		}
+
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> Rows;
+		Rows.Add(MakeShared<FJsonValueObject>(ImportOneSource(SourceFile, Params, RequestedKind)));
+		Result->SetArrayField(TEXT("rows"), Rows);
+		Result->SetNumberField(TEXT("row_count"), 1);
+		Result->SetStringField(TEXT("requested_import_kind"), ImportKindToString(RequestedKind));
+		Result->SetBoolField(
+			TEXT("dry_run"),
+			Params->HasTypedField<EJson::Boolean>(TEXT("dry_run")) &&
+			Params->GetBoolField(TEXT("dry_run")));
+		return FMonolithActionResult::Success(Result);
 	}
 
 	TSharedPtr<FJsonObject> ReimportOneAsset(const FString& AssetPathInput, const TSharedPtr<FJsonObject>& Params)
@@ -568,30 +1477,142 @@ namespace
 			AddMessage(Messages, TEXT("cannot_reimport"), TEXT("No registered reimport handler can reimport this asset."));
 		}
 
-		int32 SourceFileIndex = INDEX_NONE;
-		if (Params.IsValid() && Params->HasTypedField<EJson::Number>(TEXT("source_file_index")))
+		bool bAllowExternal = false;
+		if (Params.IsValid())
 		{
-			SourceFileIndex = Params->GetIntegerField(TEXT("source_file_index"));
+			Params->TryGetBoolField(TEXT("allow_external"), bAllowExternal);
+		}
+		Row->SetBoolField(TEXT("allow_external"), bAllowExternal);
+
+		int32 SourceFileIndex = INDEX_NONE;
+		TryReadOptionalSourceFileIndex(Params, SourceFileIndex, Messages);
+		Row->SetNumberField(TEXT("source_file_index"), SourceFileIndex);
+		if (SourceFileIndex != INDEX_NONE && !SourceFilenames.IsValidIndex(SourceFileIndex))
+		{
+			AddMessage(
+				Messages,
+				TEXT("invalid_source_file_index"),
+				FString::Printf(
+					TEXT("source_file_index %d is outside the available range 0..%d."),
+					SourceFileIndex,
+					SourceFilenames.Num() - 1));
 		}
 
 		FString PreferredSource;
-		if (Params.IsValid())
+		const bool bPreferredSourceProvided =
+			Params.IsValid() && Params->HasField(TEXT("source_file"));
+		if (bPreferredSourceProvided)
 		{
-			Params->TryGetStringField(TEXT("source_file"), PreferredSource);
+			if (!Params->HasTypedField<EJson::String>(TEXT("source_file")))
+			{
+				AddMessage(
+					Messages,
+					TEXT("invalid_source_file"),
+					TEXT("Optional param 'source_file' must be a non-empty string when provided."));
+			}
+			else
+			{
+				PreferredSource = Params->GetStringField(TEXT("source_file"));
+				PreferredSource.TrimStartAndEndInline();
+				if (PreferredSource.IsEmpty())
+				{
+					AddMessage(
+						Messages,
+						TEXT("invalid_source_file"),
+						TEXT("Optional param 'source_file' must be a non-empty string when provided."));
+				}
+			}
 		}
+		const bool bReplacesAllSources = !PreferredSource.IsEmpty() && SourceFileIndex == INDEX_NONE;
+
+		TArray<TSharedPtr<FJsonValue>> ValidatedSourceRows;
+		for (int32 Index = 0; Index < SourceFilenames.Num(); ++Index)
+		{
+			const bool bSourceWillBeReplaced =
+				bReplacesAllSources ||
+				(!PreferredSource.IsEmpty() && SourceFileIndex == Index);
+			const FString NormalizedStoredSource = NormalizeSourceFile(SourceFilenames[Index]);
+			const bool bStoredSourceExists = FPaths::FileExists(NormalizedStoredSource);
+			const bool bStoredSourceUnderRoots = IsUnderDefaultImportRoots(NormalizedStoredSource);
+			const bool bStoredSourceBlockedLink = HasBlockedLinkTraversal(NormalizedStoredSource);
+
+			TSharedPtr<FJsonObject> SourceRow = MakeShared<FJsonObject>();
+			SourceRow->SetNumberField(TEXT("index"), Index);
+			SourceRow->SetStringField(TEXT("filename"), SourceFilenames[Index]);
+			SourceRow->SetStringField(TEXT("normalized_filename"), NormalizedStoredSource);
+			SourceRow->SetBoolField(TEXT("exists"), bStoredSourceExists);
+			SourceRow->SetBoolField(TEXT("under_default_roots"), bStoredSourceUnderRoots);
+			SourceRow->SetBoolField(TEXT("blocked_link_traversal"), bStoredSourceBlockedLink);
+			SourceRow->SetBoolField(TEXT("will_be_replaced"), bSourceWillBeReplaced);
+			ValidatedSourceRows.Add(MakeShared<FJsonValueObject>(SourceRow));
+
+			if (!bSourceWillBeReplaced && !bStoredSourceExists)
+			{
+				AddMessage(
+					Messages,
+					TEXT("source_missing"),
+					FString::Printf(TEXT("Stored reimport source does not exist: %s"), *NormalizedStoredSource));
+			}
+			if (!bSourceWillBeReplaced && !bStoredSourceUnderRoots && !bAllowExternal)
+			{
+				AddMessage(
+					Messages,
+					bStoredSourceBlockedLink ? TEXT("linked_source_blocked") : TEXT("external_source_blocked"),
+					bStoredSourceBlockedLink
+						? FString::Printf(
+							TEXT("Stored reimport source traverses a symlink or junction below an allowed root: %s"),
+							*NormalizedStoredSource)
+						: FString::Printf(
+							TEXT("Stored reimport source is outside project/content/saved roots: %s"),
+							*NormalizedStoredSource));
+			}
+		}
+		Row->SetArrayField(TEXT("validated_source_files"), ValidatedSourceRows);
+
 		if (!PreferredSource.IsEmpty())
 		{
-			bool bAllowExternal = false;
-			Params->TryGetBoolField(TEXT("allow_external"), bAllowExternal);
 			const FString NormalizedSource = NormalizeSourceFile(PreferredSource);
-			if (!FPaths::FileExists(NormalizedSource))
+			const bool bReplacementExists = FPaths::FileExists(NormalizedSource);
+			if (!bReplacementExists)
 			{
 				AddMessage(Messages, TEXT("source_missing"), FString::Printf(TEXT("Source file does not exist: %s"), *NormalizedSource));
 			}
 			if (!IsUnderDefaultImportRoots(NormalizedSource) && !bAllowExternal)
 			{
-				AddMessage(Messages, TEXT("external_source_blocked"), TEXT("Source file is outside project/content/saved roots. Pass allow_external=true only after caller-side policy allows it."));
+				const bool bBlockedLinkTraversal = HasBlockedLinkTraversal(NormalizedSource);
+				AddMessage(
+					Messages,
+					bBlockedLinkTraversal ? TEXT("linked_source_blocked") : TEXT("external_source_blocked"),
+					bBlockedLinkTraversal
+						? TEXT("Replacement source traverses a symlink or junction below an allowed root.")
+						: TEXT("Source file is outside project/content/saved roots. Pass allow_external=true only after caller-side policy allows it."));
 			}
+
+			ERequestedImportKind ReplacementKind = ERequestedImportKind::Any;
+			FString CompatibilityReason;
+			const bool bReplacementCompatible = IsReplacementSourceCompatible(
+				Asset,
+				NormalizedSource,
+				SourceFilenames,
+				ReplacementKind,
+				CompatibilityReason);
+			Row->SetStringField(
+				TEXT("replacement_import_kind"),
+				ImportKindToString(ReplacementKind));
+			Row->SetBoolField(
+				TEXT("replacement_source_compatible"),
+				bReplacementCompatible);
+			Row->SetStringField(
+				TEXT("replacement_compatibility_reason"),
+				CompatibilityReason);
+			if (!bReplacementCompatible)
+			{
+				AddMessage(
+					Messages,
+					TEXT("replacement_source_incompatible"),
+					CompatibilityReason);
+			}
+
 			PreferredSource = NormalizedSource;
 			Row->SetStringField(TEXT("preferred_source_file"), PreferredSource);
 		}
@@ -641,7 +1662,7 @@ void FMonolithInterchangeActions::RegisterActions(FMonolithToolRegistry& Registr
 		FParamSchemaBuilder().Build());
 
 	Registry.RegisterAction(TEXT("interchange"), TEXT("can_import"),
-		TEXT("Validate whether a source file can be handed to an Interchange import workflow."),
+		TEXT("Validate whether a registered Interchange translator or legacy factory can import a source file."),
 		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::CanImport),
 		FParamSchemaBuilder()
 			.Required(TEXT("source_file"), TEXT("string"), TEXT("Source file to validate"))
@@ -650,7 +1671,7 @@ void FMonolithInterchangeActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Build());
 
 	Registry.RegisterAction(TEXT("interchange"), TEXT("can_reimport"),
-		TEXT("Check whether an existing asset has source import data usable for reimport."),
+		TEXT("Check whether Unreal's reimport manager has a handler for an existing asset."),
 		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::CanReimport),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to inspect"))
@@ -666,11 +1687,10 @@ void FMonolithInterchangeActions::RegisterActions(FMonolithToolRegistry& Registr
 	auto ImportSchema = FParamSchemaBuilder()
 		.Required(TEXT("source_file"), TEXT("string"), TEXT("Source file to import"))
 		.Required(TEXT("destination_path"), TEXT("string"), TEXT("Destination content folder such as /Game/Imported"))
-		.Required(TEXT("conflict_policy"), TEXT("string"), TEXT("fail, overwrite, rename, or reimport_only"))
+		.Required(TEXT("conflict_policy"), TEXT("string"), TEXT("fail, overwrite, or rename"))
 		.Optional(TEXT("allow_external"), TEXT("boolean"), TEXT("Allow source files outside project/content/saved roots"), TEXT("false"))
 		.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required for mutation unless dry_run=true"), TEXT("false"))
 		.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Validate without creating packages"), TEXT("false"))
-		.Optional(TEXT("options"), TEXT("object"), TEXT("Forward-compatible pipeline options echoed in import_with_options responses"))
 		.Build();
 
 	Registry.RegisterAction(TEXT("interchange"), TEXT("import_asset"),
@@ -684,36 +1704,31 @@ void FMonolithInterchangeActions::RegisterActions(FMonolithToolRegistry& Registr
 		FParamSchemaBuilder()
 			.Required(TEXT("source_files"), TEXT("array"), TEXT("Source files to import"))
 			.Required(TEXT("destination_path"), TEXT("string"), TEXT("Destination content folder such as /Game/Imported"))
-			.Required(TEXT("conflict_policy"), TEXT("string"), TEXT("fail, overwrite, rename, or reimport_only"))
+			.Required(TEXT("conflict_policy"), TEXT("string"), TEXT("fail, overwrite, or rename"))
 			.Optional(TEXT("allow_external"), TEXT("boolean"), TEXT("Allow source files outside project/content/saved roots"), TEXT("false"))
 			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required for mutation unless dry_run=true"), TEXT("false"))
 			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Validate without creating packages"), TEXT("false"))
-			.Optional(TEXT("options"), TEXT("object"), TEXT("Forward-compatible pipeline options echoed in the response"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("interchange"), TEXT("import_scene"),
-		TEXT("Typed scene import entrypoint over the guarded Interchange import implementation."),
-		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ImportAsset),
+		TEXT("Import only a scene-capable source through a registered scene importer."),
+		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ImportScene),
 		ImportSchema);
 	Registry.RegisterAction(TEXT("interchange"), TEXT("import_mesh"),
-		TEXT("Typed mesh import entrypoint over the guarded Interchange import implementation."),
-		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ImportAsset),
+		TEXT("Import a static mesh with an explicitly configured mesh factory."),
+		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ImportMesh),
 		ImportSchema);
 	Registry.RegisterAction(TEXT("interchange"), TEXT("import_skeletal_mesh"),
-		TEXT("Typed skeletal mesh import entrypoint over the guarded Interchange import implementation."),
-		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ImportAsset),
+		TEXT("Import an FBX skeletal mesh with skeletal detection fixed before import."),
+		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ImportSkeletalMesh),
 		ImportSchema);
 	Registry.RegisterAction(TEXT("interchange"), TEXT("import_texture"),
-		TEXT("Typed texture import entrypoint over the guarded Interchange import implementation."),
-		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ImportAsset),
+		TEXT("Import only a texture source through a registered texture importer."),
+		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ImportTexture),
 		ImportSchema);
 	Registry.RegisterAction(TEXT("interchange"), TEXT("import_audio"),
-		TEXT("Typed audio import entrypoint over the guarded Interchange import implementation."),
-		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ImportAsset),
-		ImportSchema);
-	Registry.RegisterAction(TEXT("interchange"), TEXT("import_with_options"),
-		TEXT("Guarded import entrypoint that accepts a forward-compatible options object."),
-		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ImportAsset),
+		TEXT("Import only a wave-audio source through a registered audio importer."),
+		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ImportAudio),
 		ImportSchema);
 
 	Registry.RegisterAction(TEXT("interchange"), TEXT("update_reimport_path"),
@@ -745,12 +1760,13 @@ void FMonolithInterchangeActions::RegisterActions(FMonolithToolRegistry& Registr
 		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ReimportAssets),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_paths"), TEXT("array"), TEXT("Asset paths to reimport"))
+			.Optional(TEXT("allow_external"), TEXT("boolean"), TEXT("Allow stored source files outside project/content/saved roots"), TEXT("false"))
 			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required for mutation unless dry_run=true"), TEXT("false"))
 			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Validate without reimporting"), TEXT("false"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("interchange"), TEXT("export_asset"),
-		TEXT("Export one asset to a local file through UAssetExportTask after path validation."),
+		TEXT("Export one asset through a matching UExporter after output-path validation."),
 		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ExportAsset),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to export"))
@@ -779,14 +1795,13 @@ FMonolithActionResult FMonolithInterchangeActions::GetSupportedFormats(const TSh
 		TEXT("interchange.import_skeletal_mesh"),
 		TEXT("interchange.import_texture"),
 		TEXT("interchange.import_audio"),
-		TEXT("interchange.import_with_options"),
 		TEXT("interchange.update_reimport_path"),
 		TEXT("interchange.reimport_asset"),
 		TEXT("interchange.reimport_assets"),
 		TEXT("interchange.export_asset")
 	};
 	Result->SetArrayField(TEXT("implemented_mutation_actions"), StringArrayToJson(ImplementedMutationActions));
-	Result->SetStringField(TEXT("policy"), TEXT("Import, reimport, and export mutations require confirm=true unless dry_run=true. File roots, destination packages, and conflict_policy are validated before writes."));
+	Result->SetStringField(TEXT("policy"), TEXT("Import, reimport, and export mutations require confirm=true unless dry_run=true. Concrete backends, link-safe file roots, destination packages, and conflict_policy are validated before writes."));
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -803,17 +1818,28 @@ FMonolithActionResult FMonolithInterchangeActions::CanImport(const TSharedPtr<FJ
 
 	FString DestinationPath;
 	Params->TryGetStringField(TEXT("destination_path"), DestinationPath);
+	DestinationPath = NormalizePackageFolder(DestinationPath);
 
 	const FString NormalizedSource = NormalizeSourceFile(SourceFile);
 	const FString Extension = FPaths::GetExtension(NormalizedSource, false).ToLower();
 	const FInterchangeFormatDef* Format = FindFormatDef(Extension);
 	const bool bFileExists = FPaths::FileExists(NormalizedSource);
+	const bool bLexicallyUnderRoots = IsLexicallyUnderDefaultImportRoots(NormalizedSource);
 	const bool bUnderRoots = IsUnderDefaultImportRoots(NormalizedSource);
+	const bool bBlockedLinkTraversal = HasBlockedLinkTraversal(NormalizedSource);
 	const bool bDestinationValid = !DestinationPath.IsEmpty()
 		? FPackageName::IsValidLongPackageName(DestinationPath, false) && IsGamePackagePath(DestinationPath)
 		: true;
-	const bool bInterchangeAvailable = IsInterchangeAvailable();
-	const bool bCanImport = bInterchangeAvailable && bFileExists && Format != nullptr && (bAllowExternal || bUnderRoots) && bDestinationValid;
+	const FImportBackendAvailability Backend =
+		bFileExists && Format
+			? GetImportBackendAvailability(NormalizedSource, ERequestedImportKind::Any)
+			: FImportBackendAvailability();
+	const bool bCanImport =
+		bFileExists &&
+		Format != nullptr &&
+		Backend.IsAvailable() &&
+		(bAllowExternal || bUnderRoots) &&
+		bDestinationValid;
 
 	TArray<TSharedPtr<FJsonValue>> Issues;
 	auto AddIssue = [&Issues](const FString& Code, const FString& Message)
@@ -824,10 +1850,6 @@ FMonolithActionResult FMonolithInterchangeActions::CanImport(const TSharedPtr<FJ
 		Issues.Add(MakeShared<FJsonValueObject>(Issue));
 	};
 
-	if (!bInterchangeAvailable)
-	{
-		AddIssue(TEXT("interchange_unavailable"), TEXT("No Interchange module was found in the current engine/project module set."));
-	}
 	if (!bFileExists)
 	{
 		AddIssue(TEXT("source_missing"), FString::Printf(TEXT("Source file does not exist: %s"), *NormalizedSource));
@@ -838,21 +1860,39 @@ FMonolithActionResult FMonolithInterchangeActions::CanImport(const TSharedPtr<FJ
 	}
 	if (!bUnderRoots && !bAllowExternal)
 	{
-		AddIssue(TEXT("external_source_blocked"), TEXT("Source file is outside project/content/saved roots. Pass allow_external=true only after caller-side policy allows it."));
+		AddIssue(
+			bBlockedLinkTraversal ? TEXT("linked_source_blocked") : TEXT("external_source_blocked"),
+			bBlockedLinkTraversal
+				? TEXT("Source path traverses a symlink or junction below an allowed root. Use a direct path and allow_external=true only after caller-side policy allows it.")
+				: TEXT("Source file is outside project/content/saved roots. Pass allow_external=true only after caller-side policy allows it."));
 	}
 	if (!bDestinationValid)
 	{
-		AddIssue(TEXT("invalid_destination_path"), TEXT("destination_path must be a valid /Game long package path such as /Game/Imported/MyAsset."));
+		AddIssue(TEXT("invalid_destination_path"), TEXT("destination_path must be a valid /Game content folder such as /Game/Imported."));
+	}
+	if (bFileExists && Format && !Backend.IsAvailable())
+	{
+		AddIssue(
+			TEXT("importer_unavailable"),
+			FString::Printf(
+				TEXT("No registered Interchange translator or legacy factory can import extension '%s'."),
+				*Extension));
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("can_import"), bCanImport);
-	Result->SetBoolField(TEXT("interchange_available"), bInterchangeAvailable);
+	Result->SetBoolField(TEXT("interchange_available"), IsInterchangeAvailable());
+	Result->SetBoolField(TEXT("interchange_translator_available"), Backend.bInterchangeTranslator);
+	Result->SetStringField(
+		TEXT("legacy_factory_class"),
+		Backend.LegacyFactoryClass ? Backend.LegacyFactoryClass->GetPathName() : FString());
 	Result->SetStringField(TEXT("source_file"), SourceFile);
 	Result->SetStringField(TEXT("normalized_source_file"), NormalizedSource);
 	Result->SetStringField(TEXT("extension"), Extension);
 	Result->SetBoolField(TEXT("source_exists"), bFileExists);
+	Result->SetBoolField(TEXT("lexically_under_default_roots"), bLexicallyUnderRoots);
 	Result->SetBoolField(TEXT("under_default_roots"), bUnderRoots);
+	Result->SetBoolField(TEXT("blocked_link_traversal"), bBlockedLinkTraversal);
 	Result->SetBoolField(TEXT("allow_external"), bAllowExternal);
 	Result->SetObjectField(TEXT("destination"), ValidateDestinationPackage(DestinationPath));
 	Result->SetArrayField(TEXT("issues"), Issues);
@@ -874,8 +1914,11 @@ FMonolithActionResult FMonolithInterchangeActions::CanReimport(const TSharedPtr<
 		return FMonolithActionResult::Error(Error);
 	}
 
+	TArray<FString> HandlerSourceFiles;
+	const bool bHandlerCanReimport =
+		FReimportManager::Instance()->CanReimport(Asset, &HandlerSourceFiles);
 	const UAssetImportData* ImportData = FindAssetImportData(Asset);
-	TArray<TSharedPtr<FJsonValue>> SourceFiles = SourceFilesToJson(ImportData);
+	TArray<TSharedPtr<FJsonValue>> SourceFiles = SourceFilesToJson(HandlerSourceFiles);
 	bool bAnyExistingSource = false;
 	for (const TSharedPtr<FJsonValue>& Value : SourceFiles)
 	{
@@ -892,7 +1935,9 @@ FMonolithActionResult FMonolithInterchangeActions::CanReimport(const TSharedPtr<
 	Result->SetStringField(TEXT("asset_path"), AssetPath);
 	Result->SetStringField(TEXT("asset_class"), Asset->GetClass()->GetName());
 	Result->SetBoolField(TEXT("has_import_data"), ImportData != nullptr);
-	Result->SetBoolField(TEXT("can_reimport"), ImportData != nullptr && bAnyExistingSource && IsInterchangeAvailable());
+	Result->SetBoolField(TEXT("can_reimport"), bHandlerCanReimport);
+	Result->SetBoolField(TEXT("handler_available"), bHandlerCanReimport);
+	Result->SetBoolField(TEXT("any_source_exists"), bAnyExistingSource);
 	Result->SetBoolField(TEXT("interchange_available"), IsInterchangeAvailable());
 	Result->SetNumberField(TEXT("source_file_count"), SourceFiles.Num());
 	Result->SetArrayField(TEXT("source_files"), SourceFiles);
@@ -920,23 +1965,7 @@ FMonolithActionResult FMonolithInterchangeActions::GetImportData(const TSharedPt
 
 FMonolithActionResult FMonolithInterchangeActions::ImportAsset(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SourceFile;
-	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("source_file"), SourceFile) || SourceFile.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'source_file'"));
-	}
-
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	TArray<TSharedPtr<FJsonValue>> Rows;
-	Rows.Add(MakeShared<FJsonValueObject>(ImportOneSource(SourceFile, Params)));
-	Result->SetArrayField(TEXT("rows"), Rows);
-	Result->SetNumberField(TEXT("row_count"), 1);
-	Result->SetBoolField(TEXT("dry_run"), Params->HasTypedField<EJson::Boolean>(TEXT("dry_run")) && Params->GetBoolField(TEXT("dry_run")));
-	if (Params->HasTypedField<EJson::Object>(TEXT("options")))
-	{
-		Result->SetObjectField(TEXT("options"), Params->GetObjectField(TEXT("options")));
-	}
-	return FMonolithActionResult::Success(Result);
+	return ImportSingleSource(Params, ERequestedImportKind::Any);
 }
 
 FMonolithActionResult FMonolithInterchangeActions::ImportAssets(const TSharedPtr<FJsonObject>& Params)
@@ -950,20 +1979,52 @@ FMonolithActionResult FMonolithInterchangeActions::ImportAssets(const TSharedPtr
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
 	Rows.Reserve(SourceFiles.Num());
+	TSet<FName> ProspectivePackages;
+	const bool bDryRun =
+		Params.IsValid() &&
+		Params->HasTypedField<EJson::Boolean>(TEXT("dry_run")) &&
+		Params->GetBoolField(TEXT("dry_run"));
 	for (const FString& SourceFile : SourceFiles)
 	{
-		Rows.Add(MakeShared<FJsonValueObject>(ImportOneSource(SourceFile, Params)));
+		Rows.Add(MakeShared<FJsonValueObject>(
+			ImportOneSource(
+				SourceFile,
+				Params,
+				ERequestedImportKind::Any,
+				bDryRun ? &ProspectivePackages : nullptr,
+				SourceFiles.Num() > 1)));
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetArrayField(TEXT("rows"), Rows);
 	Result->SetNumberField(TEXT("row_count"), Rows.Num());
-	Result->SetBoolField(TEXT("dry_run"), Params->HasTypedField<EJson::Boolean>(TEXT("dry_run")) && Params->GetBoolField(TEXT("dry_run")));
-	if (Params->HasTypedField<EJson::Object>(TEXT("options")))
-	{
-		Result->SetObjectField(TEXT("options"), Params->GetObjectField(TEXT("options")));
-	}
+	Result->SetBoolField(TEXT("dry_run"), bDryRun);
 	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithInterchangeActions::ImportScene(const TSharedPtr<FJsonObject>& Params)
+{
+	return ImportSingleSource(Params, ERequestedImportKind::Scene);
+}
+
+FMonolithActionResult FMonolithInterchangeActions::ImportMesh(const TSharedPtr<FJsonObject>& Params)
+{
+	return ImportSingleSource(Params, ERequestedImportKind::StaticMesh);
+}
+
+FMonolithActionResult FMonolithInterchangeActions::ImportSkeletalMesh(const TSharedPtr<FJsonObject>& Params)
+{
+	return ImportSingleSource(Params, ERequestedImportKind::SkeletalMesh);
+}
+
+FMonolithActionResult FMonolithInterchangeActions::ImportTexture(const TSharedPtr<FJsonObject>& Params)
+{
+	return ImportSingleSource(Params, ERequestedImportKind::Texture);
+}
+
+FMonolithActionResult FMonolithInterchangeActions::ImportAudio(const TSharedPtr<FJsonObject>& Params)
+{
+	return ImportSingleSource(Params, ERequestedImportKind::Audio);
 }
 
 FMonolithActionResult FMonolithInterchangeActions::UpdateReimportPath(const TSharedPtr<FJsonObject>& Params)
@@ -988,19 +2049,46 @@ FMonolithActionResult FMonolithInterchangeActions::UpdateReimportPath(const TSha
 	bool bAllowExternal = false;
 	Params->TryGetBoolField(TEXT("allow_external"), bAllowExternal);
 	const FString NormalizedSource = NormalizeSourceFile(SourceFile);
+	const bool bSourceExists = !NormalizedSource.IsEmpty() && FPaths::FileExists(NormalizedSource);
+	const bool bUnderRoots = !NormalizedSource.IsEmpty() && IsUnderDefaultImportRoots(NormalizedSource);
+	const bool bBlockedLinkTraversal = !NormalizedSource.IsEmpty() && HasBlockedLinkTraversal(NormalizedSource);
 	if (!SourceFile.IsEmpty() && !FPaths::FileExists(NormalizedSource))
 	{
 		AddMessage(Messages, TEXT("source_missing"), FString::Printf(TEXT("Source file does not exist: %s"), *NormalizedSource));
 	}
-	if (!SourceFile.IsEmpty() && !IsUnderDefaultImportRoots(NormalizedSource) && !bAllowExternal)
+	if (!SourceFile.IsEmpty() && !bUnderRoots && !bAllowExternal)
 	{
-		AddMessage(Messages, TEXT("external_source_blocked"), TEXT("Source file is outside project/content/saved roots. Pass allow_external=true only after caller-side policy allows it."));
+		AddMessage(
+			Messages,
+			bBlockedLinkTraversal ? TEXT("linked_source_blocked") : TEXT("external_source_blocked"),
+			bBlockedLinkTraversal
+				? TEXT("Source path traverses a symlink or junction below an allowed root. Use a direct path and allow_external=true only after caller-side policy allows it.")
+				: TEXT("Source file is outside project/content/saved roots. Pass allow_external=true only after caller-side policy allows it."));
 	}
 
 	int32 SourceFileIndex = INDEX_NONE;
-	if (Params.IsValid() && Params->HasTypedField<EJson::Number>(TEXT("source_file_index")))
+	TryReadOptionalSourceFileIndex(Params, SourceFileIndex, Messages);
+	if (SourceFileIndex < INDEX_NONE)
 	{
-		SourceFileIndex = Params->GetIntegerField(TEXT("source_file_index"));
+		AddMessage(Messages, TEXT("invalid_source_file_index"), TEXT("source_file_index must be -1 or a zero-based source index."));
+	}
+
+	TArray<FString> ExistingSourceFiles;
+	const bool bCanReimport =
+		FReimportManager::Instance()->CanReimport(Asset, &ExistingSourceFiles);
+	if (!bCanReimport)
+	{
+		AddMessage(Messages, TEXT("cannot_reimport"), TEXT("No registered reimport handler can update this asset's source path."));
+	}
+	if (SourceFileIndex >= 0 && !ExistingSourceFiles.IsValidIndex(SourceFileIndex))
+	{
+		AddMessage(
+			Messages,
+			TEXT("invalid_source_file_index"),
+			FString::Printf(
+				TEXT("source_file_index %d is outside the available range 0..%d."),
+				SourceFileIndex,
+				ExistingSourceFiles.Num() - 1));
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -1009,6 +2097,12 @@ FMonolithActionResult FMonolithInterchangeActions::UpdateReimportPath(const TSha
 	Result->SetStringField(TEXT("source_file"), SourceFile);
 	Result->SetStringField(TEXT("normalized_source_file"), NormalizedSource);
 	Result->SetNumberField(TEXT("source_file_index"), SourceFileIndex);
+	Result->SetBoolField(TEXT("source_exists"), bSourceExists);
+	Result->SetBoolField(TEXT("under_default_roots"), bUnderRoots);
+	Result->SetBoolField(TEXT("blocked_link_traversal"), bBlockedLinkTraversal);
+	Result->SetBoolField(TEXT("allow_external"), bAllowExternal);
+	Result->SetBoolField(TEXT("can_reimport"), bCanReimport);
+	Result->SetArrayField(TEXT("previous_source_files"), SourceFilesToJson(ExistingSourceFiles));
 	Result->SetBoolField(TEXT("dry_run"), bDryRun);
 
 	if (Messages.Num() > 0)
@@ -1025,9 +2119,88 @@ FMonolithActionResult FMonolithInterchangeActions::UpdateReimportPath(const TSha
 	}
 
 	FReimportManager::Instance()->UpdateReimportPath(Asset, NormalizedSource, SourceFileIndex);
-	Result->SetStringField(TEXT("status"), TEXT("updated_reimport_path"));
+	TArray<FString> UpdatedSourceFiles;
+	const bool bCanReimportAfterUpdate =
+		FReimportManager::Instance()->CanReimport(Asset, &UpdatedSourceFiles);
+	const int32 ExpectedIndex = SourceFileIndex == INDEX_NONE ? 0 : SourceFileIndex;
+	bool bReadbackMatches = bCanReimportAfterUpdate && UpdatedSourceFiles.IsValidIndex(ExpectedIndex);
+	if (bReadbackMatches)
+	{
+		const FString NormalizedReadback = NormalizeSourceFile(UpdatedSourceFiles[ExpectedIndex]);
+#if PLATFORM_WINDOWS
+		bReadbackMatches = NormalizedReadback.Equals(NormalizedSource, ESearchCase::IgnoreCase);
+#else
+		bReadbackMatches = NormalizedReadback.Equals(NormalizedSource, ESearchCase::CaseSensitive);
+#endif
+	}
+
+	Result->SetBoolField(TEXT("can_reimport_after_update"), bCanReimportAfterUpdate);
+	Result->SetBoolField(TEXT("readback_matches"), bReadbackMatches);
+
+	bool bPreviousPathsRestored = false;
+	if (!bReadbackMatches)
+	{
+		// UpdateReimportPath has already mutated the asset. Returning a bare
+		// "error" would let a caller treat this as a no-op and retry against
+		// changed metadata, so the previous path is restored when possible and the
+		// resulting state is reported explicitly.
+		if (ExistingSourceFiles.IsValidIndex(ExpectedIndex))
+		{
+			const FString PreviousSource = ExistingSourceFiles[ExpectedIndex];
+			FReimportManager::Instance()->UpdateReimportPath(
+				Asset,
+				PreviousSource,
+				SourceFileIndex);
+
+			TArray<FString> RestoredSourceFiles;
+			if (FReimportManager::Instance()->CanReimport(Asset, &RestoredSourceFiles)
+				&& RestoredSourceFiles.IsValidIndex(ExpectedIndex))
+			{
+				const FString NormalizedRestored =
+					NormalizeSourceFile(RestoredSourceFiles[ExpectedIndex]);
+				const FString NormalizedPrevious = NormalizeSourceFile(PreviousSource);
+#if PLATFORM_WINDOWS
+				bPreviousPathsRestored = NormalizedRestored.Equals(
+					NormalizedPrevious,
+					ESearchCase::IgnoreCase);
+#else
+				bPreviousPathsRestored = NormalizedRestored.Equals(
+					NormalizedPrevious,
+					ESearchCase::CaseSensitive);
+#endif
+				UpdatedSourceFiles = MoveTemp(RestoredSourceFiles);
+			}
+		}
+
+		Result->SetBoolField(TEXT("mutation_committed"), true);
+		Result->SetBoolField(
+			TEXT("previous_source_files_restored"),
+			bPreviousPathsRestored);
+		Result->SetBoolField(TEXT("partial_mutation"), !bPreviousPathsRestored);
+
+		AddMessage(
+			Messages,
+			TEXT("reimport_path_readback_mismatch"),
+			TEXT("The registered reimport handler did not report the requested source path after UpdateReimportPath."));
+		if (!bPreviousPathsRestored)
+		{
+			AddMessage(
+				Messages,
+				TEXT("reimport_path_rollback_failed"),
+				TEXT("The previous source path could not be restored; the asset's reimport metadata is in an indeterminate state and must not be retried blindly."));
+		}
+	}
+
+	Result->SetStringField(
+		TEXT("status"),
+		bReadbackMatches
+			? TEXT("updated_reimport_path")
+			: (bPreviousPathsRestored ? TEXT("error") : TEXT("partial_mutation")));
 	Result->SetArrayField(TEXT("messages"), Messages);
-	Result->SetArrayField(TEXT("source_files"), SourceFilesToJson(FindAssetImportData(Asset)));
+	Result->SetArrayField(TEXT("source_files"), SourceFilesToJson(UpdatedSourceFiles));
+	TArray<UObject*> Objects;
+	Objects.Add(Asset);
+	Result->SetArrayField(TEXT("dirty_packages"), DirtyPackagesToJson(Objects));
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -1098,13 +2271,38 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 	bool bReplaceExisting = false;
 	Params->TryGetBoolField(TEXT("replace_existing"), bReplaceExisting);
 	const bool bFileExists = !NormalizedFilePath.IsEmpty() && FPaths::FileExists(NormalizedFilePath);
+	const bool bPathIsDirectory =
+		!NormalizedFilePath.IsEmpty() &&
+		IFileManager::Get().DirectoryExists(*NormalizedFilePath);
 	if (!NormalizedFilePath.IsEmpty() && !ValidateOutputFileRoot(NormalizedFilePath, bAllowExternal))
 	{
 		AddMessage(Messages, TEXT("external_output_blocked"), TEXT("Output path is outside project/content/saved roots. Pass allow_external=true only after caller-side policy allows it."));
 	}
+	if (bPathIsDirectory)
+	{
+		AddMessage(
+			Messages,
+			TEXT("output_path_is_directory"),
+			TEXT("file_path resolves to an existing directory, not a writable output file."));
+	}
 	if (bFileExists && !bReplaceExisting)
 	{
 		AddMessage(Messages, TEXT("output_exists"), TEXT("Output file already exists and replace_existing=false."));
+	}
+	const FString Extension = FPaths::GetExtension(NormalizedFilePath, false);
+	UExporter* Exporter = Extension.IsEmpty()
+		? UExporter::FindExporter(Asset, TEXT(""))
+		: UExporter::FindExporter(Asset, *Extension);
+	if (!Exporter)
+	{
+		AddMessage(
+			Messages,
+			TEXT("exporter_unavailable"),
+			FString::Printf(
+				TEXT("No exporter can write asset %s (%s) to extension '%s'."),
+				*AssetPath,
+				*Asset->GetClass()->GetName(),
+				*Extension));
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -1112,8 +2310,11 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 	Result->SetStringField(TEXT("asset_class"), Asset->GetClass()->GetName());
 	Result->SetStringField(TEXT("file_path"), NormalizedFilePath);
 	Result->SetBoolField(TEXT("file_exists"), bFileExists);
+	Result->SetBoolField(TEXT("path_is_directory"), bPathIsDirectory);
 	Result->SetBoolField(TEXT("replace_existing"), bReplaceExisting);
 	Result->SetBoolField(TEXT("dry_run"), bDryRun);
+	Result->SetBoolField(TEXT("exporter_available"), Exporter != nullptr);
+	Result->SetStringField(TEXT("exporter_class"), Exporter ? Exporter->GetClass()->GetPathName() : FString());
 
 	if (Messages.Num() > 0)
 	{
@@ -1126,17 +2327,6 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 		Result->SetStringField(TEXT("status"), TEXT("would_export"));
 		Result->SetArrayField(TEXT("messages"), Messages);
 		return FMonolithActionResult::Success(Result);
-	}
-
-	const FString Extension = FPaths::GetExtension(NormalizedFilePath, false);
-	UExporter* Exporter = UExporter::FindExporter(Asset, *Extension);
-	if (!Exporter)
-	{
-		Exporter = UExporter::FindExporter(Asset, TEXT(""));
-	}
-	if (!Exporter)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("No exporter found for asset %s (%s)"), *AssetPath, *Asset->GetClass()->GetName()));
 	}
 
 	const FString OutDir = FPaths::GetPath(NormalizedFilePath);

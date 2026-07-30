@@ -36,5 +36,10 @@ public class MonolithCore : ModuleRules
 		{
 			PublicSystemLibraries.Add("bcrypt.lib");
 		}
+
+		PrivateDependencyModuleNames.AddRange(new string[]
+		{
+			"SourceControl"
+		});
 	}
 }

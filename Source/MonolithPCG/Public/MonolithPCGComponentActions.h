@@ -31,3 +31,14 @@ public:
 	static FMonolithActionResult GetComponentOutput(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult SetComponentUserParameters(const TSharedPtr<FJsonObject>& Params);
 };
+
+#if WITH_DEV_AUTOMATION_TESTS
+namespace UE::MonolithPCG::Private
+{
+/** Inject one consumed-once owning-level save failure for an exact disposable actor. */
+void ConfigureComponentLevelSaveTestFault(const FString& ExactActorPath);
+
+/** Clear the component-level save fault target. */
+void ResetComponentLevelSaveTestFault();
+}
+#endif

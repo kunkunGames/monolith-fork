@@ -237,6 +237,10 @@ bool FMonolithDescribeActionSchemaMissingBothTest::RunTest(const FString& /*Para
 	TestFalse(TEXT("missing required params must error"), R.bSuccess);
 	if (!R.bSuccess)
 	{
+		TestEqual(
+			TEXT("missing required params use JSON-RPC invalid-params code"),
+			R.ErrorCode,
+			FMonolithJsonUtils::ErrInvalidParams);
 		TestTrue(TEXT("error mentions target_namespace"),
 			R.ErrorMessage.Contains(TEXT("target_namespace")));
 		TestTrue(TEXT("error mentions target_action"),

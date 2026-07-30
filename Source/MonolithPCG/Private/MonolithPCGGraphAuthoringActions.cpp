@@ -6,6 +6,8 @@
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
+#include "MonolithPCGPropertyBagUtils.h"
+#include "MonolithPCGResultUtils.h"
 #include "MonolithSourceControlUtils.h"
 #include "Reflection/MonolithDryRunGuard.h"
 #include "Reflection/MonolithReflectionReader.h"
@@ -41,6 +43,7 @@
 #include "UObject/SavePackage.h"
 #include "UObject/SoftObjectPath.h"
 #include "UObject/UObjectGlobals.h"
+#include "UObject/UObjectHash.h"
 #include "UObject/UObjectHash.h"
 #include "UObject/UnrealType.h"
 
@@ -122,21 +125,6 @@ static constexpr int32 MaxPersistentGraphObjects = 250000;
 static constexpr int32 MaxPersistentGraphObjectDepth = 256;
 static constexpr int64 MaxPersistentGraphSerializedBytes = 128ll * 1024ll * 1024ll;
 
-FMonolithActionExecutionPolicy MutationPolicy()
-{
-	FMonolithActionExecutionPolicy Policy;
-	Policy.PolicyId = TEXT("transaction_optional");
-	Policy.bDefaulted = false;
-	Policy.bDirtyPackageTracking = true;
-	Policy.bTransactionWrapping = true;
-	// Every handler validates the mutated graph before SaveLoadedAsset. A late
-	// execution-guard validator would run after persistence and cannot roll the
-	// package file back if it fails, so the pre-save boundary is authoritative.
-	Policy.bPostEditValidation = false;
-	Policy.bEnforced = true;
-	return Policy;
-}
-
 TArray<TSharedPtr<FJsonValue>> StringsToJson(const TArray<FString>& Values)
 {
 	TArray<TSharedPtr<FJsonValue>> Rows;
@@ -165,7 +153,8 @@ FMonolithActionResult InvalidParam(const FString& Field, const FString& Detail)
 bool ReadRequiredString(const TSharedPtr<FJsonObject>& Params, const TCHAR* Field, FString& OutValue, FString& OutError)
 {
 	OutValue.Reset();
-	if (!Params.IsValid() || !Params->TryGetStringField(Field, OutValue))
+	const TSharedPtr<FJsonValue> JsonValue = Params.IsValid() ? Params->TryGetField(Field) : nullptr;
+	if (!JsonValue.IsValid() || JsonValue->Type != EJson::String || !JsonValue->TryGetString(OutValue))
 	{
 		OutError = FString::Printf(TEXT("%s must be a string"), Field);
 		return false;
@@ -187,7 +176,8 @@ bool ReadOptionalBool(const TSharedPtr<FJsonObject>& Params, const TCHAR* Field,
 	{
 		return true;
 	}
-	if (!Params->TryGetBoolField(Field, OutValue))
+	const TSharedPtr<FJsonValue> JsonValue = Params->TryGetField(Field);
+	if (!JsonValue.IsValid() || JsonValue->Type != EJson::Boolean || !JsonValue->TryGetBool(OutValue))
 	{
 		OutError = FString::Printf(TEXT("%s must be a boolean"), Field);
 		return false;
@@ -204,14 +194,15 @@ bool ReadOptionalInt(const TSharedPtr<FJsonObject>& Params, const TCHAR* Field, 
 		OutError = FString::Printf(TEXT("%s must be a number"), Field);
 		return false;
 	}
-	const int64 IntegralValue = static_cast<int64>(Number);
-	if (!FMath::IsNearlyEqual(Number, static_cast<double>(IntegralValue)) || IntegralValue < MinValue ||
-		IntegralValue > MaxValue)
+	if (!FMath::IsFinite(Number) ||
+		Number < static_cast<double>(MinValue) ||
+		Number > static_cast<double>(MaxValue) ||
+		FMath::TruncToDouble(Number) != Number)
 	{
 		OutError = FString::Printf(TEXT("%s must be an integer in range %d..%d"), Field, MinValue, MaxValue);
 		return false;
 	}
-	OutValue = static_cast<int32>(IntegralValue);
+	OutValue = static_cast<int32>(Number);
 	return true;
 }
 
@@ -233,7 +224,7 @@ bool ReadStringArray(const TSharedPtr<FJsonObject>& Params, const TCHAR* Field, 
 	for (const TSharedPtr<FJsonValue>& Value : *Values)
 	{
 		FString StringValue;
-		if (!Value.IsValid() || !Value->TryGetString(StringValue))
+		if (!Value.IsValid() || Value->Type != EJson::String || !Value->TryGetString(StringValue))
 		{
 			OutError = FString::Printf(TEXT("%s must be an array of strings"), Field);
 			return false;
@@ -1390,9 +1381,10 @@ bool CaptureSettingsSnapshots(UPCGSettings* Settings, const TSharedPtr<FJsonObje
 
 	TSet<FProperty*> SeenProperties;
 	TArray<FProperty*> SortedProperties;
-	for (const auto& Pair : FMonolithJsonUtils::GetFields(Tree))
+	for (const auto& Pair : Tree->Values)
 	{
-		FProperty* Property = FMonolithReflectionWalker::FindPropertyForwarding(Settings->GetClass(), Pair.Key);
+		FProperty* Property = FMonolithReflectionWalker::FindPropertyForwarding(
+			Settings->GetClass(), MonolithKeyToString(Pair.Key));
 		if (!Property || SeenProperties.Contains(Property))
 		{
 			continue;
@@ -1608,6 +1600,22 @@ TSharedPtr<FJsonObject> BuildGraphValidationReport(UPCGGraph* Graph, const FStri
 			if (NodeIds.Contains(Id))
 			{
 				AddError(FString::Printf(TEXT("Duplicate node_id '%s'"), *Id));
+			}
+			// ResolveNode treats these as aliases for the graph's special input
+			// and output nodes. An element node carrying one of them makes
+			// node_id ambiguous - connection actions select the special node
+			// while element-only actions select the element - so callers can
+			// mutate a different endpoint than graph info reports.
+			for (const TCHAR* Reserved : { TEXT("__input__"), TEXT("__output__"), TEXT("input"), TEXT("output") })
+			{
+				if (Id.Equals(Reserved, ESearchCase::IgnoreCase))
+				{
+					AddError(FString::Printf(
+						TEXT("Node '%s' uses reserved node_id '%s', which is ambiguous with the graph's special input/output nodes"),
+						*Id,
+						Reserved));
+					break;
+				}
 			}
 			NodeIds.Add(Id);
 			if (!Node->GetSettings())
@@ -1841,6 +1849,38 @@ void RestorePackageDirtyState(UPCGGraph* Graph, bool bWasDirty)
 	}
 }
 
+void FinalizeGraphRollbackDirtyState(UPCGGraph* Graph, bool bWasDirty, bool bRollbackComplete)
+{
+	if (Graph && Graph->GetPackage())
+	{
+		// Never hide a partially restored graph by returning a previously clean
+		// dirty bit. An incomplete rollback must remain visible to Save All and
+		// source-control reconciliation.
+		Graph->GetPackage()->SetDirtyFlag(bRollbackComplete ? bWasDirty : true);
+	}
+}
+
+bool RestoreGraphUserParameters(
+	UPCGGraph* Graph,
+	const FInstancedPropertyBag& OriginalBag,
+	bool bWasDirty)
+{
+	if (!Graph)
+	{
+		return false;
+	}
+	Graph->UpdateUserParametersStruct([&OriginalBag](FInstancedPropertyBag& Parameters)
+	{
+		Parameters = OriginalBag;
+	});
+	const bool bRestored =
+		MonolithPCGPropertyBagUtils::AreExactlyEquivalent(
+			OriginalBag,
+			Graph->GetUserParametersStruct());
+	FinalizeGraphRollbackDirtyState(Graph, bWasDirty, bRestored);
+	return bRestored;
+}
+
 int32 GetUserParameterCount(const UPCGGraph* Graph)
 {
 	const FInstancedPropertyBag* Bag = Graph ? Graph->GetUserParametersStruct() : nullptr;
@@ -1968,7 +2008,9 @@ bool BuildPersistentObjectIndex(
 
 	TArray<UObject*> NestedObjects;
 	GetObjectsWithOuter(
-		const_cast<UPCGGraph*>(Root), NestedObjects, EGetObjectsFlags::IncludeNestedObjects);
+		const_cast<UPCGGraph*>(Root),
+		NestedObjects,
+		EGetObjectsFlags::IncludeNestedObjects);
 	const int64 TotalObjectCount = static_cast<int64>(NestedObjects.Num()) + 1;
 	if (TotalObjectCount > MaxPersistentGraphObjects)
 	{
@@ -2119,9 +2161,12 @@ bool AreUserParametersPersistentlyIdentical(
 			ADesc.Name == BDesc.Name &&
 			ADesc.ValueType == BDesc.ValueType &&
 			ADesc.ContainerTypes == BDesc.ContainerTypes &&
-			ADesc.PropertyFlags == BDesc.PropertyFlags &&
+			ADesc.PropertyFlags == BDesc.PropertyFlags
+#if UE_VERSION_NEWER_THAN_OR_EQUAL(5, 8, 0)
+			&&
 			ADesc.KeyType == BDesc.KeyType &&
 			ADesc.KeyTypeObject.Get() == BDesc.KeyTypeObject.Get()
+#endif
 #if WITH_EDITORONLY_DATA
 			&& ADesc.MetaData == BDesc.MetaData
 			&& ADesc.MetaClass.Get() == BDesc.MetaClass.Get()
@@ -2246,7 +2291,7 @@ bool ArePersistentGraphPropertiesIdentical(
 				AObject->GetClass(), EFieldIteratorFlags::IncludeSuper); It; ++It)
 		{
 			const FProperty* const Property = *It;
-#if WITH_EDITORONLY_DATA
+#if WITH_EDITORONLY_DATA && UE_VERSION_NEWER_THAN_OR_EQUAL(5, 8, 0)
 			const bool bIdentityBoundEditorWorkspaceState =
 				PendingIndex == 0
 				&& Property
@@ -2388,11 +2433,8 @@ FMonolithActionResult AttachGraphReplacementSourceControl(
 	}
 	else
 	{
-		if (!Result.ErrorData.IsValid())
-		{
-			Result.ErrorData = MakeShared<FJsonObject>();
-		}
-		Result.ErrorData->SetObjectField(TEXT("source_control_prepare"), Prepare);
+		MonolithPCGResultUtils::EnsureErrorDataObject(Result)->SetObjectField(
+			TEXT("source_control_prepare"), Prepare);
 	}
 	return Result;
 }
@@ -2647,7 +2689,7 @@ bool ReplaceGraphObjectState(
 		TargetInputNodeBefore ? TargetInputNodeBefore->GetSettings() : nullptr;
 	UPCGSettings* const TargetOutputSettingsBefore =
 		TargetOutputNodeBefore ? TargetOutputNodeBefore->GetSettings() : nullptr;
-#if WITH_EDITORONLY_DATA
+#if WITH_EDITORONLY_DATA && UE_VERSION_NEWER_THAN_OR_EQUAL(5, 8, 0)
 	// LastEditedDocuments is persisted by PCG solely to restore the target
 	// asset's editor workspace.  It is identity-bound UI state, not graph
 	// contents: importing the donor's soft paths would point the canonical
@@ -2686,7 +2728,7 @@ bool ReplaceGraphObjectState(
 		{
 			return false;
 		}
-#if WITH_EDITORONLY_DATA
+#if WITH_EDITORONLY_DATA && UE_VERSION_NEWER_THAN_OR_EQUAL(5, 8, 0)
 		Target->LastEditedDocuments = TargetLastEditedDocumentsBefore;
 #endif
 		return true;
@@ -2936,16 +2978,17 @@ bool RollbackAddedNode(UPCGGraph* Graph, UPCGNode* Node)
 	return bDetached;
 }
 
-void RollbackConnectedEdge(UPCGGraph* Graph, UPCGNode* SourceNode, const FName SourcePin, UPCGNode* TargetNode,
+bool RollbackConnectedEdge(UPCGGraph* Graph, UPCGNode* SourceNode, const FName SourcePin, UPCGNode* TargetNode,
 						   const FName TargetPin)
 {
 	if (!Graph || !SourceNode || !TargetNode)
 	{
-		return;
+		return false;
 	}
 	FMonolithPCGScopedGraphEditNotifications NotificationScope(Graph);
 	Graph->RemoveEdge(SourceNode, SourcePin, TargetNode, TargetPin);
 	NotificationScope.MarkExternalModification();
+	return !AreConnected(SourceNode->GetOutputPin(SourcePin), TargetNode->GetInputPin(TargetPin));
 }
 
 bool RollbackDisconnectedEdge(UPCGGraph* Graph, UPCGNode* SourceNode, const FName SourcePin,
@@ -2997,8 +3040,8 @@ bool RestoreSettingsMutation(UPCGGraph* Graph, UPCGNode* Node, UPCGSettings* Set
 		}
 		NotificationScope.MarkExternalModification();
 	}
-	RestorePackageDirtyState(Graph, bWasDirty);
-	bRestored &= Graph->GetPackage() && Graph->GetPackage()->IsDirty() == bWasDirty;
+	bRestored &= AreEdgeDescriptorsEqual(CaptureIncidentEdges(Graph, Node), OriginalIncidentEdges);
+	FinalizeGraphRollbackDirtyState(Graph, bWasDirty, bRestored);
 	return bRestored;
 }
 
@@ -3045,9 +3088,8 @@ bool RestoreSubgraphMutation(UPCGGraph* Graph, UPCGNode* Node, UPCGSubgraphSetti
 		NotificationScope.MarkExternalModification();
 	}
 
-	RestorePackageDirtyState(Graph, bWasDirty);
-	bRestored &= Graph->GetPackage() && Graph->GetPackage()->IsDirty() == bWasDirty;
 	bRestored &= AreEdgeDescriptorsEqual(CaptureIncidentEdges(Graph, Node), OriginalIncidentEdges);
+	FinalizeGraphRollbackDirtyState(Graph, bWasDirty, bRestored);
 	return bRestored;
 }
 
@@ -3112,7 +3154,7 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 			 "optional editable property summaries."),
 		FMonolithActionHandler::CreateStatic(&ListNodeTypes),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Optional(TEXT("query"), TEXT("string"),
 					  TEXT("Case-insensitive class, friendly-name, title, or "
 						   "path filter"))
@@ -3131,13 +3173,13 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 			 "true."),
 		FMonolithActionHandler::CreateStatic(&CreateGraph),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Project-owned PCG graph package path"))
 			.Optional(TEXT("existing_policy"), TEXT("string"),
 					  TEXT("Existing destination policy: fail or return_existing"), TEXT("fail"))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Persist the new graph package"), TEXT("true"))
 			.Build(),
-		TEXT("Graph Authoring"), MonolithPCGAuthoring::MutationPolicy());
+		TEXT("Graph Authoring"));
 
 	Registry.RegisterAction(
 		TEXT("pcg"), TEXT("get_pcg_graph_info"),
@@ -3146,7 +3188,7 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 			 "settings values."),
 		FMonolithActionHandler::CreateStatic(&GetGraphInfo),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Project-owned PCG graph package or object path"))
 			.Optional(TEXT("include_settings"), TEXT("bool"), TEXT("Include bounded editable settings values"),
 					  TEXT("false"))
@@ -3174,7 +3216,7 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 			 "existing_policy=return_existing."),
 		FMonolithActionHandler::CreateStatic(&AddNode),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Project-owned PCG graph package or object path"))
 			.Required(TEXT("node_type"), TEXT("string"),
 					  TEXT("Friendly, exact, or /Script UPCGSettings class identifier"))
@@ -3185,7 +3227,7 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 			.Optional(TEXT("properties"), TEXT("object"), TEXT("Validated initial UPCGSettings property tree"))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Persist the graph after mutation"), TEXT("true"))
 			.Build(),
-		TEXT("Graph Authoring"), MonolithPCGAuthoring::MutationPolicy());
+		TEXT("Graph Authoring"));
 
 	Registry.RegisterAction(
 		TEXT("pcg"), TEXT("remove_pcg_node"),
@@ -3193,14 +3235,14 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 			 "graph. Graph input/output nodes are protected."),
 		FMonolithActionHandler::CreateStatic(&RemoveNode),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Project-owned PCG graph package or object path"))
 			.Required(TEXT("node_id"), TEXT("string"),
 					  TEXT("Exact node_id returned by add/get, or a unique "
 						   "authored title"))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Persist the graph after mutation"), TEXT("true"))
 			.Build(),
-		TEXT("Graph Authoring"), MonolithPCGAuthoring::MutationPolicy());
+		TEXT("Graph Authoring"));
 
 	Registry.RegisterAction(
 		TEXT("pcg"), TEXT("connect_pcg_nodes"),
@@ -3210,7 +3252,7 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 			 "idempotent."),
 		FMonolithActionHandler::CreateStatic(&ConnectNodes),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Project-owned PCG graph package or object path"))
 			.Required(TEXT("source_node"), TEXT("string"),
 					  TEXT("Source node_id; __input__ addresses the graph input node"))
@@ -3220,7 +3262,7 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 			.Required(TEXT("target_pin"), TEXT("string"), TEXT("Target input pin label"))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Persist the graph after mutation"), TEXT("true"))
 			.Build(),
-		TEXT("Graph Authoring"), MonolithPCGAuthoring::MutationPolicy());
+		TEXT("Graph Authoring"));
 
 	Registry.RegisterAction(
 		TEXT("pcg"), TEXT("disconnect_pcg_nodes"),
@@ -3228,7 +3270,7 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 			 "success and is reported as not_connected."),
 		FMonolithActionHandler::CreateStatic(&DisconnectNodes),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Project-owned PCG graph package or object path"))
 			.Required(TEXT("source_node"), TEXT("string"),
 					  TEXT("Source node_id; __input__ addresses the graph input node"))
@@ -3238,7 +3280,7 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 			.Required(TEXT("target_pin"), TEXT("string"), TEXT("Target input pin label"))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Persist the graph after mutation"), TEXT("true"))
 			.Build(),
-		TEXT("Graph Authoring"), MonolithPCGAuthoring::MutationPolicy());
+		TEXT("Graph Authoring"));
 
 	Registry.RegisterAction(
 		TEXT("pcg"), TEXT("set_pcg_node_params"),
@@ -3248,7 +3290,7 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 			 "dry-run."),
 		FMonolithActionHandler::CreateStatic(&SetNodeParams),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Project-owned PCG graph package or object path"))
 			.Required(TEXT("node_id"), TEXT("string"),
 					  TEXT("Exact node_id returned by add/get, or a unique "
@@ -3257,7 +3299,7 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Validate and report without mutation"), TEXT("false"))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Persist the graph after mutation"), TEXT("true"))
 			.Build(),
-		TEXT("Graph Authoring"), MonolithPCGAuthoring::MutationPolicy());
+		TEXT("Graph Authoring"));
 
 	Registry.RegisterAction(
 		TEXT("pcg"), TEXT("set_pcg_subgraph"),
@@ -3267,7 +3309,7 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 			 "rollback, and optional save."),
 		FMonolithActionHandler::CreateStatic(&SetSubgraph),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Project-owned parent PCG graph package or object path"))
 			.Required(TEXT("node_id"), TEXT("string"),
 				TEXT("Exact UPCGSubgraphSettings node_id returned by add/get, or a unique authored title"))
@@ -3276,7 +3318,7 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Validate and report without mutation"), TEXT("false"))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Persist the parent graph after mutation"), TEXT("true"))
 			.Build(),
-		TEXT("Graph Authoring"), MonolithPCGAuthoring::MutationPolicy());
+		TEXT("Graph Authoring"));
 
 	Registry.RegisterAction(
 		TEXT("pcg"), TEXT("set_pcg_graph_user_parameters"),
@@ -3284,7 +3326,7 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 			 "project-owned UPCGGraph. Every upsert requires an explicit default_value; dry-run defaults true."),
 		FMonolithActionHandler::CreateStatic(&SetGraphUserParameters),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Exact project-owned PCG graph package or object path"))
 			.Optional(TEXT("upsert"), TEXT("array"),
 				TEXT("Parameter objects with name, type, and explicit default_value"))
@@ -3293,7 +3335,7 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 				TEXT("true"))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Persist the graph after mutation"), TEXT("true"))
 			.Build(),
-		TEXT("Graph Authoring"), MonolithPCGAuthoring::MutationPolicy());
+		TEXT("Graph Authoring"));
 
 	Registry.RegisterAction(
 		TEXT("pcg"), TEXT("replace_pcg_graph_contents"),
@@ -3304,7 +3346,7 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 			 "donors containing the target fail closed. Dry-run defaults true; commit requires confirm=true."),
 		FMonolithActionHandler::CreateStatic(&ReplaceGraphContents),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("source_asset_path"), TEXT("string"),
 				TEXT("Exact project-owned source UPCGGraph package or object path"))
 			.Required(TEXT("target_asset_path"), TEXT("string"),
@@ -3319,7 +3361,7 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 			.Optional(TEXT("edge_limit"), TEXT("integer"),
 				TEXT("Maximum source or target edges accepted (1-20000)"), TEXT("20000"))
 			.Build(),
-		TEXT("Graph Authoring"), MonolithPCGAuthoring::MutationPolicy());
+		TEXT("Graph Authoring"));
 
 	Registry.RegisterAction(
 		TEXT("pcg"), TEXT("validate_pcg_graph"),
@@ -3329,7 +3371,7 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 			 "mutation."),
 		FMonolithActionHandler::CreateStatic(&ValidateGraph),
 		FParamSchemaBuilder()
-			.EnableValidation()
+			.StrictComplexTypes()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Project-owned PCG graph package or object path"))
 			.Optional(TEXT("require_output_connection"), TEXT("bool"),
 					  TEXT("Treat an unconnected graph output as an error"), TEXT("false"))
@@ -3340,60 +3382,14 @@ void FMonolithPCGGraphAuthoringActions::RegisterActions(FMonolithToolRegistry& R
 			.Build(),
 		TEXT("Graph Authoring"));
 
-	const TArray<FString> AuthoringActions = {
-		TEXT("list_pcg_node_types"),  TEXT("create_pcg_graph"),	   TEXT("get_pcg_graph_info"),
-		TEXT("add_pcg_node"),		  TEXT("remove_pcg_node"),	   TEXT("connect_pcg_nodes"),
-		TEXT("disconnect_pcg_nodes"), TEXT("set_pcg_node_params"), TEXT("set_pcg_graph_user_parameters"),
-		TEXT("set_pcg_subgraph"),
-		TEXT("replace_pcg_graph_contents"), TEXT("validate_pcg_graph")};
-	for (const FString& Action : AuthoringActions)
-	{
-		Registry.SetActionSearchMetadata(
-			TEXT("pcg"), Action,
-			{TEXT("PCG graph authoring"), TEXT("procedural content generation asset editing"), TEXT("PCG node graph")},
-			{TEXT("edit PCG asset"), TEXT("build PCG graph")}, {});
-	}
-
-	Registry.SetActionPlanningMetadata(TEXT("pcg"), TEXT("create_pcg_graph"), TEXT("unreal-pcg"),
-									   {TEXT("The PCG plugin must be enabled and the destination must not "
-											 "already exist")},
-									   {TEXT("Created graph object path, package path, save status, and initial "
-											 "node/edge counts")},
-									   {TEXT("pcg.add_pcg_node"), TEXT("pcg.get_pcg_graph_info")});
-	Registry.SetActionPlanningMetadata(TEXT("pcg"), TEXT("set_pcg_node_params"), TEXT("unreal-pcg"),
-									   {TEXT("Use pcg.list_pcg_node_types(include_properties=true) or "
-											 "dry_run=true before unfamiliar settings writes")},
-									   {TEXT("Per-field canonical reflection-walker report plus save status")},
-									   {TEXT("pcg.get_pcg_graph_info"), TEXT("pcg.validate_pcg_graph")});
-	Registry.SetActionPlanningMetadata(TEXT("pcg"), TEXT("set_pcg_subgraph"), TEXT("unreal-pcg"),
-									   {TEXT("The node must be UPCGSubgraphSettings and both graphs must be project-owned; "
-											 "dry-run before changing an existing assignment")},
-									   {TEXT("Exact previous/requested/read-back graph-interface paths, recursion/filter "
-											 "validation, incident-topology evidence, pin summaries, and save status")},
-									   {TEXT("pcg.get_pcg_graph_info"), TEXT("pcg.validate_pcg_graph")});
-	Registry.SetActionPlanningMetadata(
-		TEXT("pcg"), TEXT("set_pcg_graph_user_parameters"), TEXT("unreal-pcg"),
-		{TEXT("Use dry_run=true first; every upsert must name a supported scalar type and explicit default_value")},
-		{TEXT("Exact atomic add/update/remove rows, before/after parameter counts, canonical default values, and save status")},
-		{TEXT("pcg.get_pcg_graph_info"), TEXT("pcg.set_component_user_parameters")});
-	Registry.SetActionPlanningMetadata(
-		TEXT("pcg"), TEXT("replace_pcg_graph_contents"), TEXT("unreal-pcg"),
-		{TEXT("Source and target must be distinct exact project-owned UPCGGraph assets, and the source must "
-			  "neither be recursive nor contain the target; run the default dry-run and inspect bounded counts "
-			  "before repeating with dry_run=false and confirm=true")},
-		{TEXT("Exact source/target paths, preserved target identity, before/after node-edge-parameter counts, "
-			  "deep persistent-property read-back, structural validation, rollback status, and save status")},
-		{TEXT("pcg.get_pcg_graph_info"), TEXT("pcg.validate_pcg_graph")});
-	Registry.SetActionPlanningMetadata(TEXT("pcg"), TEXT("validate_pcg_graph"), TEXT("unreal-pcg"), {},
-									   {TEXT("Bounded structural validation report with valid, errors, "
-											 "warnings, node_count, and edge_count")},
-									   {TEXT("pcg.get_pcg_graph_info")});
 }
 
 FMonolithActionResult FMonolithPCGGraphAuthoringActions::ListNodeTypes(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Query;
-	if (Params.IsValid() && Params->HasField(TEXT("query")) && !Params->TryGetStringField(TEXT("query"), Query))
+	const TSharedPtr<FJsonValue> QueryField = Params.IsValid() ? Params->TryGetField(TEXT("query")) : nullptr;
+	if (QueryField.IsValid() && QueryField->Type != EJson::Null &&
+		(QueryField->Type != EJson::String || !QueryField->TryGetString(Query)))
 	{
 		return MonolithPCGAuthoring::InvalidParam(TEXT("query"), TEXT("query must be a string"));
 	}
@@ -3504,8 +3500,11 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::CreateGraph(const TShar
 		return MonolithPCGAuthoring::InvalidParam(TEXT("save"), Error);
 	}
 	FString ExistingPolicy = TEXT("fail");
-	if (Params.IsValid() && Params->HasField(TEXT("existing_policy")) &&
-		!Params->TryGetStringField(TEXT("existing_policy"), ExistingPolicy))
+	const TSharedPtr<FJsonValue> ExistingPolicyField = Params.IsValid()
+		? Params->TryGetField(TEXT("existing_policy"))
+		: nullptr;
+	if (ExistingPolicyField.IsValid() && ExistingPolicyField->Type != EJson::Null &&
+		(ExistingPolicyField->Type != EJson::String || !ExistingPolicyField->TryGetString(ExistingPolicy)))
 	{
 		return MonolithPCGAuthoring::InvalidParam(TEXT("existing_policy"), TEXT("existing_policy must be a string"));
 	}
@@ -3533,6 +3532,19 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::CreateGraph(const TShar
 			{
 				return MonolithPCGAuthoring::InvalidParam(TEXT("asset_path"), Error);
 			}
+			// LoadGraph accepts a UPCGGraph subclass, but this action creates an
+			// exact UPCGGraph. Returning a subclass let rerunnable automation
+			// proceed with subclass-specific behaviour, and later exact-UPCGGraph
+			// operations such as complete replacement then reject the same asset.
+			if (ExistingGraph->GetClass() != UPCGGraph::StaticClass())
+			{
+				return MonolithPCGAuthoring::InvalidParam(
+					TEXT("asset_path"),
+					FString::Printf(
+						TEXT("Existing asset '%s' is a %s, not an exact UPCGGraph; existing_policy=return_existing cannot return it"),
+						*ExistingObjectPath,
+						*ExistingGraph->GetClass()->GetName()));
+			}
 			TSharedPtr<FJsonObject> Result = MonolithPCGAuthoring::MutationResult(
 				TEXT("create_pcg_graph"), ExistingObjectPath, TEXT("existing"), false, FString());
 			Result->SetStringField(TEXT("package_name"), PackageName);
@@ -3549,6 +3561,20 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::CreateGraph(const TShar
 	{
 		return MonolithPCGAuthoring::InvalidParam(
 			TEXT("asset_path"), FString::Printf(TEXT("A package file already exists for '%s'"), *PackageName));
+	}
+
+	// AssetExists and the disk-only DoesPackageExist both pass for an in-memory
+	// unsaved package that holds no asset at the requested object path.
+	// CreatePackage would then reuse it, so a successful create could save
+	// unrelated objects, and DiscardCreatedGraph on a later failure clears the
+	// shared package's dirty flag and hides those unsaved changes.
+	if (FindPackage(nullptr, *PackageName) != nullptr)
+	{
+		return MonolithPCGAuthoring::InvalidParam(
+			TEXT("asset_path"),
+			FString::Printf(
+				TEXT("An unsaved in-memory package already exists at '%s'; save or discard it before creating a graph there"),
+				*PackageName));
 	}
 
 	UPackage* Package = CreatePackage(*PackageName);
@@ -3665,8 +3691,11 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::AddNode(const TSharedPt
 		return MonolithPCGAuthoring::InvalidParam(TEXT("save"), Error);
 	}
 	FString ExistingPolicy = TEXT("fail");
-	if (Params.IsValid() && Params->HasField(TEXT("existing_policy")) &&
-		!Params->TryGetStringField(TEXT("existing_policy"), ExistingPolicy))
+	const TSharedPtr<FJsonValue> ExistingPolicyField = Params.IsValid()
+		? Params->TryGetField(TEXT("existing_policy"))
+		: nullptr;
+	if (ExistingPolicyField.IsValid() && ExistingPolicyField->Type != EJson::Null &&
+		(ExistingPolicyField->Type != EJson::String || !ExistingPolicyField->TryGetString(ExistingPolicy)))
 	{
 		return MonolithPCGAuthoring::InvalidParam(TEXT("existing_policy"), TEXT("existing_policy must be a string"));
 	}
@@ -3679,8 +3708,11 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::AddNode(const TSharedPt
 	}
 
 	FString NodeTitle;
-	if (Params.IsValid() && Params->HasField(TEXT("node_title")) &&
-		!Params->TryGetStringField(TEXT("node_title"), NodeTitle))
+	const TSharedPtr<FJsonValue> NodeTitleField = Params.IsValid()
+		? Params->TryGetField(TEXT("node_title"))
+		: nullptr;
+	if (NodeTitleField.IsValid() && NodeTitleField->Type != EJson::Null &&
+		(NodeTitleField->Type != EJson::String || !NodeTitleField->TryGetString(NodeTitle)))
 	{
 		return MonolithPCGAuthoring::InvalidParam(TEXT("node_title"), TEXT("node_title must be a string"));
 	}
@@ -3701,6 +3733,21 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::AddNode(const TSharedPt
 		if (!(*Position)[0]->TryGetNumber(X) || !(*Position)[1]->TryGetNumber(Y))
 		{
 			return MonolithPCGAuthoring::InvalidParam(TEXT("position"), TEXT("position must contain two numbers"));
+		}
+		// Graph coordinates are int32. Narrowing an out-of-range or non-finite
+		// double is undefined behaviour and previously placed the node at an
+		// unrelated coordinate while the action still reported success.
+		auto IsRepresentableCoordinate = [](double Value)
+		{
+			return FMath::IsFinite(Value)
+				&& Value >= static_cast<double>(TNumericLimits<int32>::Min())
+				&& Value <= static_cast<double>(TNumericLimits<int32>::Max());
+		};
+		if (!IsRepresentableCoordinate(X) || !IsRepresentableCoordinate(Y))
+		{
+			return MonolithPCGAuthoring::InvalidParam(
+				TEXT("position"),
+				TEXT("position values must be finite and within the int32 graph coordinate range"));
 		}
 		PositionX = FMath::RoundToInt(X);
 		PositionY = FMath::RoundToInt(Y);
@@ -3810,7 +3857,7 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::AddNode(const TSharedPt
 		if (!Node || !Settings)
 		{
 			const bool bRolledBack = !Node || MonolithPCGAuthoring::RollbackAddedNode(Graph, Node);
-			MonolithPCGAuthoring::RestorePackageDirtyState(Graph, bWasDirty);
+			MonolithPCGAuthoring::FinalizeGraphRollbackDirtyState(Graph, bWasDirty, bRolledBack);
 			Error = FString::Printf(TEXT("UPCGGraph::AddNodeOfType failed for %s"), *SettingsClass->GetName());
 			if (!bRolledBack)
 			{
@@ -3831,7 +3878,7 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::AddNode(const TSharedPt
 			if (ActualTitle.IsEmpty() || !SanitizedTitleConflicts.IsEmpty())
 			{
 				const bool bRolledBack = MonolithPCGAuthoring::RollbackAddedNode(Graph, Node);
-				MonolithPCGAuthoring::RestorePackageDirtyState(Graph, bWasDirty);
+				MonolithPCGAuthoring::FinalizeGraphRollbackDirtyState(Graph, bWasDirty, bRolledBack);
 				Error = ActualTitle.IsEmpty()
 					? TEXT("PCG settings sanitized node_title to an empty title")
 					: FString::Printf(TEXT("PCG settings sanitized node_title to '%s', which conflicts with an existing node"),
@@ -3853,7 +3900,7 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::AddNode(const TSharedPt
 			if (!MonolithPCGAuthoring::ValidateEditableTree(Settings, InitialProperties, Error))
 			{
 				const bool bRolledBack = MonolithPCGAuthoring::RollbackAddedNode(Graph, Node);
-				MonolithPCGAuthoring::RestorePackageDirtyState(Graph, bWasDirty);
+				MonolithPCGAuthoring::FinalizeGraphRollbackDirtyState(Graph, bWasDirty, bRolledBack);
 				if (!bRolledBack)
 				{
 					Error += TEXT("; explicit node rollback was incomplete");
@@ -3864,7 +3911,7 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::AddNode(const TSharedPt
 			if (ApplyReport.Errors > 0 || !ApplyReport.bWouldApply)
 			{
 				const bool bRolledBack = MonolithPCGAuthoring::RollbackAddedNode(Graph, Node);
-				MonolithPCGAuthoring::RestorePackageDirtyState(Graph, bWasDirty);
+				MonolithPCGAuthoring::FinalizeGraphRollbackDirtyState(Graph, bWasDirty, bRolledBack);
 				PropertyReport = FMonolithDryRunGuard::ReportToJson(ApplyReport);
 				return FMonolithActionResult::Error(
 					bRolledBack ? TEXT("PCG node property apply failed after preflight")
@@ -3882,7 +3929,7 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::AddNode(const TSharedPt
 	if (!MonolithPCGAuthoring::ValidateGraphForCommit(Graph, ObjectPath, ValidationReport, Error))
 	{
 		const bool bRolledBack = MonolithPCGAuthoring::RollbackAddedNode(Graph, Node);
-		MonolithPCGAuthoring::RestorePackageDirtyState(Graph, bWasDirty);
+		MonolithPCGAuthoring::FinalizeGraphRollbackDirtyState(Graph, bWasDirty, bRolledBack);
 		if (!bRolledBack)
 		{
 			Error += TEXT("; explicit node rollback was incomplete");
@@ -3894,7 +3941,7 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::AddNode(const TSharedPt
 	if (!MonolithPCGAuthoring::SaveGraph(Graph, bSave, bSaved, SavedFilename, Error))
 	{
 		const bool bRolledBack = MonolithPCGAuthoring::RollbackAddedNode(Graph, Node);
-		MonolithPCGAuthoring::RestorePackageDirtyState(Graph, bWasDirty);
+		MonolithPCGAuthoring::FinalizeGraphRollbackDirtyState(Graph, bWasDirty, bRolledBack);
 		if (!bRolledBack)
 		{
 			Error += TEXT("; explicit node rollback was incomplete");
@@ -3961,8 +4008,9 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::RemoveNode(const TShare
 	Graph->MarkPackageDirty();
 	if (Graph->GetNodes().Contains(Node))
 	{
-		MonolithPCGAuthoring::RestoreRemovedNode(Graph, Node, RemovedNodeName, IncidentEdges);
-		MonolithPCGAuthoring::RestorePackageDirtyState(Graph, bWasDirty);
+		const bool bRestored = MonolithPCGAuthoring::RestoreRemovedNode(
+			Graph, Node, RemovedNodeName, IncidentEdges);
+		MonolithPCGAuthoring::FinalizeGraphRollbackDirtyState(Graph, bWasDirty, bRestored);
 		return FMonolithActionResult::Error(TEXT("UPCGGraph::RemoveNode postcondition failed"));
 	}
 	TSharedPtr<FJsonObject> ValidationReport;
@@ -3970,7 +4018,7 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::RemoveNode(const TShare
 	{
 		const bool bRestored = MonolithPCGAuthoring::RestoreRemovedNode(
 			Graph, Node, RemovedNodeName, IncidentEdges);
-		MonolithPCGAuthoring::RestorePackageDirtyState(Graph, bWasDirty);
+		MonolithPCGAuthoring::FinalizeGraphRollbackDirtyState(Graph, bWasDirty, bRestored);
 		if (!bRestored)
 		{
 			Error += TEXT("; explicit node rollback was incomplete");
@@ -3984,7 +4032,7 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::RemoveNode(const TShare
 	{
 		const bool bRestored = MonolithPCGAuthoring::RestoreRemovedNode(
 			Graph, Node, RemovedNodeName, IncidentEdges);
-		MonolithPCGAuthoring::RestorePackageDirtyState(Graph, bWasDirty);
+		MonolithPCGAuthoring::FinalizeGraphRollbackDirtyState(Graph, bWasDirty, bRestored);
 		if (!bRestored)
 		{
 			Error += TEXT("; explicit node rollback was incomplete");
@@ -4101,9 +4149,9 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::ConnectNodes(const TSha
 		Graph->AddLabeledEdge(SourceNode, FName(*SourcePinLabel), TargetNode, FName(*TargetPinLabel));
 		if (!MonolithPCGAuthoring::AreConnected(SourcePin, TargetPin))
 		{
-			MonolithPCGAuthoring::RollbackConnectedEdge(
+			const bool bRolledBack = MonolithPCGAuthoring::RollbackConnectedEdge(
 				Graph, SourceNode, FName(*SourcePinLabel), TargetNode, FName(*TargetPinLabel));
-			MonolithPCGAuthoring::RestorePackageDirtyState(Graph, bWasDirty);
+			MonolithPCGAuthoring::FinalizeGraphRollbackDirtyState(Graph, bWasDirty, bRolledBack);
 			return FMonolithActionResult::Error(TEXT("UPCGGraph::AddEdge did not create the requested edge"));
 		}
 		NotificationScope.MarkExternalModification();
@@ -4114,9 +4162,13 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::ConnectNodes(const TSha
 	{
 		if (!bAlreadyConnected)
 		{
-			MonolithPCGAuthoring::RollbackConnectedEdge(
+			const bool bRolledBack = MonolithPCGAuthoring::RollbackConnectedEdge(
 				Graph, SourceNode, FName(*SourcePinLabel), TargetNode, FName(*TargetPinLabel));
-			MonolithPCGAuthoring::RestorePackageDirtyState(Graph, bWasDirty);
+			MonolithPCGAuthoring::FinalizeGraphRollbackDirtyState(Graph, bWasDirty, bRolledBack);
+			if (!bRolledBack)
+			{
+				Error += TEXT("; explicit edge rollback was incomplete");
+			}
 		}
 		return FMonolithActionResult::Error(Error).WithErrorData(ValidationReport);
 	}
@@ -4127,9 +4179,13 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::ConnectNodes(const TSha
 	{
 		if (!bAlreadyConnected)
 		{
-			MonolithPCGAuthoring::RollbackConnectedEdge(
+			const bool bRolledBack = MonolithPCGAuthoring::RollbackConnectedEdge(
 				Graph, SourceNode, FName(*SourcePinLabel), TargetNode, FName(*TargetPinLabel));
-			MonolithPCGAuthoring::RestorePackageDirtyState(Graph, bWasDirty);
+			MonolithPCGAuthoring::FinalizeGraphRollbackDirtyState(Graph, bWasDirty, bRolledBack);
+			if (!bRolledBack)
+			{
+				Error += TEXT("; explicit edge rollback was incomplete");
+			}
 		}
 		return FMonolithActionResult::Error(Error);
 	}
@@ -4199,9 +4255,9 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::DisconnectNodes(const T
 		const bool bRemoved = Graph->RemoveEdge(SourceNode, FName(*SourcePinLabel), TargetNode, FName(*TargetPinLabel));
 		if (!bRemoved || MonolithPCGAuthoring::AreConnected(SourcePin, TargetPin))
 		{
-			MonolithPCGAuthoring::RollbackDisconnectedEdge(
+			const bool bRestored = MonolithPCGAuthoring::RollbackDisconnectedEdge(
 				Graph, SourceNode, FName(*SourcePinLabel), TargetNode, FName(*TargetPinLabel));
-			MonolithPCGAuthoring::RestorePackageDirtyState(Graph, bWasDirty);
+			MonolithPCGAuthoring::FinalizeGraphRollbackDirtyState(Graph, bWasDirty, bRestored);
 			return FMonolithActionResult::Error(TEXT("UPCGGraph::RemoveEdge postcondition failed"));
 		}
 		NotificationScope.MarkExternalModification();
@@ -4214,7 +4270,7 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::DisconnectNodes(const T
 		{
 			const bool bRestored = MonolithPCGAuthoring::RollbackDisconnectedEdge(
 				Graph, SourceNode, FName(*SourcePinLabel), TargetNode, FName(*TargetPinLabel));
-			MonolithPCGAuthoring::RestorePackageDirtyState(Graph, bWasDirty);
+			MonolithPCGAuthoring::FinalizeGraphRollbackDirtyState(Graph, bWasDirty, bRestored);
 			if (!bRestored)
 			{
 				Error += TEXT("; explicit edge rollback was incomplete");
@@ -4231,7 +4287,7 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::DisconnectNodes(const T
 		{
 			const bool bRestored = MonolithPCGAuthoring::RollbackDisconnectedEdge(
 				Graph, SourceNode, FName(*SourcePinLabel), TargetNode, FName(*TargetPinLabel));
-			MonolithPCGAuthoring::RestorePackageDirtyState(Graph, bWasDirty);
+			MonolithPCGAuthoring::FinalizeGraphRollbackDirtyState(Graph, bWasDirty, bRestored);
 			if (!bRestored)
 			{
 				Error += TEXT("; explicit edge rollback was incomplete");
@@ -4639,22 +4695,24 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::SetGraphUserParameters(
 	TSharedPtr<FJsonObject> ValidationReport;
 	if (!MonolithPCGAuthoring::ValidateGraphForCommit(Graph, ObjectPath, ValidationReport, Error))
 	{
-		Graph->UpdateUserParametersStruct([&OriginalBag](FInstancedPropertyBag& Parameters)
+		const bool bRestored =
+			MonolithPCGAuthoring::RestoreGraphUserParameters(Graph, OriginalBag, bWasDirty);
+		if (!bRestored)
 		{
-			Parameters = OriginalBag;
-		});
-		Graph->GetPackage()->SetDirtyFlag(bWasDirty);
+			Error += TEXT("; graph user-parameter rollback was incomplete");
+		}
 		return FMonolithActionResult::Error(Error).WithErrorData(ValidationReport);
 	}
 	bool bSaved = false;
 	FString SavedFilename;
 	if (!MonolithPCGAuthoring::SaveGraph(Graph, bSave, bSaved, SavedFilename, Error))
 	{
-		Graph->UpdateUserParametersStruct([&OriginalBag](FInstancedPropertyBag& Parameters)
+		const bool bRestored =
+			MonolithPCGAuthoring::RestoreGraphUserParameters(Graph, OriginalBag, bWasDirty);
+		if (!bRestored)
 		{
-			Parameters = OriginalBag;
-		});
-		Graph->GetPackage()->SetDirtyFlag(bWasDirty);
+			Error += TEXT("; graph user-parameter rollback was incomplete");
+		}
 		return FMonolithActionResult::Error(Error);
 	}
 	return FMonolithActionResult::Success(BuildResult(TEXT("updated"), bSaved, SavedFilename));
@@ -5147,10 +5205,8 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::ReplaceGraphContents(
 			Target, TargetObjectPath, TargetValidation, Error))
 	{
 		FMonolithActionResult Failure = RollbackFailure(Error);
-		if (Failure.ErrorData.IsValid())
-		{
-			Failure.ErrorData->SetObjectField(TEXT("target_validation"), TargetValidation);
-		}
+		MonolithPCGResultUtils::EnsureErrorDataObject(Failure)->SetObjectField(
+			TEXT("target_validation"), TargetValidation);
 		return Failure;
 	}
 

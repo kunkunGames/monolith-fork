@@ -1046,6 +1046,104 @@ TArray<FString> FMonolithParamSchema::FindUnknownKeys(
 	return Unknown;
 }
 
+int32 FMonolithParamSchema::RecoverStringEncodedComplexParams(
+	const TSharedPtr<FJsonObject>& Schema,
+	const TSharedPtr<FJsonObject>& Params)
+{
+	if (!Schema.IsValid() || !Params.IsValid())
+	{
+		return 0;
+	}
+
+	auto TypeSpecContains = [](const FString& TypeSpec, const TCHAR* ExpectedType)
+	{
+		TArray<FString> Types;
+		TypeSpec.ParseIntoArray(Types, TEXT("|"), true);
+		for (FString Type : Types)
+		{
+			Type.TrimStartAndEndInline();
+			if (Type.Equals(ExpectedType, ESearchCase::IgnoreCase))
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+
+	int32 RecoveredCount = 0;
+	for (const auto& SchemaPair : FMonolithJsonUtils::GetFields(Schema))
+	{
+		if (SchemaPair.Key.StartsWith(TEXT("_")))
+		{
+			continue;
+		}
+
+		const TSharedPtr<FJsonObject>* ParamDefinition = nullptr;
+		if (!SchemaPair.Value.IsValid()
+			|| !SchemaPair.Value->TryGetObject(ParamDefinition)
+			|| !ParamDefinition
+			|| !ParamDefinition->IsValid())
+		{
+			continue;
+		}
+
+		// A schema entry can set allow_string_encoded_complex=false (via
+		// FParamSchemaBuilder::RequiredExactType / OptionalExactType) when the
+		// action contract must observe the caller's original EJson type instead
+		// of accepting this client-compatibility transform. Security- and
+		// mutation-sensitive actions rely on that opt-out.
+		bool bAllowStringEncodedComplex = true;
+		(*ParamDefinition)->TryGetBoolField(TEXT("allow_string_encoded_complex"), bAllowStringEncodedComplex);
+		if (!bAllowStringEncodedComplex)
+		{
+			continue;
+		}
+
+		FString TypeSpec;
+		if (!(*ParamDefinition)->TryGetStringField(TEXT("type"), TypeSpec))
+		{
+			continue;
+		}
+
+		const bool bAllowsArray = TypeSpecContains(TypeSpec, TEXT("array"));
+		const bool bAllowsObject = TypeSpecContains(TypeSpec, TEXT("object"));
+		if (!bAllowsArray && !bAllowsObject)
+		{
+			continue;
+		}
+
+		FString EncodedValue;
+		if (!Params->TryGetStringField(SchemaPair.Key, EncodedValue) || EncodedValue.IsEmpty())
+		{
+			continue;
+		}
+
+		if (bAllowsArray)
+		{
+			TArray<TSharedPtr<FJsonValue>> ParsedArray;
+			const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(EncodedValue);
+			if (FJsonSerializer::Deserialize(Reader, ParsedArray))
+			{
+				Params->SetArrayField(SchemaPair.Key, ParsedArray);
+				++RecoveredCount;
+				continue;
+			}
+		}
+
+		if (bAllowsObject)
+		{
+			TSharedPtr<FJsonObject> ParsedObject;
+			const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(EncodedValue);
+			if (FJsonSerializer::Deserialize(Reader, ParsedObject) && ParsedObject.IsValid())
+			{
+				Params->SetObjectField(SchemaPair.Key, ParsedObject);
+				++RecoveredCount;
+			}
+		}
+	}
+
+	return RecoveredCount;
+}
 bool FMonolithParamSchema::ValidateTypedParams(
 	const TSharedPtr<FJsonObject>& Schema,
 	const TSharedPtr<FJsonObject>& Params,
@@ -1151,6 +1249,19 @@ bool FMonolithParamSchema::ValidateTypedParams(
 	}
 
 	return OutErrors.Num() == 0;
+}
+
+bool FMonolithParamSchema::IsUniversalResponseShapingParam(
+	const FString& ParamName)
+{
+	// ApplyResponseShaping consumes these exact, case-sensitive keys after the
+	// action handler returns. Keep the contract centralized so registry-level
+	// and action-local strict validation cannot drift apart.
+	return ParamName == TEXT("_fields")
+		|| ParamName == TEXT("_omit")
+		|| ParamName == TEXT("_compact_json")
+		|| ParamName == TEXT("_row_fields")
+		|| ParamName == TEXT("_path_fields");
 }
 
 bool FMonolithParamSchema::IsStrictParamsEnabled()

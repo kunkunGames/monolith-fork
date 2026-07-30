@@ -1,6 +1,7 @@
-// Copyright tumourlove. All Rights Reserved.
-#include "../Public/MonolithFuzzyMatch.h"
+// SPDX-License-Identifier: MIT
+
 #include "MonolithFuzzyMatch.h"
+
 #include "Algo/LevenshteinDistance.h"
 #include "Algo/StableSort.h"
 
@@ -30,15 +31,9 @@ namespace
 		Tokens.Add(Token);
 	}
 
-	// Typo eligibility + allowed max edit distance, or -1 when ineligible.
-	// Mirrors the legacy IsFindTypoMatch gate so scoring stays byte-for-byte.
 	int32 GetTypoMaxDistance(const FString& QueryToken, const FString& FieldToken)
 	{
-		if (QueryToken.Len() < 4 || FieldToken.Len() < 4)
-		{
-			return -1;
-		}
-		if (QueryToken[0] != FieldToken[0])
+		if (QueryToken.Len() < 4 || FieldToken.Len() < 4 || QueryToken[0] != FieldToken[0])
 		{
 			return -1;
 		}
@@ -66,7 +61,9 @@ FString FMonolithFuzzyMatch::NormalizeText(FString Text)
 	return FString::Join(Tokens, TEXT(" "));
 }
 
-TArray<FString> FMonolithFuzzyMatch::Tokenize(const FString& Text, const TMap<FString, TArray<FString>>* AliasTable)
+TArray<FString> FMonolithFuzzyMatch::Tokenize(
+	const FString& Text,
+	const TMap<FString, TArray<FString>>* AliasTable)
 {
 	TArray<FString> RawTokens;
 	NormalizeText(Text).ParseIntoArrayWS(RawTokens);
@@ -80,7 +77,6 @@ TArray<FString> FMonolithFuzzyMatch::Tokenize(const FString& Text, const TMap<FS
 
 	if (AliasTable)
 	{
-		// Snapshot so freshly added aliases are not themselves re-expanded.
 		const TArray<FString> Snapshot = Tokens;
 		for (const FString& Token : Snapshot)
 		{
@@ -97,11 +93,20 @@ TArray<FString> FMonolithFuzzyMatch::Tokenize(const FString& Text, const TMap<FS
 	return Tokens;
 }
 
-int32 FMonolithFuzzyMatch::EditDistanceBounded(const FString& A, const FString& B, int32 MaxDistance, bool bCaseInsensitive, bool bAllowTransposition)
+int32 FMonolithFuzzyMatch::EditDistanceBounded(
+	const FString& A,
+	const FString& B,
+	int32 MaxDistance,
+	bool bCaseInsensitive,
+	bool bAllowTransposition)
 {
+	if (MaxDistance < 0)
+	{
+		return MAX_int32;
+	}
+
 	const int32 La = A.Len();
 	const int32 Lb = B.Len();
-	// Length-difference lower bound holds for both Levenshtein and OSA (each edit changes length by <= 1).
 	if (FMath::Abs(La - Lb) > MaxDistance)
 	{
 		return MaxDistance + 1;
@@ -115,9 +120,11 @@ int32 FMonolithFuzzyMatch::EditDistanceBounded(const FString& A, const FString& 
 		return La;
 	}
 
-	auto Fold = [bCaseInsensitive](TCHAR Ch) { return bCaseInsensitive ? FChar::ToLower(Ch) : Ch; };
+	auto Fold = [bCaseInsensitive](TCHAR Ch)
+	{
+		return bCaseInsensitive ? FChar::ToLower(Ch) : Ch;
+	};
 
-	// Three rolling rows: PrevPrev (row i-2) is only read for the transposition term.
 	TArray<int32> PrevPrev;
 	TArray<int32> Prev;
 	TArray<int32> Curr;
@@ -134,29 +141,27 @@ int32 FMonolithFuzzyMatch::EditDistanceBounded(const FString& A, const FString& 
 		Curr[0] = I;
 		int32 RowMin = Curr[0];
 		const TCHAR Ca = Fold(A[I - 1]);
-		const TCHAR CaPrev = (I >= 2) ? Fold(A[I - 2]) : TEXT('\0');
+		const TCHAR CaPrev = I >= 2 ? Fold(A[I - 2]) : TEXT('\0');
 		for (int32 J = 1; J <= Lb; ++J)
 		{
 			const TCHAR Cb = Fold(B[J - 1]);
-			const int32 Cost = (Ca == Cb) ? 0 : 1;
+			const int32 Cost = Ca == Cb ? 0 : 1;
 			int32 Best = FMath::Min3(
 				Prev[J] + 1,
 				Curr[J - 1] + 1,
 				Prev[J - 1] + Cost);
-			if (bAllowTransposition && I >= 2 && J >= 2 && Ca == Fold(B[J - 2]) && CaPrev == Cb)
+			if (bAllowTransposition && I >= 2 && J >= 2
+				&& Ca == Fold(B[J - 2]) && CaPrev == Cb)
 			{
 				Best = FMath::Min(Best, PrevPrev[J - 2] + 1);
 			}
 			Curr[J] = Best;
 			RowMin = FMath::Min(RowMin, Best);
 		}
-		// Row-minimum early-out is valid only for plain Levenshtein. A transposition can skip
-		// row i-1, so a high minimum there does not bound the OSA result.
 		if (!bAllowTransposition && RowMin > MaxDistance)
 		{
 			return MaxDistance + 1;
 		}
-		// Rotate: PrevPrev <- old Prev (row i-1), Prev <- Curr (row i), Curr <- spare buffer.
 		Swap(PrevPrev, Prev);
 		Swap(Prev, Curr);
 	}
@@ -164,14 +169,19 @@ int32 FMonolithFuzzyMatch::EditDistanceBounded(const FString& A, const FString& 
 	return Prev[Lb];
 }
 
-bool FMonolithFuzzyMatch::IsTypoMatch(const FString& QueryToken, const FString& FieldToken, bool bAllowTransposition)
+bool FMonolithFuzzyMatch::IsTypoMatch(
+	const FString& QueryToken,
+	const FString& FieldToken,
+	bool bAllowTransposition)
 {
 	const int32 MaxDistance = GetTypoMaxDistance(QueryToken, FieldToken);
-	if (MaxDistance < 0)
-	{
-		return false;
-	}
-	return EditDistanceBounded(QueryToken, FieldToken, MaxDistance, /*bCaseInsensitive=*/false, bAllowTransposition) <= MaxDistance;
+	return MaxDistance >= 0
+		&& EditDistanceBounded(
+			QueryToken,
+			FieldToken,
+			MaxDistance,
+			/*bCaseInsensitive=*/false,
+			bAllowTransposition) <= MaxDistance;
 }
 
 int32 FMonolithFuzzyMatch::ScoreTokens(
@@ -225,7 +235,13 @@ int32 FMonolithFuzzyMatch::ScoreTokens(
 				{
 					continue;
 				}
-				const int32 Distance = EditDistanceBounded(Token, FieldToken, MaxDistance, /*bCaseInsensitive=*/false, bAllowTransposition);
+
+				const int32 Distance = EditDistanceBounded(
+					Token,
+					FieldToken,
+					MaxDistance,
+					/*bCaseInsensitive=*/false,
+					bAllowTransposition);
 				if (Distance <= MaxDistance)
 				{
 					Score += Weights.Fuzzy;
@@ -268,8 +284,9 @@ FMonolithFuzzyScore FMonolithFuzzyMatch::ScoreCandidate(
 
 	for (const FMonolithFuzzyField& Field : Fields)
 	{
-		const FString Stem = Field.ReasonTag ? FString(Field.ReasonTag) : FString(TEXT("field"));
-
+		const FString Stem = Field.ReasonTag
+			? FString(Field.ReasonTag)
+			: FString(TEXT("field"));
 		if (!QueryNormalized.IsEmpty())
 		{
 			if (Field.ExactPhraseBonus != 0 && Field.Text == QueryNormalized)
@@ -290,10 +307,16 @@ FMonolithFuzzyScore FMonolithFuzzyMatch::ScoreCandidate(
 		}
 
 		TSet<FString> Matched;
-		const TCHAR* TokenReason = Field.ReasonTag ? Field.ReasonTag : TEXT("field");
 		Result.Score += ScoreTokens(
-			QueryTokens, Field.Tokens, Field.Text, Field.Weights,
-			TokenReason, Result.Reasons, Matched, &Result.BestDistance, bAllowTransposition);
+			QueryTokens,
+			Field.Tokens,
+			Field.Text,
+			Field.Weights,
+			Field.ReasonTag ? Field.ReasonTag : TEXT("field"),
+			Result.Reasons,
+			Matched,
+			&Result.BestDistance,
+			bAllowTransposition);
 
 		for (const FString& Token : Matched)
 		{

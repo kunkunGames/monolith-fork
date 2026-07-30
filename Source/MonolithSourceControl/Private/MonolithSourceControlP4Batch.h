@@ -11,6 +11,9 @@ namespace MonolithSourceControlP4
 	inline constexpr int32 MaxCommandCount = 40;
 	inline constexpr int32 MaxOpenedLimit = 5000;
 	inline constexpr int32 MaxOpenedBackendRecordCount = MaxOpenedLimit + 1;
+	inline constexpr int32 TimedOutReturnCode = -1001;
+	inline constexpr double CommandTimeoutSeconds = 30.0;
+	inline constexpr float ProcessPollIntervalSeconds = 0.01f;
 
 	struct FDepotPathMapping
 	{
@@ -33,6 +36,12 @@ namespace MonolithSourceControlP4
 		int32 ResolvedPathCount = 0;
 		int32 FailedPathCount = 0;
 		bool bRejected = false;
+		// Set when a p4 child process could not be launched or timed out, as
+		// opposed to running successfully and reporting a path as unmapped. The
+		// caller must surface this as a backend error rather than an ordinary
+		// per-row failure, because the command never produced a verdict.
+		bool bBackendUnavailable = false;
+		FString BackendError;
 		FString Error;
 	};
 
@@ -46,6 +55,26 @@ namespace MonolithSourceControlP4
 		bool bCountIsLowerBound = false;
 	};
 
+	struct FProcessPollCallbacks
+	{
+		TFunction<bool()> IsRunning;
+		TFunction<void()> TerminateAndWait;
+		TFunction<FString()> ReadStdOut;
+		TFunction<FString()> ReadStdErr;
+		TFunction<bool(int32&)> GetReturnCode;
+		TFunction<double()> NowSeconds;
+		TFunction<void(float)> Sleep;
+	};
+
+	struct FProcessPollResult
+	{
+		FString StdOut;
+		FString StdErr;
+		int32 ReturnCode = INDEX_NONE;
+		bool bTimedOut = false;
+		bool bReturnCodeAvailable = false;
+	};
+
 	using FWhereBatchRunner = TFunction<bool(
 		const TArray<FString>& /*DepotPaths*/,
 		FString& /*OutStdOut*/,
@@ -54,6 +83,9 @@ namespace MonolithSourceControlP4
 
 	/** Encodes one argument according to the Microsoft C runtime argv rules. */
 	FString QuoteWindowsCommandLineArgument(const FString& Argument);
+
+	/** Encodes one quote-free argument for Unreal's Unix CreateProc argv parser. */
+	FString QuoteUnrealUnixCommandLineArgument(const FString& Argument);
 
 	/** Encodes one argument for the host platform's FPlatformProcess command line. */
 	FString QuoteCommandLineArgument(const FString& Argument);
@@ -77,6 +109,15 @@ namespace MonolithSourceControlP4
 
 	/** Projects a bounded backend observation into returned/sentinel semantics. */
 	FOpenedRecordWindow MakeOpenedRecordWindow(int32 ObservedRecordCount, int32 Limit);
+
+	/**
+	 * Polls an already-launched process, drains both output pipes, and terminates
+	 * the process when the monotonic deadline expires.
+	 */
+	FProcessPollResult PollProcessWithTimeout(
+		const FProcessPollCallbacks& Callbacks,
+		double TimeoutSeconds,
+		float PollIntervalSeconds = ProcessPollIntervalSeconds);
 
 	/**
 	 * Resolves depot/client paths through bounded `p4 -ztag where` batches.

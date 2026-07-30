@@ -51,8 +51,8 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `[w] remove_game_feature_data_action` | `game_feature_data_path*` `action_index?` `action_name?` `action_class_path?` `remove_all?=false` `save?=true` `dry_run?=false` | Remove one or more existing GameFeatureData `Actions` entries by index, instanced object name, and/or action class. |
 | `validate_plugin` | `plugin_name*` | Validate a plugin descriptor, content root, GameFeatureData asset, and creation gate state. Read-only. |
 
-`find_game_feature_data` and `describe_game_feature_data` mark both params optional in the schema, but the handler requires at least one of `plugin_name` or `asset_path` and errors otherwise; `asset_path` accepts either a package path or an object path. `list_plugins` `limit` is clamped to 1..200.
-All writer actions support `dry_run=true`; use it before applying when editing shared assets. They require existing assets of the expected shape and validate referenced classes/assets/tags before mutation.
+`find_game_feature_data` and `describe_game_feature_data` mark both params optional in the schema, but the handler requires at least one of `plugin_name` or `asset_path` and errors otherwise; `asset_path` accepts either a package path or an object path. Plugin-name resolution uses a descriptor-declared data asset or one unique indexed candidate; multiple unmatched candidates require `asset_path`. `list_plugins` `limit` is clamped to 1..200.
+All writer actions support `dry_run=true`; use it before applying when editing shared assets. They require existing assets of the expected shape and preflight the complete edit on a transient action copy before committing. Rejected calls do not attach actions or dirty packages.
 
 ## Common Workflows
 
@@ -150,6 +150,8 @@ If `find_game_feature_data` reports multiple matches or a multi-data plugin, pas
 ## Gotchas / Rules
 
 - `get_status` and the nine writer actions are always registered. `list_plugins`, `find_game_feature_data`, `describe_game_feature_data`, `list_action_classes`, `describe_action_set`, and `validate_plugin` require `bEnableGameFeatureActions` to be registered; when it is off, `get_status` reports `enabled=false` and lists them under `available_when_enabled`.
+- Treat `action_name` as an exact object-name and action-class selector. A same-name object of another class or an occupied non-`Actions` inner name is an error; omit `action_name` only when class-based reuse is intended.
+- Writer dry-runs and real writes enforce the same referenced class/object/tag types. In particular, reflected soft-class fields enforce `MetaClass`, `initialization_data` must be a DataTable, and `ability_sets` entries must be LyraAbilitySet assets.
 - This namespace does NOT activate, deactivate, create, rename, or delete plugins; do that through editor plugin management and `unreal-config` descriptor/INI edits. Its writers are scoped to existing ActionSet/GameFeatureData assets and known property arrays.
 - GameFeatureData reflection is bounded — `describe_game_feature_data` summarizes feature actions, it does not deep-load arbitrary referenced assets. Follow up in the owning namespace (e.g. `unreal-gas`, `unreal-blueprints`) for the actual contributed content.
 - This reference is generated from the live `RegisterAction` surface. If an action is missing or renamed, re-run `monolith_discover({ namespace: "gamefeatures" })` — the catalog is the source of truth.

@@ -21,6 +21,7 @@ class MONOLITHCORE_API FMonolithSourceControlUtils
 {
 public:
 	static bool IsProviderAvailable(FString& OutReason);
+	static bool TryGetMountedPackageName(const FString& Input, FString& OutPackageName);
 	static bool NormalizePathForSourceControl(const FString& Input, FString& OutFile, FString& OutError);
 	static bool PackageNameToFilename(const FString& PackageName, FString& OutFile, FString& OutError);
 

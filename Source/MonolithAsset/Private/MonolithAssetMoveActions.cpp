@@ -46,18 +46,6 @@ namespace
 		TSharedPtr<FJsonObject> Report;
 	};
 
-	static FMonolithActionExecutionPolicy MoveAssetsPolicy()
-	{
-		FMonolithActionExecutionPolicy Policy;
-		Policy.PolicyId = TEXT("track_dirty_packages");
-		Policy.bDefaulted = false;
-		Policy.bDirtyPackageTracking = true;
-		Policy.bTransactionWrapping = false;
-		Policy.bPostEditValidation = false;
-		Policy.bEnforced = true;
-		return Policy;
-	}
-
 	static TArray<TSharedPtr<FJsonValue>> StringsToJson(const TArray<FString>& Values)
 	{
 		TArray<TSharedPtr<FJsonValue>> Result;
@@ -484,15 +472,40 @@ namespace
 			AddPreflightError(Plan, TEXT("destination_outside_allowed_roots"));
 		}
 
+		const bool bSourceExistsOnDisk =
+			FPackageName::DoesPackageExist(Plan.SourcePackage, &Plan.SourceFilename);
 		TArray<FAssetData> SourceAssets;
 		AssetRegistry.GetAssetsByPackageName(
 			FName(*Plan.SourcePackage),
 			SourceAssets,
 			/*bIncludeOnlyOnDiskAssets=*/false);
+		if (SourceAssets.Num() == 0
+			&& bSourceExistsOnDisk
+			&& !AssetRegistry.IsLoadingAssets())
+		{
+			// Custom/late mount points may contain a valid package that has not
+			// entered the registry cache yet. Scan the one resolved file; never
+			// broaden the search or load the asset during preflight.
+			AssetRegistry.ScanFilesSynchronous(
+				{ Plan.SourceFilename },
+				/*bForceRescan=*/true);
+			AssetRegistry.GetAssetsByPackageName(
+				FName(*Plan.SourcePackage),
+				SourceAssets,
+				/*bIncludeOnlyOnDiskAssets=*/false);
+		}
 		const FString ExpectedSourceName = FPackageName::GetLongPackageAssetName(Plan.SourcePackage);
 		if (SourceAssets.Num() != 1)
 		{
-			AddPreflightError(Plan, SourceAssets.Num() == 0 ? TEXT("source_missing") : TEXT("source_package_must_contain_one_primary_asset"));
+			AddPreflightError(
+				Plan,
+				SourceAssets.Num() == 0
+					? (bSourceExistsOnDisk
+						? (AssetRegistry.IsLoadingAssets()
+							? TEXT("asset_registry_loading")
+							: TEXT("source_not_indexed_after_exact_scan"))
+						: TEXT("source_missing"))
+					: TEXT("source_package_must_contain_one_primary_asset"));
 		}
 		else if (SourceAssets[0].AssetName.ToString() != ExpectedSourceName)
 		{
@@ -525,7 +538,6 @@ namespace
 			AddPreflightError(Plan, TEXT("destination_package_is_loaded"));
 		}
 
-		FPackageName::DoesPackageExist(Plan.SourcePackage, &Plan.SourceFilename);
 		TArray<FName> HardReferencers;
 		TArray<FName> SoftReferencers;
 		AssetRegistry.GetReferencers(
@@ -1252,7 +1264,6 @@ void FMonolithAssetMoveActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Move explicit source packages to exact destination packages through IAssetTools::RenameAssets. Defaults to dry-run, never overwrites, and verifies registry, disk, source, destination, and redirector postconditions."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAssetMoveActions::MoveAssets),
 		FParamSchemaBuilder()
-			.EnableValidation()
 			.Required(TEXT("moves"), TEXT("array"), TEXT("1-512 exact move objects: [{\"source\":\"/Root/Old\",\"destination\":\"/OtherRoot/New\"}]"))
 			.Required(TEXT("allowed_source_roots"), TEXT("array"), TEXT("Required non-empty source package-root allowlist; matching is package-segment bounded"))
 			.Required(TEXT("allowed_destination_roots"), TEXT("array"), TEXT("Required non-empty destination package-root allowlist; matching is package-segment bounded"))
@@ -1260,30 +1271,9 @@ void FMonolithAssetMoveActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("confirm"), TEXT("bool"), TEXT("Required when dry_run=false"), TEXT("false"))
 			.Optional(TEXT("cleanup_redirectors"), TEXT("bool"), TEXT("Delete at most 200 exact source redirectors in one fully preflighted, source-control-verified batch; never opens the modal AssetTools fixup report"), TEXT("false"))
 			.Optional(TEXT("accept_cdo_reference_warning"), TEXT("bool"), TEXT("Explicitly accept only AssetRenameManager's exact CDO/config reference warning; mutation requires an editor launched without -Unattended"), TEXT("false"))
+			.StrictComplexTypes()
 			.Build(),
-		TEXT("Lifecycle"),
-		MoveAssetsPolicy());
-
-	Registry.SetActionSearchMetadata(
-		TEXT("asset"),
-		TEXT("move_assets"),
-		{ TEXT("move asset package"), TEXT("relocate assets"), TEXT("cross plugin move"), TEXT("rename package path"), TEXT("redirector cleanup") },
-		{ TEXT("move assets"), TEXT("relocate packages"), TEXT("move between plugins") },
-		{ TEXT("dry-run moving /OldPlugin/UI/WBP_Menu to /NewPlugin/UI/WBP_Menu"), TEXT("move these packages with exact source and destination paths") });
-	Registry.SetActionPlanningMetadata(
-		TEXT("asset"),
-		TEXT("move_assets"),
-		TEXT("unreal-asset"),
-		{ TEXT("Run dry_run=true first; every source and destination must be an exact long package name; confirm=true is required for mutation") },
-		{ TEXT("Per-move preflight and postcondition rows including registry, disk, class, source-primary, and redirector state") },
-		{ TEXT("source_control.get_status"), TEXT("asset.inspect_assets_batch") });
-	Registry.SetActionAnnotations(
-		TEXT("asset"),
-		TEXT("move_assets"),
-		/*bReadOnly=*/false,
-		/*bDestructive=*/true,
-		/*bIdempotent=*/false,
-		TEXT("Move Assets"));
+		TEXT("Lifecycle"));
 
 	Registry.RegisterAction(
 		TEXT("asset"),
@@ -1291,35 +1281,14 @@ void FMonolithAssetMoveActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Idempotently delete only exact redirectors whose expected destination objects are intact, whose AssetRegistry hard/soft referencer sets are empty, and whose source-control delete/revert-add postconditions are verified. Defaults to dry-run and never performs a rename or reference rewrite."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAssetMoveActions::CleanupMovedRedirectors),
 		FParamSchemaBuilder()
-			.EnableValidation()
 			.Required(TEXT("moves"), TEXT("array"), TEXT("1-200 exact completed move objects. Optional paired source_object_path/destination_object_path fields preserve non-leaf exact targets and allow many-to-one destinations."))
 			.Required(TEXT("allowed_source_roots"), TEXT("array"), TEXT("Required non-empty source package-root allowlist; matching is package-segment bounded"))
 			.Required(TEXT("allowed_destination_roots"), TEXT("array"), TEXT("Required non-empty destination package-root allowlist; read-only roots are allowed because destinations are validated but never mutated"))
 			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Validate exact redirector targets, zero referencers, destination integrity, and idempotent already-cleaned state without loading or deleting"), TEXT("true"))
 			.Optional(TEXT("confirm"), TEXT("bool"), TEXT("Required when dry_run=false"), TEXT("false"))
+			.StrictComplexTypes()
 			.Build(),
-		TEXT("Lifecycle"),
-		MoveAssetsPolicy());
-	Registry.SetActionSearchMetadata(
-		TEXT("asset"),
-		TEXT("cleanup_moved_redirectors"),
-		{ TEXT("cleanup moved redirectors"), TEXT("finalize asset move"), TEXT("recover moved assets"), TEXT("delete zero-reference redirectors") },
-		{ TEXT("finalize moved packages"), TEXT("recover a completed rename after cleanup failure") },
-		{ TEXT("dry-run exact old-to-new move pairs before deleting source redirectors") });
-	Registry.SetActionPlanningMetadata(
-		TEXT("asset"),
-		TEXT("cleanup_moved_redirectors"),
-		TEXT("unreal-asset"),
-		{ TEXT("Run dry_run=true first; the source must be absent or an exact redirector to the supplied destination, and all hard/soft referencer sets must be empty") },
-		{ TEXT("Per-pair exact target, referencer, registry, disk, class-stability, and source-removal postconditions") },
-		{ TEXT("source_control.get_status"), TEXT("asset.inspect_assets_batch") });
-	Registry.SetActionAnnotations(
-		TEXT("asset"),
-		TEXT("cleanup_moved_redirectors"),
-		/*bReadOnly=*/false,
-		/*bDestructive=*/true,
-		/*bIdempotent=*/true,
-		TEXT("Cleanup Moved Redirectors"));
+		TEXT("Lifecycle"));
 }
 
 FMonolithActionResult FMonolithAssetMoveActions::MoveAssets(const TSharedPtr<FJsonObject>& Params)

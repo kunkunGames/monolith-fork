@@ -17,12 +17,17 @@
 namespace
 {
 	const TCHAR* ImportTextureFromFileAssetPath = TEXT("/Game/Tests/Monolith/Asset/Textures/T_ImportTextureFromFileTest");
+	const TCHAR* ImportTextureFromFileSourceBasenamePath = TEXT("/Game/Tests/Monolith/Asset/Textures/T_ImportTextureFromFileFixture");
 
 	void DeleteImportTextureFromFileAsset()
 	{
 		if (UEditorAssetLibrary::DoesAssetExist(ImportTextureFromFileAssetPath))
 		{
 			UEditorAssetLibrary::DeleteAsset(ImportTextureFromFileAssetPath);
+		}
+		if (UEditorAssetLibrary::DoesAssetExist(ImportTextureFromFileSourceBasenamePath))
+		{
+			UEditorAssetLibrary::DeleteAsset(ImportTextureFromFileSourceBasenamePath);
 		}
 	}
 
@@ -47,7 +52,11 @@ namespace
 		TArray<uint8> PngBytes;
 		PngBytes.Append(PngBytes64.GetData(), PngBytes64.Num());
 
-		const FString FixtureDir = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Automation"), TEXT("MonolithAsset"));
+		const FString RelativeFixtureDir =
+			FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Automation"), TEXT("MonolithAsset"));
+		const FString FixtureDir =
+			IFileManager::Get().ConvertToAbsolutePathForExternalAppForWrite(
+				*RelativeFixtureDir);
 		IFileManager::Get().MakeDirectory(*FixtureDir, true);
 		OutSourcePath = FPaths::Combine(FixtureDir, TEXT("T_ImportTextureFromFileFixture.png"));
 		return FFileHelper::SaveArrayToFile(PngBytes, *OutSourcePath);
@@ -108,19 +117,25 @@ bool FMonolithAssetImportTextureFromFileSourceMetadataTest::RunTest(const FStrin
 	double SourceSizeY = 0.0;
 	FString Format;
 	FString SourceFormat;
+	FString AssetPath;
 	Result.Result->TryGetNumberField(TEXT("size_x"), SizeX);
 	Result.Result->TryGetNumberField(TEXT("size_y"), SizeY);
 	Result.Result->TryGetNumberField(TEXT("source_size_x"), SourceSizeX);
 	Result.Result->TryGetNumberField(TEXT("source_size_y"), SourceSizeY);
 	Result.Result->TryGetStringField(TEXT("format"), Format);
 	Result.Result->TryGetStringField(TEXT("source_format"), SourceFormat);
+	Result.Result->TryGetStringField(TEXT("asset_path"), AssetPath);
 
+	TestEqual(TEXT("asset_path is the exact requested destination"), AssetPath, FString(ImportTextureFromFileAssetPath));
 	TestEqual(TEXT("size_x reports source width"), static_cast<int32>(SizeX), 2);
 	TestEqual(TEXT("size_y reports source height"), static_cast<int32>(SizeY), 2);
 	TestEqual(TEXT("source_size_x reports source width"), static_cast<int32>(SourceSizeX), 2);
 	TestEqual(TEXT("source_size_y reports source height"), static_cast<int32>(SourceSizeY), 2);
 	TestTrue(TEXT("format is populated"), !Format.IsEmpty() && !Format.Equals(TEXT("unknown"), ESearchCase::IgnoreCase));
 	TestEqual(TEXT("source_format is TSF_BGRA8"), SourceFormat, FString(TEXT("TSF_BGRA8")));
+	TestFalse(
+		TEXT("source-basename fallback asset was not created"),
+		UEditorAssetLibrary::DoesAssetExist(ImportTextureFromFileSourceBasenamePath));
 
 	UTexture2D* Texture = LoadObject<UTexture2D>(
 		nullptr,
@@ -134,8 +149,102 @@ bool FMonolithAssetImportTextureFromFileSourceMetadataTest::RunTest(const FStrin
 #endif
 	}
 
+	TSharedPtr<FJsonObject> InvalidSettings = MakeShared<FJsonObject>();
+	InvalidSettings->SetStringField(TEXT("compression"), TEXT("not_a_compression_mode"));
+	TSharedPtr<FJsonObject> InvalidParams = MakeShared<FJsonObject>();
+	InvalidParams->SetStringField(TEXT("source_path"), SourcePath);
+	InvalidParams->SetStringField(
+		TEXT("destination"),
+		TEXT("/Game/Tests/Monolith/Asset/Textures/T_InvalidImportTextureSettings"));
+	InvalidParams->SetObjectField(TEXT("settings"), InvalidSettings);
+	const FMonolithActionResult InvalidResult = FMonolithToolRegistry::Get().ExecuteAction(
+		TEXT("asset"), TEXT("import_texture_from_file"), InvalidParams);
+	TestFalse(TEXT("invalid compression is rejected instead of defaulted"), InvalidResult.bSuccess);
+	TestEqual(TEXT("invalid compression uses invalid-params code"), InvalidResult.ErrorCode, -32602);
+	TestFalse(
+		TEXT("invalid compression does not create an asset"),
+		UEditorAssetLibrary::DoesAssetExist(
+			TEXT("/Game/Tests/Monolith/Asset/Textures/T_InvalidImportTextureSettings")));
+
 	IFileManager::Get().Delete(*SourcePath, false, true, true);
 	DeleteImportTextureFromFileAsset();
+	return true;
+}
+
+/**
+ * MonolithAsset.ImportTextureFromFile.StrictBooleanSettings
+ *
+ * Rejects string-coerced compatibility settings before the import task can
+ * create or mutate an asset. UE 5.7's JSON bool accessor accepts values such
+ * as "false" unless the native JSON type is checked first.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithAssetImportTextureFromFileStrictBooleanSettingsTest,
+	"MonolithAsset.ImportTextureFromFile.StrictBooleanSettings",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithAssetImportTextureFromFileStrictBooleanSettingsTest::RunTest(const FString& Parameters)
+{
+	FString SourcePath;
+	TestTrue(TEXT("PNG fixture was written"), WriteImportTextureFromFileFixture(SourcePath));
+	if (SourcePath.IsEmpty())
+	{
+		return false;
+	}
+
+	struct FBooleanCase
+	{
+		const TCHAR* Label;
+		const TCHAR* Field;
+		bool bNested;
+	};
+
+	const FBooleanCase Cases[] = {
+		{ TEXT("nested_srgb"), TEXT("srgb"), true },
+		{ TEXT("top_level_srgb"), TEXT("srgb"), false },
+		{ TEXT("nested_tiling"), TEXT("tiling"), true },
+		{ TEXT("top_level_tiling"), TEXT("tiling"), false }
+	};
+
+	for (const FBooleanCase& Case : Cases)
+	{
+		const FString Destination = FString::Printf(
+			TEXT("/Game/Tests/Monolith/Asset/Textures/T_InvalidBool_%s"),
+			Case.Label);
+		if (UEditorAssetLibrary::DoesAssetExist(Destination))
+		{
+			UEditorAssetLibrary::DeleteAsset(Destination);
+		}
+
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("source_path"), SourcePath);
+		Params->SetStringField(TEXT("destination"), Destination);
+		if (Case.bNested)
+		{
+			TSharedPtr<FJsonObject> Settings = MakeShared<FJsonObject>();
+			Settings->SetStringField(Case.Field, TEXT("false"));
+			Params->SetObjectField(TEXT("settings"), Settings);
+		}
+		else
+		{
+			Params->SetStringField(Case.Field, TEXT("false"));
+		}
+
+		const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(
+			TEXT("asset"), TEXT("import_texture_from_file"), Params);
+		TestFalse(
+			FString::Printf(TEXT("%s string boolean is rejected"), Case.Label),
+			Result.bSuccess);
+		TestEqual(
+			FString::Printf(TEXT("%s uses invalid-params code"), Case.Label),
+			Result.ErrorCode,
+			-32602);
+		TestFalse(
+			FString::Printf(TEXT("%s does not create an asset"), Case.Label),
+			UEditorAssetLibrary::DoesAssetExist(Destination));
+	}
+
+	IFileManager::Get().Delete(*SourcePath, false, true, true);
 	return true;
 }
 

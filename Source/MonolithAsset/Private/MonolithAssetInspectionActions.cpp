@@ -1,6 +1,7 @@
 #include "MonolithAssetInspectionActions.h"
 
 #include "MonolithAssetUtils.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -14,6 +15,10 @@
 #include "UObject/SoftObjectPath.h"
 #include "UObject/SoftObjectPtr.h"
 #include "UObject/UnrealType.h"
+
+#if WITH_DEV_AUTOMATION_TESTS
+#include "Tests/MonolithAssetInspectionTestHooks.h"
+#endif
 
 namespace
 {
@@ -113,13 +118,49 @@ namespace
 		return Ref;
 	}
 
+	bool DoesSoftReferenceExist(const FSoftObjectPath& Path)
+	{
+		if (!Path.IsValid())
+		{
+			return false;
+		}
+
+		if (Path.ResolveObject())
+		{
+			return true;
+		}
+
+		const FString AssetPath = Path.GetAssetPathString();
+
+		// /Script exports are native and created with their module. ResolveObject
+		// above already covers the loaded case, so only an unloadable module is
+		// indeterminate here rather than automatically valid.
+		if (AssetPath.StartsWith(TEXT("/Script/"), ESearchCase::IgnoreCase))
+		{
+			return true;
+		}
+
+		// A soft path naming a missing subobject, such as /Game/Pkg.Asset:Missing,
+		// fails ResolveObject while its owning asset still has a registry row.
+		// Treating the row as sufficient reported an unresolvable path as existing.
+		if (!Path.GetSubPathString().IsEmpty())
+		{
+			return false;
+		}
+
+		// Only namespaces that genuinely cannot be queried are inherently valid.
+		// Plugin and /Engine mounts are ordinary asset paths, so hard-coding them
+		// as existing hid every missing reference outside /Game.
+		return FMonolithAssetUtils::AssetExists(AssetPath);
+	}
+
 	TSharedPtr<FJsonObject> SoftObjectRefToJson(const FSoftObjectPath& Path)
 	{
 		TSharedPtr<FJsonObject> Ref = MakeShared<FJsonObject>();
 		Ref->SetStringField(TEXT("path"), Path.ToString());
 		Ref->SetStringField(TEXT("asset_path"), Path.GetAssetPathString());
 		Ref->SetBoolField(TEXT("valid"), Path.IsValid());
-		Ref->SetBoolField(TEXT("exists"), Path.IsValid() && FMonolithAssetUtils::AssetExists(Path.GetAssetPathString()));
+		Ref->SetBoolField(TEXT("exists"), DoesSoftReferenceExist(Path));
 		return Ref;
 	}
 
@@ -297,9 +338,10 @@ namespace
 		Ref->SetBoolField(TEXT("soft"), bSoft);
 		if (bSoft)
 		{
-			const FString AssetPath = FSoftObjectPath(Path).GetAssetPathString();
+			const FSoftObjectPath SoftPath(Path);
+			const FString AssetPath = SoftPath.GetAssetPathString();
 			Ref->SetStringField(TEXT("asset_path"), AssetPath);
-			Ref->SetBoolField(TEXT("exists"), AssetPath.StartsWith(TEXT("/Game")) ? FMonolithAssetUtils::AssetExists(AssetPath) : true);
+			Ref->SetBoolField(TEXT("exists"), DoesSoftReferenceExist(SoftPath));
 		}
 		OutRefs.Add(MakeShared<FJsonValueObject>(Ref));
 	}
@@ -371,6 +413,74 @@ namespace
 					ArrayProp->Inner,
 					Helper.GetRawPtr(Index),
 					FString::Printf(TEXT("%s.%s[%d]"), *Source, *Property->GetName(), Index),
+					OutRefs,
+					Seen,
+					Depth - 1,
+					ArrayLimit);
+			}
+			return;
+		}
+
+		// TSet and TMap were never visited, so hard and soft references stored in
+		// them were absent from inspect_asset(include_references=true) and could
+		// not raise unresolved_soft_reference. They use the same depth and
+		// item-count safeguards as the array case.
+		if (const FSetProperty* SetProp = CastField<FSetProperty>(Property))
+		{
+			FScriptSetHelper Helper(SetProp, ValuePtr);
+			int32 Visited = 0;
+			for (int32 Index = 0; Index < Helper.GetMaxIndex(); ++Index)
+			{
+				if (!Helper.IsValidIndex(Index))
+				{
+					continue;
+				}
+				if (Visited >= ArrayLimit)
+				{
+					break;
+				}
+				++Visited;
+				CollectReferencesFromProperty(
+					SetProp->ElementProp,
+					Helper.GetElementPtr(Index),
+					FString::Printf(TEXT("%s.%s{%d}"), *Source, *Property->GetName(), Index),
+					OutRefs,
+					Seen,
+					Depth - 1,
+					ArrayLimit);
+			}
+			return;
+		}
+
+		if (const FMapProperty* MapProp = CastField<FMapProperty>(Property))
+		{
+			FScriptMapHelper Helper(MapProp, ValuePtr);
+			int32 Visited = 0;
+			for (int32 Index = 0; Index < Helper.GetMaxIndex(); ++Index)
+			{
+				if (!Helper.IsValidIndex(Index))
+				{
+					continue;
+				}
+				if (Visited >= ArrayLimit)
+				{
+					break;
+				}
+				++Visited;
+				const FString EntrySource =
+					FString::Printf(TEXT("%s.%s{%d}"), *Source, *Property->GetName(), Index);
+				CollectReferencesFromProperty(
+					MapProp->KeyProp,
+					Helper.GetKeyPtr(Index),
+					EntrySource + TEXT(".key"),
+					OutRefs,
+					Seen,
+					Depth - 1,
+					ArrayLimit);
+				CollectReferencesFromProperty(
+					MapProp->ValueProp,
+					Helper.GetValuePtr(Index),
+					EntrySource + TEXT(".value"),
 					OutRefs,
 					Seen,
 					Depth - 1,
@@ -653,7 +763,7 @@ void FMonolithAssetInspectionActions::RegisterActions(FMonolithToolRegistry& Reg
 	Registry.RegisterAction(TEXT("asset"), TEXT("list_supported_asset_enrichers"),
 		TEXT("List read-only typed asset enrichers supported by Monolith."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAssetInspectionActions::ListSupportedAssetEnrichers),
-		FParamSchemaBuilder().Build());
+		FParamSchemaBuilder().StrictComplexTypes().Build());
 
 	Registry.RegisterAction(TEXT("asset"), TEXT("inspect_asset"),
 		TEXT("Inspect an asset with typed read-only enrichment when supported."),
@@ -662,6 +772,7 @@ void FMonolithAssetInspectionActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to inspect"))
 			.Optional(TEXT("include_references"), TEXT("boolean"), TEXT("Include reflected object references"), TEXT("true"))
 			.Optional(TEXT("array_limit"), TEXT("number"), TEXT("Maximum items per reflected array"), TEXT("32"))
+			.StrictComplexTypes()
 			.Build());
 
 	Registry.RegisterAction(TEXT("asset"), TEXT("inspect_assets_batch"),
@@ -671,6 +782,7 @@ void FMonolithAssetInspectionActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Required(TEXT("asset_paths"), TEXT("array"), TEXT("Asset paths to inspect"))
 			.Optional(TEXT("include_references"), TEXT("boolean"), TEXT("Include reflected object references"), TEXT("false"))
 			.Optional(TEXT("array_limit"), TEXT("number"), TEXT("Maximum items per reflected array"), TEXT("16"))
+			.StrictComplexTypes()
 			.Build());
 
 	Registry.RegisterAction(TEXT("asset"), TEXT("validate_typed_asset"),
@@ -679,12 +791,8 @@ void FMonolithAssetInspectionActions::RegisterActions(FMonolithToolRegistry& Reg
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to validate"))
 			.Optional(TEXT("array_limit"), TEXT("number"), TEXT("Array cap used when evaluating large payload warnings"), TEXT("32"))
+			.StrictComplexTypes()
 			.Build());
-
-	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("asset"), TEXT("inspect_asset"),
-		{ TEXT("asset details"), TEXT("asset properties"), TEXT("read asset metadata"), TEXT("asset references"), TEXT("texture settings") },
-		{ TEXT("inspect asset"), TEXT("describe asset"), TEXT("show asset"), TEXT("asset info") },
-		{ TEXT("inspect /Game/Textures/T_Rock and show its compression settings"), TEXT("what references does this asset have") });
 }
 
 FMonolithActionResult FMonolithAssetInspectionActions::ListSupportedAssetEnrichers(const TSharedPtr<FJsonObject>& Params)
@@ -723,7 +831,14 @@ FMonolithActionResult FMonolithAssetInspectionActions::InspectAsset(const TShare
 	}
 
 	bool bIncludeReferences = true;
-	Params->TryGetBoolField(TEXT("include_references"), bIncludeReferences);
+	if (Params->HasField(TEXT("include_references"))
+		&& (!Params->HasTypedField<EJson::Boolean>(TEXT("include_references"))
+			|| !Params->TryGetBoolField(TEXT("include_references"), bIncludeReferences)))
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Invalid parameter 'include_references': must be a boolean."),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	double ArrayLimitNumber = 32.0;
 	Params->TryGetNumberField(TEXT("array_limit"), ArrayLimitNumber);
@@ -741,7 +856,14 @@ FMonolithActionResult FMonolithAssetInspectionActions::InspectAssetsBatch(const 
 	}
 
 	bool bIncludeReferences = false;
-	Params->TryGetBoolField(TEXT("include_references"), bIncludeReferences);
+	if (Params->HasField(TEXT("include_references"))
+		&& (!Params->HasTypedField<EJson::Boolean>(TEXT("include_references"))
+			|| !Params->TryGetBoolField(TEXT("include_references"), bIncludeReferences)))
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Invalid parameter 'include_references': must be a boolean."),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	double ArrayLimitNumber = 16.0;
 	Params->TryGetNumberField(TEXT("array_limit"), ArrayLimitNumber);
@@ -810,3 +932,13 @@ FMonolithActionResult FMonolithAssetInspectionActions::ValidateTypedAsset(const 
 	Result->SetBoolField(TEXT("valid"), !HasBlockingValidationWarnings(Warnings));
 	return FMonolithActionResult::Success(Result);
 }
+
+#if WITH_DEV_AUTOMATION_TESTS
+namespace MonolithAsset::Tests
+{
+	bool DoesSoftReferenceExistForTest(const FSoftObjectPath& Path)
+	{
+		return DoesSoftReferenceExist(Path);
+	}
+}
+#endif
