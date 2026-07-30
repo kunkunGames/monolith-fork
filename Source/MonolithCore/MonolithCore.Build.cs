@@ -25,5 +25,10 @@ public class MonolithCore : ModuleRules
 			"Sockets",       // TCP probe for port bind verification
 			"Networking"     // Socket address utilities
 		});
+
+		PrivateDependencyModuleNames.AddRange(new string[]
+		{
+			"SourceControl"
+		});
 	}
 }
