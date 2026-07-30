@@ -1,6 +1,6 @@
 # Monolith API Reference
 
-**Version:** v0.21.3 · **Last updated:** 2026-07-26
+**Version:** v0.21.3 · **Last updated:** 2026-07-29
 
 **In-tree action total is approximate: ~1,400+ actions across 25+ in-tree namespaces** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
@@ -22,6 +22,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [blueprint](#blueprint) | 111 | Blueprint read/write, variable/component/graph CRUD, node ops, compile, auto-layout, spawn actors, dataset read/edit pack (DataTable/CurveTable/StringTable + `seed_data_asset`), cross-class property access, parent-function overrides |
 | [material](#material) | 63 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
 | [animation](#animation) | 145 | Curves, bone tracks, sync markers, root motion, compression, blend spaces (incl. baking + interpolation control), ABPs (incl. an AnimGraph-authoring pack — additive/slot/cached-pose/blend (by int + by enum)/sync/layered-blend/Control Rig/linked-layer/conduit nodes + output wiring — custom anim-graph nodes + state-machine teardown + compound expression transition rules), montages, skeletons, PoseSearch, IKRig, Control Rig |
+| [chooser](#chooser) | 16 | ChooserTable discovery, bounded readback, non-mutating structural validation, deep inspection, authoring, and reference editing |
 | [niagara](#niagara) | 119 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, effect types, event-aware summaries + validate_system event-chain reasoning, temporal-control composite writers + read aggregators, stateless-emitter factory) |
 | [editor](#editor) | 29 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, Python escape-hatch, persistent-level swap |
 | [config](#config) | 6 | INI config inspection and search |
@@ -43,7 +44,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [network](#network) | 4 | **New v0.17.0.** Reflection Intelligence — UE 5.7 replication inspection (replicated classes, RPCs, OnRep handlers, unbalanced-OnRep audit) |
 | [pipeline](#pipeline) | 2 | **New v0.17.0.** Reflection Intelligence — read-only composer actions (`pr_review`, `release_readiness`) |
 | [reflect](#reflect) | 1 | **New v0.19.0.** Reflection Intelligence — index maintenance (`rebuild_reflection_index`, project-only force-rebuild of the RI reflection tables; WRITE/maintenance) |
-| **In-tree subtotal** | **1406** | (all default-active; +45 experimental town gen → 1451 when registered) |
+| **In-tree subtotal** | **~1,400+** | Counts are intentionally approximate; query `monolith_discover()` for the current registry total. |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -407,6 +408,57 @@ Animation curves, bone tracks, sync markers, root motion, compression, blend spa
 | Layout / batch | 2 | `auto_layout`, `batch_execute` |
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithAnimation.md` for the deep dive.
+
+---
+
+## chooser
+
+ChooserTable discovery, readback, structural validation, deep inspection,
+authoring, and reference editing. The namespace is registered from
+`MonolithAnimation`, which is the sole owner of its startup and teardown.
+
+The six readback actions accept only a canonical mounted package path
+(`/Game/Choosers/CHT_Locomotion`) or matching top-level object path
+(`/Game/Choosers/CHT_Locomotion.CHT_Locomotion`). They reject relative paths,
+filesystem paths, subobjects, redirectors, case-only aliases, and mismatched
+object names. They do not compile, transact, mutate, save, or dirty the package.
+Reflected values are serialized to a maximum depth of 3, with at most 128
+fields per full struct (16 in compact column summaries) and 256 entries per
+full container (8 in compact summaries). Container wrappers preserve the full
+`count` and emit `truncated_after` when only the bounded prefix is returned.
+Depth-limited structs and containers return
+`serialization=depth_limit` without expanding. String, localized-text, and
+otherwise unsupported export values cap at 4,096 characters; longer values
+return `serialization`, bounded `value`, `original_char_count`, and
+`truncated_after`.
+
+| Category | Action | Parameters | Contract |
+|---|---|---|---|
+| Discovery | `list_chooser_tables` | `path_filter?`, `offset=0`, `limit=200` | Deterministic AssetRegistry page. `path_filter` is an exact mounted package prefix; `limit` is 1–1000. |
+| Readback | `get_chooser_table` | `asset_path`, `include_rows=false`, `row_limit=50` | Bounded counts, columns, references, fallback result, and optional rows/cells. Editor row count comes from `ResultsStructs` rather than stale derived arrays, root context inheritance is honored, and fixed reflected arrays expose bounded `count` + `items`. `row_limit` is 1–500. |
+| Readback | `list_chooser_columns` | `asset_path` | Column type, input/output classification, disabled state, row-value property/type/count, and bounded reflected fields. |
+| Readback | `list_chooser_rows` | `asset_path`, `start_row=0`, `limit=100` | Bounded row page with result, disabled state, and per-column cell values. |
+| Readback | `list_chooser_references` | `asset_path`, `offset=0`, `limit=200` | Stably sorted bounded hard/soft references with reflected source locations and exact loaded-object or AssetRegistry-object existence evidence. A loaded or on-disk package without the referenced export is not evidence that the asset still exists. Blueprint `…_C` fallback requires a soft-class property and an exact `GeneratedClassPath` tag. Response fields expose depth, global visit-budget, and result-count completeness. |
+| Validation | `validate_chooser_table` | `asset_path` | Non-mutating row-array/column alignment, known result-payload target, and reference-resolution validation. Warnings do not invalidate; errors do. Invalid/null result payloads and any bounded scan stop return `complete=false` and an error. |
+| Deep read/edit | `inspect_chooser` | `asset_path`, `include_cells=false`, `recursive=false` | Deep Chooser-aware inspection, optionally including the nested chooser tree. |
+| Deep read/edit | `duplicate_chooser_tree` | `source_assets`, `destination_folder`, `remap_rules?` | Two-pass duplicate and nested/result-reference remap. |
+| Deep read/edit | `set_context_object_class` | `asset_path`, `context_name_or_index`, `class_path` | Rewrite a class context entry and recompile. |
+| Deep read/edit | `set_result_asset_reference` | `asset_path`, `row_or_column`, `asset_path_value` | Rewrite an asset result row and recompile. |
+| Deep read/edit | `set_evaluate_chooser_result_reference` | `asset_path`, `row`, `child_chooser_path` | Rewrite an EvaluateChooser child-table reference and recompile. |
+| Validation | `validate_chooser` | `asset_path`, `expected_context_class?`, `expected_result_type?` | Compile-based Chooser validation; distinct from non-mutating `validate_chooser_table`. |
+| Authoring | `create_chooser_table` | `asset_path`, `output_type=Object`, `output_class?`, `context_class?` | Create an empty table. |
+| Authoring | `add_chooser_column` | `asset_path`, `column_kind`, `binding_property?`, `enum_class?` | Add and back-fill an input/output column. |
+| Authoring | `add_chooser_row` | `asset_path`, `cells`, `output_psd` | Append one row while growing every parallel row array atomically. |
+| Authoring | `set_chooser_cell` | `asset_path`, `column_index`, `row_index`, typed value fields | Replace one typed predicate cell. |
+
+The six discovery/readback actions remain registered without the optional
+Chooser plugin because they use AssetRegistry and reflection only. Calls that
+must load a `UChooserTable` return `ErrOptionalDepUnavailable` when the class is
+unavailable. The existing ten deep/authoring actions also remain discoverable
+but return their explicit Chooser-unavailable handler error off-gate.
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithAnimation.md` and
+`Plugins/Monolith/Skills/unreal-chooser/SKILL.md`.
 
 ---
 
@@ -1124,20 +1176,73 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithLevelSequence.md`.
 
 ---
 
-## gameplay_message
+## dataflow
 
-Read-only GameplayMessageRouter availability, exact channel/payload validation, and bounded static broadcaster/listener source tracing. **5 actions.** Implemented by `MonolithGameplayMessage` without a compile-time dependency on `GameplayMessageRuntime` or `GameplayMessageNodes`.
+Bounded, read-only `UDataflow` asset discovery, graph/node-schema inspection,
+integrity validation, variable inspection, and editor-comment membership.
+**8 actions.** Implemented by `MonolithDataflow` with explicit
+`DataflowCore`/`DataflowEngine` dependencies.
 
 | Action | Key params | Notes |
 |--------|-----------|-------|
+| `get_status` | — | Exact eight-action roster, Dataflow plugin/module state, and explicit authoring/evaluation/regeneration=false flags |
+| `list_assets` | `package_path?`, `limit?` | AssetRegistry-only bounded discovery; reports count completeness and never loads assets |
+| `get_dataflow_graph` | `asset_path`, `node_limit?`, `connection_limit?`, `pin_limit?`, `property_limit?`, `include_properties?` | Independent node/connection slices, explicit nested truncation, registered/declared pin provenance, and package-dirty postconditions |
+| `list_dataflow_node_types` | `filter?`, `common_only?`, `limit?`, `include_pins?`, `pin_limit?` | Deterministic category/type ordering with exact counts and bounded optional pin schemas |
+| `get_dataflow_node_schema` | `type_name`, `include_properties?`, `pin_limit?`, `property_limit?` | One case-exact registered factory type; case-only substitution returns `node_type_case_mismatch` |
+| `validate_dataflow_graph` | `asset_path`, `node_scan_limit?`, `connection_scan_limit?`, `issue_limit?` | Bounded structural validation; incomplete scans emit `validity_status=incomplete` and omit `valid` |
+| `list_dataflow_variables` | `asset_path`, `limit?` | Bounded property-bag descriptors and scalar values with explicit value-read, omission, and truncation status |
+| `list_dataflow_comments` | `asset_path`, `comment_limit?`, `node_limit?`, `graph_node_scan_limit?` | Bounded comment/membership rows; rejects comparison budgets above 1,000,000 |
+
+Scalar params require exact JSON types; unknown keys, fractional integers, and
+out-of-range limits fail with `-32602`. `package_path` is `/Game` or a
+canonical directory below it. `asset_path` is an exact, case-sensitive
+`/Game/.../Asset.Asset` object path and rejects shorthand names, file
+extensions, backslashes, subobjects, redirects, and alternate resolved
+objects. All numeric limits publish inclusive `minimum` and `maximum` fields in
+their discoverable action schemas.
+
+Every dynamic response also shares a fixed aggregate budget of 4,096 returned
+rows across top-level and nested collections. Reflected/free-form strings
+passed through the bounded reader additionally share 1,048,576 characters.
+`output_returned_row_count`, `output_rows_truncated`,
+`output_returned_bounded_text_character_count`,
+`output_bounded_text_truncated`, and `output_budget_exhausted` distinguish
+aggregate truncation from the individual action limits; fixed-size GUID and
+contract metadata remain bounded by the row ceiling. Asset-backed reads
+capture and verify package dirty state even when the loaded object is rejected
+for case, redirect, or type mismatch.
+
+Editable node/default properties and property-bag variables expose bounded
+scalar values only. Dynamic containers, structs, and fixed arrays report an
+explicit `value_read_status` such as `omitted_container` or `omitted_struct`
+and omit `value`; the module never calls an unbounded generic export path for
+those values.
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithDataflow.md`.
+
+---
+
+## Core action-schema helper
+
+`FParamSchemaBuilder::Range(name, min, max)` adds inclusive machine-readable
+`minimum` and `maximum` fields to an already-declared registered-action
+parameter. It is a discovery contract only: action handlers must still perform
+strict runtime type and range validation.
+
+`FMonolithParamSchema::IsUniversalResponseShapingParam(name)` identifies the
+five exact, case-sensitive parameters consumed after action dispatch:
+`_fields`, `_omit`, `_compact_json`, `_row_fields`, and `_path_fields`.
+Action-local strict readers call this helper so they preserve typo rejection
+without rejecting the framework's universal response-shaping contract.
+## gameplay_message
+Read-only GameplayMessageRouter availability, exact channel/payload validation, and bounded static broadcaster/listener source tracing. **5 actions.** Implemented by `MonolithGameplayMessage` without a compile-time dependency on `GameplayMessageRuntime` or `GameplayMessageNodes`.
 | `get_status` | — | Exact plugin, runtime/nodes module, subsystem class, async-listener class, listener-handle struct, and match-enum availability |
 | `describe_listener_contract` | — | Reflected functions, match types, lifetime rules, and equal-or-derived broadcast payload compatibility with the listener's accepted parent struct |
 | `validate_message_struct` | `message_struct`, `require_blueprint_type?`, `require_no_object_references?` | Exact non-redirecting `UScriptStruct` identity, structure size, metadata, and recursive object-reference checks |
 | `validate_channel_contract` | `channel_tag`, `message_struct?`, `match_type?`, `require_registered_tag?`, `require_blueprint_type?` | Canonical tag syntax, exact registration/case, case-sensitive match type, and optional payload validation |
 | `trace_channel_usage` | `channel_tag?`, `source_root?`, `source_roots?`, `include_monolith_source?`, `include_engine_gameplay_message_sources?`, `max_files?`, `max_results?`, `include_line_text?` | Per-call bounded lexical candidates; nested project-plugin roots; physical path enforcement; truncation-safe orphan status; source excerpts are opt-in; no PIE, listeners, or broadcasts |
-
 Scalar params require exact JSON types. Object paths reject whitespace, backslashes, extensions, subobjects, redirects, case changes, and resolved-path substitutions. Channel tags may be a valid single segment but reject leading, trailing, or internal empty dot segments. `max_files` is `1..5000`; `max_results` is `1..1000`; values are never clamped. `summary.orphan_analysis_complete=false` means bounds or skipped input made absence claims indeterminate, so no orphan candidate is emitted.
-
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithGameplayMessage.md`.
 
 ---
