@@ -1,8 +1,8 @@
 # Monolith Interchange Action Port Verification
 
-**Date:** 2026-07-29 (KST)
+**Date:** 2026-07-29; final review verification 2026-07-31 (KST)
 **Branch:** `agent/interchange-import-pipeline`
-**Pinned implementation source:** `ea6bc58f8d259715d16cc859fd6f7809edaaf7c9`
+**Pinned implementation source:** `41dbbe4c778684299f8d7b35058d4968b7317dd0`
 **Engine floor:** Unreal Engine 5.7
 **Engine ceiling tested:** Unreal Engine 5.8
 **Status:** Passed
@@ -27,6 +27,10 @@ The review hardening replaces advertised-but-unimplemented behavior with concret
 | Batch preview | Dry-run reserves each successful row's prospective package, so later same-name sources see the same `fail` conflict or unique `rename` suffix as a confirmed sequence. |
 | Preflight normalization | `can_import` applies the same destination-folder whitespace/trailing-slash normalization as import. |
 | Exact source index | A present `source_file_index` must be integer JSON; a string such as `"1"` cannot fall back to `INDEX_NONE`. |
+| Optional source path | A present `source_file` must be an exact non-empty JSON string; null, scalar coercion, and whitespace-only replacement paths fail before handler mutation. |
+| Replacement compatibility | A replacement source must match the target asset kind and have a real Interchange translator or legacy factory; untyped assets may only retain an equivalent stored extension. |
+| Multi-output imports | Scene/mesh imports accept one source, `conflict_policy=fail`, and a dedicated destination proven empty by complete bounded Asset Registry, loaded-object, and filesystem inspection. |
+| Export file shape | Export rejects a directory whose name merely ends in a supported extension instead of treating it as a writable output file. |
 | Plugin load contract | `Monolith.uplugin` enables the engine's `Interchange` plugin because `MonolithInterchange` hard-links `InterchangeEngine`. |
 | Workflow truthfulness | The skill uses `describe_query(action_schema)` and treats `[w]` as external side effects rather than promising universal editor Undo. |
 
@@ -52,14 +56,14 @@ Both engine roots were resolved from the applicable disposable host `.uproject` 
 
 | Gate | Result | Evidence | Linked artifact |
 |------|--------|----------|-----------------|
-| UE 5.7 host-project UBT | Passed — final target invocation at `ea6bc58f`, `Result: Succeeded` | `D:\P4\speed\Saved\ValidationHosts\MonolithPR1UE57\Saved\Logs\PR1-Interchange-Review2-Build-UE57-20260730-013558.out.log` | 295,424 bytes, SHA-256 `8F20F6BB58E91CD318CFD271B1C747D7385E5FAD7BF6DAF332A765ACB28BD77D` |
-| UE 5.8 host-project UBT | Passed — final target invocation at `ea6bc58f`, `Result: Succeeded` | `D:\P4\speed\Saved\ValidationHosts\MonolithPR1UE58\Saved\Logs\PR1-Interchange-Review2-Build-UE58-20260730-013018.out.log` | 276,992 bytes, SHA-256 `859E381E22EE6C7BD699197929BF600D482B8432446EFE80E8022EFC51DE58D8` |
+| UE 5.7 host-project UBT | Passed — final source-content invocation at `41dbbe4c`, `Result: Succeeded` | `D:\P4\speed\Saved\ValidationHosts\MonolithPR1UE57\Saved\Logs\PR1-Interchange-PathFix-Build-UE57-20260731-020444.log` | 349,184 bytes, SHA-256 `90FE50D15DC14B6583312474132BFB1064AA3F79E2DE43FD7AECE5194096A541` |
+| UE 5.8 host-project UBT | Passed — final source-content invocation at `41dbbe4c`, `Result: Succeeded` | `D:\P4\MonolithInterchangeUE58Host\Saved\Logs\InterchangeActionPort-PathFix-Build-UE58-20260731-020350.log` | 329,216 bytes, SHA-256 `560AD59BD0627AADFECFB4900C0AFF11BA9107A1B6D97F763E72348D88768F69` |
 | Native proxy | Passed — Visual Studio located through `vswhere`, optimized x64 executable linked | `Tools\MonolithProxy\build_proxy.bat` | 559,104 bytes, SHA-256 `CA5625EB2843FF8917B2E14C85F5BFC3361047CF011BB96123C5905AB807B200` |
 | Python proxy syntax | Passed | `python -m py_compile Scripts\monolith_proxy.py` | N/A |
 
-An earlier UE 5.7 direct `UnrealEditor -Plugin=...` attempt was explicitly rejected as evidence because its log contained UE 5.8 host PCH/source paths. The accepted UE 5.7 result comes from the unique `MonolithPR1UE57HostEditor` target and a detached worktree pinned to the implementation source above. The final UE 5.8 run uses the separate UE 5.8 host and the main PR worktree at that same source.
+An earlier UE 5.7 direct `UnrealEditor -Plugin=...` attempt was explicitly rejected as evidence because its log contained UE 5.8 host PCH/source paths. The accepted UE 5.7 result comes from the unique `MonolithPR1UE57HostEditor` target and a detached worktree whose source content matches the implementation source above. The final UE 5.8 run uses the separate UE 5.8 host with the same source content.
 
-One intermediate UE 5.8 invocation at `558b3092` exposed a real cross-version compile error: UE 5.8 stores `FJsonObject::Values` under a shared-string key, so direct `Values.Find(FString)` is not portable even though it compiles on UE 5.7. The final source uses the public `FJsonObject::TryGetField` API; both accepted builds above are from that corrected `ea6bc58f` source.
+One intermediate UE 5.8 invocation at `558b3092` exposed a real cross-version compile error: UE 5.8 stores `FJsonObject::Values` under a shared-string key, so direct `Values.Find(FString)` is not portable even though it compiles on UE 5.7. The final source retains the public `FJsonObject::TryGetField` fix first verified at `ea6bc58f`; the accepted builds above additionally include every later review hardening commit through `41dbbe4c`.
 
 The next review pass at `92a0b3de` found two post-preflight gaps: typed result validation could report a plain error after Unreal had already created wrong-kind objects, and only `rename` assigned `DestinationName`, allowing sanitized `fail`/`overwrite` imports to drift from the predicted package. Code commit `450b30c7` snapshots destination object paths, rolls back new typed-mismatch assets, reports retained results as an explicit partial mutation, and assigns the resolved name for every conflict policy.
 
@@ -70,10 +74,10 @@ The next review pass at `92a0b3de` found two post-preflight gaps: typed result v
 | Gate | UE 5.7 | UE 5.8 |
 |------|--------|--------|
 | Focused automation | 1 succeeded, 0 warnings, 0 errors | 1 succeeded, 0 warnings, 0 errors |
-| Report | `D:\P4\speed\Saved\ValidationHosts\MonolithPR1UE57\Saved\Automation\PR1-Interchange-Review2-UE57-20260730-013731\index.json` | `D:\P4\speed\Saved\ValidationHosts\MonolithPR1UE58\Saved\Automation\PR1-Interchange-Review2-UE58-20260730-013658\index.json` |
+| Report | `D:\P4\speed\Saved\ValidationHosts\MonolithPR1UE57\Saved\Automation\PR1-Interchange-PathFix-UE57-20260731-020501\index.json` | `D:\P4\MonolithInterchangeUE58Host\Saved\Automation\InterchangeActionPort-PathFix-UE58-20260731-020412\index.json` |
 | Test | `Monolith.ParamGuard.MonolithInterchange.ImportRejectsMalformedParams` | `Monolith.ParamGuard.MonolithInterchange.ImportRejectsMalformedParams` |
 
-The focused test verifies complete 15-action registration, absence of `import_with_options`, schema rejection for a missing source parameter, guarded handling of a missing file, audio-vs-PNG typed mismatch with the exact `typed_import_extension_mismatch` code, dry-run rejection when no exporter supports the requested extension, `can_import` destination normalization, `fail`/`rename` same-name batch preview behavior, and controlled rejection of a nonnumeric source index.
+The focused test verifies complete 15-action registration, absence of `import_with_options`, schema rejection for a missing or wrongly typed source parameter, guarded handling of a missing file, audio-vs-PNG typed mismatch with the exact `typed_import_extension_mismatch` code, dry-run rejection when no exporter supports the requested extension, `can_import` destination normalization, `fail`/`rename` same-name batch preview behavior using a real PNG fixture, and controlled rejection of a nonnumeric source index. Project-generated fixture paths are converted to full paths before dispatch so UE 5.7 and UE 5.8 exercise the same allowed-root contract.
 
 ### Review 3 rollback and resolved-name evidence
 
@@ -88,7 +92,7 @@ The expanded automation creates a new unsaved `UTexture2D`, confirms that rollba
 
 Final live MCP evidence used UE 5.8 port `9431` and fetched `describe.action_schema` before the write. Importing `Saved\Direct\123.png` through `interchange.import_texture` with `conflict_policy=fail` returned `expected_asset_name=Asset_123`, `resolved_asset_name=Asset_123`, and the exact object `/Game/Tests/Monolith/Interchange/NumericNameReview3_20260730_0306/Asset_123.Asset_123`; `matching_kind_count=1`. The editor then exited through the described `editor.run_console_command` schema, port `9431` was released, the copied source fixture was deleted, and no `Asset_123.uasset` remained. Live log: `D:\P4\speed\Saved\ValidationHosts\MonolithPR1UE58\Saved\Logs\PR1-Interchange-Review3-LiveMCP-UE58-20260730-030532.log`.
 
-Final UE 5.8 follow-up live MCP evidence at `ea6bc58f` used port `9431`; `/health` reported `status=ok`, version `0.21.3`, and 1,342 registered tools. Exact schemas were fetched through `describe_query(action_schema)` before domain calls. The editor was closed through `editor.run_console_command("QUIT_EDITOR")`; PID 49724 exited and port 9431 was released.
+The latest live MCP follow-up remains pinned to the earlier `ea6bc58f` implementation and used port `9431`; it is retained as transport/schema evidence, not as exact-head runtime proof. `/health` reported `status=ok`, version `0.21.3`, and 1,342 registered tools. Exact schemas were fetched through `describe_query(action_schema)` before domain calls. The editor was closed through `editor.run_console_command("QUIT_EDITOR")`; PID 49724 exited and port 9431 was released. Exact-head proof for `41dbbe4c` is the cross-version build and focused automation evidence above.
 
 | Live scenario | Result |
 |---------------|--------|
