@@ -52,10 +52,12 @@ For a channel that is intentionally not registered yet, pass `require_registered
 - Explicit roots must exist both lexically and physically under the current project's `Source` or `Plugins` directory. Junction/symlink escapes are rejected, and recursive traversal rechecks the physical boundary.
 - `Plugins/Monolith/Source` is excluded unless `include_monolith_source=true`.
 - Engine scanning is limited to the installed `GameplayMessageRouter/Source` directory and requires `include_engine_gameplay_message_sources=true`.
-- Each supported call on a source line is parsed separately. Channel candidates come only from that call's first argument, so a later call cannot inherit an earlier call's payload or match type.
-- At most 256 roots, 5,000 source files, 1,000 matches, 2 MiB per file, 32 candidates per call, and 1,000 issues are processed. The response reports every reached limit.
+- Each supported call on a source line is parsed separately. Its pattern declares the channel and match-type argument positions, so a later call cannot inherit an earlier call's payload or match type and callback names cannot masquerade as `PartialMatch`.
+- Eligible files are deduplicated and sorted before `max_files` selects the prefix. At most 100,000 eligible files may be enumerated; at most 5,000 are selected, with 256 roots, 1,000 matches, 2 MiB per file, 32 candidates per call, and 1,000 issues. The response separates `files_selected` from files actually loaded in `files_scanned` and reports `limits.eligible_files_enumerated`.
+- Inline and multi-line comments are excluded, supported call tokens require an identifier boundary, and scoped constants such as `Combat::TAG_Event` retain their qualifier.
 - `include_line_text=false` omits both `line_text` and `function_context`; opt in only when source excerpts are appropriate.
 - Orphan broadcaster/listener findings require a complete scan. When any file/result/candidate bound or skipped-file condition prevents absence proof, require `summary.orphan_analysis_complete=false`, inspect `absence_analysis_indeterminate`, and do not interpret zero counterpart rows as an orphan.
+- A filtered child-channel trace retains any ancestor `PartialMatch` listener that can receive the child broadcast; inspect that ancestor row as part of the counterpart evidence.
 - Matches are lexical single-line candidates. They do not prove branch reachability, listener lifetime, runtime registration, broadcast execution, or payload compatibility at runtime.
 
 Use `channel_graph`, `broadcasters`, `listeners`, `issues`, and `limits` as bounded review evidence. Do not treat them as PIE or live-subsystem proof.

@@ -62,7 +62,7 @@ from exact reflected paths.
 | Default source roots | PASS — current-project `Source` and every discovered `EPluginType::Project` source directory, including nested `Plugins/GameFeatures/...` plugins. |
 | Explicit source roots | PASS — roots must exist lexically and physically under the current project's `Source` or `Plugins` directory; junction/symlink escapes fail. |
 | Engine source | PASS — opt-in is limited to the installed `GameplayMessageRouter/Source` directory. |
-| Source bounds | PASS — 256 roots, 5,000 files, 2 MiB per file, 1,000 results, 32 candidates per call, and 1,000 issues are hard limits with explicit truncation metadata. Incomplete scans suppress orphan claims and report indeterminate absence analysis. |
+| Source bounds | PASS — 256 roots, 100,000 eligible files enumerated, 5,000 path-sorted files selected, 2 MiB per file, 1,000 results, 32 candidates per call, and 1,000 issues are hard limits with explicit truncation metadata. Incomplete scans suppress orphan claims and report indeterminate absence analysis. |
 | Runtime claim | PASS — output declares `analysis_mode="bounded_static_source"` and `runtime_execution="not_performed"` and lists reachability/lifetime/delivery limitations. |
 | Mutation | PASS — handlers do not call listener registration, broadcast, compile, save, modify, dirty, or package-creation APIs. The `RegisterListener(` occurrence in the trace implementation is a bounded lexical search token, not a function call. |
 
@@ -70,8 +70,9 @@ from exact reflected paths.
 
 ## 3.1. AI Review Remediation
 
-All ten actionable Codex review findings were reproduced as contract gaps and
-closed in production code plus focused regression assertions.
+The initial ten actionable review findings and every subsequent source-trace
+accuracy finding were reproduced as contract gaps and closed in production
+code plus focused regression assertions.
 
 | Review finding | Root fix | Regression evidence |
 |---|---|---|
@@ -85,6 +86,13 @@ closed in production code plus focused regression assertions.
 | Lexical path checks allowed junction escapes | Root and allowed-directory identities are resolved through `IFileManager::GetFilenameOnDisk`; recursive enumeration rechecks each physical path against its root. | Each host exposes a project-local junction to an external fixture, and the root is rejected with invalid params. |
 | Single-segment literal tags were ignored | Quoted first-argument candidates use the canonical tag validator instead of requiring a dot. | Literal `"Message"` is found with its exact payload. |
 | Promised struct size was absent | `message_struct.structure_size` now reports `UScriptStruct::GetStructureSize()`. | `GameplayTagContainer` asserts a positive structure size on both engines. |
+| A filtered child channel discarded an ancestor partial listener | Filter acceptance now keeps a listener row when the requested channel is a strict descendant and the listener's argument-local match type is `PartialMatch`. | Filtering `Message.Child` returns both its broadcaster and the `Message` partial listener, with zero false-orphan counts. |
+| Scoped tag constants collapsed to the same leaf | Constant extraction walks complete C++ `::` qualifier chains while retaining strict token boundaries. | `Combat::TAG_Event` and `UI::TAG_Event` remain separate channel candidates. |
+| Calls inside inline or block comments were treated as live | A quote-aware line sanitizer removes `//` and multi-line `/* ... */` regions while preserving line/column positions. | Inline and multi-line commented fixture calls are absent from results. |
+| Callback names containing `PartialMatch` changed listener semantics | Each listener pattern declares its match argument and only exact enum tokens in that argument are recognized. | `&ThisClass::OnPartialMatch` with no match argument reports `ExactMatch(default)`. |
+| `max_files` depended on filesystem enumeration order | Eligible paths are deduplicated, fully sorted, then truncated; enumeration above 100,000 fails explicitly. | `max_files=1` always selects `AA_DeterministicFirst.inl`, never `ZZ_DeterministicLast.inl`. |
+| Larger identifiers containing a supported call token produced false matches | Every trace token now requires a C++ identifier boundary while the explicit `K2_BroadcastMessage` pattern still owns its exact call. | `CanBroadcastMessage` and `TryRegisterListener` fixtures produce no matches. |
+| `files_scanned` counted selected paths that were never opened | The scanner increments `files_scanned` only after successful load and separately reports `files_selected`. | `max_results=1` reports three selected fixture files but only the first actually scanned file. |
 
 ---
 

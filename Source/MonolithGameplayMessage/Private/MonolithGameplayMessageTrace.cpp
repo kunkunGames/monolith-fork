@@ -22,6 +22,9 @@ namespace MonolithGameplayMessage
 			// Most entrypoints take the channel first; the Blueprint async
 			// listener takes a world context object before it.
 			int32 ChannelArgumentIndex;
+			// Zero-based match-type argument, or INDEX_NONE when the call has no
+			// listener match contract.
+			int32 MatchArgumentIndex;
 		};
 
 		const FTracePattern TracePatterns[] =
@@ -31,42 +34,48 @@ namespace MonolithGameplayMessage
 				TEXT("BroadcastMessage<"),
 				TEXT("broadcaster"),
 				TEXT("Templated native broadcast call; the template argument is a payload candidate."),
-				0
+				0,
+				INDEX_NONE
 			},
 			{
 				TEXT("broadcast_call"),
 				TEXT("BroadcastMessage("),
 				TEXT("broadcaster"),
 				TEXT("Native or reflected broadcast call; payload type may be implied by the expression."),
-				0
+				0,
+				INDEX_NONE
 			},
 			{
 				TEXT("broadcast_blueprint"),
 				TEXT("K2_BroadcastMessage("),
 				TEXT("broadcaster"),
 				TEXT("Blueprint-facing broadcast call site."),
-				0
+				0,
+				INDEX_NONE
 			},
 			{
 				TEXT("register_listener_template"),
 				TEXT("RegisterListener<"),
 				TEXT("listener"),
 				TEXT("Templated native listener registration; the template argument is a payload candidate."),
-				0
+				0,
+				2
 			},
 			{
 				TEXT("register_listener_call"),
 				TEXT("RegisterListener("),
 				TEXT("listener"),
 				TEXT("Native listener registration; payload type may be implied by the callback signature."),
-				0
+				0,
+				2
 			},
 			{
 				TEXT("async_listener"),
 				TEXT("ListenForGameplayMessages("),
 				TEXT("listener"),
 				TEXT("Blueprint async listener registration call site."),
-				1
+				1,
+				3
 			}
 		};
 
@@ -88,12 +97,29 @@ namespace MonolithGameplayMessage
 			int32 OversizeFilesSkipped = 0;
 			int32 UnreadableFilesSkipped = 0;
 			int32 CandidateListsTruncated = 0;
+			int32 EligibleFilesEnumerated = 0;
 			bool bFileLimitReached = false;
 			bool bResultLimitReached = false;
 			bool bIssueLimitReached = false;
 			bool bPhysicalBoundaryViolation = false;
 			FString PhysicalBoundaryViolationPath;
 		};
+
+		constexpr int32 MaxEnumeratedSourceFiles = 100000;
+
+		bool IsCppIdentifierCharacter(TCHAR Character)
+		{
+			return FChar::IsAlnum(Character) || Character == TEXT('_');
+		}
+
+		bool IsStrictDescendantChannel(
+			const FString& Channel,
+			const FString& Ancestor)
+		{
+			return Channel.Len() > Ancestor.Len()
+				&& Channel.StartsWith(Ancestor, ESearchCase::CaseSensitive)
+				&& Channel[Ancestor.Len()] == TEXT('.');
+		}
 
 		FMonolithActionResult InvalidParams(const FString& Error)
 		{
@@ -217,12 +243,13 @@ namespace MonolithGameplayMessage
 		{
 			OutFiles.Reset();
 			IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+			TSet<FString> SeenFiles;
 
 			for (const FString& Root : Roots)
 			{
 				const bool bCompleted = PlatformFile.IterateDirectoryRecursively(
 					*Root,
-					[&OutFiles, &Stats, &Root, bIncludeMonolithSource, MaxFiles](
+					[&OutFiles, &SeenFiles, &Stats, &Root, bIncludeMonolithSource](
 						const TCHAR* FilenameOrDirectory,
 						bool bIsDirectory)
 					{
@@ -252,10 +279,9 @@ namespace MonolithGameplayMessage
 						{
 							return true;
 						}
-						if (OutFiles.Num() >= MaxFiles)
+						if (SeenFiles.Contains(PhysicalPath))
 						{
-							Stats.bFileLimitReached = true;
-							return false;
+							return true;
 						}
 
 						const int64 FileSize =
@@ -271,6 +297,14 @@ namespace MonolithGameplayMessage
 							return true;
 						}
 
+						if (OutFiles.Num() >= MaxEnumeratedSourceFiles)
+						{
+							// A deterministic max_files subset cannot be proven
+							// after abandoning filesystem-order enumeration.
+							Stats.bFileLimitReached = true;
+							return false;
+						}
+						SeenFiles.Add(PhysicalPath);
 						OutFiles.Add(MoveTemp(PhysicalPath));
 						return true;
 					});
@@ -283,27 +317,96 @@ namespace MonolithGameplayMessage
 						*Stats.PhysicalBoundaryViolationPath);
 					return false;
 				}
-				if (!bCompleted && !Stats.bFileLimitReached)
+				if (!bCompleted && Stats.bFileLimitReached
+					&& OutFiles.Num() >= MaxEnumeratedSourceFiles)
+				{
+					OutError = FString::Printf(
+						TEXT("Eligible source file enumeration exceeds the deterministic hard limit of %d"),
+						MaxEnumeratedSourceFiles);
+					return false;
+				}
+				if (!bCompleted)
 				{
 					OutError = FString::Printf(TEXT("Failed while enumerating source root '%s'"), *Root);
 					return false;
 				}
-				if (Stats.bFileLimitReached)
-				{
-					break;
-				}
 			}
 
 			OutFiles.Sort();
+			Stats.EligibleFilesEnumerated = OutFiles.Num();
+			if (OutFiles.Num() > MaxFiles)
+			{
+				Stats.bFileLimitReached = true;
+				OutFiles.SetNum(MaxFiles, EAllowShrinking::No);
+			}
 			return true;
 		}
 
-		bool IsCommentOnlyLine(FString Line)
+		bool IsEscapedCharacter(const FString& Text, int32 Index);
+
+		FString StripCommentsFromLine(
+			const FString& Line,
+			bool& bInBlockComment)
 		{
-			Line.TrimStartInline();
-			return Line.StartsWith(TEXT("//"))
-				|| Line.StartsWith(TEXT("/*"))
-				|| Line.StartsWith(TEXT("*"));
+			FString Result;
+			Result.Reserve(Line.Len());
+			bool bInDoubleQuote = false;
+			bool bInSingleQuote = false;
+			for (int32 Index = 0; Index < Line.Len(); ++Index)
+			{
+				const TCHAR Character = Line[Index];
+				const TCHAR Next =
+					Index + 1 < Line.Len() ? Line[Index + 1] : TEXT('\0');
+
+				if (bInBlockComment)
+				{
+					Result.AppendChar(TEXT(' '));
+					if (Character == TEXT('*') && Next == TEXT('/'))
+					{
+						Result.AppendChar(TEXT(' '));
+						++Index;
+						bInBlockComment = false;
+					}
+					continue;
+				}
+
+				if (!bInDoubleQuote && !bInSingleQuote
+					&& Character == TEXT('/') && Next == TEXT('/'))
+				{
+					while (Result.Len() < Line.Len())
+					{
+						Result.AppendChar(TEXT(' '));
+					}
+					break;
+				}
+				if (!bInDoubleQuote && !bInSingleQuote
+					&& Character == TEXT('/') && Next == TEXT('*'))
+				{
+					Result.AppendChar(TEXT(' '));
+					Result.AppendChar(TEXT(' '));
+					++Index;
+					bInBlockComment = true;
+					continue;
+				}
+				if (Character == TEXT('"')
+					&& !bInSingleQuote
+					&& !IsEscapedCharacter(Line, Index))
+				{
+					bInDoubleQuote = !bInDoubleQuote;
+				}
+				else if (Character == TEXT('\'')
+					&& !bInDoubleQuote
+					&& !IsEscapedCharacter(Line, Index))
+				{
+					bInSingleQuote = !bInSingleQuote;
+				}
+				Result.AppendChar(Character);
+			}
+			while (Result.Len() < Line.Len())
+			{
+				Result.AppendChar(TEXT(' '));
+			}
+			return Result;
 		}
 
 		FString InferFunctionContext(const TArray<FString>& Lines, int32 LineIndex)
@@ -312,7 +415,7 @@ namespace MonolithGameplayMessage
 			{
 				FString Candidate = Lines[Index];
 				Candidate.TrimStartAndEndInline();
-				if (IsCommentOnlyLine(Candidate))
+				if (Candidate.IsEmpty())
 				{
 					continue;
 				}
@@ -657,15 +760,38 @@ namespace MonolithGameplayMessage
 						break;
 					}
 
+					// The prefix must begin at a token boundary unless it follows
+					// a C++ scope operator. This prevents identifiers such as
+					// MyTAG_Event from being split into a fake TAG_Event channel.
+					if (FoundIndex > 0
+						&& IsCppIdentifierCharacter(FirstArgument[FoundIndex - 1]))
+					{
+						SearchIndex = FoundIndex + Prefix.Len();
+						continue;
+					}
+
 					int32 EndIndex = FoundIndex;
 					while (EndIndex < FirstArgument.Len()
-						&& (FChar::IsAlnum(FirstArgument[EndIndex])
-							|| FirstArgument[EndIndex] == TEXT('_')))
+						&& IsCppIdentifierCharacter(FirstArgument[EndIndex]))
 					{
 						++EndIndex;
 					}
+
+					int32 StartIndex = FoundIndex;
+					while (StartIndex >= 2
+						&& FirstArgument[StartIndex - 1] == TEXT(':')
+						&& FirstArgument[StartIndex - 2] == TEXT(':'))
+					{
+						StartIndex -= 2;
+						while (StartIndex > 0
+							&& IsCppIdentifierCharacter(
+								FirstArgument[StartIndex - 1]))
+						{
+							--StartIndex;
+						}
+					}
 					AddCandidateUnique(
-						FirstArgument.Mid(FoundIndex, EndIndex - FoundIndex),
+						FirstArgument.Mid(StartIndex, EndIndex - StartIndex),
 						Candidates,
 						bTruncated);
 					SearchIndex = FMath::Max(EndIndex, FoundIndex + 1);
@@ -699,34 +825,51 @@ namespace MonolithGameplayMessage
 				256);
 		}
 
-		FString ExtractMatchType(const FString& Line)
+		FString ExtractMatchType(
+			const FString& Call,
+			int32 MatchArgumentIndex)
 		{
-			if (Line.Contains(TEXT("PartialMatch"))
-				|| Line.Contains(TEXT("EGameplayMessageMatch::Partial")))
+			if (MatchArgumentIndex == INDEX_NONE)
+			{
+				return FString();
+			}
+			FString Argument = ExtractArgument(Call, MatchArgumentIndex);
+			Argument.TrimStartAndEndInline();
+			Argument.ReplaceInline(TEXT(" "), TEXT(""));
+			Argument.ReplaceInline(TEXT("\t"), TEXT(""));
+			if (Argument.Equals(
+					TEXT("EGameplayMessageMatch::PartialMatch"),
+					ESearchCase::CaseSensitive)
+				|| Argument.Equals(TEXT("PartialMatch"), ESearchCase::CaseSensitive))
 			{
 				return TEXT("PartialMatch");
 			}
-			if (Line.Contains(TEXT("ExactMatch"))
-				|| Line.Contains(TEXT("EGameplayMessageMatch::Exact")))
+			if (Argument.Equals(
+					TEXT("EGameplayMessageMatch::ExactMatch"),
+					ESearchCase::CaseSensitive)
+				|| Argument.Equals(TEXT("ExactMatch"), ESearchCase::CaseSensitive))
 			{
 				return TEXT("ExactMatch");
 			}
 			return FString();
 		}
 
-		bool IsShadowedBroadcastCall(
+		bool IsSupportedCallToken(
 			const FString& Line,
 			const FTracePattern& Pattern,
 			int32 TokenIndex)
 		{
-			if (FCString::Strcmp(Pattern.Code, TEXT("broadcast_call")) != 0
-				|| TokenIndex < 3)
+			if (TokenIndex > 0
+				&& IsCppIdentifierCharacter(Line[TokenIndex - 1]))
 			{
 				return false;
 			}
-
-			return Line.Mid(TokenIndex - 3, 3)
-				.Equals(TEXT("K2_"), ESearchCase::CaseSensitive);
+			// The generic BroadcastMessage pattern is embedded in the explicit
+			// K2_BroadcastMessage token. Let the specific pattern own that call.
+			return FCString::Strcmp(Pattern.Code, TEXT("broadcast_call")) != 0
+				|| TokenIndex < 3
+				|| !Line.Mid(TokenIndex - 3, 3)
+					.Equals(TEXT("K2_"), ESearchCase::CaseSensitive);
 		}
 
 		TSharedPtr<FJsonObject> TraceRowToJson(
@@ -972,6 +1115,7 @@ FMonolithActionResult FMonolithGameplayMessageActions::TraceChannelUsage(
 	TMap<FString, int32> CountsByRole;
 	TMap<FString, int32> CountsByCode;
 	int32 FilesWithMatches = 0;
+	int32 FilesScanned = 0;
 
 	for (const FString& File : SourceFiles)
 	{
@@ -987,12 +1131,23 @@ FMonolithActionResult FMonolithGameplayMessageActions::TraceChannelUsage(
 			++Stats.UnreadableFilesSkipped;
 			continue;
 		}
+		++FilesScanned;
 
-		bool bFileMatched = false;
-		for (int32 LineIndex = 0; LineIndex < Lines.Num(); ++LineIndex)
+		TArray<FString> SanitizedLines;
+		SanitizedLines.Reserve(Lines.Num());
+		bool bInBlockComment = false;
+		for (const FString& SourceLine : Lines)
 		{
-			const FString& Line = Lines[LineIndex];
-			if (IsCommentOnlyLine(Line))
+			SanitizedLines.Add(
+				StripCommentsFromLine(SourceLine, bInBlockComment));
+		}
+		bool bFileMatched = false;
+		for (int32 LineIndex = 0;
+			LineIndex < SanitizedLines.Num();
+			++LineIndex)
+		{
+			const FString& Line = SanitizedLines[LineIndex];
+			if (Line.TrimStartAndEnd().IsEmpty())
 			{
 				continue;
 			}
@@ -1013,7 +1168,7 @@ FMonolithActionResult FMonolithGameplayMessageActions::TraceChannelUsage(
 					}
 					SearchIndex =
 						TokenIndex + FCString::Strlen(Pattern.Token);
-					if (IsShadowedBroadcastCall(Line, Pattern, TokenIndex))
+					if (!IsSupportedCallToken(Line, Pattern, TokenIndex))
 					{
 						continue;
 					}
@@ -1057,7 +1212,9 @@ FMonolithActionResult FMonolithGameplayMessageActions::TraceChannelUsage(
 						Payload = ExtractStaticStructCandidate(Call);
 					}
 
-					FString MatchType = ExtractMatchType(Call);
+					FString MatchType = ExtractMatchType(
+						Call,
+						Pattern.MatchArgumentIndex);
 					if (MatchType.IsEmpty()
 						&& FString(Pattern.Role).Equals(
 							TEXT("listener"),
@@ -1068,10 +1225,24 @@ FMonolithActionResult FMonolithGameplayMessageActions::TraceChannelUsage(
 
 					for (const FString& Channel : Channels)
 					{
-						if (!RequestedChannel.IsEmpty()
-							&& !Channel.Equals(
+						const bool bExactRequestedChannel =
+							RequestedChannel.IsEmpty()
+							|| Channel.Equals(
 								RequestedChannel,
-								ESearchCase::CaseSensitive))
+								ESearchCase::CaseSensitive);
+						const bool bRelevantPartialAncestor =
+							!RequestedChannel.IsEmpty()
+							&& FString(Pattern.Role).Equals(
+								TEXT("listener"),
+								ESearchCase::CaseSensitive)
+							&& MatchType.Equals(
+								TEXT("PartialMatch"),
+								ESearchCase::CaseSensitive)
+							&& IsStrictDescendantChannel(
+								RequestedChannel,
+								Channel);
+						if (!bExactRequestedChannel
+							&& !bRelevantPartialAncestor)
 						{
 							continue;
 						}
@@ -1087,7 +1258,9 @@ FMonolithActionResult FMonolithGameplayMessageActions::TraceChannelUsage(
 						if (bIncludeLineText)
 						{
 							Trace.FunctionContext =
-								InferFunctionContext(Lines, LineIndex);
+								InferFunctionContext(
+									SanitizedLines,
+									LineIndex);
 							Trace.LineText = BoundText(Call, 300);
 						}
 
@@ -1199,20 +1372,12 @@ FMonolithActionResult FMonolithGameplayMessageActions::TraceChannelUsage(
 		}
 	}
 
-	auto IsStrictDescendantOf =
-		[](const FString& Channel, const FString& Ancestor)
-	{
-		return Channel.Len() > Ancestor.Len()
-			&& Channel.StartsWith(Ancestor, ESearchCase::CaseSensitive)
-			&& Channel[Ancestor.Len()] == TEXT('.');
-	};
-
 	auto HasAncestorPartialListener =
-		[&PartialListenerChannels, &IsStrictDescendantOf](const FString& Channel)
+		[&PartialListenerChannels](const FString& Channel)
 	{
 		for (const FString& Ancestor : PartialListenerChannels)
 		{
-			if (IsStrictDescendantOf(Channel, Ancestor))
+			if (IsStrictDescendantChannel(Channel, Ancestor))
 			{
 				return true;
 			}
@@ -1221,11 +1386,11 @@ FMonolithActionResult FMonolithGameplayMessageActions::TraceChannelUsage(
 	};
 
 	auto HasDescendantBroadcaster =
-		[&BroadcasterChannels, &IsStrictDescendantOf](const FString& Channel)
+		[&BroadcasterChannels](const FString& Channel)
 	{
 		for (const FString& Descendant : BroadcasterChannels)
 		{
-			if (IsStrictDescendantOf(Descendant, Channel))
+			if (IsStrictDescendantChannel(Descendant, Channel))
 			{
 				return true;
 			}
@@ -1390,9 +1555,9 @@ FMonolithActionResult FMonolithGameplayMessageActions::TraceChannelUsage(
 		Checks,
 		bOk,
 		TEXT("source_files_scanned"),
-		SourceFiles.Num() > 0,
+		FilesScanned > 0,
 		TEXT("error"),
-		FString::Printf(TEXT("files_scanned=%d"), SourceFiles.Num()));
+		FString::Printf(TEXT("files_scanned=%d"), FilesScanned));
 	AddCheck(
 		Checks,
 		bOk,
@@ -1406,6 +1571,9 @@ FMonolithActionResult FMonolithGameplayMessageActions::TraceChannelUsage(
 	Limits->SetNumberField(TEXT("max_files"), MaxFiles);
 	Limits->SetNumberField(TEXT("max_results"), MaxResults);
 	Limits->SetNumberField(TEXT("max_source_file_bytes"), MaxSourceFileBytes);
+	Limits->SetNumberField(
+		TEXT("max_enumerated_source_files"),
+		MaxEnumeratedSourceFiles);
 	Limits->SetNumberField(TEXT("max_candidates_per_line"), MaxCandidatesPerLine);
 	Limits->SetNumberField(TEXT("max_issues"), MaxIssues);
 	Limits->SetBoolField(TEXT("file_limit_reached"), Stats.bFileLimitReached);
@@ -1419,6 +1587,9 @@ FMonolithActionResult FMonolithGameplayMessageActions::TraceChannelUsage(
 	Limits->SetNumberField(
 		TEXT("candidate_lists_truncated"),
 		Stats.CandidateListsTruncated);
+	Limits->SetNumberField(
+		TEXT("eligible_files_enumerated"),
+		Stats.EligibleFilesEnumerated);
 
 	TSharedPtr<FJsonObject> Summary = MakeShared<FJsonObject>();
 	Summary->SetNumberField(TEXT("channel_count"), Channels.Num());
@@ -1454,7 +1625,8 @@ FMonolithActionResult FMonolithGameplayMessageActions::TraceChannelUsage(
 		TEXT("include_engine_gameplay_message_sources"),
 		bIncludeEngineSources);
 	Result->SetNumberField(TEXT("roots_checked"), Roots.Num());
-	Result->SetNumberField(TEXT("files_scanned"), SourceFiles.Num());
+	Result->SetNumberField(TEXT("files_scanned"), FilesScanned);
+	Result->SetNumberField(TEXT("files_selected"), SourceFiles.Num());
 	Result->SetNumberField(TEXT("files_with_matches"), FilesWithMatches);
 	Result->SetNumberField(TEXT("match_count"), Matches.Num());
 	Result->SetObjectField(TEXT("limits"), Limits);
