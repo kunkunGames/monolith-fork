@@ -222,3 +222,18 @@ and links on UE 5.7 and UE 5.8, passes 5/5 focused tests on each engine,
 rejects package-only evidence for a missing referenced export, changes the
 generated catalog only by the intended six actions, introduces no new static
 finding, and does not include any excluded feature class.
+
+---
+
+## AI review remediation, head `98321260`
+
+| Review finding | Root fix |
+| --- | --- |
+| Every path under `/Script/` was reported as existing without checking the export | `AssetExistsForSoftPath` resolves the exact object. A failed resolve is authoritative when the script package is loaded; when the owning module is absent the reference cannot be disproved and is not reported missing. |
+| An unloaded Blueprint-generated class (`/Game/F/BP_F.BP_F_C`) was reported unresolved | The registry indexes the owning Blueprint, not the generated-class export. A failed exact lookup on a `_C` object name retries against the owning Blueprint asset. |
+| `TScriptInterface` hard references were never collected | `FInterfaceProperty` is not an `FObjectPropertyBase`, so it fell through every branch. An explicit branch now reads the interface's object pointer via the typed accessor. |
+| Only element zero of a reflected fixed-size array was visited | `CollectReferencesFromStruct` iterates all `ArrayDim` elements through the indexed `ContainerPtrToValuePtr` overload and labels each source `Prop[i]`. |
+| Deprecated properties produced false `unresolved_soft_reference` findings | The field iterator uses `EFieldIteratorFlags::ExcludeDeprecated`, matching the serializer's policy. |
+| `list_chooser_rows` silently capped every row at 512 cells | The row endpoints report `column_count`, `row_cells_per_row`, and `row_cells_truncated`, so a partial predicate/output set is explicit. |
+| `int64`/`uint64` values above 2^53−1 were rounded through a double | Integers outside the exactly representable JSON range are emitted as decimal strings; smaller values keep their numeric form. |
+| Depth-limited scans still reported `complete=true` (carried over from head `0a84192d`, not closed by the prior fix) | `FReferenceScan` gains `bDepthLimited`, kept separate from `bTruncated` so a depth stop does not abort sibling traversal. `IsComplete()` requires both to be clear, `validate_chooser_table` raises `reference_scan_depth_limited`, and the read endpoints publish `scan_depth_limited`/`references_depth_limited` plus an explicit completeness flag. |

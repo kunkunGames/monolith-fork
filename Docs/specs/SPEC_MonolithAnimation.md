@@ -431,16 +431,18 @@ Depth-limited structs and containers return explicit
 `serialization=depth_limit` metadata without expanding. String,
 localized-text, and otherwise unsupported export values cap at 4,096
 characters; longer values return explicit serialization and truncation
-metadata.
+metadata. Reflected `int64`/`uint64` values outside the exactly representable
+JSON range (±2^53−1) are emitted as decimal strings rather than being rounded
+through a double.
 
 | Action | Contract |
 |--------|----------|
 | `list_chooser_tables` | Deterministic AssetRegistry discovery with exact `path_filter`, `offset`, and bounded `limit` (1–1000). Returns `count`, `total`, and `has_more`. |
 | `get_chooser_table` | Bounded summary of row/column/result/context counts, reflected column data, hard/soft references, fallback result, and optional `include_rows` readback (`row_limit` 1–500). |
 | `list_chooser_columns` | Reflected type, input/output classification, disabled state, row-value property/type/count, and bounded fields for each column. Hard cap: 512 columns with explicit `truncated`. |
-| `list_chooser_rows` | Bounded row page (`start_row`, `limit` 1–500) with result data, disabled state, and per-column cell values. |
-| `list_chooser_references` | Bounded hard/soft reference page with reflected source locations and exact loaded-object or AssetRegistry-object existence evidence. A resident or on-disk package without the referenced export is not asset evidence. Returns `scan_truncated`; truncation is never presented as complete validation. |
-| `validate_chooser_table` | Non-mutating row-array/column alignment and soft-reference asset validation. Warnings do not set `valid=false`; errors do. A bounded-scan overflow is an error and returns `complete=false`. |
+| `list_chooser_rows` | Bounded row page (`start_row`, `limit` 1–500) with result data, disabled state, and per-column cell values. Cells are capped at 512 per row, so the response also reports `column_count`, `row_cells_per_row`, and `row_cells_truncated`; a partial row is never presented as complete. |
+| `list_chooser_references` | Bounded hard/soft reference page with reflected source locations and exact loaded-object or AssetRegistry-object existence evidence. A resident or on-disk package without the referenced export is not asset evidence. Exports under `/Script/` are resolved exactly rather than assumed valid, and a Blueprint-generated class path (`…_C`) falls back to its owning Blueprint's registry row. `TScriptInterface` objects, deprecated-property exclusion, and every element of a reflected fixed-size array are all honored. Returns `scan_truncated`, `scan_depth_limited`, and `scan_complete`; neither truncation nor a depth stop is presented as complete validation. |
+| `validate_chooser_table` | Non-mutating row-array/column alignment and soft-reference asset validation. Warnings do not set `valid=false`; errors do. A bounded-scan overflow is an error and returns `complete=false`, as is a nesting-depth stop (`reference_scan_depth_limited`). |
 
 ### Deep inspection and reference editing (6)
 

@@ -28,13 +28,25 @@ namespace MonolithChooserRead
 	constexpr int32 MaxCompactContainerElements = 8;
 	constexpr int32 MaxSerializedContainerElements = 256;
 	constexpr int32 MaxSerializedStringChars = 4096;
+	// JSON numbers are IEEE-754 doubles, so integers beyond 2^53-1 cannot round
+	// trip. Values outside this range are emitted as decimal strings instead of
+	// being silently rounded.
+	constexpr int64 MaxExactJsonInteger = 9007199254740991LL;
 
 	struct FReferenceScan
 	{
 		TArray<TSharedPtr<FJsonValue>> Values;
 		TSet<FString> Seen;
 		TMap<FString, bool> AssetExistsCache;
+		// Set when the row/element budget stops collection. Every traversal loop
+		// checks this, so it aborts the remaining scan.
 		bool bTruncated = false;
+		// Set when the depth budget prevented descending into a struct or
+		// container. Unlike bTruncated this does not abort sibling traversal, but
+		// it still means the reflected graph was not walked completely.
+		bool bDepthLimited = false;
+
+		bool IsComplete() const { return !bTruncated && !bDepthLimited; }
 	};
 
 	FMonolithActionResult InvalidParam(const FString& Param, const FString& Reason)
@@ -523,12 +535,23 @@ namespace MonolithChooserRead
 					CastField<FUInt16Property>(Property)
 					|| CastField<FUInt32Property>(Property)
 					|| CastField<FUInt64Property>(Property);
-				return MakeShared<FJsonValueNumber>(
-					Unsigned
-						? static_cast<double>(
-							NumericProperty->GetUnsignedIntPropertyValue(Value))
-						: static_cast<double>(
-							NumericProperty->GetSignedIntPropertyValue(Value)));
+				if (Unsigned)
+				{
+					const uint64 RawValue =
+						NumericProperty->GetUnsignedIntPropertyValue(Value);
+					if (RawValue > static_cast<uint64>(MaxExactJsonInteger))
+					{
+						return MakeShared<FJsonValueString>(LexToString(RawValue));
+					}
+					return MakeShared<FJsonValueNumber>(static_cast<double>(RawValue));
+				}
+				const int64 RawValue =
+					NumericProperty->GetSignedIntPropertyValue(Value);
+				if (RawValue > MaxExactJsonInteger || RawValue < -MaxExactJsonInteger)
+				{
+					return MakeShared<FJsonValueString>(LexToString(RawValue));
+				}
+				return MakeShared<FJsonValueNumber>(static_cast<double>(RawValue));
 			}
 			return MakeShared<FJsonValueNumber>(
 				NumericProperty->GetFloatingPointPropertyValue(Value));
@@ -887,10 +910,14 @@ namespace MonolithChooserRead
 	TArray<TSharedPtr<FJsonValue>> SerializeRows(
 		const UObject* Chooser,
 		int32 StartRow,
-		int32 Limit)
+		int32 Limit,
+		int32& OutTotalColumns,
+		int32& OutSerializedColumns)
 	{
 		const int32 RowCount = GetChooserRowCount(Chooser);
-		const int32 ColumnCount = FMath::Min(GetArrayNum(Chooser, TEXT("ColumnsStructs")), MaxColumns);
+		OutTotalColumns = GetArrayNum(Chooser, TEXT("ColumnsStructs"));
+		const int32 ColumnCount = FMath::Min(OutTotalColumns, MaxColumns);
+		OutSerializedColumns = ColumnCount;
 		const int32 EndRow = FMath::Min(RowCount, StartRow + Limit);
 
 		TArray<TSharedPtr<FJsonValue>> Rows;
@@ -948,11 +975,8 @@ namespace MonolithChooserRead
 		}
 
 		const FString PackageName = FPackageName::ObjectPathToPackageName(AssetPath);
-		if (PackageName.StartsWith(TEXT("/Script/")))
-		{
-			return true;
-		}
-		if (!FPackageName::IsValidLongPackageName(PackageName))
+		const bool bScriptPackage = PackageName.StartsWith(TEXT("/Script/"));
+		if (!bScriptPackage && !FPackageName::IsValidLongPackageName(PackageName))
 		{
 			return false;
 		}
@@ -970,12 +994,45 @@ namespace MonolithChooserRead
 					ExactPath,
 					ESearchCase::CaseSensitive);
 		}
-		if (!Exists)
+
+		if (!Exists && bScriptPackage)
+		{
+			// Native exports are created when their module loads, so a failed
+			// resolve is authoritative once the script package is present. If the
+			// owning module is not loaded the reference cannot be disproved, so it
+			// is not reported missing.
+			Exists = FindPackage(nullptr, *PackageName) == nullptr;
+		}
+		else if (!Exists)
 		{
 			// AssetExists performs an exact AssetRegistry object-path lookup.
 			// Package residency or on-disk package existence is deliberately not
 			// sufficient: a deleted export can leave either package behind.
 			Exists = FMonolithAssetUtils::AssetExists(AssetPath);
+
+			if (!Exists)
+			{
+				// A Blueprint-generated class export such as /Game/F/BP_F.BP_F_C
+				// has no AssetRegistry row of its own; the registry indexes the
+				// owning Blueprint (/Game/F/BP_F.BP_F). Fall back to that asset so
+				// an unloaded soft-class reference is not reported unresolved.
+				FString ObjectName;
+				FString PackageOnly;
+				if (AssetPath.Split(
+						TEXT("."),
+						&PackageOnly,
+						&ObjectName,
+						ESearchCase::CaseSensitive,
+						ESearchDir::FromEnd)
+					&& ObjectName.EndsWith(TEXT("_C"), ESearchCase::CaseSensitive))
+				{
+					const FString GeneratingAssetName =
+						ObjectName.LeftChop(2);
+					Exists = !GeneratingAssetName.IsEmpty()
+						&& FMonolithAssetUtils::AssetExists(
+							PackageOnly + TEXT(".") + GeneratingAssetName);
+				}
+			}
 		}
 		Scan.AssetExistsCache.Add(ExactPath, Exists);
 		return Exists;
@@ -1037,8 +1094,17 @@ namespace MonolithChooserRead
 		FReferenceScan& Scan,
 		int32 Depth)
 	{
-		if (!Property || !Value || Depth < 0 || Scan.bTruncated)
+		if (!Property || !Value || Scan.bTruncated)
 		{
+			return;
+		}
+		if (Depth < 0)
+		{
+			// The depth budget stopped this descent, so the scan is incomplete.
+			// Reporting it keeps validate_chooser_table from claiming complete=true
+			// over a reflected graph it never finished walking. Sibling traversal
+			// deliberately continues.
+			Scan.bDepthLimited = true;
 			return;
 		}
 
@@ -1063,6 +1129,27 @@ namespace MonolithChooserRead
 		if (const FObjectPropertyBase* ObjectProperty = CastField<FObjectPropertyBase>(Property))
 		{
 			if (const UObject* Object = ObjectProperty->GetObjectPropertyValue(Value))
+			{
+				AddReference(
+					Scan,
+					Source,
+					Object->GetPathName(),
+					Object->GetClass()->GetName(),
+					true,
+					false,
+					true);
+			}
+			return;
+		}
+
+		if (const FInterfaceProperty* InterfaceProperty =
+			CastField<FInterfaceProperty>(Property))
+		{
+			// TScriptInterface is not an FObjectPropertyBase, so its object is
+			// invisible to the branch above and to every container case below.
+			const FScriptInterface& Interface =
+				InterfaceProperty->GetPropertyValue(Value);
+			if (const UObject* Object = Interface.GetObject())
 			{
 				AddReference(
 					Scan,
@@ -1188,21 +1275,51 @@ namespace MonolithChooserRead
 		FReferenceScan& Scan,
 		int32 Depth)
 	{
-		if (!Struct || !StructMemory || Depth < 0 || Scan.bTruncated)
+		if (!Struct || !StructMemory || Scan.bTruncated)
 		{
 			return;
 		}
-		for (TFieldIterator<FProperty> It(Struct, EFieldIteratorFlags::IncludeSuper);
+		if (Depth < 0)
+		{
+			Scan.bDepthLimited = true;
+			return;
+		}
+		// Deprecated properties can retain legacy paths that the active struct no
+		// longer uses; including them produces false unresolved-reference findings
+		// after a property migration. This matches the serializer's policy.
+		for (TFieldIterator<FProperty> It(
+				Struct,
+				EFieldIteratorFlags::IncludeSuper,
+				EFieldIteratorFlags::ExcludeDeprecated);
 			It && !Scan.bTruncated;
 			++It)
 		{
 			const FProperty* Property = *It;
-			CollectReferencesFromProperty(
-				Property,
-				Property->ContainerPtrToValuePtr<void>(StructMemory),
-				Source + TEXT(".") + Property->GetName(),
-				Scan,
-				Depth);
+			const FString PropertySource = Source + TEXT(".") + Property->GetName();
+			if (Property->ArrayDim <= 1)
+			{
+				CollectReferencesFromProperty(
+					Property,
+					Property->ContainerPtrToValuePtr<void>(StructMemory),
+					PropertySource,
+					Scan,
+					Depth);
+				continue;
+			}
+
+			// A reflected fixed-size C array stores ArrayDim adjacent elements;
+			// visiting only element zero silently drops the rest.
+			for (int32 ElementIndex = 0;
+				ElementIndex < Property->ArrayDim && !Scan.bTruncated;
+				++ElementIndex)
+			{
+				CollectReferencesFromProperty(
+					Property,
+					Property->ContainerPtrToValuePtr<void>(StructMemory, ElementIndex),
+					FString::Printf(TEXT("%s[%d]"), *PropertySource, ElementIndex),
+					Scan,
+					Depth);
+			}
 		}
 	}
 
@@ -1478,6 +1595,10 @@ FMonolithActionResult FMonolithChooserReadActions::HandleGetChooserTable(
 	Result->SetBoolField(TEXT("columns_truncated"), ColumnsTruncated);
 	Result->SetArrayField(TEXT("references"), References.Values);
 	Result->SetBoolField(TEXT("references_truncated"), References.bTruncated);
+	Result->SetBoolField(
+		TEXT("references_depth_limited"),
+		References.bDepthLimited);
+	Result->SetBoolField(TEXT("references_complete"), References.IsComplete());
 
 	if (FStructProperty* Fallback =
 		FindFProperty<FStructProperty>(Chooser->GetClass(), TEXT("FallbackResult")))
@@ -1493,11 +1614,23 @@ FMonolithActionResult FMonolithChooserReadActions::HandleGetChooserTable(
 
 	if (IncludeRows)
 	{
-		TArray<TSharedPtr<FJsonValue>> Rows =
-			SerializeRows(Chooser, 0, FMath::Min(RowCount, RowLimit));
+		int32 RowTotalColumns = 0;
+		int32 RowSerializedColumns = 0;
+		TArray<TSharedPtr<FJsonValue>> Rows = SerializeRows(
+			Chooser,
+			0,
+			FMath::Min(RowCount, RowLimit),
+			RowTotalColumns,
+			RowSerializedColumns);
 		Result->SetArrayField(TEXT("rows"), Rows);
 		Result->SetNumberField(TEXT("rows_returned"), Rows.Num());
 		Result->SetBoolField(TEXT("rows_truncated"), Rows.Num() < RowCount);
+		Result->SetNumberField(
+			TEXT("row_cells_per_row"),
+			RowSerializedColumns);
+		Result->SetBoolField(
+			TEXT("row_cells_truncated"),
+			RowSerializedColumns < RowTotalColumns);
 	}
 	return FMonolithActionResult::Success(Result);
 }
@@ -1574,7 +1707,10 @@ FMonolithActionResult FMonolithChooserReadActions::HandleListChooserRows(
 			FString::Printf(TEXT("expected a row index in the range 0..%d"), RowCount));
 	}
 
-	TArray<TSharedPtr<FJsonValue>> Rows = SerializeRows(Chooser, StartRow, Limit);
+	int32 TotalColumns = 0;
+	int32 SerializedColumns = 0;
+	TArray<TSharedPtr<FJsonValue>> Rows =
+		SerializeRows(Chooser, StartRow, Limit, TotalColumns, SerializedColumns);
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("asset_path"), ObjectPath);
 	Result->SetStringField(TEXT("package_path"), PackagePath);
@@ -1582,6 +1718,14 @@ FMonolithActionResult FMonolithChooserReadActions::HandleListChooserRows(
 	Result->SetNumberField(TEXT("start_row"), StartRow);
 	Result->SetNumberField(TEXT("count"), Rows.Num());
 	Result->SetBoolField(TEXT("has_more"), StartRow + Rows.Num() < RowCount);
+	// Each row is capped at MaxColumns cells, so a wide table returns a partial
+	// predicate/output set. Report that explicitly instead of letting the caller
+	// mistake it for a complete row.
+	Result->SetNumberField(TEXT("column_count"), TotalColumns);
+	Result->SetNumberField(TEXT("row_cells_per_row"), SerializedColumns);
+	Result->SetBoolField(
+		TEXT("row_cells_truncated"),
+		SerializedColumns < TotalColumns);
 	Result->SetArrayField(TEXT("rows"), Rows);
 	return FMonolithActionResult::Success(Result);
 }
@@ -1639,6 +1783,8 @@ FMonolithActionResult FMonolithChooserReadActions::HandleListChooserReferences(
 	Result->SetNumberField(TEXT("total"), Total);
 	Result->SetBoolField(TEXT("has_more"), Offset + Page.Num() < Total);
 	Result->SetBoolField(TEXT("scan_truncated"), Scan.bTruncated);
+	Result->SetBoolField(TEXT("scan_depth_limited"), Scan.bDepthLimited);
+	Result->SetBoolField(TEXT("scan_complete"), Scan.IsComplete());
 	Result->SetArrayField(TEXT("references"), Page);
 	return FMonolithActionResult::Success(Result);
 }
@@ -1819,6 +1965,16 @@ FMonolithActionResult FMonolithChooserReadActions::HandleValidateChooserTable(
 			TEXT("reference_scan_truncated"),
 			TEXT("Reference validation exceeded its bounded scan limit; validity cannot be proven."));
 	}
+	if (References.bDepthLimited)
+	{
+		AddIssue(
+			Issues,
+			ErrorCount,
+			WarningCount,
+			TEXT("error"),
+			TEXT("reference_scan_depth_limited"),
+			TEXT("Reference validation hit its nesting-depth budget; part of the reflected graph was never checked, so validity cannot be proven."));
+	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("asset_path"), ObjectPath);
@@ -1829,7 +1985,9 @@ FMonolithActionResult FMonolithChooserReadActions::HandleValidateChooserTable(
 	Result->SetNumberField(TEXT("issue_count"), Issues.Num());
 	Result->SetNumberField(TEXT("error_count"), ErrorCount);
 	Result->SetNumberField(TEXT("warning_count"), WarningCount);
-	Result->SetBoolField(TEXT("complete"), !References.bTruncated && ColumnCount <= MaxColumns);
+	Result->SetBoolField(
+		TEXT("complete"),
+		References.IsComplete() && ColumnCount <= MaxColumns);
 	Result->SetBoolField(TEXT("valid"), ErrorCount == 0);
 	return FMonolithActionResult::Success(Result);
 }
