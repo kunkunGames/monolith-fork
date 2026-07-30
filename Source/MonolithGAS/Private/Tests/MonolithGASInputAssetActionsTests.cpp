@@ -1023,6 +1023,58 @@ bool FMonolithGASInputAssetLifecycleAndCloneTest::RunTest(const FString& /*Param
 	bPassed &= TestTrue(TEXT("different keys validate cleanly"), GetBool(ValidateResult, TEXT("valid")));
 	bPassed &= TestEqual(TEXT("one context is validated"), GetInt(ValidateResult, TEXT("contexts_checked")), 1);
 
+	FString WindowsStyleContextPath = Assets.Context;
+	WindowsStyleContextPath.ReplaceInline(TEXT("/"), TEXT("\\"));
+	TSharedPtr<FJsonObject> WindowsStyleValidateParams = MakeShared<FJsonObject>();
+	WindowsStyleValidateParams->SetArrayField(
+		TEXT("context_paths"),
+		MakeStringArray({ WindowsStyleContextPath }));
+	const FMonolithActionResult WindowsStyleValidateResult =
+		Execute(TEXT("validate_input_mappings"), WindowsStyleValidateParams);
+	bPassed &= TestTrue(
+		TEXT("context_paths normalizes Windows-style separators"),
+		WindowsStyleValidateResult.bSuccess);
+	bPassed &= TestEqual(
+		TEXT("Windows-style context path selects one context"),
+		GetInt(WindowsStyleValidateResult, TEXT("contexts_checked")),
+		1);
+
+	TSharedPtr<FJsonObject> EncodedValidateParams = MakeShared<FJsonObject>();
+	EncodedValidateParams->SetStringField(
+		TEXT("context_paths"),
+		FString::Printf(TEXT("[\"%s\"]"), *Assets.Context));
+	const FMonolithActionResult EncodedValidateResult =
+		Execute(TEXT("validate_input_mappings"), EncodedValidateParams);
+	bPassed &= TestTrue(
+		TEXT("registry recovers a JSON-encoded context_paths array"),
+		EncodedValidateResult.bSuccess);
+	bPassed &= TestEqual(
+		TEXT("recovered context_paths selects one context"),
+		GetInt(EncodedValidateResult, TEXT("contexts_checked")),
+		1);
+
+	TSharedPtr<FJsonObject> EncodedClassArrayPreview = MakeMappingParams(
+		Assets.Context,
+		Assets.ActionB,
+		TEXT("Tab"),
+		true,
+		false);
+	EncodedClassArrayPreview->SetStringField(TEXT("modifier_classes"), TEXT("[]"));
+	EncodedClassArrayPreview->SetStringField(TEXT("trigger_classes"), TEXT("[]"));
+	const FMonolithActionResult EncodedClassArrayPreviewResult =
+		Execute(TEXT("add_input_mapping"), EncodedClassArrayPreview);
+	bPassed &= TestTrue(
+		TEXT("registry recovers JSON-encoded modifier and trigger arrays"),
+		EncodedClassArrayPreviewResult.bSuccess);
+	bPassed &= TestEqual(
+		TEXT("recovered empty modifier array remains empty"),
+		GetInt(EncodedClassArrayPreviewResult, TEXT("modifier_count"), -1),
+		0);
+	bPassed &= TestEqual(
+		TEXT("recovered empty trigger array remains empty"),
+		GetInt(EncodedClassArrayPreviewResult, TEXT("trigger_count"), -1),
+		0);
+
 	const FMonolithActionResult RemovePreviewResult = Execute(
 		TEXT("remove_input_mapping"),
 		MakeMappingParams(Assets.Context, Assets.ActionB, TEXT("Enter"), true, false));
@@ -1054,6 +1106,69 @@ bool FMonolithGASInputAssetLifecycleAndCloneTest::RunTest(const FString& /*Param
 		TEXT("context retains the primary mapping"),
 		Context ? Context->GetMappings().Num() : -1,
 		1);
+
+	TSharedPtr<FJsonObject> DuplicateSource = MakeMappingParams(
+		Assets.Context,
+		Assets.ActionA,
+		TEXT("SpaceBar"));
+	DuplicateSource->SetBoolField(TEXT("allow_duplicate"), true);
+	DuplicateSource->SetArrayField(
+		TEXT("modifier_classes"),
+		TArray<TSharedPtr<FJsonValue>>());
+	DuplicateSource->SetArrayField(
+		TEXT("trigger_classes"),
+		TArray<TSharedPtr<FJsonValue>>());
+	const FMonolithActionResult DuplicateSourceResult =
+		Execute(TEXT("add_input_mapping"), DuplicateSource);
+	bPassed &= TestTrue(
+		TEXT("duplicate source fixture is created explicitly"),
+		DuplicateSourceResult.bSuccess);
+	bPassed &= TestEqual(
+		TEXT("source context contains two action-key matches"),
+		Context ? Context->GetMappings().Num() : -1,
+		2);
+
+	TSharedPtr<FJsonObject> AmbiguousClone = MakeMappingParams(
+		Assets.Context,
+		Assets.ActionB,
+		TEXT("Enter"),
+		true,
+		false);
+	AmbiguousClone->SetStringField(TEXT("source_context_path"), Assets.Context);
+	AmbiguousClone->SetStringField(TEXT("source_action_path"), Assets.ActionA);
+	AmbiguousClone->SetStringField(TEXT("source_key"), TEXT("SpaceBar"));
+	const FMonolithActionResult AmbiguousCloneResult =
+		Execute(TEXT("add_input_mapping"), AmbiguousClone);
+	bPassed &= TestFalse(
+		TEXT("ambiguous source selector is rejected"),
+		AmbiguousCloneResult.bSuccess);
+	bPassed &= TestEqual(
+		TEXT("ambiguous source selector uses invalid-params"),
+		AmbiguousCloneResult.ErrorCode,
+		FMonolithJsonUtils::ErrInvalidParams);
+	bPassed &= TestTrue(
+		TEXT("ambiguous source selector requests an exact row"),
+		AmbiguousCloneResult.ErrorMessage.Contains(TEXT("source_mapping_index")));
+
+	AmbiguousClone->SetNumberField(TEXT("source_mapping_index"), 1);
+	const FMonolithActionResult IndexedCloneResult =
+		Execute(TEXT("add_input_mapping"), AmbiguousClone);
+	bPassed &= TestTrue(
+		TEXT("exact source mapping index disambiguates duplicate rows"),
+		IndexedCloneResult.bSuccess);
+	bPassed &= TestEqual(
+		TEXT("clone reports the selected source row"),
+		GetInt(IndexedCloneResult, TEXT("source_mapping_index"), -1),
+		1);
+	bPassed &= TestEqual(
+		TEXT("indexed clone uses the selected row's empty modifiers"),
+		GetInt(IndexedCloneResult, TEXT("modifier_count"), -1),
+		0);
+	bPassed &= TestEqual(
+		TEXT("indexed clone uses the selected row's empty triggers"),
+		GetInt(IndexedCloneResult, TEXT("trigger_count"), -1),
+		0);
+
 	bPassed &= TestFalse(TEXT("save=false creates no uasset files"), Assets.HasSavedFiles());
 	return bPassed;
 }

@@ -211,6 +211,41 @@ namespace
 		return true;
 	}
 
+	bool ReadOptionalNonNegativeIntParam(
+		const TSharedPtr<FJsonObject>& Params,
+		const TCHAR* FieldName,
+		int32& OutValue,
+		FString& OutError)
+	{
+		if (!Params.IsValid())
+		{
+			return true;
+		}
+
+		const TSharedPtr<FJsonValue> Field = Params->TryGetField(FieldName);
+		if (!Field.IsValid())
+		{
+			return true;
+		}
+
+		double NumberValue = 0.0;
+		if (Field->Type != EJson::Number
+			|| !Field->TryGetNumber(NumberValue)
+			|| !FMath::IsFinite(NumberValue)
+			|| NumberValue < 0.0
+			|| NumberValue > static_cast<double>(MAX_int32)
+			|| NumberValue != static_cast<double>(static_cast<int32>(NumberValue)))
+		{
+			OutError = FString::Printf(
+				TEXT("Malformed parameter: %s must be a non-negative integer"),
+				FieldName);
+			return false;
+		}
+
+		OutValue = static_cast<int32>(NumberValue);
+		return true;
+	}
+
 	bool ReadMutationOptions(
 		const TSharedPtr<FJsonObject>& Params,
 		FInputMutationOptions& OutOptions,
@@ -314,6 +349,7 @@ namespace
 	{
 		FString NormalizedInput = InputPath;
 		NormalizedInput.TrimStartAndEndInline();
+		NormalizedInput.ReplaceInline(TEXT("\\"), TEXT("/"));
 		if (NormalizedInput.IsEmpty())
 		{
 			OutError = TEXT("Input asset path must not be empty");
@@ -702,21 +738,38 @@ namespace
 		return true;
 	}
 
-	int32 FindMappingIndexByActionAndKey(const UInputMappingContext* Context, const UInputAction* Action, const FKey& Key)
+	int32 FindMappingIndexByActionAndKey(
+		const UInputMappingContext* Context,
+		const UInputAction* Action,
+		const FKey& Key,
+		int32* OutMatchCount = nullptr)
 	{
+		if (OutMatchCount)
+		{
+			*OutMatchCount = 0;
+		}
 		if (!Context || !Action)
 		{
 			return INDEX_NONE;
 		}
+
+		int32 FirstMatchIndex = INDEX_NONE;
 		const TArray<FEnhancedActionKeyMapping>& Mappings = Context->GetMappings();
 		for (int32 Index = 0; Index < Mappings.Num(); ++Index)
 		{
 			if (Mappings[Index].Action == Action && Mappings[Index].Key == Key)
 			{
-				return Index;
+				if (FirstMatchIndex == INDEX_NONE)
+				{
+					FirstMatchIndex = Index;
+				}
+				if (OutMatchCount)
+				{
+					++(*OutMatchCount);
+				}
 			}
 		}
-		return INDEX_NONE;
+		return FirstMatchIndex;
 	}
 
 	template <typename AssetType>
@@ -1195,6 +1248,7 @@ void FMonolithGASInputAssetActions::RegisterActions(FMonolithToolRegistry& Regis
 			.OptionalAssetPath(TEXT("source_context_path"), TEXT("Optional source InputMappingContext to clone modifiers/triggers from"))
 			.OptionalAssetPath(TEXT("source_action_path"), TEXT("Source InputAction for the mapping to clone"))
 			.Optional(TEXT("source_key"), TEXT("string"), TEXT("Source FKey for the mapping to clone"))
+			.Optional(TEXT("source_mapping_index"), TEXT("integer"), TEXT("Optional exact source mapping row; required to disambiguate duplicate action+key rows"))
 			.Optional(TEXT("modifier_classes"), TEXT("array"), TEXT("Optional UInputModifier class paths. If present, replaces cloned/existing modifiers; empty array clears modifiers."))
 			.Optional(TEXT("trigger_classes"), TEXT("array"), TEXT("Optional UInputTrigger class paths. If present, replaces cloned/existing triggers; empty array clears triggers."))
 			.Optional(TEXT("allow_duplicate"), TEXT("boolean"), TEXT("Always add a new mapping instead of updating an existing action+key mapping"), TEXT("false"))
@@ -1855,11 +1909,16 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 	const bool bHasSourceContextPath = HasParam(Params, TEXT("source_context_path"));
 	const bool bHasSourceActionPath = HasParam(Params, TEXT("source_action_path"));
 	const bool bHasSourceKey = HasParam(Params, TEXT("source_key"));
-	const bool bHasAnySourceField = bHasSourceContextPath || bHasSourceActionPath || bHasSourceKey;
+	const bool bHasSourceMappingIndex = HasParam(Params, TEXT("source_mapping_index"));
+	const bool bHasAnySourceField =
+		bHasSourceContextPath
+		|| bHasSourceActionPath
+		|| bHasSourceKey
+		|| bHasSourceMappingIndex;
 	if (bHasAnySourceField && !(bHasSourceContextPath && bHasSourceActionPath && bHasSourceKey))
 	{
 		return InvalidParams(
-			TEXT("source_context_path, source_action_path, and source_key must be provided together"));
+			TEXT("source_context_path, source_action_path, and source_key must be provided together; source_mapping_index is optional"));
 	}
 
 	UInputMappingContext* Context = LoadInputMappingContext(ContextPath, Error);
@@ -1881,14 +1940,21 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 	}
 
 	const FEnhancedActionKeyMapping* SourceMapping = nullptr;
+	int32 SelectedSourceMappingIndex = INDEX_NONE;
 	if (bHasAnySourceField)
 	{
 		FString SourceContextPath;
 		FString SourceActionPath;
 		FString SourceKeyName;
+		int32 RequestedSourceMappingIndex = INDEX_NONE;
 		if (!ReadOptionalStringParam(Params, TEXT("source_context_path"), SourceContextPath, Error, false)
 			|| !ReadOptionalStringParam(Params, TEXT("source_action_path"), SourceActionPath, Error, false)
-			|| !ReadOptionalStringParam(Params, TEXT("source_key"), SourceKeyName, Error, false))
+			|| !ReadOptionalStringParam(Params, TEXT("source_key"), SourceKeyName, Error, false)
+			|| !ReadOptionalNonNegativeIntParam(
+				Params,
+				TEXT("source_mapping_index"),
+				RequestedSourceMappingIndex,
+				Error))
 		{
 			return InvalidParams(Error);
 		}
@@ -1908,8 +1974,50 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 		{
 			return InvalidParams(Error);
 		}
-		const int32 SourceIndex = FindMappingIndexByActionAndKey(SourceContext, SourceAction, SourceKey);
-		if (SourceIndex == INDEX_NONE)
+
+		if (bHasSourceMappingIndex)
+		{
+			const TArray<FEnhancedActionKeyMapping>& SourceMappings = SourceContext->GetMappings();
+			if (!SourceMappings.IsValidIndex(RequestedSourceMappingIndex))
+			{
+				return InvalidParams(FString::Printf(
+					TEXT("source_mapping_index %d is outside source context '%s' mapping range [0, %d)"),
+					RequestedSourceMappingIndex,
+					*SourceContext->GetPathName(),
+					SourceMappings.Num()));
+			}
+			const FEnhancedActionKeyMapping& RequestedMapping =
+				SourceMappings[RequestedSourceMappingIndex];
+			if (RequestedMapping.Action != SourceAction || RequestedMapping.Key != SourceKey)
+			{
+				return InvalidParams(FString::Printf(
+					TEXT("source_mapping_index %d does not match action '%s' and key '%s' in '%s'"),
+					RequestedSourceMappingIndex,
+					*SourceAction->GetPathName(),
+					*SourceKey.ToString(),
+					*SourceContext->GetPathName()));
+			}
+			SelectedSourceMappingIndex = RequestedSourceMappingIndex;
+		}
+		else
+		{
+			int32 SourceMatchCount = 0;
+			SelectedSourceMappingIndex = FindMappingIndexByActionAndKey(
+				SourceContext,
+				SourceAction,
+				SourceKey,
+				&SourceMatchCount);
+			if (SourceMatchCount > 1)
+			{
+				return InvalidParams(FString::Printf(
+					TEXT("Source selector is ambiguous: action '%s' and key '%s' match %d mappings in '%s'; provide source_mapping_index"),
+					*SourceAction->GetPathName(),
+					*SourceKey.ToString(),
+					SourceMatchCount,
+					*SourceContext->GetPathName()));
+			}
+		}
+		if (SelectedSourceMappingIndex == INDEX_NONE)
 		{
 			return FMonolithActionResult::Error(FString::Printf(
 				TEXT("Source mapping not found for action '%s' and key '%s' in '%s'."),
@@ -1917,7 +2025,7 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 				*SourceKey.ToString(),
 				*SourceContext->GetPathName()));
 		}
-		SourceMapping = &SourceContext->GetMappings()[SourceIndex];
+		SourceMapping = &SourceContext->GetMappings()[SelectedSourceMappingIndex];
 	}
 
 	const int32 Before = Context->GetMappings().Num();
@@ -2055,6 +2163,10 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 	Result->SetBoolField(TEXT("dry_run"), Options.bDryRun);
 	Result->SetBoolField(TEXT("allow_duplicate"), bAllowDuplicate);
 	Result->SetBoolField(TEXT("cloned_from_source"), SourceMapping != nullptr);
+	if (SourceMapping)
+	{
+		Result->SetNumberField(TEXT("source_mapping_index"), SelectedSourceMappingIndex);
+	}
 	Result->SetNumberField(TEXT("modifier_count"), DesiredModifierCount);
 	Result->SetNumberField(TEXT("trigger_count"), DesiredTriggerCount);
 	Result->SetBoolField(TEXT("saved"), bSaved);

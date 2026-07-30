@@ -99,14 +99,14 @@ The eight tests were `Registration`, `WriteGate`, `DryRun`, `StrictParams`, `Cre
 | Full editor target build | PASS | PASS |
 | Focused automation | PASS, 8/8 | PASS, 8/8 |
 | Automation warnings / errors | 0 / 0 | 0 / 0 |
-| Build log | `D:\P4\MonolithInputUE57Host\Saved\Logs\EnhancedInput-Review4-Accepted-Build-UE57-20260730-035832.out.log` | `D:\P4\MonolithInputUE58Host\Saved\Logs\EnhancedInput-Review4-Accepted-Build-UE58-20260730-040021.out.log` |
-| UBT log | `D:\P4\MonolithInputUE57Host\Saved\Logs\EnhancedInput-Review4-Accepted-UBT-UE57-20260730-035832.log` | `D:\P4\MonolithInputUE58Host\Saved\Logs\EnhancedInput-Review4-Accepted-UBT-UE58-20260730-040021.log` |
-| Report | `D:\P4\MonolithInputUE57Host\Saved\Automation\EnhancedInput-Review4-Final-UE57-20260730-035848\index.json` | `D:\P4\MonolithInputUE58Host\Saved\Automation\EnhancedInput-Review4-AcceptedCleanDirect-UE58-20260730-040739\index.json` |
-| `UnrealEditor-MonolithGAS.dll` bytes | 2,515,456 | 2,412,544 |
-| DLL SHA256 | `F92B17859785ADAA58C4776732946AC92E3B6938C4FEE4C115FAD4F6C548D4FA` | `4C9FCBFFD3BA8CEF47511B5F1204125F37CB212693F4B36D791A8B00AD500B8F` |
+| Build log | `D:\P4\MonolithInputUE57Host\Saved\Logs\EnhancedInput-FinalReview-Build-UE57-20260730-233529.out.log` | `D:\P4\MonolithInputUE58Host\Saved\Logs\EnhancedInput-FinalReview-Build-UE58-20260730-233612.out.log` |
+| UBT log | `D:\P4\MonolithInputUE57Host\Saved\Logs\EnhancedInput-FinalReview-UBT-UE57-20260730-233529.log` | `D:\P4\MonolithInputUE58Host\Saved\Logs\EnhancedInput-FinalReview-UBT-UE58-20260730-233612.log` |
+| Report | `D:\P4\MonolithInputUE57Host\Saved\Automation\EnhancedInput-FinalReview-TestExit-UE57-20260730-233837\index.json` | `D:\P4\MonolithInputUE58Host\Saved\Automation\EnhancedInput-FinalReview-TestExit-UE58-20260730-233929\index.json` |
+| `UnrealEditor-MonolithGAS.dll` bytes | 2,521,088 | 2,417,152 |
+| DLL SHA256 | `0D5D521331E7A2F1FD5927973AA94A7DDE251C39816E6304243C01D046348557` | `3DFAC53B2E45111CA677F0F8B37AD3479A390ADAC837A7AC1059687B2E372F59` |
 | Residual `Content\Tests\Monolith\Input` files | 0 | 0 |
 
-Both accepted build logs contain `Result: Succeeded`. Both automation reports contain eight successes, zero successes-with-warnings, zero failures, and zero not-run tests.
+Both final-review full-target invocations compile the two changed translation units, relink `UnrealEditor-MonolithGAS.dll`, and end with `Result: Succeeded` (5/5 affected actions). Both `-TestExit="Automation Test Queue Empty"` automation reports contain eight successes, zero successes-with-warnings, zero failures, and zero not-run tests. The earlier accepted clean-host full builds remain the from-scratch module baseline; the final-review builds prove the exact changed source and test inputs are linked.
 
 ---
 
@@ -145,6 +145,22 @@ Every asset-path parameter in the `input` schemas (`asset_path`, `context_path`,
 
 `Monolith.ParamGuard.GAS.InputAssets.SaveFailureReporting` is gated to Windows. `FScopedSaveBlocker` provokes the failure by holding a write handle open on the destination `.uasset`, which only blocks `SavePackage` where file locking is mandatory. POSIX locking is advisory and does not prevent the temp-file rename, so on macOS/Linux the save would succeed and every structured-failure assertion would fail; the expected log messages are Windows-specific for the same reason. The save-failure contract is platform independent, but this way of provoking it is not, so the test reports an explicit skip rather than a false failure.
 
+### Review round 4 (2026-07-30)
+
+The final three fresh findings were confirmed and fixed at their contract boundaries.
+
+- `NormalizeAndValidateInputAssetPath` now normalizes `\` separators itself. This covers `context_paths` array elements, which cannot use the dispatcher's scalar `AssetPath` rewrite, and also makes direct handler-level validation consistent with dispatched scalar paths.
+- The core registry intentionally recovers schema-declared array/object parameters from JSON-encoded strings for MCP-client compatibility. The input API/spec now states that `modifier_classes`, `trigger_classes`, and `context_paths` accept that compatibility form while still rejecting non-string/empty elements. Automation exercises both a recovered context selection and recovered empty class arrays.
+- A source action+key selector no longer silently takes the first duplicate mapping. Ambiguous selectors return invalid-params and require `source_mapping_index`; an explicit index must be in range and identify the requested action+key row. Automation creates two distinguishable duplicate rows, proves the unindexed selector fails, and proves index 1 clones the intended empty modifier/trigger state.
+
+The round also re-ran the already-fixed active review contracts: required strings reject non-string JSON, malformed list roots reject invalid long package names, add/remove dry-runs return `preview_state="proposed"`, and the save-failure test is explicitly Windows-gated.
+
+Final round verification:
+
+- UE 5.7 and UE 5.8 full-target invocations: 5/5 affected compile/link actions, `Result: Succeeded`.
+- `Monolith.ParamGuard.GAS.InputAssets`: 8/8 on both engines, warning/error 0/0, queue-empty and `TestExit` confirmed.
+- Residual `Content\Tests\Monolith\Input` files: 0 on both hosts.
+
 ---
 
 ## 8. Visual and Delivery Scope
@@ -158,4 +174,4 @@ Every asset-path parameter in the `input` schemas (`asset_path`, `context_path`,
 
 ## 9. Conclusion
 
-PASS. The verified code adds exactly 10 `input` actions, resolves every actionable finding from both review rounds, preserves strict mutation/no-op/preview/save-failure contracts, builds on the supported UE 5.7 floor and UE 5.8, passes 8/8 warning-free focused tests on both engines, completes live schema-first dry-run/commit/readback plus GC-separated creation Undo/Redo through MCP, and leaves no generated test assets behind.
+PASS. The verified code adds exactly 10 `input` actions, resolves every actionable finding across all review rounds, preserves strict scalar/mutation/no-op/preview/save-failure contracts while documenting intentional encoded-array compatibility, rejects ambiguous source clones, builds on the supported UE 5.7 floor and UE 5.8, passes 8/8 warning-free focused tests on both engines, completes live schema-first dry-run/commit/readback plus GC-separated creation Undo/Redo through MCP, and leaves no generated test assets behind.

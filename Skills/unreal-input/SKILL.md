@@ -42,7 +42,7 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `[w] create_input_action` | `asset_path*` `value_type?=Boolean` (Boolean/Axis1D/Axis2D/Axis3D) `description?` `consume_input?=true` `trigger_when_paused?=false` `accumulation?` (TakeHighestAbsoluteValue/Cumulative) `overwrite?=false` `dry_run?=false` `confirm?=false` `save?=false` | Create or update a UInputAction asset |
 | `[w] set_input_action_properties` | `asset_path*` `value_type?` (Boolean/Axis1D/Axis2D/Axis3D) `description?` `consume_input?` `consume_legacy_mappings?` `trigger_when_paused?` `reserve_all_mappings?` `accumulation?` (TakeHighestAbsoluteValue/Cumulative) `dry_run?=false` `confirm?=false` `save?=false` | Update common UInputAction properties |
 | `[w] create_input_mapping_context` | `asset_path*` `description?` `overwrite?=false` `dry_run?=false` `confirm?=false` `save?=false` | Create or update a UInputMappingContext asset |
-| `[w] add_input_mapping` | `context_path*` `action_path*` `key*` `source_context_path?` `source_action_path?` `source_key?` `modifier_classes?` `trigger_classes?` `allow_duplicate?=false` `dry_run?=false` `confirm?=false` `save?=false` | Add or update a key mapping; optionally clone or instantiate modifiers/triggers |
+| `[w] add_input_mapping` | `context_path*` `action_path*` `key*` `source_context_path?` `source_action_path?` `source_key?` `source_mapping_index?` `modifier_classes?` `trigger_classes?` `allow_duplicate?=false` `dry_run?=false` `confirm?=false` `save?=false` | Add or update a key mapping; optionally clone or instantiate modifiers/triggers |
 | `[w] remove_input_mapping` | `context_path*` `action_path*` `key*` `dry_run?=false` `confirm?=false` `save?=false` | Remove matching key mappings without dirtying the package when none exist |
 
 ## Mutation Contract
@@ -52,7 +52,7 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 - `save` defaults to `false`. A confirmed in-memory change marks the package dirty; `save: true` additionally writes it immediately. If that save fails, inspect structured `error.data`: the in-memory mutation is already committed, `retry_safe` is false, and a blind retry can duplicate intent. Dry-runs and semantic no-ops never dirty or save a package.
 - Asset paths and list roots must resolve under `/Game`. Omitted list roots default to `/Game`; malformed or non-`/Game` paths are rejected rather than redirected to a fallback asset or widened to Engine/plugin content.
 - `add_input_mapping` reuses the existing action+key mapping by default. Set `allow_duplicate: true` only when a deliberate duplicate row is required.
-- `source_context_path`, `source_action_path`, and `source_key` form one clone selector and must be supplied together.
+- `source_context_path`, `source_action_path`, and `source_key` form one clone selector and must be supplied together. If they match duplicate rows, inspect the context first and pass `source_mapping_index` for the exact row; the action rejects an ambiguous first-match guess.
 - When `modifier_classes` or `trigger_classes` is present, the array replaces cloned/existing entries; an empty array explicitly clears that side. Dry-run validates soft path syntax and already-loaded class compatibility, returns `class_resolution: "deferred_until_confirm"`, and performs full class loading/validation only on confirmation.
 
 ## Common Workflows
