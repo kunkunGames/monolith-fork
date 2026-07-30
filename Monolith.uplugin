@@ -260,6 +260,11 @@
 			"Name": "MonolithDataflow",
 			"Type": "Editor",
 			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "MonolithGameplayMessage",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
 		}
 	]
 }
