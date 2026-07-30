@@ -40,6 +40,17 @@ namespace MonolithGameFeatures
 {
 	static const FTopLevelAssetPath GameFeatureDataClassPath(TEXT("/Script/GameFeatures"), TEXT("GameFeatureData"));
 
+	// remove_all still deletes every match, but the response only carries this
+	// many serialized summaries so a large Actions array cannot produce an
+	// unbounded payload.
+	static constexpr int32 MaxRemovedActionSummaries = 50;
+
+	// ExportTextItem_Direct materializes a whole value before any character cap
+	// can apply, so a container past this element count reports its size instead
+	// of a serialized value. Without this, max_value_chars bounded the response
+	// but not the allocation or the work needed to produce it.
+	static constexpr int32 MaxExportedContainerElements = 64;
+
 	struct FGameFeaturePluginInfo
 	{
 		FString Name;
@@ -290,6 +301,19 @@ namespace MonolithGameFeatures
 		if (!Params->TryGetNumberField(FieldName, NumberValue))
 		{
 			OutError = FString::Printf(TEXT("Param '%s' must be an integer"), FieldName);
+			return false;
+		}
+		// Range-check while the value is still a double. Converting an out-of-range
+		// or non-finite floating-point value to int32 is undefined behaviour, so a
+		// malformed request such as action_index=1e100 must be rejected before the
+		// cast rather than after it.
+		if (!FMath::IsFinite(NumberValue)
+			|| NumberValue < static_cast<double>(TNumericLimits<int32>::Min())
+			|| NumberValue > static_cast<double>(TNumericLimits<int32>::Max()))
+		{
+			OutError = FString::Printf(
+				TEXT("Param '%s' must be an integer within the int32 range"),
+				FieldName);
 			return false;
 		}
 		const int32 IntegerValue = static_cast<int32>(NumberValue);
@@ -809,6 +833,18 @@ namespace MonolithGameFeatures
 			return false;
 		}
 
+		// The commit path creates an inner UObject owned by this asset, which only
+		// carries correct ownership and duplication semantics on an instanced
+		// reference array. A plain object-reference array would keep pointing at
+		// the original action object when the asset is duplicated or inherited.
+		if (!OutArrayProperty->ContainsInstancedObjectProperty())
+		{
+			OutError = FString::Printf(
+				TEXT("Actions array on '%s' is not an instanced object array; authoring instanced actions requires Instanced/ExportObject semantics"),
+				*ActionSet->GetPathName());
+			return false;
+		}
+
 		return true;
 	}
 
@@ -945,6 +981,22 @@ namespace MonolithGameFeatures
 		OutPlan.bCreatedAction = !OutPlan.ExistingAction;
 		if (OutPlan.bCreatedAction && !ActionName.IsEmpty())
 		{
+			// action_name reaches DuplicateObject as a UObject name. Unreal forbids
+			// path and subobject delimiters there, and an invalid name trips a fatal
+			// check instead of returning an error, so validate during preflight.
+			FText ObjectNameError;
+			if (!FName::IsValidXName(
+				ActionName,
+				INVALID_OBJECTNAME_CHARACTERS,
+				&ObjectNameError))
+			{
+				OutError = FString::Printf(
+					TEXT("action_name '%s' is not a valid object name: %s"),
+					*ActionName,
+					*ObjectNameError.ToString());
+				return false;
+			}
+
 			const FName RequestedObjectName(*ActionName);
 			if (StaticFindObjectFast(UObject::StaticClass(), ActionOwner, RequestedObjectName))
 			{
@@ -1315,6 +1367,10 @@ namespace MonolithGameFeatures
 			return false;
 		}
 
+		// An extension slot can legitimately hold several widget registrations, so
+		// an entry is identified by its (slot tag, widget class) pair. Matching on
+		// the tag alone made a second class for the same slot overwrite the first,
+		// silently saving only the last requested widget.
 		for (int32 Index = 0; Index < Helper.Num(); ++Index)
 		{
 			void* StructPtr = Helper.GetRawPtr(Index);
@@ -1329,18 +1385,16 @@ namespace MonolithGameFeatures
 			{
 				return false;
 			}
-			const bool bClassChanged = !ExistingClassPath.Equals(DesiredClassPath, ESearchCase::IgnoreCase);
-			bOutUpdated = bClassChanged;
-			OutCountAfter = Helper.Num();
-			if (bClassChanged && !bDryRun)
+			if (!ExistingClassPath.Equals(DesiredClassPath, ESearchCase::IgnoreCase))
 			{
-				ActionObject->Modify();
-				bool bAppliedClassChange = false;
-				if (!TrySetSoftClassProperty(StructPtr, StructProperty->Struct, ClassPropertyName, DesiredClassPath, bAppliedClassChange, OutError))
-				{
-					return false;
-				}
+				// A different widget in the same slot is a separate registration.
+				continue;
 			}
+
+			// The exact (slot, class) pair already exists, so this request is a
+			// no-op rather than an update.
+			bOutUpdated = false;
+			OutCountAfter = Helper.Num();
 			return true;
 		}
 
@@ -2235,11 +2289,40 @@ namespace MonolithGameFeatures
 		const FString NormalizedAssetPath = NormalizeAssetPath(AssetPath);
 		if (!NormalizedAssetPath.IsEmpty())
 		{
+			// The asset-path branch previously ignored plugin_name while leaving it
+			// populated, so a response could label an unrelated asset as belonging
+			// to the caller-supplied plugin. Verify the association instead.
+			FGameFeaturePluginInfo SelectorPlugin;
+			const bool bHasPluginSelector = !OutPluginName.IsEmpty();
+			if (bHasPluginSelector && !TryFindPluginByName(OutPluginName, SelectorPlugin))
+			{
+				OutError = FString::Printf(TEXT("No GameFeature plugin named '%s' was found"), *OutPluginName);
+				return false;
+			}
+
 			for (const FAssetData& Asset : GetGameFeatureDataAssets())
 			{
 				if (Asset.PackageName.ToString().Equals(NormalizedAssetPath, ESearchCase::IgnoreCase)
 					|| Asset.GetObjectPathString().Equals(AssetPath, ESearchCase::IgnoreCase))
 				{
+					if (bHasPluginSelector)
+					{
+						const FString PluginPackagePath =
+							GetPackagePathForPlugin(SelectorPlugin);
+						const FString AssetPackageName = Asset.PackageName.ToString();
+						if (!PluginPackagePath.IsEmpty()
+							&& !AssetPackageName.StartsWith(
+								PluginPackagePath,
+								ESearchCase::IgnoreCase))
+						{
+							OutError = FString::Printf(
+								TEXT("GameFeatureData asset '%s' does not belong to plugin '%s' (expected a package under '%s')"),
+								*AssetPackageName,
+								*OutPluginName,
+								*PluginPackagePath);
+							return false;
+						}
+					}
 					OutAsset = Asset;
 					return true;
 				}
@@ -2369,10 +2452,40 @@ namespace MonolithGameFeatures
 
 		if (bIncludeValue && Container && !Property->HasAnyPropertyFlags(CPF_Transient))
 		{
-			FString Value;
 			const void* ValuePtr = Property->ContainerPtrToValuePtr<const void>(Container);
-			Property->ExportTextItem_Direct(Value, ValuePtr, nullptr, Owner, PPF_None);
-			Row->SetStringField(TEXT("value"), TruncateValue(Value, MaxValueChars));
+
+			int32 ContainerElementCount = INDEX_NONE;
+			if (const FArrayProperty* ValueArrayProperty = CastField<FArrayProperty>(Property))
+			{
+				ContainerElementCount = FScriptArrayHelper(ValueArrayProperty, ValuePtr).Num();
+			}
+			else if (const FSetProperty* ValueSetProperty = CastField<FSetProperty>(Property))
+			{
+				ContainerElementCount = FScriptSetHelper(ValueSetProperty, ValuePtr).Num();
+			}
+			else if (const FMapProperty* ValueMapProperty = CastField<FMapProperty>(Property))
+			{
+				ContainerElementCount = FScriptMapHelper(ValueMapProperty, ValuePtr).Num();
+			}
+			if (ContainerElementCount != INDEX_NONE)
+			{
+				Row->SetNumberField(TEXT("element_count"), ContainerElementCount);
+			}
+
+			if (ContainerElementCount > MaxExportedContainerElements)
+			{
+				// Serializing first and truncating afterwards would allocate the
+				// full string regardless of MaxValueChars.
+				Row->SetBoolField(TEXT("value_omitted"), true);
+				Row->SetStringField(TEXT("value_omitted_reason"), TEXT("container_too_large"));
+			}
+			else
+			{
+				FString Value;
+				Property->ExportTextItem_Direct(Value, ValuePtr, nullptr, Owner, PPF_None);
+				Row->SetBoolField(TEXT("value_truncated"), Value.Len() > MaxValueChars);
+				Row->SetStringField(TEXT("value"), TruncateValue(Value, MaxValueChars));
+			}
 		}
 		return Row;
 	}
@@ -2439,20 +2552,24 @@ namespace MonolithGameFeatures
 		ActionJson->SetStringField(TEXT("class_path"), ActionClass ? ActionClass->GetClassPathName().ToString() : FString());
 		ActionJson->SetStringField(TEXT("module"), GetClassModuleName(ActionClass));
 
+		// Exporting every property value and then discarding the array defeated the
+		// point of include_action_properties=false, which exists precisely to skip
+		// the expensive reflected serialization. Only the count is gathered when
+		// rows were not requested.
 		int32 TotalPropertyCount = 0;
 		TArray<TSharedPtr<FJsonValue>> Properties = PropertyListToJson(
 			ActionClass,
 			ActionObject,
 			ActionObject,
 			bEditableOnly,
-			bIncludeValues,
-			PropertyLimit,
+			bIncludeProperties && bIncludeValues,
+			bIncludeProperties ? PropertyLimit : 0,
 			MaxValueChars,
 			TotalPropertyCount);
 		ActionJson->SetNumberField(TEXT("property_count"), TotalPropertyCount);
-		ActionJson->SetBoolField(TEXT("properties_truncated"), TotalPropertyCount > Properties.Num());
 		if (bIncludeProperties)
 		{
+			ActionJson->SetBoolField(TEXT("properties_truncated"), TotalPropertyCount > Properties.Num());
 			ActionJson->SetArrayField(TEXT("properties"), Properties);
 		}
 		return ActionJson;
@@ -2508,7 +2625,16 @@ namespace MonolithGameFeatures
 			TEXT("remove_game_feature_data_action")
 		};
 		TArray<FString> RegisteredActions = AlwaysActions;
-		if (bEnabled)
+		// StartupModule chose the registered action set. Changing
+		// bEnableGameFeatureActions in Project Settings does not re-register, so
+		// reporting the live setting advertised actions dispatch cannot find (or
+		// hid actions that remain callable) until the editor restarted. Ask the
+		// registry what is actually dispatchable and report the configured value
+		// separately.
+		const bool bInspectionRegistered = FMonolithToolRegistry::Get().HasAction(
+			TEXT("gamefeatures"),
+			TEXT("list_plugins"));
+		if (bInspectionRegistered)
 		{
 			RegisteredActions.Append(InspectionActions);
 		}
@@ -2517,9 +2643,13 @@ namespace MonolithGameFeatures
 
 		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 		Result->SetStringField(TEXT("namespace"), TEXT("gamefeatures"));
-		Result->SetStringField(TEXT("mode"), bEnabled ? TEXT("inspection_and_instanced_action_writes") : TEXT("instanced_action_writes"));
-		Result->SetBoolField(TEXT("enabled"), bEnabled);
-		Result->SetBoolField(TEXT("inspection_enabled"), bEnabled);
+		Result->SetStringField(TEXT("mode"), bInspectionRegistered ? TEXT("inspection_and_instanced_action_writes") : TEXT("instanced_action_writes"));
+		Result->SetBoolField(TEXT("enabled"), bInspectionRegistered);
+		Result->SetBoolField(TEXT("inspection_enabled"), bInspectionRegistered);
+		Result->SetBoolField(TEXT("inspection_configured"), bEnabled);
+		// True when Project Settings were edited after startup, so the configured
+		// value and the dispatchable surface disagree until the editor restarts.
+		Result->SetBoolField(TEXT("restart_required"), bEnabled != bInspectionRegistered);
 		Result->SetBoolField(TEXT("write_actions_registered"), true);
 		Result->SetBoolField(TEXT("creation_allowed"), bCreationAllowed);
 		Result->SetBoolField(TEXT("hard_toolsetregistry_dependency"), false);
@@ -3218,8 +3348,44 @@ FMonolithActionResult FMonolithGameFeatureActions::SetPrimaryAssetScan(const TSh
 		return FMonolithActionResult::Error(Error, -32602);
 	}
 
+	// Every scan target is written straight into FPrimaryAssetTypeInfo, so an
+	// invalid directory or package path silently produces a null scan root that
+	// Asset Manager discovery and cook rules skip.
+	for (const FString& Directory : Directories)
+	{
+		if (!FPackageName::IsValidLongPackageName(Directory, /*bIncludeReadOnlyRoots=*/true))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(
+					TEXT("directories entry '%s' must be a valid long package directory such as /Game/Characters"),
+					*Directory),
+				-32602);
+		}
+	}
+	for (const FString& SpecificAsset : SpecificAssets)
+	{
+		const FString SpecificAssetPackage =
+			FPackageName::ObjectPathToPackageName(SpecificAsset);
+		if (!FPackageName::IsValidLongPackageName(SpecificAssetPackage, /*bIncludeReadOnlyRoots=*/true))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(
+					TEXT("specific_assets entry '%s' must be a valid package or object path such as /Game/Characters/BP_Hero.BP_Hero"),
+					*SpecificAsset),
+				-32602);
+		}
+	}
+
 	TArray<FPrimaryAssetTypeInfo>& TypesToScan = GameFeatureData->GetPrimaryAssetTypesToScan();
 	const FName DesiredPrimaryAssetType(*PrimaryAssetType);
+	// FName("None") is NAME_None, which Asset Manager cannot discover, so an
+	// entry created under it would be silently inert.
+	if (DesiredPrimaryAssetType.IsNone())
+	{
+		return FMonolithActionResult::Error(
+			TEXT("primary_asset_type must not be 'None'; that resolves to NAME_None, which Asset Manager cannot discover"),
+			-32602);
+	}
 	const int32 ExistingIndex = TypesToScan.IndexOfByPredicate([&DesiredPrimaryAssetType](const FPrimaryAssetTypeInfo& Info)
 	{
 		return Info.PrimaryAssetType == DesiredPrimaryAssetType;
@@ -4238,7 +4404,10 @@ FMonolithActionResult FMonolithGameFeatureActions::RemoveGameFeatureDataAction(c
 		{
 			continue;
 		}
-		if (bHasActionName && (!ActionObject || !ActionObject->GetName().Equals(ActionName, ESearchCase::CaseSensitive)))
+		// UObject/FName identity is case-insensitive, and TryFindExistingAction
+		// selects that way, so a case-sensitive match here made an action
+		// reachable by the add writers unremovable with the same selector.
+		if (bHasActionName && (!ActionObject || !ActionObject->GetName().Equals(ActionName, ESearchCase::IgnoreCase)))
 		{
 			continue;
 		}
@@ -4248,14 +4417,21 @@ FMonolithActionResult FMonolithGameFeatureActions::RemoveGameFeatureDataAction(c
 		}
 
 		MatchedIndices.Add(Index);
-		RemovedActions.Add(MakeShared<FJsonValueObject>(MonolithGameFeatures::ActionObjectToJson(
-			ActionObject,
-			Index,
-			true,
-			true,
-			true,
-			40,
-			512)));
+		// Every match used to be serialized with up to 40 reflected property
+		// values, so remove_all against a large Actions array produced an
+		// unbounded response. All matched indices are still removed; only the
+		// returned summaries are capped, and the truncation is reported.
+		if (RemovedActions.Num() < MonolithGameFeatures::MaxRemovedActionSummaries)
+		{
+			RemovedActions.Add(MakeShared<FJsonValueObject>(MonolithGameFeatures::ActionObjectToJson(
+				ActionObject,
+				Index,
+				true,
+				true,
+				true,
+				40,
+				512)));
+		}
 		if (!bRemoveAll)
 		{
 			break;
@@ -4272,6 +4448,21 @@ FMonolithActionResult FMonolithGameFeatureActions::RemoveGameFeatureDataAction(c
 		});
 		for (const int32 IndexToRemove : MatchedIndices)
 		{
+			// Dropping the array reference leaves the instanced action object under
+			// the UGameFeatureData outer until GC, so an immediate add reusing the
+			// same action_name hit the occupied-name guard in
+			// PrepareInstancedActionEdit even though the action was gone. Rename
+			// the removed object into the transient package so its name is free.
+			if (UObject* RemovedAction =
+				ActionsObjectProperty->GetObjectPropertyValue(
+					ActionsHelper.GetRawPtr(IndexToRemove)))
+			{
+				RemovedAction->Rename(
+					nullptr,
+					GetTransientPackage(),
+					REN_DontCreateRedirectors | REN_NonTransactional);
+				RemovedAction->MarkAsGarbage();
+			}
 			ActionsHelper.RemoveValues(IndexToRemove, 1);
 		}
 
@@ -4292,6 +4483,10 @@ FMonolithActionResult FMonolithGameFeatureActions::RemoveGameFeatureDataAction(c
 	Result->SetBoolField(TEXT("saved"), bSaved);
 	Result->SetBoolField(TEXT("changed"), MatchedIndices.Num() > 0);
 	Result->SetArrayField(TEXT("removed_actions"), RemovedActions);
+	Result->SetNumberField(TEXT("removed_actions_returned"), RemovedActions.Num());
+	Result->SetBoolField(
+		TEXT("removed_actions_truncated"),
+		RemovedActions.Num() < MatchedIndices.Num());
 	if (bHasActionIndex)
 	{
 		Result->SetNumberField(TEXT("action_index"), ActionIndex);
@@ -4339,18 +4534,33 @@ FMonolithActionResult FMonolithGameFeatureActions::ValidatePlugin(const TSharedP
 		TEXT("gamefeatures_dependency"),
 		Plugin.bDeclaresGameFeaturesDependency,
 		Plugin.bDeclaresGameFeaturesDependency ? TEXT("Descriptor declares enabled GameFeatures plugin dependency") : TEXT("Descriptor does not declare enabled GameFeatures plugin dependency"))));
+	// The summary is derived from exactly these predicates so it can never report
+	// ok=true while a validating check below reports failure.
+	const bool bDescriptorExists = FPaths::FileExists(Plugin.DescriptorPath);
+	const bool bContentRootOk =
+		Plugin.bCanContainContent && !Plugin.MountedAssetPath.IsEmpty();
+	const bool bHasDataAsset = DataAssets.Num() > 0;
+
 	Checks.Add(MakeShared<FJsonValueObject>(MonolithGameFeatures::MakeCheck(
 		TEXT("content_root"),
-		Plugin.bCanContainContent && !Plugin.MountedAssetPath.IsEmpty(),
+		bContentRootOk,
 		Plugin.MountedAssetPath.IsEmpty() ? TEXT("Plugin has no mounted asset path") : Plugin.MountedAssetPath)));
 	Checks.Add(MakeShared<FJsonValueObject>(MonolithGameFeatures::MakeCheck(
 		TEXT("game_feature_data"),
-		DataAssets.Num() > 0,
-		DataAssets.Num() > 0 ? DataAssets[0].PackageName.ToString() : TEXT("No GameFeatureData asset found under plugin content root"))));
-	Checks.Add(MakeShared<FJsonValueObject>(MonolithGameFeatures::MakeCheck(
+		bHasDataAsset,
+		bHasDataAsset ? DataAssets[0].PackageName.ToString() : TEXT("No GameFeatureData asset found under plugin content root"))));
+
+	// creation_gate reports which capabilities this read-only slice exposes; it
+	// says nothing about whether the plugin is valid. It is therefore marked
+	// informational and excluded from the summary rather than reported as a
+	// failed check the summary then contradicts.
+	TSharedPtr<FJsonObject> CreationGateCheck = MonolithGameFeatures::MakeCheck(
 		TEXT("creation_gate"),
-		!bCreationAllowed,
-		bCreationAllowed ? TEXT("Creation flags are enabled, but no creation action is registered in this first slice") : TEXT("Creation disabled in this read-only slice"))));
+		true,
+		bCreationAllowed ? TEXT("Creation flags are enabled, but no creation action is registered in this first slice") : TEXT("Creation disabled in this read-only slice"));
+	CreationGateCheck->SetBoolField(TEXT("informational"), true);
+	CreationGateCheck->SetBoolField(TEXT("creation_flags_enabled"), bCreationAllowed);
+	Checks.Add(MakeShared<FJsonValueObject>(CreationGateCheck));
 
 	TArray<TSharedPtr<FJsonValue>> Warnings;
 	if (!Plugin.bDeclaresGameFeaturesDependency)
@@ -4368,7 +4578,12 @@ FMonolithActionResult FMonolithGameFeatureActions::ValidatePlugin(const TSharedP
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("plugin_name"), Plugin.Name);
-	Result->SetBoolField(TEXT("ok"), FPaths::FileExists(Plugin.DescriptorPath) && Plugin.bDeclaresGameFeaturesDependency && Plugin.bCanContainContent && DataAssets.Num() > 0);
+	Result->SetBoolField(
+		TEXT("ok"),
+		bDescriptorExists
+			&& Plugin.bDeclaresGameFeaturesDependency
+			&& bContentRootOk
+			&& bHasDataAsset);
 	Result->SetObjectField(TEXT("plugin"), MonolithGameFeatures::PluginToJson(Plugin, &DataAssets));
 	Result->SetArrayField(TEXT("checks"), Checks);
 	Result->SetArrayField(TEXT("warnings"), Warnings);

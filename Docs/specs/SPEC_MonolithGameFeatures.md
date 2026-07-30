@@ -247,3 +247,21 @@ Focused tests should cover:
 - Creation remains reserved and cannot run through this PR.
 - `Docs/SPEC_CORE.md`, `Docs/API_REFERENCE.md`, and a focused testing note
   describe the actual implemented surface.
+
+## Review remediation (head `5fdadfee`)
+
+| Contract | Behaviour |
+| --- | --- |
+| Object names | `action_name` is validated with `FName::IsValidXName(INVALID_OBJECTNAME_CHARACTERS)` during preflight. A value such as `Feature/Action` previously reached `DuplicateObject` and could trip a fatal UObject name check instead of returning an MCP error. |
+| Numeric params | Integer params are range-checked as doubles against the `int32` interval and rejected when non-finite, before any cast. Converting an out-of-range double to `int32` is undefined behaviour. |
+| Widget slots | Widget entries are identified by `(slot tag, widget class)`. Matching on the tag alone let a second class for the same slot overwrite the first, so only the last requested widget was saved. Lyra extension slots legitimately hold several registrations. |
+| Removal selector | `remove_game_feature_data_action` matches `action_name` case-insensitively, matching UObject/FName identity and the add writers' selector. |
+| Removed names | A removed action object is renamed into the transient package, so its `action_name` is immediately reusable instead of blocking the next add until GC. |
+| Primary asset scan | `directories` and `specific_assets` must be valid long package directory/object paths, and `primary_asset_type` may not be `None` (which resolves to `NAME_None` and cannot be discovered). |
+| Selector conflict | Supplying both `asset_path` and `plugin_name` verifies the asset actually lives under the named plugin's content root instead of labelling an unrelated asset with the caller's plugin. |
+| Instanced arrays | Authoring requires `Actions` to be an instanced object array (`ContainsInstancedObjectProperty`). A plain object-reference array lacks the ownership/duplication semantics an inner action object needs. |
+| Property export | Container values above 64 elements report `element_count` with `value_omitted=true` rather than being fully serialized and then truncated, so `max_value_chars` bounds the work and not just the response. A single large non-container struct is still exported in full. |
+| Description flags | `include_action_properties=false` skips property enumeration and value export entirely instead of building and discarding the array. |
+| Removal summaries | `remove_all` deletes every match but returns at most 50 serialized summaries, with `removed_actions_returned` and `removed_actions_truncated`. |
+| Status accuracy | `get_status` derives `registered_actions` from the live registry rather than the current Project Settings value, and reports `inspection_configured` plus `restart_required` when the two disagree. |
+| validate_plugin | The summary `ok` is derived from the same predicates as the validating checks, and `creation_gate` is marked `informational` because it reports slice capability rather than plugin validity. |
