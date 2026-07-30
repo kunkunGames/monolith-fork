@@ -3,6 +3,7 @@
 **Version:** v0.21.3 · **Last updated:** 2026-07-29
 **Version:** v0.21.3 · **Last updated:** 2026-07-28
 
+**In-tree action total is approximate: ~1,400+ actions across 26+ in-tree namespaces** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 **In-tree action total is approximate: ~1,400+ actions across 25+ in-tree namespaces** (public, in-tree only; most are active by default, the GameFeatures surface is optional/config-gated, and 45 experimental town-gen actions register only when `bEnableProceduralTownGen=true`). The surface is too large to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
 The per-namespace numbers in the Table of Contents and body sections below are kept for structure, not precision — they drift with every action added and are no longer maintained to the unit. Treat them as ballpark; the live figure always comes from `monolith_discover()`.
@@ -33,6 +34,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [collection](#collection) | 13 | Content Browser collection discovery, membership, dynamic queries, colors, and validation |
 | [source](#source) | 11 | Unreal Engine C++ source code navigation |
 | [source_control](#source_control) | 11 | Provider-backed status/checkout/add/delete/revert plus bounded Perforce opened/path mapping |
+| [pcg](#pcg) | 28 | Exact-path PCG graph discovery/authoring/replacement and asynchronous editor-world/Blueprint-template component lifecycle control |
 | [mesh](#mesh) | 194 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, mesh import (incl. skeletal + animation). +45 town gen registers only with `bEnableProceduralTownGen=true` (experimental, not in the public count) |
 | [ui](#ui) | 138 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, headline scaffolders, navigation/conversion gap-closure, accessibility, CommonUI, GAS UI bindings |
 | [gas](#gas) | 135 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold |
@@ -1097,6 +1099,53 @@ Perforce mapping is bounded to 128 paths and 24,000 encoded characters per `p4 w
 
 ---
 
+## pcg
+
+Exact-path PCG discovery, typed graph authoring, complete identity-preserving graph replacement, Blueprint-template assignment, and bounded editor-world component lifecycle control. **28 actions.** The module requires the engine PCG plugin and uses public UE 5.7/5.8 APIs. Project-owned write targets, confirmation gates, structural validation, rollback, save evidence, and handler-owned source-control preparation are part of the action contracts; no default graph, alternate asset, or string-encoded JSON-container fallback is accepted.
+
+For exhaustive parameters and defaults, call `describe_query("action_schema", target_namespace="pcg", target_action="<name>")` or `monolith_discover("pcg", detail=true)`. The focused ownership, bounds, and engine-version contract lives in [`specs/SPEC_MonolithPCG.md`](specs/SPEC_MonolithPCG.md).
+
+PCG schema scalars are type-strict. Pass native JSON strings, booleans, and finite integral numbers within each documented range; quoted booleans/numbers, boolean path values, fractional integers, and out-of-range list limits return invalid params instead of being coerced or clamped. The documented canonical decimal-string form for full-range `int64` user-parameter values is the deliberate exception.
+
+| Action | Kind | Contract |
+|--------|------|----------|
+| `get_status` | read | PCG readiness plus the current dynamically enumerated `pcg` action roster |
+| `list_graph_assets` | read | Bounded AssetRegistry graph discovery |
+| `get_graph_asset` | read | One bounded graph metadata row by exact asset path |
+| `list_components` | read | Bounded active-editor-world PCG component rows with canonical paths |
+| `remap_graph_references` | guarded write | Dry-run/confirm bounded soft-reference migration with strict object `root_remaps` |
+| `list_pcg_node_types` | read | Concrete loaded settings classes, aliases, and optional editable-field summaries |
+| `create_pcg_graph` | write | Create one project-owned `UPCGGraph`; explicit rerun policy |
+| `get_pcg_graph_info` | read | Bounded nodes, pins, edges, settings, positions, and special-node state |
+| `add_pcg_node` | write | Typed settings-node creation with strict initial settings and explicit rerun policy |
+| `remove_pcg_node` | write | Remove one element node and incident edges; special nodes are rejected |
+| `connect_pcg_nodes` | write | Exact pin-label connection after ownership, direction, type, capacity, and cycle checks |
+| `disconnect_pcg_nodes` | write | Idempotent exact-edge removal |
+| `set_pcg_node_params` | guarded write | Canonical reflection-walker dry-run/apply against one settings object |
+| `set_pcg_graph_user_parameters` | guarded write | Atomic bounded scalar graph-parameter schema/default authoring; dry-run by default |
+| `set_pcg_subgraph` | guarded write | Exact graph/interface assignment through `SetSubgraph`, with recursion/filter guards and rollback |
+| `replace_pcg_graph_contents` | guarded write | Seeded complete donor-state replacement that preserves the target identity, validates exact persistent equality, and requires confirmed commit |
+| `validate_pcg_graph` | read | Bounded structural ownership/topology/connectivity diagnostics |
+| `create_component` | write | Create and register one exact-name transactional component on an exact user-authored actor |
+| `get_component` | read/poll | Exact component graph/configuration/lifecycle state, bounded parameters, optional exact managed-resource count |
+| `set_component_graph` | write | Exact graph assignment to an idle ungenerated live component with read-back and optional save |
+| `set_blueprint_component_graph` | guarded write | Dry-run/confirm graph assignment to one exact Actor Blueprint SCS PCG template, compile/re-resolve/read-back, and rollback |
+| `set_component_settings` | write | Atomic validated seed/activation/partition/trigger configuration |
+| `generate_component` | async runtime | Native non-blocking generation schedule; task ids are decimal strings |
+| `refresh_component` | async runtime | Native refresh schedule/coalescing with no hidden replace or cancel behavior |
+| `cancel_component` | runtime | Generation-only cancellation; refresh, cleanup, and runtime-scheduler ownership fail closed |
+| `cleanup_component` | async runtime | Native non-blocking cleanup schedule with explicit remove/reuse intent and truthful coalescing |
+| `get_component_output` | read | Independently bounded output/tag/resource/managed-object summaries with truncation evidence |
+| `set_component_user_parameters` | guarded write | Atomic strict-scalar graph-instance override apply/reset with dry-run and optional level save |
+
+Generation and cleanup are schedule-and-poll operations. Every available task id is a decimal string paired with a validity flag. Generation ids are readable on UE 5.7/5.8. UE 5.8 also exposes the component's current cleanup task id; UE 5.7 returns `cleanup_task_id_supported=false` and omits that unavailable field, while a newly scheduled cleanup still returns its exact `scheduled_task_id`. Callers poll `get_component` until lifecycle state is idle and must not busy-wait inside one action.
+
+Exact persistent graph replacement is deliberately stricter than copying nodes. It preserves the canonical target package/object and default I/O identities while comparing the complete donor-owned object graph under bounded package-persistent semantics. On UE 5.8+, the target-owned `LastEditedDocuments` editor workspace is preserved; UE 5.7 has no corresponding field. Any failure after mutation attempts snapshot rollback and reports whether state and dirty-bit restoration were verified.
+
+Owning-level save failure is atomic for `create_component`, `set_component_graph`, `set_component_settings`, and `set_component_user_parameters`. Structured error data includes `mutation_attempted`, `rollback_complete`, `changed`, and `save_error`, with `rollback_error` when restoration is incomplete. A verified rollback reports `changed=false` and restores the original dirty bit; an incomplete rollback keeps the package dirty so a surviving live mutation cannot be hidden.
+
+---
+
 ## mesh
 
 Mesh inspection, scene manipulation, spatial queries, level blockout, GeometryScript, procedural geometry, lighting, audio, performance, mesh import (incl. skeletal + animation, PR #58), and **experimental** procedural town generation. **194 actions** (always registered, in the public count) + 45 experimental town gen (gated on `bEnableProceduralTownGen=true`, default `false`) = 239 when town-gen is on.
@@ -2015,7 +2064,7 @@ If you're building a sibling plugin yourself, read `Plugins/Monolith/Docs/SIBLIN
 |---|---|---|---|---|
 | External sibling plugin | Custom | Varies | Registers its own namespace at startup and ships through its own repo/channel. | Outside `Plugins/Monolith/` |
 
-**Why these aren't in the in-tree count:** the in-tree count (the approximate `~1,400+ / 25+` figure) counts only modules shipped inside the public `Monolith-vX.Y.Z.zip` release. Sibling plugins live in their own folders, ship via their own channels (or stay private), and may or may not be installed in any given consumer's project. Their absence is not a degraded state — Monolith is fully functional without them.
+**Why these aren't in the in-tree count:** the in-tree count (the approximate `~1,400+ / 26+` figure) counts only modules shipped inside the public `Monolith-vX.Y.Z.zip` release. Sibling plugins live in their own folders, ship via their own channels (or stay private), and may or may not be installed in any given consumer's project. Their absence is not a degraded state — Monolith is fully functional without them.
 
 Private sibling bridges are intentionally omitted from the public API reference. Their action rosters, namespaces, and release notes belong in their own repos/channels; Monolith must not publish them as part of the public API surface.
 

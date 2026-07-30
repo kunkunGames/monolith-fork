@@ -9,6 +9,13 @@ class UBlueprint;
 class MONOLITHCORE_API FMonolithAssetUtils
 {
 public:
+	/**
+	 * Return true when a mounted long package name resolves inside the current
+	 * project checkout, including project and GameFeature plugin content mounts.
+	 * Engine and externally-mounted packages are rejected.
+	 */
+	static bool IsProjectOwnedPackage(const FString& PackageName);
+
 	/** Resolve a user-provided path to a proper asset path (handles /Game/, /Content/, relative, etc.) */
 	static FString ResolveAssetPath(const FString& InPath);
 
@@ -36,6 +43,32 @@ public:
 	static T* LoadAssetByPath(const FString& AssetPath)
 	{
 		return Cast<T>(LoadAssetByPath(T::StaticClass(), AssetPath));
+	}
+
+	/**
+	 * Resolve and load an asset with an expected class, returning the normalized
+	 * path and caller-facing validation error.
+	 */
+	static bool TryLoadAssetByPath(
+		UClass* ExpectedClass,
+		const FString& AssetPath,
+		UObject*& OutAsset,
+		FString& OutResolvedPath,
+		FString& OutError);
+
+	/** Resolve and load an asset as a specific type. */
+	template<typename T>
+	static bool TryLoadAssetByPath(
+		const FString& AssetPath,
+		T*& OutAsset,
+		FString& OutResolvedPath,
+		FString& OutError)
+	{
+		UObject* RawAsset = nullptr;
+		const bool bLoaded = TryLoadAssetByPath(
+			T::StaticClass(), AssetPath, RawAsset, OutResolvedPath, OutError);
+		OutAsset = Cast<T>(RawAsset);
+		return bLoaded && OutAsset != nullptr;
 	}
 
 	/** Check if an asset exists at the given path */
