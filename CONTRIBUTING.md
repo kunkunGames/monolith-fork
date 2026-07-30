@@ -50,14 +50,18 @@ Each module owns a specific domain:
 | **MonolithMesh** | `mesh` | Mesh inspection, scene manipulation, spatial queries, blockout, procedural geometry, lighting, experimental town gen |
 | **MonolithEditor** | `editor`, `animation` | Build triggers, live compile, log capture, crash context, scene capture, texture import |
 | **MonolithConfig** | `config` | INI resolution, explain, diff, search |
+| **MonolithIndex** | `project`, `collection` | SQLite FTS5 deep project indexer and Content Browser collection management |
+| **MonolithConfig** | `config`, `localization` | INI/CVar inspection plus guarded StringTable culture, validation, mutation, and CSV round-trip workflows |
 | **MonolithIndex** | `project` | SQLite FTS5 deep project indexer |
 | **MonolithSource** | `source` | Engine source lookup, call graphs, class hierarchy |
+| **MonolithSourceControl** | `source_control` | Provider-backed file preparation and bounded Perforce opened/path mapping |
 | **MonolithUI** | `ui` | Widget Blueprint CRUD, templates, styling, animation, settings scaffolding, accessibility |
 | **MonolithGAS** | `gas`, `input` | Gameplay Ability System authoring plus 10 Enhanced Input asset actions. `gas` registration follows `bEnableGAS`; `input` remains available independently, and `WITH_GBA` gates only optional Blueprint Attributes integration |
 | **MonolithAI** | `ai` | Behavior trees, blackboards, EQS, StateTree, SmartObjects, perception, navigation, AI controllers |
 | **MonolithAudio** | `audio` | Sound cues, waves, classes, submixes, attenuation, concurrency, MetaSounds |
 | **MonolithAudioRuntime** | -- | Runtime support for the audio module (registers no MCP actions) |
 | **MonolithLevelSequence** | `level_sequence` | Sequencer inspection: bindings, directors, event bindings |
+| **MonolithInterchange** | `interchange` | Guarded asset import, batch import, reimport-source management, reimport, export, and source inspection |
 | **MonolithReflectionIntel** | `cppreflect`, `reflect`, `decision`, `risk`, `pipeline`, `network` (plus additions to existing namespaces) | Reflection intelligence over project C++ and assets: UCLASS/UPROPERTY/UFUNCTION queries, replication audits, decision records, churn/hotspot analysis, release readiness |
 | **MonolithComboGraph** | `combograph` | Optional ComboGraph integration (gated on `WITH_COMBOGRAPH`) |
 | **MonolithLogicDriver** | `logicdriver` | Optional Logic Driver Pro integration (gated on `WITH_LOGICDRIVER`) |
