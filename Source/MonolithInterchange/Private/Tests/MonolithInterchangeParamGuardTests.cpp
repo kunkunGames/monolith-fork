@@ -122,7 +122,8 @@ bool FMonolithParamGuardInterchangeImportMalformedParamsTest::RunTest(const FStr
 
 	{
 		const FString SourceFile =
-			FPaths::ProjectSavedDir() / TEXT("Automation/MonolithInterchange/type_mismatch.png");
+			FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()) /
+			TEXT("Automation/MonolithInterchange/type_mismatch.png");
 		IFileManager::Get().MakeDirectory(*FPaths::GetPath(SourceFile), true);
 		TestTrue(
 			TEXT("typed import fixture was written"),
@@ -192,7 +193,9 @@ bool FMonolithParamGuardInterchangeImportMalformedParamsTest::RunTest(const FStr
 	{
 		const FString FixtureId = FGuid::NewGuid().ToString(EGuidFormats::Digits);
 		const FString FixtureRoot =
-			FPaths::ProjectSavedDir() / TEXT("Automation/MonolithInterchange") / FixtureId;
+			FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()) /
+			TEXT("Automation/MonolithInterchange") /
+			FixtureId;
 		const FString SourceA = FixtureRoot / TEXT("A/duplicate.png");
 		const FString SourceB = FixtureRoot / TEXT("B/duplicate.png");
 		IFileManager::Get().MakeDirectory(*FPaths::GetPath(SourceA), true);
@@ -256,7 +259,6 @@ bool FMonolithParamGuardInterchangeImportMalformedParamsTest::RunTest(const FStr
 			Params->SetBoolField(TEXT("dry_run"), true);
 			return Params;
 		};
-
 		{
 			const FMonolithActionResult Result =
 				Registry.ExecuteAction(
