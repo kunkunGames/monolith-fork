@@ -129,6 +129,7 @@ static const std::vector<std::string> CORE_QUERY_TOOLS = {
     "level_sequence_query",
     "dataflow_query",
     "interchange_query",
+    "collection_query",
 };
 
 // ============================================================================

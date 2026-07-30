@@ -52,6 +52,10 @@ if errorlevel 1 (
     exit /b 1
 )
 if not exist "..\..\Binaries" mkdir "..\..\Binaries"
+if errorlevel 1 (
+    echo FAILED: Could not create Binaries directory
+    exit /b 1
+)
 copy /Y monolith_proxy.exe "..\..\Binaries\monolith_proxy.exe"
 if errorlevel 1 (
     echo FAILED: could not copy monolith_proxy.exe into Binaries
@@ -59,5 +63,6 @@ if errorlevel 1 (
     exit /b 1
 )
 popd
+    echo FAILED: Could not copy monolith_proxy.exe to Binaries
 echo SUCCESS: Built monolith_proxy.exe
 exit /b 0

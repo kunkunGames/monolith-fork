@@ -1,6 +1,7 @@
 # Monolith API Reference
 
 **Version:** v0.21.3 · **Last updated:** 2026-07-29
+**Version:** v0.21.3 · **Last updated:** 2026-07-28
 
 **In-tree action total is approximate: ~1,400+ actions across 25+ in-tree namespaces** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
@@ -27,6 +28,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [editor](#editor) | 29 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, Python escape-hatch, persistent-level swap |
 | [config](#config) | 6 | INI config inspection and search |
 | [project](#project) | 7 | Project-wide asset index (SQLite + FTS5) |
+| [collection](#collection) | 13 | Content Browser collection discovery, membership, dynamic queries, colors, and validation |
 | [source](#source) | 11 | Unreal Engine C++ source code navigation |
 | [source_control](#source_control) | 11 | Provider-backed status/checkout/add/delete/revert plus bounded Perforce opened/path mapping |
 | [mesh](#mesh) | 194 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, mesh import (incl. skeletal + animation). +45 town gen registers only with `bEnableProceduralTownGen=true` (experimental, not in the public count) |
@@ -49,6 +51,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | **In-tree subtotal** | **~1,400+** | Counts are intentionally approximate; query `monolith_discover()` for the current registry total. |
 | **In-tree subtotal** | **1417** | (all default-active; +45 experimental town gen → 1462 when registered) |
 | **In-tree subtotal** | **1405** | (all default-active; +45 experimental town gen → 1450 when registered) |
+| **In-tree subtotal** | **1419** | (all default-active; +45 experimental town gen → 1464 when registered) |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -794,6 +797,30 @@ Deep details for a specific asset — nodes, variables, parameters, dependencies
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `query` | string | **required** | Substring to search for in tag names |
+
+---
+
+## collection
+
+Content Browser collection management backed by Unreal's `CollectionManager`. **13 actions.** Unless stated otherwise, `share_type` accepts `local`, `private`, `shared`, or `system` and defaults to `local` only when omitted. An explicitly empty `share_type` is invalid rather than an alias for the default store.
+
+| Action | Parameters | Behavior |
+|--------|------------|----------|
+| `collection.list_collections` | `share_type` (`all`) | List collection names, share types, storage modes, resolved asset counts, saved dynamic query text, and optional colors. All returned dynamic collections share one asset enumeration. |
+| `collection.get_collection` | `name` (**required**), `share_type` | Return one collection's details, including current resolved `asset_count` and `query_text` for a dynamic collection. |
+| `collection.create_collection` | `name` (**required**), `share_type`, `storage_mode` (`static`; `static` or `dynamic`) | Create a collection and return its details. |
+| `collection.delete_collection` | `name` (**required**), `share_type`, `force` (`false`) | Delete a collection. Resolved static or dynamic membership is rejected unless `force=true`. |
+| `collection.add_assets` | `name` (**required**), `share_type`, `asset_path` or `asset_paths[]` | Add one or more soft object paths to a static collection. At least one path is required. |
+| `collection.remove_assets` | `name` (**required**), `share_type`, `asset_path` or `asset_paths[]` | Remove one or more soft object paths from a static collection. At least one path is required. |
+| `collection.list_assets` | `name` (**required**), `share_type`, `recursive` (`self`; `self`, `children`, `parents`, or `all`) | Resolve and list matching soft object paths across static and dynamic collections in the selected recursion scope. |
+| `collection.contains_asset` | `name` (**required**), `asset_path` (**required**), `share_type`, `recursive` (`self`) | Resolve static and dynamic membership and report whether the selected collection scope contains the normalized path. |
+| `collection.set_dynamic_query` | `name` (**required**), `query_text` (**required**), `share_type` | Set a dynamic collection's query text and return the stored query. |
+| `collection.get_dynamic_query` | `name` (**required**), `share_type` | Return a dynamic collection's query text. |
+| `collection.set_collection_color` | `name` (**required**), `share_type`, `color` (`{r,g,b,a}` in `0..1`; omit to clear) | Set or clear the collection color. Alpha defaults to `1`; the result reports `updated`, `name`, `share_type`, `color_cleared`, and the applied `color` when present without resolving collection membership. |
+| `collection.validate_collection_name` | `name` (**required**), `share_type` (`local`; also accepts `all`) | Ask `CollectionManager` whether a name is valid and return its validation error when invalid. |
+| `collection.create_unique_collection_name` | `base_name` (**required**), `share_type` | Generate a valid, non-conflicting name without creating the collection. |
+
+All scalar and array element types are validated exactly, and required strings such as `query_text` must be non-empty. Optional enum defaults apply only when the field is absent: explicitly empty `share_type` and `storage_mode` values return `-32602`. A string supplied where a bool, number, object, or array is required is not coerced. Every target-specific action returns JSON-RPC `-32602` when the selected collection does not exist: `list_assets` does not masquerade as a successful empty collection, and `contains_asset` does not convert lookup failure to `contains=false`. Dynamic membership is evaluated against the live Content Browser asset set through `ICollectionContainer::TestDynamicQuery`; core `Name`, package-folder `Path`, `Class`/`Type`, `Collection`/`Tag`, and registered item-attribute expressions are supported. `FContentBrowserItemDataAttributeValue::GetValue<FString>()` safely normalizes the engine's string, name, and text backing variants in both supported engine versions. `Path` excludes the virtual `/All` prefix and asset leaf. One `list_collections` call compiles all requested dynamic filters and resolves them in one asset enumeration; every Content Browser alias is evaluated before successful matches are deduplicated per logical asset and per collection using a compact filter bitset. Nested dynamic collections share per-asset membership caching. A nested evaluation failure or dynamic-reference cycle propagates as an explicit error instead of silently becoming a non-match. A newly created dynamic collection with no saved query resolves to zero assets, including when referenced by another dynamic collection, instead of treating an empty text filter as “match all.” Non-forced deletion uses the same resolved membership, including dynamic query results. Unique-name candidates are checked through `ICollectionContainer::IsValidCollectionName` before success. An Unreal collection operation that fails after validation returns `-32603` and preserves the engine-provided error text when available. Mutating calls reject read-only share types rather than falling back to another scope.
 
 ---
 

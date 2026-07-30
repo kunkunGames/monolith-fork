@@ -41,6 +41,12 @@ Then restart Claude Code.
 - **Seed parity check:** `python Scripts/test_proxy_seed_parity.py` verifies the Python and native fallback seed lists are identical, unique, and include required dispatchers such as `dataflow_query`.
 - **Native rebuild:** `Tools\MonolithProxy\build_proxy.bat` uses an existing `cl.exe` environment or locates the newest installed x64 C++ toolchain through Visual Studio Installer's `vswhere.exe`; it does not assume an edition or installation drive. `build.bat` delegates to the same authoritative path.
 
+New public namespaces must be added to the native and Python seed lists together. Test the seed with an isolated `LOCALAPPDATA` and an unreachable `MONOLITH_URL`; otherwise an existing cache can hide a missing entry.
+
+## Native Proxy Build
+
+Run `build_proxy.bat` from `Tools\MonolithProxy`. The script uses `cl.exe` from the active developer environment when available; otherwise it locates the latest installed Visual C++ x64 toolchain through `vswhere`. A missing compiler, compile failure, output-directory failure, or binary-copy failure returns a non-zero exit code.
+
 ## Call Log
 
 Both proxies append one JSONL line per upstream MCP roundtrip to:
