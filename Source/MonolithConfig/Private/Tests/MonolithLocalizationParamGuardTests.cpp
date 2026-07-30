@@ -4,9 +4,11 @@
 #include "Internationalization/StringTable.h"
 #include "Internationalization/StringTableCore.h"
 #include "Internationalization/StringTableRegistry.h"
+#include "HAL/PlatformFileManager.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
+#include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "Misc/ScopeExit.h"
 #include "MonolithAssetUtils.h"
@@ -641,6 +643,30 @@ bool FMonolithParamGuardLocalizationStringTableLifecycleTest::RunTest(const FStr
 		CreatedTable->GetMutableStringTable()->RemoveMetaData(FTextKey(EntryKey), FName(TEXT(" Owner ")));
 	}
 
+	const FString LiteralApostropheKey = TEXT("'=Literal.Key");
+	const FString FormulaSourceString = TEXT("=SUM(1,1)");
+	{
+		TSharedPtr<FJsonObject> Metadata = MakeShared<FJsonObject>();
+		Metadata->SetStringField(TEXT("FormulaValue"), TEXT("+1+1"));
+		Metadata->SetStringField(TEXT("LiteralApostrophe"), TEXT("'=literal"));
+
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), AssetPath);
+		Params->SetStringField(TEXT("key"), LiteralApostropheKey);
+		Params->SetStringField(TEXT("source_string"), FormulaSourceString);
+		Params->SetObjectField(TEXT("metadata"), Metadata);
+		Params->SetBoolField(TEXT("confirm"), true);
+
+		const FMonolithActionResult Result =
+			FMonolithToolRegistry::Get().ExecuteAction(
+				TEXT("localization"),
+				TEXT("set_string_entry"),
+				Params);
+		TestTrue(
+			TEXT("formula and literal-apostrophe CSV fixture is created"),
+			Result.bSuccess);
+	}
+
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("asset_path"), AssetPath);
@@ -670,6 +696,26 @@ bool FMonolithParamGuardLocalizationStringTableLifecycleTest::RunTest(const FStr
 	}
 
 	{
+		FString ExportedCsv;
+		TestTrue(
+			TEXT("exported CSV can be read for formula-guard inspection"),
+			FFileHelper::LoadFileToString(ExportedCsv, *CsvPath));
+		TestTrue(
+			TEXT("formula cells use the unambiguous versioned spreadsheet guard"),
+			ExportedCsv.Contains(TEXT("'__monolith_formula_guard_v1__:")));
+		TestTrue(
+			TEXT("literal apostrophe-plus-formula-looking content is not rewritten as a guard"),
+			ExportedCsv.Contains(LiteralApostropheKey));
+	}
+
+	// Simulate an existing row that lacks a metadata field represented as
+	// present-empty in the CSV. Value-only comparison used to mistake this for a
+	// no-op because GetMetaData returns "" for both absent and present-empty.
+	CreatedTable->GetMutableStringTable()->RemoveMetaData(
+		FTextKey(EntryKey),
+		FName(TEXT("EmptyAllowed")));
+
+	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("asset_path"), AssetPath);
 		Params->SetStringField(TEXT("file_path"), CsvRelativePath);
@@ -680,6 +726,12 @@ bool FMonolithParamGuardLocalizationStringTableLifecycleTest::RunTest(const FStr
 		if (!TestTrue(TEXT("replace import succeeds without losing existing context"), Result.bSuccess))
 		{
 			AddError(FString::Printf(TEXT("replace import error: %s"), *Result.ErrorMessage));
+		}
+		if (Result.Result.IsValid())
+		{
+			TestTrue(
+				TEXT("present-empty metadata missing from the target is detected as a real change"),
+				Result.Result->GetBoolField(TEXT("changed")));
 		}
 	}
 
@@ -724,6 +776,127 @@ bool FMonolithParamGuardLocalizationStringTableLifecycleTest::RunTest(const FStr
 				return true;
 			});
 		TestFalse(TEXT("replace CSV import does not create absent empty metadata on another row"), bUnexpectedEmptyMetadata);
+	}
+
+	{
+		FString FormulaReadback;
+		TestTrue(
+			TEXT("literal-apostrophe key survives export/import"),
+			CreatedTable->GetStringTable()->GetSourceString(
+				FTextKey(LiteralApostropheKey),
+				FormulaReadback));
+		TestEqual(
+			TEXT("formula-looking source string round-trips exactly"),
+			FormulaReadback,
+			FormulaSourceString);
+
+		bool bFoundFormulaMetadata = false;
+		bool bFoundLiteralApostropheMetadata = false;
+		CreatedTable->GetStringTable()->EnumerateMetaData(
+			FTextKey(LiteralApostropheKey),
+			[&bFoundFormulaMetadata, &bFoundLiteralApostropheMetadata](
+				FName MetadataId,
+				const FString& MetadataValue)
+			{
+				if (MetadataId == FName(TEXT("FormulaValue")))
+				{
+					bFoundFormulaMetadata = MetadataValue == TEXT("+1+1");
+				}
+				else if (MetadataId == FName(TEXT("LiteralApostrophe")))
+				{
+					bFoundLiteralApostropheMetadata =
+						MetadataValue == TEXT("'=literal");
+				}
+				return true;
+			});
+		TestTrue(
+			TEXT("formula-looking metadata round-trips exactly"),
+			bFoundFormulaMetadata);
+		TestTrue(
+			TEXT("literal apostrophe metadata is never stripped as a guard"),
+			bFoundLiteralApostropheMetadata);
+	}
+
+	{
+		FString OriginalCsv;
+		TestTrue(
+			TEXT("original CSV is snapshotted for save-failure rollback coverage"),
+			FFileHelper::LoadFileToString(OriginalCsv, *CsvPath));
+
+		FString PackageFilename;
+		TestTrue(
+			TEXT("fixture package resolves to a filename"),
+			FPackageName::TryConvertLongPackageNameToFilename(
+				CreatedTable->GetOutermost()->GetName(),
+				PackageFilename,
+				FPackageName::GetAssetPackageExtension()));
+		IFileManager::Get().MakeDirectory(*FPaths::GetPath(PackageFilename), true);
+		TUniquePtr<IFileHandle> PackageFileLock(
+			FPlatformFileManager::Get().GetPlatformFile().OpenWrite(
+				*PackageFilename,
+				false,
+				false));
+		if (!TestTrue(
+			TEXT("exclusive package handle is acquired for deterministic save failure"),
+			PackageFileLock.IsValid()))
+		{
+			return false;
+		}
+
+		ON_SCOPE_EXIT
+		{
+			PackageFileLock.Reset();
+			IFileManager::Get().Delete(*PackageFilename, false, true);
+			FFileHelper::SaveStringToFile(OriginalCsv, *CsvPath);
+		};
+
+		TestTrue(
+			TEXT("changed replacement CSV fixture is written"),
+			FFileHelper::SaveStringToFile(
+				TEXT("key,source_string\nMainMenu.Play,MustRollBack\n"),
+				*CsvPath));
+
+		UPackage* TablePackage = CreatedTable->GetOutermost();
+		TablePackage->SetDirtyFlag(false);
+
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), AssetPath);
+		Params->SetStringField(TEXT("file_path"), CsvRelativePath);
+		Params->SetBoolField(TEXT("replace_existing"), true);
+		Params->SetBoolField(TEXT("confirm"), true);
+		Params->SetBoolField(TEXT("save"), true);
+
+		AddExpectedError(
+			TEXT("Error moving file"),
+			EAutomationExpectedErrorFlags::Contains,
+			1);
+		const FMonolithActionResult Result =
+			FMonolithToolRegistry::Get().ExecuteAction(
+				TEXT("localization"),
+				TEXT("import_string_table_csv"),
+				Params);
+		TestFalse(
+			TEXT("blocked package save returns an explicit action failure"),
+			Result.bSuccess);
+		TestFalse(
+			TEXT("save-failure rollback restores the originally clean package state"),
+			TablePackage->IsDirty());
+
+		FString RestoredSource;
+		TestTrue(
+			TEXT("save-failure rollback restores the primary entry"),
+			CreatedTable->GetStringTable()->GetSourceString(
+				FTextKey(EntryKey),
+				RestoredSource));
+		TestEqual(
+			TEXT("save-failure rollback restores the primary source string"),
+			RestoredSource,
+			FString(TEXT("Play")));
+		TestTrue(
+			TEXT("save-failure replace rollback restores entries omitted by the failed CSV"),
+			CreatedTable->GetStringTable()->GetSourceString(
+				FTextKey(LiteralApostropheKey),
+				RestoredSource));
 	}
 
 	{

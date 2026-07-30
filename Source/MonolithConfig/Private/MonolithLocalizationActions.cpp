@@ -32,6 +32,7 @@ namespace
 {
 	constexpr int32 MaxValidationIssueRows = 200;
 	const TCHAR* MetadataPresenceCsvHeader = TEXT("__monolith_metadata_presence_v1");
+	const TCHAR* SpreadsheetFormulaGuard = TEXT("'__monolith_formula_guard_v1__:");
 
 	struct FLocalizationMutationOptions
 	{
@@ -399,6 +400,11 @@ namespace
 
 		FSavePackageArgs SaveArgs;
 		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+		// Tool actions must surface filesystem/save failures as structured
+		// results. Without SAVE_NoError, commandlet-backed automation can route
+		// an ordinary access-denied failure through the fatal error device before
+		// this function has a chance to roll the mutation back.
+		SaveArgs.SaveFlags = SAVE_NoError;
 		bOutSaved = UPackage::SavePackage(Asset->GetPackage(), Asset, *OutSavedPath, SaveArgs);
 		if (!bOutSaved)
 		{
@@ -422,8 +428,9 @@ namespace
 	 * which evaluate any cell starting with one of these characters as a formula
 	 * regardless of CSV quoting. Localization source strings are attacker
 	 * influenced content, so a leading formula character is neutralized with a
-	 * single quote prefix - the prefix spreadsheet applications strip on display
-	 * and, unlike dropping the character, it stays reversible on import.
+	 * versioned single-quote marker. A raw value that already begins with the
+	 * marker is escaped by doubling it, making import unambiguous even for literal
+	 * values such as "'=not-a-formula".
 	 */
 	bool CellStartsSpreadsheetFormula(const FString& Cell)
 	{
@@ -443,9 +450,13 @@ namespace
 	FString EscapeCsvCell(const FString& Cell)
 	{
 		FString Escaped = Cell;
-		if (CellStartsSpreadsheetFormula(Escaped))
+		if (Escaped.StartsWith(SpreadsheetFormulaGuard, ESearchCase::CaseSensitive))
 		{
-			Escaped.InsertAt(0, TEXT('\''));
+			Escaped.InsertAt(0, SpreadsheetFormulaGuard);
+		}
+		else if (CellStartsSpreadsheetFormula(Escaped))
+		{
+			Escaped.InsertAt(0, SpreadsheetFormulaGuard);
 		}
 		Escaped.ReplaceInline(TEXT("\""), TEXT("\"\""));
 		if (Escaped.Contains(TEXT(",")) || Escaped.Contains(TEXT("\"")) || Escaped.Contains(TEXT("\r")) || Escaped.Contains(TEXT("\n")))
@@ -456,16 +467,23 @@ namespace
 	}
 
 	/**
-	 * Reverses the formula-neutralizing prefix added by EscapeCsvCell so an
-	 * export/import round trip is lossless.
+	 * Reverses only the versioned marker emitted by EscapeCsvCell. Literal leading
+	 * apostrophes are never stripped, and a doubled marker decodes to one literal
+	 * marker.
 	 */
 	FString UnescapeCsvFormulaGuard(const FString& Cell)
 	{
-		if (Cell.Len() >= 2
-			&& Cell[0] == TEXT('\'')
-			&& CellStartsSpreadsheetFormula(Cell.Mid(1)))
+		if (!Cell.StartsWith(SpreadsheetFormulaGuard, ESearchCase::CaseSensitive))
 		{
-			return Cell.Mid(1);
+			return Cell;
+		}
+
+		const FString Remainder =
+			Cell.Mid(FCString::Strlen(SpreadsheetFormulaGuard));
+		if (Remainder.StartsWith(SpreadsheetFormulaGuard, ESearchCase::CaseSensitive) ||
+			CellStartsSpreadsheetFormula(Remainder))
+		{
+			return Remainder;
 		}
 		return Cell;
 	}
@@ -747,6 +765,12 @@ namespace
 		return ParsedRows;
 	}
 
+	bool TryGetStringTableMetaData(
+		FStringTableConstRef TableRef,
+		const FTextKey& Key,
+		const FString& MetadataKey,
+		FString& OutValue);
+
 	/**
 	 * Returns true when applying Rows would actually alter the table.
 	 *
@@ -814,9 +838,15 @@ namespace
 			{
 				const FName MetadataId(*MetadataPair.Key);
 				IncomingMetadataIds.Add(MetadataId);
-				if (!TableRef->GetMetaData(TextKey, MetadataId).Equals(
-					MetadataPair.Value,
-					ESearchCase::CaseSensitive))
+				FString ExistingMetadataValue;
+				if (!TryGetStringTableMetaData(
+						TableRef,
+						TextKey,
+						MetadataPair.Key,
+						ExistingMetadataValue) ||
+					!ExistingMetadataValue.Equals(
+						MetadataPair.Value,
+						ESearchCase::CaseSensitive))
 				{
 					return true;
 				}
@@ -1987,6 +2017,9 @@ FMonolithActionResult FMonolithLocalizationActions::ImportStringTableCsv(const T
 	FString SavedPath;
 	if (bChanged)
 	{
+		UPackage* TablePackage = Table->GetOutermost();
+		const bool bPackageWasDirty = TablePackage && TablePackage->IsDirty();
+
 		// Snapshot the current contents so a save failure after a destructive
 		// replace can restore them instead of leaving a dirty, rebuilt table that
 		// the caller believes was untouched.
@@ -2074,6 +2107,10 @@ FMonolithActionResult FMonolithLocalizationActions::ImportStringTableCsv(const T
 						FName(*MetadataPair.Key),
 						MetadataPair.Value);
 				}
+			}
+			if (TablePackage)
+			{
+				TablePackage->SetDirtyFlag(bPackageWasDirty);
 			}
 			return FMonolithActionResult::Error(Error);
 		}
