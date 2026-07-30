@@ -112,30 +112,30 @@ TArray<FString> FMonolithParamSchema::FindUnknownKeys(
 	// Legacy wbp_path/asset_path back-compat: allow asset_path everywhere.
 	Allowed.Add(TEXT("asset_path"));
 
-	// Survivor B (plan §3.B) — universal response-shaping params. Allow these
-	// on EVERY action so the K3 STRICT_PARAMS=1 path does not hard-fail on
-	// `_fields` / `_omit` / `_compact_json`. The post-filter at the bottom
-	// of ExecuteAction consumes + acts on them.
-	Allowed.Add(TEXT("_fields"));
-	Allowed.Add(TEXT("_omit"));
-	Allowed.Add(TEXT("_compact_json"));
-	// Phase 1.1 (RI ergonomics handover #3) — nested-payload shaping params.
-	// `_row_fields` filters each row of the unique top-level list payload;
-	// `_path_fields` retains only matching dotted leaves. Same allowlist
-	// treatment as the original three.
-	Allowed.Add(TEXT("_row_fields"));
-	Allowed.Add(TEXT("_path_fields"));
-
 	for (const auto& Pair : Params->Values)
 	{
 		const FString PairKeyStr = MonolithKeyToString(Pair.Key);
-		if (!Allowed.Contains(PairKeyStr))
+		if (!Allowed.Contains(PairKeyStr)
+			&& !IsUniversalResponseShapingParam(PairKeyStr))
 		{
 			Unknown.Add(PairKeyStr);
 		}
 	}
 
 	return Unknown;
+}
+
+bool FMonolithParamSchema::IsUniversalResponseShapingParam(
+	const FString& ParamName)
+{
+	// ApplyResponseShaping consumes these exact, case-sensitive keys after the
+	// action handler returns. Keep the contract centralized so registry-level
+	// and action-local strict validation cannot drift apart.
+	return ParamName == TEXT("_fields")
+		|| ParamName == TEXT("_omit")
+		|| ParamName == TEXT("_compact_json")
+		|| ParamName == TEXT("_row_fields")
+		|| ParamName == TEXT("_path_fields");
 }
 
 bool FMonolithParamSchema::IsStrictParamsEnabled()
@@ -331,13 +331,20 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 	// centrally: when the schema declares array/object and the incoming value
 	// is a string that parses as that JSON kind, replace it with the parsed
 	// value. Strings that don't parse pass through untouched, so a legitimate
-	// string value can never be corrupted.
+	// string value can never be corrupted. A schema entry can set
+	// allow_string_encoded_complex=false (via RequiredExactType /
+	// OptionalExactType) when the action contract must observe the original
+	// EJson type instead of accepting this client-compatibility transform.
 	if (ActionInfo.ParamSchema.IsValid())
 	{
 		for (const auto& SchemaPair : ActionInfo.ParamSchema->Values)
 		{
 			const TSharedPtr<FJsonObject>* ParamDefPtr = nullptr;
 			if (!SchemaPair.Value->TryGetObject(ParamDefPtr) || !ParamDefPtr) continue;
+
+			bool bAllowStringEncodedComplex = true;
+			(*ParamDefPtr)->TryGetBoolField(TEXT("allow_string_encoded_complex"), bAllowStringEncodedComplex);
+			if (!bAllowStringEncodedComplex) continue;
 
 			FString DeclaredType;
 			(*ParamDefPtr)->TryGetStringField(TEXT("type"), DeclaredType);

@@ -8,7 +8,7 @@
 
 ## MonolithAnimation
 
-**Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, AnimGraph, AnimGraphRuntime, BlueprintGraph, AnimationBlueprintLibrary, PoseSearch, BlendStackEditor, AnimationModifiers, EditorScriptingUtilities, Json, JsonUtilities
+**Dependencies:** Core, CoreUObject, Engine, MonolithCore, AssetRegistry, UnrealEd, AnimGraph, AnimGraphRuntime, BlueprintGraph, AnimationBlueprintLibrary, PoseSearch, BlendStackEditor, AnimationModifiers, EditorScriptingUtilities, Json, JsonUtilities
 
 > **`BlendStackEditor` dep (2026-06-07)** added for the Motion Matching action pack — `build_motion_matching_node` spawns the bound-graph `UAnimGraphNode_MotionMatching` / BlendStack nodes.
 
@@ -16,8 +16,9 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithAnimationModule` | Registers ~170 animation actions across `MonolithAnimationActions.cpp` (incl. the state-machine authoring actions `create_state_machine` / `build_state_machine`, plus 2026-06-07 readback actions `get_anim_graph_choosers` / `get_transition_rule`, plus the 2026-06-10 introspection-gap binding actions `get_anim_node_function_bindings` / `set_anim_node_function_binding` (Gap 2) + `get_anim_node_pin_bindings` / `set_anim_node_pin_binding` (Gap 12)), `MonolithPoseSearchActions.cpp` (PoseSearch + the 2026-06-07 Motion Matching action pack), `MonolithAbpWriteActions.cpp` (5), `MonolithControlRigWriteActions.cpp` (3), `MonolithAnimLayoutActions.cpp` (1), `MonolithAnimationRuntimeActions.cpp` (1 — `sample_pie_anim_instance`), and the 5 graph-surgery actions (`rebuild_evaluate_chooser_node`, `replace_evaluate_chooser_nodes`, `duplicate_reparent_and_sanitize`, `find_node_slice`, `remove_node_slice`). `sample_pie_timeseries` (Gap 9) also registers under the `animation` namespace but is implemented in MonolithEditor. The `WITH_CHOOSER`-gated `chooser` namespace (10 actions) is registered from this module but counted under its own namespace |
+| `FMonolithAnimationModule` | Registers ~170 animation actions across `MonolithAnimationActions.cpp` (incl. the state-machine authoring actions `create_state_machine` / `build_state_machine`, plus 2026-06-07 readback actions `get_anim_graph_choosers` / `get_transition_rule`, plus the 2026-06-10 introspection-gap binding actions `get_anim_node_function_bindings` / `set_anim_node_function_binding` (Gap 2) + `get_anim_node_pin_bindings` / `set_anim_node_pin_binding` (Gap 12)), `MonolithPoseSearchActions.cpp` (PoseSearch + the 2026-06-07 Motion Matching action pack), `MonolithAbpWriteActions.cpp` (5), `MonolithControlRigWriteActions.cpp` (3), `MonolithAnimLayoutActions.cpp` (1), `MonolithAnimationRuntimeActions.cpp` (1 — `sample_pie_anim_instance`), and the 5 graph-surgery actions (`rebuild_evaluate_chooser_node`, `replace_evaluate_chooser_nodes`, `duplicate_reparent_and_sanitize`, `find_node_slice`, `remove_node_slice`). `sample_pie_timeseries` (Gap 9) also registers under the `animation` namespace but is implemented in MonolithEditor. The 16-action `chooser` namespace is registered and unregistered exclusively by this module but counted under its own namespace |
 | `FMonolithAnimationActions` | Static handlers organized in 15 groups (the original action handlers) |
+| `FMonolithChooserReadActions` | Six bounded reflection-first discovery/readback/validation actions. Enforces canonical package/object paths, rejects aliases and redirectors, paginates stable results, reports incomplete depth/visit/result scans, uses the root-owned context view when Chooser is enabled, and never compiles, mutates, saves, or dirties a Chooser package |
 | `FMonolithAbpWriteActions` | ABP graph write actions (Phase v0.14.3 PR #34): `add_anim_graph_node` (built-in aliases plus generic `UAnimGraphNode_Base` class path/name resolution, with TwoBoneIK / ModifyBone helpers and auto-pin exposure), `connect_anim_graph_pins`, `set_state_animation`, `add_variable_get`, `set_anim_graph_node_property` |
 | `FMonolithControlRigWriteActions` | ControlRig write actions: 3 actions (graph node creation, pin configuration, variable management) |
 | `FMonolithAnimLayoutActions` | `auto_layout` for AnimBP graphs |
@@ -388,7 +389,7 @@ Node-level write operations over Animation Blueprint graphs, built for AnimBP re
 
 - **`FPoseSearchDatabaseAnimationAsset` is a unified 5.7 shape.** UE 5.7 collapsed prior per-asset-type containers into a single discriminated struct. The adapter routes per-row writes via the discriminator (the first of `sequence` / `blendspace` / `composite` / `montage` present in each row). Schema surfaces the discriminator under `entries[].asset_type` with the four valid values.
 - **`IAnimationDataController` requires bracket transactions.** Sequence-level writes (notify CRUD, curve CRUD, bone-track CRUD) must open / close an `IAnimationDataController` transaction. The PoseSearchDatabase fill_kind does NOT touch sequence-level transactions (it writes to the database asset directly); notify/curve fill_kinds would, hence they remain `(WISHLIST v1.1)`.
-- **CHT_ chooser-table read/edit surface lives in the `chooser` namespace, not `animation`.** Chooser tables (`UChooserTable`) are inspected and edited via the dedicated `chooser` namespace (10 actions: `inspect_chooser`, `duplicate_chooser_tree`, `set_context_object_class`, `set_result_asset_reference`, `set_evaluate_chooser_result_reference`, `validate_chooser`, plus the authoring set `create_chooser_table` / `add_chooser_column` / `add_chooser_row` / `set_chooser_cell` — all `#if WITH_CHOOSER` gated; see `SPEC_MonolithAnimation.md` § Chooser Namespace). The bulk_fill `animation` adapter still does NOT carry a chooser-table `fill_kind` — that remains `(WISHLIST)`.
+- **CHT_ chooser-table read/edit surface lives in the `chooser` namespace, not `animation`.** Chooser tables (`UChooserTable`) use a dedicated 16-action namespace: six bounded discovery/readback/structural-validation actions, six deep inspection/reference-edit actions, and four authoring actions. Registration and teardown are both owned by `MonolithAnimation`; no second module may unregister the shared namespace. The bulk_fill `animation` adapter still does NOT carry a chooser-table `fill_kind` — that remains `(WISHLIST)`.
 - **`v1 NotifyApplyTemplate fill_kind is audit-only.** Cited from the design spec. The handler scans the folder + glob and returns matched sequences with their existing notify / curve state, plus the template that would be applied. No writes commit. Real per-asset notify writes still flow through the existing `add_notify` / `add_curve` / `set_notify_time` actions.
 - **Skeleton compatibility surface in v0.14.10.** Schema surfaces `CompatibleSkeletons` via the existing `get_compatible_skeletons` action — bulk_fill of compatible-skeleton lists is a separate `(WISHLIST v1.1)` fill_kind.
 
@@ -401,9 +402,49 @@ Node-level write operations over Animation Blueprint graphs, built for AnimBP re
 
 ---
 
-## Chooser Namespace (10 — namespace: "chooser")
+## Chooser Namespace (16 — namespace: "chooser")
 
-A dedicated namespace for inspecting and editing `UChooserTable` assets, registered from `MonolithAnimation`. **All actions are `#if WITH_CHOOSER` gated** — they register only when the Chooser plugin (`Engine/Plugins/Chooser`) is present. The namespace registers no actions in builds without it.
+A dedicated namespace for discovering, inspecting, validating, and editing
+`UChooserTable` assets, registered and unregistered exclusively by
+`MonolithAnimation`.
+
+All 16 actions remain discoverable when the optional Chooser plugin is disabled.
+The six bounded read actions use only AssetRegistry/reflection and return
+`ErrOptionalDepUnavailable` when an asset call requires the unavailable
+`UChooserTable` class. The existing ten deep/authoring handlers retain their
+explicit `Chooser plugin not available` off-gate result. No handler silently
+substitutes another asset or a legacy component.
+
+### Bounded discovery, readback, and structural validation (6)
+
+These actions require a canonical mounted package or top-level object path.
+Filesystem paths, relative paths, subobjects, redirectors, case-only aliases,
+and object names that differ from the package asset name return
+`ErrInvalidParams`. They never compile, transact, mutate, save, or dirty the
+package.
+
+Reflected payload serialization is bounded independently from row/reference
+pagination: maximum depth 3, 128 fields per full struct (16 compact), and 256
+entries per full container (8 compact). Container wrappers always report the
+full `count` and add `truncated_after` when the returned prefix is incomplete.
+Depth-limited structs and containers return explicit
+`serialization=depth_limit` metadata without expanding. String,
+localized-text, and otherwise unsupported export values cap at 4,096
+characters; longer values return explicit serialization and truncation
+metadata. Reflected `int64`/`uint64` values outside the exactly representable
+JSON range (±2^53−1) are emitted as decimal strings rather than being rounded
+through a double.
+
+| Action | Contract |
+|--------|----------|
+| `list_chooser_tables` | Deterministic AssetRegistry discovery with exact `path_filter`, `offset`, and bounded `limit` (1–1000). Returns `count`, `total`, and `has_more`. |
+| `get_chooser_table` | Bounded summary of row/column/result/context counts, reflected column data, hard/soft references, fallback result, and optional `include_rows` readback (`row_limit` 1–500). `ResultsStructs` is authoritative in editor builds; `CookedResults` is used only when editor-only results are unavailable, so stale derived arrays never create phantom rows. `context_entry_count` follows the root-owned `GetContextData()` view. Fixed-size reflected C arrays serialize as bounded `count` + `items` containers rather than silently exposing element zero. |
+| `list_chooser_columns` | Reflected type, input/output classification, disabled state, row-value property/type/count, and bounded fields for each column. Hard cap: 512 columns with explicit `truncated`. |
+| `list_chooser_rows` | Bounded row page (`start_row`, `limit` 1–500) with result data, disabled state, and per-column cell values. Cells are capped at 512 per row, so the response also reports `column_count`, `row_cells_per_row`, and `row_cells_truncated`; a partial row is never presented as complete. |
+| `list_chooser_references` | Stable, bounded hard/soft reference page with reflected source locations and exact loaded-object or AssetRegistry-object existence evidence. A resident or on-disk package without the referenced export is not asset evidence. Exports under `/Script/` are resolved exactly rather than assumed valid. A Blueprint-generated class path (`…_C`) is accepted only for `FSoftClassProperty` and only when the owning Blueprint's `GeneratedClassPath` tag matches the requested export exactly. `TScriptInterface` objects, deprecated-property exclusion, and every element of a reflected fixed-size array are honored. Set/map source markers do not expose sparse internal indices, and the complete bounded result is sorted before pagination. Returns scan depth, global visit-budget, truncation, and completeness evidence. |
+| `validate_chooser_table` | Non-mutating row-array/column alignment, known result-target (`Asset`, `Chooser`, or `Class`) payload, and soft-reference asset validation. Warnings do not set `valid=false`; errors do. Invalid `FInstancedStruct` rows, null known result targets, result-validation overflow, reference-count/visit overflow, and nesting-depth stops all return `complete=false` with explicit errors. |
+
+### Deep inspection and reference editing (6)
 
 | Action | Description |
 |--------|-------------|
@@ -414,7 +455,11 @@ A dedicated namespace for inspecting and editing `UChooserTable` assets, registe
 | `set_evaluate_chooser_result_reference` | Rewrite the child `UChooserTable` that an EvaluateChooser result row points at (`FEvaluateChooser`). Root / nested chooser rows are EvaluateChooser rows and are NOT settable via `set_result_asset_reference`; this action handles them. Params: `asset_path` (required, the table to edit), `row` (required, 0-based result row index of the EvaluateChooser row), `child_chooser_path` (required, the `UChooserTable` to point it at). Marks the package dirty and recompiles (`Compile(true)`). |
 | `validate_chooser` | `Compile(true)` plus validation: optional `expected_context_class` and `expected_result_type` (`ObjectResult` / `ClassResult` / `NoPrimaryResult`), plus a sweep for null / stale result-row asset references. Read-only apart from the compile pass. |
 
-**Chooser authoring (4 — 2026-06-07)** — create a chooser table from scratch and populate it row-by-row (plus single-cell edits), the companion write surface to the inspect/edit/duplicate actions above.
+### Chooser authoring (4 — 2026-06-07)
+
+Create a chooser table from scratch and populate it row-by-row (plus
+single-cell edits), the companion write surface to the inspect/edit/duplicate
+actions above.
 
 | Action | Description |
 |--------|-------------|
