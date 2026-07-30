@@ -22,11 +22,13 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [blueprint](#blueprint) | 111 | Blueprint read/write, variable/component/graph CRUD, node ops, compile, auto-layout, spawn actors, dataset read/edit pack (DataTable/CurveTable/StringTable + `seed_data_asset`), cross-class property access, parent-function overrides |
 | [material](#material) | 63 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
 | [animation](#animation) | 145 | Curves, bone tracks, sync markers, root motion, compression, blend spaces (incl. baking + interpolation control), ABPs (incl. an AnimGraph-authoring pack — additive/slot/cached-pose/blend (by int + by enum)/sync/layered-blend/Control Rig/linked-layer/conduit nodes + output wiring — custom anim-graph nodes + state-machine teardown + compound expression transition rules), montages, skeletons, PoseSearch, IKRig, Control Rig |
+| [chooser](#chooser) | 16 | ChooserTable discovery, bounded readback, non-mutating structural validation, deep inspection, authoring, and reference editing |
 | [niagara](#niagara) | 119 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, effect types, event-aware summaries + validate_system event-chain reasoning, temporal-control composite writers + read aggregators, stateless-emitter factory) |
 | [editor](#editor) | 29 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, Python escape-hatch, persistent-level swap |
 | [config](#config) | 6 | INI config inspection and search |
 | [project](#project) | 7 | Project-wide asset index (SQLite + FTS5) |
 | [source](#source) | 11 | Unreal Engine C++ source code navigation |
+| [source_control](#source_control) | 11 | Provider-backed status/checkout/add/delete/revert plus bounded Perforce opened/path mapping |
 | [mesh](#mesh) | 194 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, mesh import (incl. skeletal + animation). +45 town gen registers only with `bEnableProceduralTownGen=true` (experimental, not in the public count) |
 | [ui](#ui) | 138 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, headline scaffolders, navigation/conversion gap-closure, accessibility, CommonUI, GAS UI bindings |
 | [gas](#gas) | 135 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold |
@@ -44,6 +46,8 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [network](#network) | 4 | **New v0.17.0.** Reflection Intelligence — UE 5.7 replication inspection (replicated classes, RPCs, OnRep handlers, unbalanced-OnRep audit) |
 | [pipeline](#pipeline) | 2 | **New v0.17.0.** Reflection Intelligence — read-only composer actions (`pr_review`, `release_readiness`) |
 | [reflect](#reflect) | 1 | **New v0.19.0.** Reflection Intelligence — index maintenance (`rebuild_reflection_index`, project-only force-rebuild of the RI reflection tables; WRITE/maintenance) |
+| **In-tree subtotal** | **~1,400+** | Counts are intentionally approximate; query `monolith_discover()` for the current registry total. |
+| **In-tree subtotal** | **1417** | (all default-active; +45 experimental town gen → 1462 when registered) |
 | **In-tree subtotal** | **1405** | (all default-active; +45 experimental town gen → 1450 when registered) |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
@@ -408,6 +412,57 @@ Animation curves, bone tracks, sync markers, root motion, compression, blend spa
 | Layout / batch | 2 | `auto_layout`, `batch_execute` |
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithAnimation.md` for the deep dive.
+
+---
+
+## chooser
+
+ChooserTable discovery, readback, structural validation, deep inspection,
+authoring, and reference editing. The namespace is registered from
+`MonolithAnimation`, which is the sole owner of its startup and teardown.
+
+The six readback actions accept only a canonical mounted package path
+(`/Game/Choosers/CHT_Locomotion`) or matching top-level object path
+(`/Game/Choosers/CHT_Locomotion.CHT_Locomotion`). They reject relative paths,
+filesystem paths, subobjects, redirectors, case-only aliases, and mismatched
+object names. They do not compile, transact, mutate, save, or dirty the package.
+Reflected values are serialized to a maximum depth of 3, with at most 128
+fields per full struct (16 in compact column summaries) and 256 entries per
+full container (8 in compact summaries). Container wrappers preserve the full
+`count` and emit `truncated_after` when only the bounded prefix is returned.
+Depth-limited structs and containers return
+`serialization=depth_limit` without expanding. String, localized-text, and
+otherwise unsupported export values cap at 4,096 characters; longer values
+return `serialization`, bounded `value`, `original_char_count`, and
+`truncated_after`.
+
+| Category | Action | Parameters | Contract |
+|---|---|---|---|
+| Discovery | `list_chooser_tables` | `path_filter?`, `offset=0`, `limit=200` | Deterministic AssetRegistry page. `path_filter` is an exact mounted package prefix; `limit` is 1–1000. |
+| Readback | `get_chooser_table` | `asset_path`, `include_rows=false`, `row_limit=50` | Bounded counts, columns, references, fallback result, and optional rows/cells. Editor row count comes from `ResultsStructs` rather than stale derived arrays, root context inheritance is honored, and fixed reflected arrays expose bounded `count` + `items`. `row_limit` is 1–500. |
+| Readback | `list_chooser_columns` | `asset_path` | Column type, input/output classification, disabled state, row-value property/type/count, and bounded reflected fields. |
+| Readback | `list_chooser_rows` | `asset_path`, `start_row=0`, `limit=100` | Bounded row page with result, disabled state, and per-column cell values. |
+| Readback | `list_chooser_references` | `asset_path`, `offset=0`, `limit=200` | Stably sorted bounded hard/soft references with reflected source locations and exact loaded-object or AssetRegistry-object existence evidence. A loaded or on-disk package without the referenced export is not evidence that the asset still exists. Blueprint `…_C` fallback requires a soft-class property and an exact `GeneratedClassPath` tag. Response fields expose depth, global visit-budget, and result-count completeness. |
+| Validation | `validate_chooser_table` | `asset_path` | Non-mutating row-array/column alignment, known result-payload target, and reference-resolution validation. Warnings do not invalidate; errors do. Invalid/null result payloads and any bounded scan stop return `complete=false` and an error. |
+| Deep read/edit | `inspect_chooser` | `asset_path`, `include_cells=false`, `recursive=false` | Deep Chooser-aware inspection, optionally including the nested chooser tree. |
+| Deep read/edit | `duplicate_chooser_tree` | `source_assets`, `destination_folder`, `remap_rules?` | Two-pass duplicate and nested/result-reference remap. |
+| Deep read/edit | `set_context_object_class` | `asset_path`, `context_name_or_index`, `class_path` | Rewrite a class context entry and recompile. |
+| Deep read/edit | `set_result_asset_reference` | `asset_path`, `row_or_column`, `asset_path_value` | Rewrite an asset result row and recompile. |
+| Deep read/edit | `set_evaluate_chooser_result_reference` | `asset_path`, `row`, `child_chooser_path` | Rewrite an EvaluateChooser child-table reference and recompile. |
+| Validation | `validate_chooser` | `asset_path`, `expected_context_class?`, `expected_result_type?` | Compile-based Chooser validation; distinct from non-mutating `validate_chooser_table`. |
+| Authoring | `create_chooser_table` | `asset_path`, `output_type=Object`, `output_class?`, `context_class?` | Create an empty table. |
+| Authoring | `add_chooser_column` | `asset_path`, `column_kind`, `binding_property?`, `enum_class?` | Add and back-fill an input/output column. |
+| Authoring | `add_chooser_row` | `asset_path`, `cells`, `output_psd` | Append one row while growing every parallel row array atomically. |
+| Authoring | `set_chooser_cell` | `asset_path`, `column_index`, `row_index`, typed value fields | Replace one typed predicate cell. |
+
+The six discovery/readback actions remain registered without the optional
+Chooser plugin because they use AssetRegistry and reflection only. Calls that
+must load a `UChooserTable` return `ErrOptionalDepUnavailable` when the class is
+unavailable. The existing ten deep/authoring actions also remain discoverable
+but return their explicit Chooser-unavailable handler error off-gate.
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithAnimation.md` and
+`Plugins/Monolith/Skills/unreal-chooser/SKILL.md`.
 
 ---
 
@@ -823,6 +878,32 @@ Unreal Engine C++ source code navigation. 1M+ symbols indexed. **12 actions** (1
 
 ---
 
+## source_control
+
+Provider-backed source-control preparation and bounded Perforce inspection. **11 actions.** The canonical path parameter is `paths`; every path action also accepts the alias `files`, and either field may contain one string or an array of strings. Relative paths resolve from the project directory. A slash-prefixed input is treated as an Unreal package/object path only when its package mount point exists; `/home/...` and other POSIX absolute paths remain filesystem paths.
+
+Boolean options are strict JSON booleans. Pass `true` or `false`; quoted strings, numeric substitutes, and explicit `null` values return `-32602`.
+
+| Action | Parameters | Description |
+|--------|------------|-------------|
+| `get_capabilities` | none | Active provider identity, installed provider names, and supported action roster |
+| `get_status` | `paths` or `files` | Normalized files and provider state (`checked_out`, `added`, `modified`, `conflicted`, capabilities, and other-user checkout details) |
+| `checkout` | `paths`/`files`, `dry_run?=false` | Check out through the active Unreal provider |
+| `add` | `paths`/`files`, `dry_run?=false` | Mark for add through the active Unreal provider |
+| `checkout_or_add` | `paths`/`files`, `dry_run?=false` | Plan or execute checkout for tracked files and add for provider-confirmed untracked files; reports `ok=false` and performs no provider mutation when any path is blocked by another-user checkout, conflict, stale revision, or an unknown/unsupported state |
+| `delete` | `paths`/`files`, `dry_run?=false`, `confirm?=false` | Mark for delete; requires `confirm=true` unless dry-running |
+| `mark_for_delete` | same as `delete` | Explicitly named alias of the delete provider operation |
+| `revert` | `paths`/`files`, `dry_run?=false`, `confirm?=false` | Revert files; requires `confirm=true` unless dry-running |
+| `revert_unchanged` | `paths`/`files`, `dry_run?=false`, `confirm?=false` | Revert unchanged files; requires `confirm=true` unless dry-running |
+| `list_opened` | `changelist?`, `resolve_packages?=true`, `limit?=200` | Bounded `p4 -ztag opened -m (limit + 1)` with optional local/package resolution; `limit` is integral `1..5000` |
+| `map_depot_paths` | `paths` or `files` | Map up to 5,000 depot/client/local/package paths, preserving one result row per input |
+
+`delete`, `mark_for_delete`, `revert`, and `revert_unchanged` return `ok=false` without executing when neither `dry_run=true` nor `confirm=true` is supplied. An unavailable provider is reported explicitly as `available=false`; the action does not edit file attributes or select an alternate provider. `checkout_or_add` distinguishes benign skips (already editable, safely checked out/added, or a not-yet-created path when add-missing is disabled) from blocking skips. Blocking facts are evaluated before those shortcuts, an invalid provider-state result is not treated as proof that a file is untracked, and add never runs after a failed or cancelled checkout.
+
+Perforce mapping is bounded to 128 paths and 24,000 encoded characters per `p4 where` command, at most 40 commands per call, and a 30-second deadline per process. A timeout terminates the process tree, marks the current and unstarted batches with explicit diagnostics, and launches no further batches. Windows and Unix command lines use platform-compatible argument quoting. Both `map_depot_paths` and `list_opened(resolve_packages=true)` return a backend error when a required `p4 where` process cannot launch or times out; they never present that outage as ordinary unmapped rows. `list_opened` exposes `observed_count`, `returned_count`, `sentinel_record_count`, `count_is_lower_bound`, `has_more`, and `truncated`; treat `count` as exact only when `count_is_lower_bound=false`.
+
+---
+
 ## mesh
 
 Mesh inspection, scene manipulation, spatial queries, level blockout, GeometryScript, procedural geometry, lighting, audio, performance, mesh import (incl. skeletal + animation, PR #58), and **experimental** procedural town generation. **194 actions** (always registered, in the public count) + 45 experimental town gen (gated on `bEnableProceduralTownGen=true`, default `false`) = 239 when town-gen is on.
@@ -1125,11 +1206,79 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithLevelSequence.md`.
 
 ---
 
-## interchange
+## dataflow
 
-Guarded asset import/export pipeline. Read-only actions validate sources and inspect import metadata; every filesystem or asset mutation requires `confirm=true` unless `dry_run=true`.
+Bounded, read-only `UDataflow` asset discovery, graph/node-schema inspection,
+integrity validation, variable inspection, and editor-comment membership.
+**8 actions.** Implemented by `MonolithDataflow` with explicit
+`DataflowCore`/`DataflowEngine` dependencies.
 
 | Action | Key params | Notes |
+|--------|-----------|-------|
+| `get_status` | — | Exact eight-action roster, Dataflow plugin/module state, and explicit authoring/evaluation/regeneration=false flags |
+| `list_assets` | `package_path?`, `limit?` | AssetRegistry-only bounded discovery; reports count completeness and never loads assets |
+| `get_dataflow_graph` | `asset_path`, `node_limit?`, `connection_limit?`, `pin_limit?`, `property_limit?`, `include_properties?` | Independent node/connection slices, explicit nested truncation, registered/declared pin provenance, and package-dirty postconditions |
+| `list_dataflow_node_types` | `filter?`, `common_only?`, `limit?`, `include_pins?`, `pin_limit?` | Deterministic category/type ordering with exact counts and bounded optional pin schemas |
+| `get_dataflow_node_schema` | `type_name`, `include_properties?`, `pin_limit?`, `property_limit?` | One case-exact registered factory type; case-only substitution returns `node_type_case_mismatch` |
+| `validate_dataflow_graph` | `asset_path`, `node_scan_limit?`, `connection_scan_limit?`, `issue_limit?` | Bounded structural validation; incomplete scans emit `validity_status=incomplete` and omit `valid` |
+| `list_dataflow_variables` | `asset_path`, `limit?` | Bounded property-bag descriptors and scalar values with explicit value-read, omission, and truncation status |
+| `list_dataflow_comments` | `asset_path`, `comment_limit?`, `node_limit?`, `graph_node_scan_limit?` | Bounded comment/membership rows; rejects comparison budgets above 1,000,000 |
+
+Scalar params require exact JSON types; unknown keys, fractional integers, and
+out-of-range limits fail with `-32602`. `package_path` is `/Game` or a
+canonical directory below it. `asset_path` is an exact, case-sensitive
+`/Game/.../Asset.Asset` object path and rejects shorthand names, file
+extensions, backslashes, subobjects, redirects, and alternate resolved
+objects. All numeric limits publish inclusive `minimum` and `maximum` fields in
+their discoverable action schemas.
+
+Every dynamic response also shares a fixed aggregate budget of 4,096 returned
+rows across top-level and nested collections. Reflected/free-form strings
+passed through the bounded reader additionally share 1,048,576 characters.
+`output_returned_row_count`, `output_rows_truncated`,
+`output_returned_bounded_text_character_count`,
+`output_bounded_text_truncated`, and `output_budget_exhausted` distinguish
+aggregate truncation from the individual action limits; fixed-size GUID and
+contract metadata remain bounded by the row ceiling. Asset-backed reads
+capture and verify package dirty state even when the loaded object is rejected
+for case, redirect, or type mismatch.
+
+Editable node/default properties and property-bag variables expose bounded
+scalar values only. Dynamic containers, structs, and fixed arrays report an
+explicit `value_read_status` such as `omitted_container` or `omitted_struct`
+and omit `value`; the module never calls an unbounded generic export path for
+those values.
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithDataflow.md`.
+
+---
+
+## Core action-schema helper
+
+`FParamSchemaBuilder::Range(name, min, max)` adds inclusive machine-readable
+`minimum` and `maximum` fields to an already-declared registered-action
+parameter. It is a discovery contract only: action handlers must still perform
+strict runtime type and range validation.
+
+`FMonolithParamSchema::IsUniversalResponseShapingParam(name)` identifies the
+five exact, case-sensitive parameters consumed after action dispatch:
+`_fields`, `_omit`, `_compact_json`, `_row_fields`, and `_path_fields`.
+Action-local strict readers call this helper so they preserve typo rejection
+without rejecting the framework's universal response-shaping contract.
+## gameplay_message
+Read-only GameplayMessageRouter availability, exact channel/payload validation, and bounded static broadcaster/listener source tracing. **5 actions.** Implemented by `MonolithGameplayMessage` without a compile-time dependency on `GameplayMessageRuntime` or `GameplayMessageNodes`.
+| `get_status` | — | Exact plugin, runtime/nodes module, subsystem class, async-listener class, listener-handle struct, and match-enum availability |
+| `describe_listener_contract` | — | Reflected functions, match types, lifetime rules, and equal-or-derived broadcast payload compatibility with the listener's accepted parent struct |
+| `validate_message_struct` | `message_struct`, `require_blueprint_type?`, `require_no_object_references?` | Exact non-redirecting `UScriptStruct` identity, structure size, metadata, and recursive object-reference checks |
+| `validate_channel_contract` | `channel_tag`, `message_struct?`, `match_type?`, `require_registered_tag?`, `require_blueprint_type?` | Canonical tag syntax, exact registration/case, case-sensitive match type, and optional payload validation |
+| `trace_channel_usage` | `channel_tag?`, `source_root?`, `source_roots?`, `include_monolith_source?`, `include_engine_gameplay_message_sources?`, `max_files?`, `max_results?`, `include_line_text?` | Deterministic path-sorted file selection; comment/token-boundary-safe per-call candidates; argument-local match inference; filtered ancestor `PartialMatch` evidence; physical path enforcement; truncation-safe orphan status; source excerpts are opt-in; no PIE, listeners, or broadcasts |
+
+Scalar params require exact JSON types. Object paths reject whitespace, backslashes, extensions, subobjects, redirects, case changes, and resolved-path substitutions. Channel tags may be a valid single segment but reject leading, trailing, or internal empty dot segments. `max_files` is `1..5000`; `max_results` is `1..1000`; values are never clamped. Trace output separates sorted `files_selected` from files actually loaded in `files_scanned`, and reports total eligible enumeration in `limits.eligible_files_enumerated` under a 100,000-file safety bound. `summary.orphan_analysis_complete=false` means bounds or skipped input made absence claims indeterminate, so no orphan candidate is emitted.
+| `trace_channel_usage` | `channel_tag?`, `source_root?`, `source_roots?`, `include_monolith_source?`, `include_engine_gameplay_message_sources?`, `max_files?`, `max_results?`, `include_line_text?` | Per-call bounded lexical candidates; nested project-plugin roots; physical path enforcement; truncation-safe orphan status; source excerpts are opt-in; no PIE, listeners, or broadcasts |
+Scalar params require exact JSON types. Object paths reject whitespace, backslashes, extensions, subobjects, redirects, case changes, and resolved-path substitutions. Channel tags may be a valid single segment but reject leading, trailing, or internal empty dot segments. `max_files` is `1..5000`; `max_results` is `1..1000`; values are never clamped. `summary.orphan_analysis_complete=false` means bounds or skipped input made absence claims indeterminate, so no orphan candidate is emitted.
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithGameplayMessage.md`.
+## interchange
+Guarded asset import/export pipeline. Read-only actions validate sources and inspect import metadata; every filesystem or asset mutation requires `confirm=true` unless `dry_run=true`.
 |--------|------------|-------|
 | `get_supported_formats` | none | Lists known source formats, runtime module availability, allowed roots, and mutation policy. |
 | `can_import` | `source_file`; optional `destination_path`, `allow_external` | Normalizes harmless folder whitespace/trailing separators, then validates source existence, extension support, a registered Interchange translator or legacy factory, link-safe root policy, and destination package syntax without mutation. |
@@ -1146,7 +1295,6 @@ Guarded asset import/export pipeline. Read-only actions validate sources and ins
 | `reimport_asset` | `asset_path`; optional `source_file`, `source_file_index`, `allow_external`, `confirm`, `dry_run` | Validates every retained handler source and an exact integer replacement index. A provided replacement source must be an exact non-empty string and must match the target asset kind plus a registered backend before Unreal's reimport manager is called. |
 | `reimport_assets` | `asset_paths`; optional `allow_external`, `confirm`, `dry_run` | Reimports assets sequentially after validating each handler-reported source path. |
 | `export_asset` | `asset_path`, `file_path`; optional `replace_existing`, `allow_external`, `confirm`, `dry_run` | Requires a matching exporter and rejects an existing directory masquerading as a filename before either dry-run success or export. |
-
 Typed mesh, skeletal-mesh, texture, and audio imports snapshot the destination before mutation. If Unreal returns no object of the requested class, Monolith attempts to remove every newly returned asset. A complete cleanup returns `status="error"`, `rollback_complete=true`, and `partial_mutation=false`; retained pre-existing, unmanaged, or undeletable results return `status="partial_import"` and `partial_mutation=true`. The row includes `rollback_candidates`, `rolled_back_assets`, `pre_existing_import_results`, `unmanaged_import_results`, rollback counts, and `dirty_packages_before_rollback` so callers can decide whether a retry is safe.
 
 ---

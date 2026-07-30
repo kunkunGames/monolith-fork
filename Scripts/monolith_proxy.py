@@ -70,6 +70,7 @@ CORE_QUERY_TOOLS = [
     "logicdriver_query",
     "audio_query",
     "level_sequence_query",
+    "dataflow_query",
     "interchange_query",
 ]
 

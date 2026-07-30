@@ -38,6 +38,8 @@ Then restart Claude Code.
 - **C++ proxy:** `Plugins/Monolith/Binaries/monolith_proxy.exe` — Native executable, faster startup
 - **Backend:** Both connect to the same Monolith HTTP server running in the Unreal Editor
 - **Editor-down startup:** Both proxies return a cached Monolith tool list when available, or a stable seed list of namespace/meta tools. This prevents MCP clients that do not fully refresh on `tools/list_changed` from starting with an empty Monolith catalog.
+- **Seed parity check:** `python Scripts/test_proxy_seed_parity.py` verifies the Python and native fallback seed lists are identical, unique, and include required dispatchers such as `dataflow_query`.
+- **Native rebuild:** `Tools\MonolithProxy\build_proxy.bat` uses an existing `cl.exe` environment or locates the newest installed x64 C++ toolchain through Visual Studio Installer's `vswhere.exe`; it does not assume an edition or installation drive. `build.bat` delegates to the same authoritative path.
 
 ## Call Log
 

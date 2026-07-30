@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Provider-backed `source_control` namespace (11 actions).** `get_capabilities`, `get_status`, `checkout`, `add`, `checkout_or_add`, `delete`, `mark_for_delete`, `revert`, and `revert_unchanged` route through Unreal's active source-control provider; `list_opened` and `map_depot_paths` add bounded Perforce opened-file and depot/local/package mapping. Mutation booleans are strict JSON values, delete/revert execution requires explicit confirmation, and Perforce queries enforce input, batch, command-count, result-window, and 30-second process limits. Mounted Unreal package paths are distinguished from POSIX absolute filesystem paths, preparation fails closed on other-user or stale-revision states, and platform command-line quoting is covered by round-trip tests.
 - **New `interchange` namespace with 15 guarded import-pipeline actions.** Inspect supported formats and registered importer/reimport-handler availability; import one or many assets through generic or type-enforcing entry points; update reimport paths with handler readback; reimport assets; and export only when an exporter exists. Mutations require `confirm=true` or an explicit dry run, reject linked-path escapes and invalid disk/package roots before writes, implement real `fail`/`overwrite`/`rename` collision behavior, and return per-item rows for batch operations.
 
 ### Fixed

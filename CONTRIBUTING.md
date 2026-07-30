@@ -52,6 +52,7 @@ Each module owns a specific domain:
 | **MonolithConfig** | `config` | INI resolution, explain, diff, search |
 | **MonolithIndex** | `project` | SQLite FTS5 deep project indexer |
 | **MonolithSource** | `source` | Engine source lookup, call graphs, class hierarchy |
+| **MonolithSourceControl** | `source_control` | Provider-backed file preparation and bounded Perforce opened/path mapping |
 | **MonolithUI** | `ui` | Widget Blueprint CRUD, templates, styling, animation, settings scaffolding, accessibility |
 | **MonolithGAS** | `gas` | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold (gated on `WITH_GBA`) |
 | **MonolithAI** | `ai` | Behavior trees, blackboards, EQS, StateTree, SmartObjects, perception, navigation, AI controllers |
