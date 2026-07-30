@@ -37,11 +37,11 @@ accepted implementation must:
 | Action | Contract |
 |---|---|
 | `chooser.list_chooser_tables` | Lists exact registry-visible Chooser Table identities with an optional canonical package-prefix filter; capped at 1,000 tables. |
-| `chooser.get_chooser_table` | Reports table/class/result/context/column/reference summaries and optionally up to 500 bounded rows. |
+| `chooser.get_chooser_table` | Reports authoritative editor rows, root-owned context, table/class/result/column/reference summaries, and optionally up to 500 bounded rows. |
 | `chooser.list_chooser_columns` | Returns bounded reflected column summaries; capped at 512 columns. |
 | `chooser.list_chooser_rows` | Pages exact rows with `start_row` and `limit`; each cell uses the local bounded serializer. |
-| `chooser.list_chooser_references` | Walks reflected hard/soft object references under explicit depth/container/result bounds and reports existence only for an exact loaded object or exact AssetRegistry object path. |
-| `chooser.validate_chooser_table` | Reports structural errors and non-fatal warnings without compiling, saving, or modifying the table. |
+| `chooser.list_chooser_references` | Walks reflected hard/soft object references under explicit depth/container/result/global-visit bounds, sorts the complete bounded result before pagination, and reports existence only for exact object evidence. |
+| `chooser.validate_chooser_table` | Reports structural, known result-payload, reference-resolution, and scan-completeness errors plus non-fatal warnings without compiling, saving, or modifying the table. |
 
 The existing authoring and deep-inspection actions remain unchanged. The final
 catalog contains 16 total `chooser` actions: the prior 10 plus these 6.
@@ -61,6 +61,9 @@ catalog contains 16 total `chooser` actions: the prior 10 plus these 6.
 | Depth boundary | PASS — depth-limited structs and containers return explicit metadata without recursively exporting their contents. |
 | String values | PASS — strings, localized text, and otherwise unsupported export text cap at 4,096 characters and return explicit truncation metadata. |
 | Table and graph bounds | PASS — columns 512, rows 500 per request, listed tables 1,000, references 4,096, reference depth 12, and container entries per reflected reference property 4,096. |
+| Global traversal bound | PASS — the reference walker stops after 65,536 property/element visits even when individually bounded containers form a nested product; endpoints publish visits and the visit limit. |
+| Authoritative rows and context | PASS — `ResultsStructs` owns editor row count, `CookedResults` is a stripped-data fallback only, and `context_entry_count` follows `UChooserTable::GetContextData()` through `RootChooser`. |
+| Result payloads | PASS — invalid `FInstancedStruct` rows and null targets for known `AssetChooser`, `SoftAssetChooser`, `EvaluateChooser`, `NestedChooser`, and `ClassChooser` payloads are validation errors. |
 | Mutation | PASS — handlers do not call compile/save/modify/dirty APIs and the authoring round-trip test reads a nine-row authored table without changing it. |
 | Validation semantics | PASS — errors make `valid=false`; warnings remain separately visible and do not invalidate the table. |
 | Soft-reference identity | PASS — a loaded or on-disk package without the referenced export is not accepted as existence. The regression fixture injects a missing `FSoftAssetChooser` path while keeping an empty package shell loaded. |
@@ -87,14 +90,19 @@ particular:
 
 ```text
 MonolithChooserReadActions.cpp
-SHA256 26EC40E1E535E2A3533AFA418E68A138FE49CE9EC1316ECE8872BA850C9C01D4
+Git blob 2826711008e70f1b581c03555dd48687b481f29d
 
 MonolithChooserReadActionsTests.cpp
-SHA256 2E270FC8051BB30764E3692EAB0BB1D56AD4E589C03A91A620B45AE2AEB712AA
+Git blob f03c41e026846b2d238c5f06141733346b4808a2
 
 Monolith.uplugin
 SHA256 5D9139060EE41DD0E067D6DB390104B3FB73C668814A5B55F7F24F1A9618F9C8
 ```
+
+`git hash-object --path=<checkout-relative-path>` produced those same blob
+identities for both physical host copies. Raw SHA-256 differs only because
+`git archive` writes canonical LF while the Windows checkout materializes
+CRLF.
 
 The hosts use independent physical plugin copies. A shared source junction
 cannot be used for consecutive cross-version verification because Unreal puts
@@ -107,10 +115,10 @@ UHT records, import libraries, and DLLs under the plugin's own
 
 | Engine | Gate | Result | Evidence |
 |---|---|---|---|
-| UE 5.7 | Physically isolated editor target build | PASS — the fresh 433-action build compiled the new test and exposed one C2446 in the new reader; after the review fix, the exact reader and regression test recompiled and `MonolithAnimation` freshly linked in 5/5 actions with `Result: Succeeded`. | `D:\P4\MonolithChooserUE57Host\Build-UE57-Isolated-20260730-040247.log`; `D:\P4\MonolithChooserUE57Host\Build-UE57-ReviewFinal-20260730.log` |
-| UE 5.7 | Final affected DLL | PASS — 2,863,104 bytes, SHA-256 `5F267CBBC6C79838118834D3A68E93DF8DE5055A2F4FB4BE41C22CF8A841F7D1`. | `D:\P4\MonolithChooserUE57Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithAnimation.dll` |
-| UE 5.8 | Physically isolated full editor target build | PASS — 433/433 actions explicitly compiled the new reader and tests; after the review fix, the exact reader and regression test recompiled and `MonolithAnimation` freshly linked in 5/5 actions with `Result: Succeeded`. | `D:\P4\MonolithChooserUE58Host\Build-UE58-Isolated-Final-20260730-040944.log`; `D:\P4\MonolithChooserUE58Host\Build-UE58-ReviewFinal-20260730.log` |
-| UE 5.8 | Final affected DLL | PASS — 2,694,656 bytes, SHA-256 `0D2D4585FA7B81B6938F95F60CC5FF047C0E9E1D9BEA14E91A2E8F0A7F7CB7D0`. | `D:\P4\MonolithChooserUE58Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithAnimation.dll` |
+| UE 5.7 | Physically isolated full editor target build | PASS — the first review build rejected the enum raw-value fallback's mixed shared-pointer conditional; after replacing it with explicit typed returns, the exact source compiled and linked all 403/403 actions with `Result: Succeeded`. | Rejected: `D:\P4\MonolithChooserUE57Host\Chooser-FinalReview2-Build-UE57-20260730.log`; accepted: `D:\P4\MonolithChooserUE57Host\Chooser-FinalReview3-Build-UE57-20260731.log` |
+| UE 5.7 | Final affected DLL | PASS — 2,892,288 bytes, SHA-256 `D1A375551E2426576E631C6E830C63A1AB141E7662D60D2A55CA397344A2145E`. | `D:\P4\MonolithChooserUE57Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithAnimation.dll` |
+| UE 5.8 | Physically isolated full editor target build | PASS — the exact source compiled and linked all 403/403 actions with `Result: Succeeded`. | `D:\P4\MonolithChooserUE58Host\Chooser-FinalReview-Build-UE58-20260731.log` |
+| UE 5.8 | Final affected DLL | PASS — 2,722,816 bytes, SHA-256 `B38898382AC5AA777F4CCFD98FC22F828E0DF2AF01F4899E38FA3DD3460FDFFF`. | `D:\P4\MonolithChooserUE58Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithAnimation.dll` |
 
 The UE 5.7 compiler error was caused by a conditional expression attempting to
 combine `TSharedRef<FJsonValueString>` and
@@ -118,21 +126,22 @@ combine `TSharedRef<FJsonValueString>` and
 enum/non-enum returns preserves the intended JSON type and compiles on both
 supported engines.
 
-The installed UE 5.8 engine was missing optional-plugin import libraries.
-They were generated from the exact installed engine plugin descriptors with
-UBT's foreign-plugin `-Plugin`, `-Module`, and `-gather` arguments:
+The final-review builds used `-NoEngineChanges`; they did not regenerate
+installed-engine import libraries. The following files are pre-existing
+external environment state and are not a source change, PR artifact, Speed
+CL 1351 protected-build receipt, or evidence that its still-unmet protected
+build gate passed:
 
-| Dependency | Bytes | SHA-256 |
-|---|---:|---|
-| `UnrealEditor-Chooser.lib` | 205,272 | `D53B032DCBCAD48E34205200EAABCB0711403752BBB80BE02C51BA6B4E16B2C7` |
-| `UnrealEditor-BlendStack.lib` | 55,144 | `E7DEC78E050AB916138C5A94CAF128974A4030B31592DD4662E500AA0423CEAA` |
+| External installed-engine state | Bytes | SHA-256 | Last modified (KST) |
+|---|---:|---|---|
+| `UnrealEditor-Chooser.lib` | 205,272 | `D53B032DCBCAD48E34205200EAABCB0711403752BBB80BE02C51BA6B4E16B2C7` | 2026-07-30 03:49:09 |
+| `UnrealEditor-BlendStack.lib` | 55,144 | `E7DEC78E050AB916138C5A94CAF128974A4030B31592DD4662E500AA0423CEAA` | 2026-07-30 03:58:31 |
+| `UnrealEditor-Localization.lib` | 193,430 | `5EAC9FBB1346DB5ED54248F54A66DC51C9070770B4B6C4E5F251C5BE08B5A175` | 2026-07-30 21:13:51 |
 
-A separate Speed UE 5.8 editor already had the installed
-`UnrealEditor-BlendStack.dll` loaded, so an unnecessary engine-DLL relink could
-not replace that file. No foreign editor was stopped. This was not an
-acceptance blocker: the isolated host subsequently linked all 433 target
-actions, loaded the installed dependency DLL, loaded the new Monolith DLL, and
-completed the focused automation successfully.
+The Chooser/BlendStack hashes and timestamps match the earlier external state;
+the Localization library predates this final review and remains separately
+attributable to the non-protected external build described by the coordinator.
+No foreign editor or build process was stopped.
 
 ---
 
@@ -146,23 +155,27 @@ Automation RunTests Monolith.Chooser.Read
 
 | Engine | Success | Failed / not run | Test errors | Final marker | Log |
 |---|---:|---:|---:|---|---|
-| UE 5.7 | 5 | 0 | 0 | `TEST COMPLETE. EXIT CODE: 0` | `D:\P4\MonolithChooserUE57Host\ChooserRead-UE57-ReviewFinal-20260730.log` |
-| UE 5.8 | 5 | 0 | 0 | `TEST COMPLETE. EXIT CODE: 0` | `D:\P4\MonolithChooserUE58Host\ChooserRead-UE58-ReviewFinal-20260730.log` |
+| UE 5.7 | 6 | 0 | 0 | `TEST COMPLETE. EXIT CODE: 0` | `D:\P4\MonolithChooserUE57Host\ChooserRead-UE57-FinalReview-20260731.log` |
+| UE 5.8 | 6 | 0 | 0 | `TEST COMPLETE. EXIT CODE: 0` | `D:\P4\MonolithChooserUE58Host\ChooserRead-UE58-FinalReview-20260731.log` |
 
-The five tests on each engine are:
+The six tests on each engine are:
 
 1. `Monolith.Chooser.Read.AuthoringRoundTrip`
 2. `Monolith.Chooser.Read.DeletedAssetPackageShell`
 3. `Monolith.Chooser.Read.EmptyTableValidation`
 4. `Monolith.Chooser.Read.ParamGuards`
 5. `Monolith.Chooser.Read.RegistrationAndSchemas`
+6. `Monolith.Chooser.Read.RootContextAndResultPayloadValidation`
 
 The new regression writes a missing soft-object path into a Chooser row while
 the corresponding empty package shell remains loaded. Readback returns
 `exists=false`, validation returns `unresolved_soft_reference`, and the table
-package remains clean on both engines. The host startup also logged that port
-9316 was already owned by the existing Monolith endpoint; this is outside the
-headless action tests and did not produce an automation-controller error.
+package remains clean on both engines. The new root/payload regression also
+proves inherited context readback, invalid result-struct detection, null known
+result-target detection, and stale `CookedResults` exclusion. Host startup
+logged that port 9316 was already owned by the existing Monolith endpoint;
+this is outside the headless action tests and did not produce an
+automation-controller error.
 
 ---
 
@@ -218,22 +231,30 @@ absent, ten Niagara raw-parameter/direct-load advisories remain, and
 
 PASS. The fork gains exactly six bounded, read-only Chooser actions without
 changing the existing ten-action authoring surface. The same source compiles
-and links on UE 5.7 and UE 5.8, passes 5/5 focused tests on each engine,
-rejects package-only evidence for a missing referenced export, changes the
-generated catalog only by the intended six actions, introduces no new static
-finding, and does not include any excluded feature class.
+and links on UE 5.7 and UE 5.8, passes 6/6 focused tests on each engine,
+uses authoritative row/context contracts, validates result payloads, rejects
+package-only evidence for a missing referenced export, keeps pagination stable
+under explicit global bounds, changes the generated catalog only by the
+intended six actions, introduces no new static finding, and does not include
+any excluded feature class.
 
 ---
 
-## AI review remediation, head `98321260`
+## AI review remediation, head `4348741c`
 
 | Review finding | Root fix |
 | --- | --- |
-| Every path under `/Script/` was reported as existing without checking the export | `AssetExistsForSoftPath` resolves the exact object. A failed resolve is authoritative when the script package is loaded; when the owning module is absent the reference cannot be disproved and is not reported missing. |
-| An unloaded Blueprint-generated class (`/Game/F/BP_F.BP_F_C`) was reported unresolved | The registry indexes the owning Blueprint, not the generated-class export. A failed exact lookup on a `_C` object name retries against the owning Blueprint asset. |
+| Every path under `/Script/` was reported as existing when its package was absent | Script exports require exact resolved-object evidence; absence of a package is no longer inverted into `exists=true`. |
+| Any ordinary asset named `…_C` could validate an unrelated soft reference | Blueprint fallback runs only for `FSoftClassProperty`, reads the owning Blueprint's `GeneratedClassPath` AssetRegistry tag, normalizes the export-text path, and requires an exact generated-class object-path match. |
 | `TScriptInterface` hard references were never collected | `FInterfaceProperty` is not an `FObjectPropertyBase`, so it fell through every branch. An explicit branch now reads the interface's object pointer via the typed accessor. |
-| Only element zero of a reflected fixed-size array was visited | `CollectReferencesFromStruct` iterates all `ArrayDim` elements through the indexed `ContainerPtrToValuePtr` overload and labels each source `Prop[i]`. |
+| Only element zero of a reflected fixed-size array was serialized or visited | Serialization returns a bounded `count` + `items` container, and reference collection visits every `ArrayDim` element through indexed `ContainerPtrToValuePtr`. |
 | Deprecated properties produced false `unresolved_soft_reference` findings | The field iterator uses `EFieldIteratorFlags::ExcludeDeprecated`, matching the serializer's policy. |
 | `list_chooser_rows` silently capped every row at 512 cells | The row endpoints report `column_count`, `row_cells_per_row`, and `row_cells_truncated`, so a partial predicate/output set is explicit. |
 | `int64`/`uint64` values above 2^53−1 were rounded through a double | Integers outside the exactly representable JSON range are emitted as decimal strings; smaller values keep their numeric form. |
+| Invalid enum ordinals serialized as an empty string | Valid ordinals retain symbolic names; invalid ordinals fall back to an exact JSON number or decimal string. |
+| Stale cooked/disabled/column arrays could inflate `row_count` | Editor `ResultsStructs` is authoritative; `CookedResults` is consulted only when the editor-only property is unavailable. Alignment problems remain visible to validation instead of becoming phantom rows. |
+| Child Choosers reported their local empty context instead of root-owned context | `context_entry_count` uses `UChooserTable::GetContextData()` behind the existing optional-dependency gate, with a reflection root fallback. |
+| Validation checked only result-array length | Every bounded editor result row must contain a valid `FInstancedStruct`; known result types must also have a non-null/non-empty `Asset`, `Chooser`, or `Class` target. |
+| Per-container limits still allowed multiplicative nested traversal | `FReferenceScan` enforces a global 65,536 property/element visit budget and publishes the used/maximum visits. |
+| Set/map sparse indices made pagination order unstable | Set/map source locations use semantic container markers, references deduplicate by stable path/location, and the complete bounded result is sorted before slicing a page. |
 | Depth-limited scans still reported `complete=true` (carried over from head `0a84192d`, not closed by the prior fix) | `FReferenceScan` gains `bDepthLimited`, kept separate from `bTruncated` so a depth stop does not abort sibling traversal. `IsComplete()` requires both to be clear, `validate_chooser_table` raises `reference_scan_depth_limited`, and the read endpoints publish `scan_depth_limited`/`references_depth_limited` plus an explicit completeness flag. |

@@ -5,6 +5,7 @@
 #include "MonolithParamSchema.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "Blueprint/BlueprintSupport.h"
 #include "Dom/JsonValue.h"
 #include "Misc/PackageName.h"
 #include "Modules/ModuleManager.h"
@@ -14,6 +15,10 @@
 #include "UObject/SoftObjectPtr.h"
 #include "UObject/UnrealType.h"
 
+#if WITH_CHOOSER
+#include "Chooser.h"
+#endif
+
 namespace MonolithChooserRead
 {
 	constexpr int32 MaxColumns = 512;
@@ -22,6 +27,8 @@ namespace MonolithChooserRead
 	constexpr int32 MaxReferencesPerScan = 4096;
 	constexpr int32 MaxReferenceDepth = 12;
 	constexpr int32 MaxArrayElementsPerReferenceProperty = 4096;
+	constexpr int32 MaxReferenceTraversalVisits = 65536;
+	constexpr int32 MaxResultPayloadsPerValidation = 4096;
 	constexpr int32 MaxSerializedDepth = 3;
 	constexpr int32 MaxCompactSerializedFields = 16;
 	constexpr int32 MaxSerializedFields = 128;
@@ -45,6 +52,9 @@ namespace MonolithChooserRead
 		// container. Unlike bTruncated this does not abort sibling traversal, but
 		// it still means the reflected graph was not walked completely.
 		bool bDepthLimited = false;
+		// Global property/element budget. Per-container limits alone do not bound
+		// nested products such as an array of structs containing large arrays.
+		int32 TraversalVisits = 0;
 
 		bool IsComplete() const { return !bTruncated && !bDepthLimited; }
 	};
@@ -414,6 +424,50 @@ namespace MonolithChooserRead
 		int32 MaxDepth,
 		bool Compact);
 
+	TSharedPtr<FJsonValue> FixedArrayPropertyToJson(
+		const FProperty* Property,
+		const void* Container,
+		int32 MaxDepth,
+		bool Compact)
+	{
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> Items;
+		if (!Property || !Container || Property->ArrayDim <= 1)
+		{
+			Result->SetNumberField(TEXT("count"), 0);
+			Result->SetArrayField(TEXT("items"), Items);
+			return MakeShared<FJsonValueObject>(Result);
+		}
+
+		Result->SetNumberField(TEXT("count"), Property->ArrayDim);
+		if (MaxDepth <= 0)
+		{
+			Result->SetStringField(TEXT("serialization"), TEXT("depth_limit"));
+			Result->SetBoolField(TEXT("depth_limited"), true);
+			Result->SetArrayField(TEXT("items"), Items);
+			return MakeShared<FJsonValueObject>(Result);
+		}
+
+		const int32 ContainerLimit =
+			Compact ? MaxCompactContainerElements : MaxSerializedContainerElements;
+		const int32 Count = FMath::Min(Property->ArrayDim, ContainerLimit);
+		Items.Reserve(Count);
+		for (int32 Index = 0; Index < Count; ++Index)
+		{
+			Items.Add(PropertyValueToJson(
+				Property,
+				Property->ContainerPtrToValuePtr<void>(Container, Index),
+				MaxDepth - 1,
+				Compact));
+		}
+		Result->SetArrayField(TEXT("items"), Items);
+		if (Count < Property->ArrayDim)
+		{
+			Result->SetNumberField(TEXT("truncated_after"), Count);
+		}
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
 	TSharedPtr<FJsonValue> GetRowValueAt(const FInstancedStruct& Column, int32 RowIndex)
 	{
 		FArrayProperty* RowValues = FindRowValuesProperty(Column.GetScriptStruct());
@@ -510,10 +564,18 @@ namespace MonolithChooserRead
 		{
 			const int64 RawValue =
 				EnumProperty->GetUnderlyingProperty()->GetSignedIntPropertyValue(Value);
-			return MakeShared<FJsonValueString>(
-				EnumProperty->GetEnum()
-					? EnumProperty->GetEnum()->GetNameStringByValue(RawValue)
-					: FString::Printf(TEXT("%lld"), RawValue));
+			const FString Name = EnumProperty->GetEnum()
+				? EnumProperty->GetEnum()->GetNameStringByValue(RawValue)
+				: FString();
+			if (!Name.IsEmpty())
+			{
+				return MakeShared<FJsonValueString>(Name);
+			}
+			if (RawValue > MaxExactJsonInteger || RawValue < -MaxExactJsonInteger)
+			{
+				return MakeShared<FJsonValueString>(LexToString(RawValue));
+			}
+			return MakeShared<FJsonValueNumber>(static_cast<double>(RawValue));
 		}
 
 		if (const FByteProperty* ByteProperty = CastField<FByteProperty>(Property))
@@ -521,8 +583,12 @@ namespace MonolithChooserRead
 			const uint8 RawValue = ByteProperty->GetPropertyValue(Value);
 			if (ByteProperty->Enum)
 			{
-				return MakeShared<FJsonValueString>(
-					ByteProperty->Enum->GetNameStringByValue(RawValue));
+				const FString Name =
+					ByteProperty->Enum->GetNameStringByValue(RawValue);
+				if (!Name.IsEmpty())
+				{
+					return MakeShared<FJsonValueString>(Name);
+				}
 			}
 			return MakeShared<FJsonValueNumber>(RawValue);
 		}
@@ -806,11 +872,17 @@ namespace MonolithChooserRead
 			const FProperty* Property = *It;
 			Fields->SetField(
 				Property->GetName(),
-				PropertyValueToJson(
-					Property,
-					Property->ContainerPtrToValuePtr<void>(StructMemory),
-					MaxDepth,
-					Compact));
+				Property->ArrayDim > 1
+					? FixedArrayPropertyToJson(
+						Property,
+						StructMemory,
+						MaxDepth,
+						Compact)
+					: PropertyValueToJson(
+						Property,
+						Property->ContainerPtrToValuePtr<void>(StructMemory),
+						MaxDepth,
+						Compact));
 			++FieldCount;
 		}
 		return Fields;
@@ -869,20 +941,46 @@ namespace MonolithChooserRead
 	int32 GetChooserRowCount(const UObject* Chooser)
 	{
 		int32 RowCount = 0;
-		RowCount = FMath::Max(RowCount, GetArrayNum(Chooser, TEXT("ResultsStructs")));
-		RowCount = FMath::Max(RowCount, GetArrayNum(Chooser, TEXT("CookedResults")));
-		RowCount = FMath::Max(RowCount, GetArrayNum(Chooser, TEXT("DisabledRows")));
-
-		const int32 ColumnCount = FMath::Min(GetArrayNum(Chooser, TEXT("ColumnsStructs")), MaxColumns);
-		for (int32 Index = 0; Index < ColumnCount; ++Index)
+		// ResultsStructs owns the editor row model. CookedResults is a fallback
+		// only when editor-only data has been stripped; taking the maximum across
+		// stale derived arrays turns corruption into phantom rows.
+		if (TryGetArrayNum(Chooser, TEXT("ResultsStructs"), RowCount))
 		{
-			if (const FInstancedStruct* Column =
-				GetInstancedStructFromArray(Chooser, TEXT("ColumnsStructs"), Index))
+			return RowCount;
+		}
+		return TryGetArrayNum(Chooser, TEXT("CookedResults"), RowCount)
+			? RowCount
+			: 0;
+	}
+
+	int32 GetChooserContextEntryCount(const UObject* Chooser)
+	{
+#if WITH_CHOOSER
+		if (const UChooserTable* Table = Cast<UChooserTable>(Chooser))
+		{
+			// GetContextData follows RootChooser and is the engine's authoritative
+			// view for inherited chooser context.
+			return Table->GetContextData().Num();
+		}
+#endif
+		if (!Chooser)
+		{
+			return 0;
+		}
+
+		const UObject* ContextOwner = Chooser;
+		if (const FObjectPropertyBase* RootProperty =
+			FindFProperty<FObjectPropertyBase>(
+				Chooser->GetClass(),
+				TEXT("RootChooser")))
+		{
+			if (const UObject* Root =
+				RootProperty->GetObjectPropertyValue_InContainer(Chooser))
 			{
-				RowCount = FMath::Max(RowCount, GetRowValuesCount(*Column));
+				ContextOwner = Root;
 			}
 		}
-		return RowCount;
+		return GetArrayNum(ContextOwner, TEXT("ContextData"));
 	}
 
 	TArray<TSharedPtr<FJsonValue>> SerializeColumns(
@@ -966,7 +1064,10 @@ namespace MonolithChooserRead
 		return Rows;
 	}
 
-	bool AssetExistsForSoftPath(const FSoftObjectPath& Path, FReferenceScan& Scan)
+	bool AssetExistsForSoftPath(
+		const FSoftObjectPath& Path,
+		bool bSoftClass,
+		FReferenceScan& Scan)
 	{
 		const FString AssetPath = Path.GetAssetPathString();
 		if (AssetPath.IsEmpty())
@@ -981,7 +1082,9 @@ namespace MonolithChooserRead
 			return false;
 		}
 		const FString ExactPath = Path.ToString();
-		if (const bool* Cached = Scan.AssetExistsCache.Find(ExactPath))
+		const FString CacheKey =
+			ExactPath + (bSoftClass ? TEXT("|soft_class") : TEXT("|soft_object"));
+		if (const bool* Cached = Scan.AssetExistsCache.Find(CacheKey))
 		{
 			return *Cached;
 		}
@@ -997,25 +1100,32 @@ namespace MonolithChooserRead
 
 		if (!Exists && bScriptPackage)
 		{
-			// Native exports are created when their module loads, so a failed
-			// resolve is authoritative once the script package is present. If the
-			// owning module is not loaded the reference cannot be disproved, so it
-			// is not reported missing.
-			Exists = FindPackage(nullptr, *PackageName) == nullptr;
+			// Script references are exact object references. A missing package is
+			// not evidence that an arbitrary export exists, and a loaded package
+			// without the named export is conclusive absence.
+			Exists = false;
 		}
 		else if (!Exists)
 		{
+			if (!Path.GetSubPathString().IsEmpty())
+			{
+				// AssetRegistry rows prove only the top-level export. An unloaded
+				// subobject path requires exact resolved-object evidence.
+				Scan.AssetExistsCache.Add(CacheKey, false);
+				return false;
+			}
 			// AssetExists performs an exact AssetRegistry object-path lookup.
 			// Package residency or on-disk package existence is deliberately not
 			// sufficient: a deleted export can leave either package behind.
 			Exists = FMonolithAssetUtils::AssetExists(AssetPath);
 
-			if (!Exists)
+			if (!Exists && bSoftClass)
 			{
 				// A Blueprint-generated class export such as /Game/F/BP_F.BP_F_C
 				// has no AssetRegistry row of its own; the registry indexes the
-				// owning Blueprint (/Game/F/BP_F.BP_F). Fall back to that asset so
-				// an unloaded soft-class reference is not reported unresolved.
+				// owning Blueprint. Accept it only for a soft-class property and
+				// only when the Blueprint's GeneratedClassPath tag matches the
+				// requested class export exactly.
 				FString ObjectName;
 				FString PackageOnly;
 				if (AssetPath.Split(
@@ -1028,13 +1138,34 @@ namespace MonolithChooserRead
 				{
 					const FString GeneratingAssetName =
 						ObjectName.LeftChop(2);
-					Exists = !GeneratingAssetName.IsEmpty()
-						&& FMonolithAssetUtils::AssetExists(
-							PackageOnly + TEXT(".") + GeneratingAssetName);
+					if (!GeneratingAssetName.IsEmpty())
+					{
+						IAssetRegistry& Registry =
+							FModuleManager::LoadModuleChecked<FAssetRegistryModule>(
+								TEXT("AssetRegistry")).Get();
+						const FAssetData BlueprintData =
+							Registry.GetAssetByObjectPath(FSoftObjectPath(
+								PackageOnly
+								+ TEXT(".")
+								+ GeneratingAssetName));
+						FString GeneratedClassExportPath;
+						if (BlueprintData.IsValid()
+							&& BlueprintData.GetTagValue(
+								FBlueprintTags::GeneratedClassPath,
+								GeneratedClassExportPath))
+						{
+							const FString GeneratedClassObjectPath =
+								FPackageName::ExportTextPathToObjectPath(
+									GeneratedClassExportPath);
+							Exists = GeneratedClassObjectPath.Equals(
+								AssetPath,
+								ESearchCase::CaseSensitive);
+						}
+					}
 				}
 			}
 		}
-		Scan.AssetExistsCache.Add(ExactPath, Exists);
+		Scan.AssetExistsCache.Add(CacheKey, Exists);
 		return Exists;
 	}
 
@@ -1051,15 +1182,15 @@ namespace MonolithChooserRead
 		{
 			return;
 		}
-		if (Scan.Values.Num() >= MaxReferencesPerScan)
-		{
-			Scan.bTruncated = true;
-			return;
-		}
 
 		const FString Key = Source + TEXT("|") + Path;
 		if (Scan.Seen.Contains(Key))
 		{
+			return;
+		}
+		if (Scan.Values.Num() >= MaxReferencesPerScan)
+		{
+			Scan.bTruncated = true;
 			return;
 		}
 		Scan.Seen.Add(Key);
@@ -1107,6 +1238,12 @@ namespace MonolithChooserRead
 			Scan.bDepthLimited = true;
 			return;
 		}
+		if (Scan.TraversalVisits >= MaxReferenceTraversalVisits)
+		{
+			Scan.bTruncated = true;
+			return;
+		}
+		++Scan.TraversalVisits;
 
 		if (const FSoftObjectProperty* SoftProperty = CastField<FSoftObjectProperty>(Property))
 		{
@@ -1121,7 +1258,10 @@ namespace MonolithChooserRead
 					SoftProperty->PropertyClass ? SoftProperty->PropertyClass->GetName() : TEXT("soft_object"),
 					Path.ResolveObject() != nullptr,
 					true,
-					AssetExistsForSoftPath(Path, Scan));
+					AssetExistsForSoftPath(
+						Path,
+						CastField<FSoftClassProperty>(Property) != nullptr,
+						Scan));
 			}
 			return;
 		}
@@ -1227,7 +1367,7 @@ namespace MonolithChooserRead
 				CollectReferencesFromProperty(
 					SetProperty->ElementProp,
 					Helper.GetElementPtr(Index),
-					FString::Printf(TEXT("%s{%d}"), *Source, Index),
+					Source + TEXT("{}"),
 					Scan,
 					Depth - 1);
 			}
@@ -1251,7 +1391,7 @@ namespace MonolithChooserRead
 					Scan.bTruncated = true;
 					break;
 				}
-				const FString EntrySource = FString::Printf(TEXT("%s{%d}"), *Source, Index);
+				const FString EntrySource = Source + TEXT("{}");
 				CollectReferencesFromProperty(
 					MapProperty->KeyProp,
 					Helper.GetKeyPtr(Index),
@@ -1332,6 +1472,29 @@ namespace MonolithChooserRead
 			TEXT("chooser"),
 			Scan,
 			MaxReferenceDepth);
+		Scan.Values.Sort(
+			[](const TSharedPtr<FJsonValue>& Left, const TSharedPtr<FJsonValue>& Right)
+			{
+				auto MakeKey = [](const TSharedPtr<FJsonValue>& Value)
+				{
+					const TSharedPtr<FJsonObject>* Object = nullptr;
+					if (!Value.IsValid()
+						|| !Value->TryGetObject(Object)
+						|| !Object
+						|| !Object->IsValid())
+					{
+						return FString();
+					}
+					FString Path;
+					FString Source;
+					FString ClassName;
+					(*Object)->TryGetStringField(TEXT("path"), Path);
+					(*Object)->TryGetStringField(TEXT("source"), Source);
+					(*Object)->TryGetStringField(TEXT("class"), ClassName);
+					return Path + TEXT("\n") + Source + TEXT("\n") + ClassName;
+				};
+				return MakeKey(Left) < MakeKey(Right);
+			});
 		return Scan;
 	}
 
@@ -1356,6 +1519,128 @@ namespace MonolithChooserRead
 		{
 			++WarningCount;
 		}
+	}
+
+	const TCHAR* GetKnownResultTargetProperty(const UScriptStruct* Struct)
+	{
+		if (!Struct)
+		{
+			return nullptr;
+		}
+		const FName Name = Struct->GetFName();
+		if (Name == TEXT("AssetChooser") || Name == TEXT("SoftAssetChooser"))
+		{
+			return TEXT("Asset");
+		}
+		if (Name == TEXT("EvaluateChooser") || Name == TEXT("NestedChooser"))
+		{
+			return TEXT("Chooser");
+		}
+		if (Name == TEXT("ClassChooser"))
+		{
+			return TEXT("Class");
+		}
+		return nullptr;
+	}
+
+	bool HasKnownResultTarget(
+		const FInstancedStruct& ResultStruct,
+		const TCHAR* TargetProperty)
+	{
+		if (!ResultStruct.IsValid()
+			|| !ResultStruct.GetScriptStruct()
+			|| !ResultStruct.GetMemory()
+			|| !TargetProperty)
+		{
+			return false;
+		}
+		if (const FSoftObjectProperty* SoftProperty =
+			FindFProperty<FSoftObjectProperty>(
+				ResultStruct.GetScriptStruct(),
+				TargetProperty))
+		{
+			return SoftProperty->GetPropertyValue(
+				SoftProperty->ContainerPtrToValuePtr<void>(
+					ResultStruct.GetMemory())).ToSoftObjectPath().IsValid();
+		}
+		if (const FObjectPropertyBase* ObjectProperty =
+			FindFProperty<FObjectPropertyBase>(
+				ResultStruct.GetScriptStruct(),
+				TargetProperty))
+		{
+			return ObjectProperty->GetObjectPropertyValue(
+				ObjectProperty->ContainerPtrToValuePtr<void>(
+					ResultStruct.GetMemory())) != nullptr;
+		}
+		return false;
+	}
+
+	bool ValidateResultPayloads(
+		const UObject* Chooser,
+		int32 ResultCount,
+		TArray<TSharedPtr<FJsonValue>>& Issues,
+		int32& ErrorCount,
+		int32& WarningCount)
+	{
+		const int32 Count =
+			FMath::Min(ResultCount, MaxResultPayloadsPerValidation);
+		for (int32 RowIndex = 0; RowIndex < Count; ++RowIndex)
+		{
+			const FInstancedStruct* ResultStruct =
+				GetInstancedStructFromArray(
+					Chooser,
+					TEXT("ResultsStructs"),
+					RowIndex);
+			if (!ResultStruct || !ResultStruct->IsValid())
+			{
+				AddIssue(
+					Issues,
+					ErrorCount,
+					WarningCount,
+					TEXT("error"),
+					TEXT("invalid_result_struct"),
+					FString::Printf(
+						TEXT("Result row %d has no valid reflected struct."),
+						RowIndex));
+				continue;
+			}
+
+			const TCHAR* TargetProperty =
+				GetKnownResultTargetProperty(ResultStruct->GetScriptStruct());
+			if (TargetProperty
+				&& !HasKnownResultTarget(*ResultStruct, TargetProperty))
+			{
+				AddIssue(
+					Issues,
+					ErrorCount,
+					WarningCount,
+					TEXT("error"),
+					TEXT("invalid_result_payload"),
+					FString::Printf(
+						TEXT("Result row %d (%s) has no valid '%s' target."),
+						RowIndex,
+						ResultStruct->GetScriptStruct()
+							? *ResultStruct->GetScriptStruct()->GetName()
+							: TEXT("Unknown"),
+						TargetProperty));
+			}
+		}
+
+		if (Count < ResultCount)
+		{
+			AddIssue(
+				Issues,
+				ErrorCount,
+				WarningCount,
+				TEXT("error"),
+				TEXT("result_validation_truncated"),
+				FString::Printf(
+					TEXT("Result payload validation stopped after %d of %d rows."),
+					Count,
+					ResultCount));
+			return false;
+		}
+		return true;
 	}
 
 	TArray<TSharedPtr<FJsonValue>> GetChooserAssets(
@@ -1590,11 +1875,19 @@ FMonolithActionResult FMonolithChooserReadActions::HandleGetChooserTable(
 	Result->SetNumberField(TEXT("disabled_row_count"), GetArrayNum(Chooser, TEXT("DisabledRows")));
 	Result->SetNumberField(TEXT("nested_chooser_count"), GetArrayNum(Chooser, TEXT("NestedChoosers")));
 	Result->SetNumberField(TEXT("nested_object_count"), GetArrayNum(Chooser, TEXT("NestedObjects")));
-	Result->SetNumberField(TEXT("context_entry_count"), GetArrayNum(Chooser, TEXT("ContextData")));
+	Result->SetNumberField(
+		TEXT("context_entry_count"),
+		GetChooserContextEntryCount(Chooser));
 	Result->SetArrayField(TEXT("columns"), Columns);
 	Result->SetBoolField(TEXT("columns_truncated"), ColumnsTruncated);
 	Result->SetArrayField(TEXT("references"), References.Values);
 	Result->SetBoolField(TEXT("references_truncated"), References.bTruncated);
+	Result->SetNumberField(
+		TEXT("reference_scan_visits"),
+		References.TraversalVisits);
+	Result->SetNumberField(
+		TEXT("reference_scan_visit_limit"),
+		MaxReferenceTraversalVisits);
 	Result->SetBoolField(
 		TEXT("references_depth_limited"),
 		References.bDepthLimited);
@@ -1784,6 +2077,10 @@ FMonolithActionResult FMonolithChooserReadActions::HandleListChooserReferences(
 	Result->SetBoolField(TEXT("has_more"), Offset + Page.Num() < Total);
 	Result->SetBoolField(TEXT("scan_truncated"), Scan.bTruncated);
 	Result->SetBoolField(TEXT("scan_depth_limited"), Scan.bDepthLimited);
+	Result->SetNumberField(TEXT("scan_visits"), Scan.TraversalVisits);
+	Result->SetNumberField(
+		TEXT("scan_visit_limit"),
+		MaxReferenceTraversalVisits);
 	Result->SetBoolField(TEXT("scan_complete"), Scan.IsComplete());
 	Result->SetArrayField(TEXT("references"), Page);
 	return FMonolithActionResult::Success(Result);
@@ -1844,8 +2141,9 @@ FMonolithActionResult FMonolithChooserReadActions::HandleValidateChooserTable(
 	}
 
 	int32 ResultsCount = 0;
-	if (TryGetArrayNum(Chooser, TEXT("ResultsStructs"), ResultsCount)
-		&& ResultsCount != RowCount)
+	const bool HasEditorResults =
+		TryGetArrayNum(Chooser, TEXT("ResultsStructs"), ResultsCount);
+	if (HasEditorResults && ResultsCount != RowCount)
 	{
 		AddIssue(
 			Issues,
@@ -1858,6 +2156,13 @@ FMonolithActionResult FMonolithChooserReadActions::HandleValidateChooserTable(
 				ResultsCount,
 				RowCount));
 	}
+	const bool ResultsComplete = !HasEditorResults
+		|| ValidateResultPayloads(
+			Chooser,
+			ResultsCount,
+			Issues,
+			ErrorCount,
+			WarningCount);
 
 	int32 DisabledCount = 0;
 	if (TryGetArrayNum(Chooser, TEXT("DisabledRows"), DisabledCount)
@@ -1985,9 +2290,17 @@ FMonolithActionResult FMonolithChooserReadActions::HandleValidateChooserTable(
 	Result->SetNumberField(TEXT("issue_count"), Issues.Num());
 	Result->SetNumberField(TEXT("error_count"), ErrorCount);
 	Result->SetNumberField(TEXT("warning_count"), WarningCount);
+	Result->SetNumberField(
+		TEXT("reference_scan_visits"),
+		References.TraversalVisits);
+	Result->SetNumberField(
+		TEXT("reference_scan_visit_limit"),
+		MaxReferenceTraversalVisits);
 	Result->SetBoolField(
 		TEXT("complete"),
-		References.IsComplete() && ColumnCount <= MaxColumns);
+		References.IsComplete()
+			&& ResultsComplete
+			&& ColumnCount <= MaxColumns);
 	Result->SetBoolField(TEXT("valid"), ErrorCount == 0);
 	return FMonolithActionResult::Success(Result);
 }

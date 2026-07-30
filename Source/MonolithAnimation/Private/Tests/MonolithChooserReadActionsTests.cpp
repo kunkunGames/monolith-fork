@@ -496,6 +496,10 @@ bool FMonolithChooserReadAuthoringRoundTripTest::RunTest(const FString& Paramete
 		return false;
 	}
 
+	// CookedResults is derived data and can temporarily be stale after editor
+	// mutations. It must never inflate the authoritative editor row count.
+	Fixture.Table->CookedResults = Fixture.Table->ResultsStructs;
+	Fixture.Table->CookedResults.AddDefaulted(3);
 	Fixture.TablePackage->SetDirtyFlag(false);
 
 	TSharedPtr<FJsonObject> GetParams = MakeShared<FJsonObject>();
@@ -512,6 +516,11 @@ bool FMonolithChooserReadAuthoringRoundTripTest::RunTest(const FString& Paramete
 			TEXT("Readback reports nine rows"),
 			static_cast<int32>(GetResult.Result->GetNumberField(TEXT("row_count"))),
 			9);
+		TestEqual(
+			TEXT("Readback exposes twelve stale cooked results without treating them as rows"),
+			static_cast<int32>(
+				GetResult.Result->GetNumberField(TEXT("cooked_result_count"))),
+			12);
 		TestEqual(
 			TEXT("Readback reports one column"),
 			static_cast<int32>(GetResult.Result->GetNumberField(TEXT("column_count"))),
@@ -632,6 +641,110 @@ bool FMonolithChooserReadAuthoringRoundTripTest::RunTest(const FString& Paramete
 	TestFalse(
 		TEXT("All readback actions preserve the package's clean state"),
 		Fixture.TablePackage->IsDirty());
+	DiscardFixture(Fixture);
+	return true;
+#endif
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithChooserReadRootContextAndResultPayloadTest,
+	"Monolith.Chooser.Read.RootContextAndResultPayloadValidation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithChooserReadRootContextAndResultPayloadTest::RunTest(
+	const FString& Parameters)
+{
+#if !WITH_CHOOSER
+	AddInfo(TEXT("Chooser plugin is disabled for this target; root-context and payload validation are covered by the enabled-host test lanes."));
+	return true;
+#else
+	using namespace MonolithChooserReadTests;
+
+	FChooserFixture Fixture = CreateFixture();
+	if (!TestNotNull(TEXT("Creates a root ChooserTable fixture"), Fixture.Table))
+	{
+		DiscardFixture(Fixture);
+		return false;
+	}
+
+	Fixture.Table->ContextData.AddDefaulted();
+	Fixture.Table->ResultsStructs.AddDefaulted();
+	Fixture.Table->DisabledRows.Add(false);
+	Fixture.Table->ResultsStructs.Add(
+		FInstancedStruct::Make<FSoftAssetChooser>());
+	Fixture.Table->DisabledRows.Add(false);
+
+	const FString ChildName =
+		TEXT("CHT_ReadChild_")
+		+ FGuid::NewGuid().ToString(EGuidFormats::Digits);
+	const FString ChildPackagePath =
+		TEXT("/Game/Developers/MonolithTests/") + ChildName;
+	UPackage* ChildPackage = CreatePackage(*ChildPackagePath);
+	UChooserTable* Child = NewObject<UChooserTable>(
+		ChildPackage,
+		*ChildName,
+		RF_Public | RF_Standalone | RF_Transactional);
+	if (!TestNotNull(TEXT("Creates a child ChooserTable fixture"), Child))
+	{
+		DiscardFixture(Fixture);
+		return false;
+	}
+	FAssetRegistryModule::AssetCreated(Child);
+	Child->RootChooser = Fixture.Table;
+	Fixture.TablePackage->SetDirtyFlag(false);
+	ChildPackage->SetDirtyFlag(false);
+
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	RegisterChooserActions(Registry);
+
+	TSharedPtr<FJsonObject> ChildParams = MakeShared<FJsonObject>();
+	ChildParams->SetStringField(TEXT("asset_path"), Child->GetPathName());
+	const FMonolithActionResult ChildResult = Registry.ExecuteAction(
+		TEXT("chooser"),
+		TEXT("get_chooser_table"),
+		ChildParams);
+	TestTrue(TEXT("Child table readback succeeds"), ChildResult.bSuccess);
+	if (ChildResult.bSuccess)
+	{
+		TestEqual(
+			TEXT("Child readback uses the root chooser's context view"),
+			static_cast<int32>(
+				ChildResult.Result->GetNumberField(TEXT("context_entry_count"))),
+			1);
+	}
+
+	TSharedPtr<FJsonObject> RootParams = MakeShared<FJsonObject>();
+	RootParams->SetStringField(TEXT("asset_path"), Fixture.TableObjectPath);
+	const FMonolithActionResult ValidateResult = Registry.ExecuteAction(
+		TEXT("chooser"),
+		TEXT("validate_chooser_table"),
+		RootParams);
+	TestTrue(TEXT("Result-payload validation executes"), ValidateResult.bSuccess);
+	if (ValidateResult.bSuccess)
+	{
+		const FString IssueCodes = JoinIssueCodes(ValidateResult.Result);
+		TestFalse(
+			TEXT("Invalid and null result payloads make validation fail"),
+			ValidateResult.Result->GetBoolField(TEXT("valid")));
+		TestTrue(
+			*FString::Printf(
+				TEXT("Invalid result struct is reported (issues: %s)"),
+				*IssueCodes),
+			IssueCodes.Contains(TEXT("invalid_result_struct")));
+		TestTrue(
+			*FString::Printf(
+				TEXT("Known result type with a null target is reported (issues: %s)"),
+				*IssueCodes),
+			IssueCodes.Contains(TEXT("invalid_result_payload")));
+	}
+
+	TestFalse(
+		TEXT("Readback preserves the root package's clean state"),
+		Fixture.TablePackage->IsDirty());
+	TestFalse(
+		TEXT("Readback preserves the child package's clean state"),
+		ChildPackage->IsDirty());
+	DiscardAsset(Child, ChildPackage);
 	DiscardFixture(Fixture);
 	return true;
 #endif

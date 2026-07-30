@@ -49,14 +49,16 @@ characters; a longer value becomes an object with the bounded `value`,
 | Action | Parameters | Result and contract |
 |---|---|---|
 | `list_chooser_tables` | `path_filter?`, `offset=0`, `limit=200` | Deterministic AssetRegistry listing. `limit` is 1–1000; returns `count`, `total`, and `has_more`. |
-| `get_chooser_table` | `asset_path*`, `include_rows=false`, `row_limit=50` | Bounded summary of row/column/result/context counts, reflected columns, references, fallback result, and optional row/cell readback. `row_limit` is 1–500. |
+| `get_chooser_table` | `asset_path*`, `include_rows=false`, `row_limit=50` | Bounded summary of row/column/result/context counts, reflected columns, references, fallback result, and optional row/cell readback. `ResultsStructs` is the authoritative editor row count (with `CookedResults` used only when editor data is unavailable), and context counts follow the root Chooser view. `row_limit` is 1–500. |
 | `list_chooser_columns` | `asset_path*` | Reflected column type, input/output classification, disabled state, row-value property/type/count, and bounded fields. |
 | `list_chooser_rows` | `asset_path*`, `start_row=0`, `limit=100` | Bounded row page with result payload, disabled state, and per-column cell values. `limit` is 1–500. |
-| `list_chooser_references` | `asset_path*`, `offset=0`, `limit=200` | Bounded hard/soft reference page with reflected source locations and exact loaded-object or AssetRegistry-object existence evidence. A loaded or on-disk package without the referenced export does not keep a missing asset valid. Returns `scan_truncated`; a truncated scan is never treated as complete validation. |
-| `validate_chooser_table` | `asset_path*` | Non-mutating structural validation: result/disabled/column row-array alignment, valid column structs, soft-reference asset resolution, and bounded-scan completeness. Warnings do not make `valid=false`; errors do. |
+| `list_chooser_references` | `asset_path*`, `offset=0`, `limit=200` | Stable, bounded hard/soft reference page with reflected source locations and exact loaded-object or AssetRegistry-object existence evidence. A loaded or on-disk package without the referenced export does not keep a missing asset valid; a Blueprint `…_C` path is accepted only for a soft-class property whose `GeneratedClassPath` tag matches exactly. Returns depth, visit-budget, and result-budget completeness evidence; an incomplete scan is never treated as complete validation. |
+| `validate_chooser_table` | `asset_path*` | Non-mutating structural validation: result/disabled/column row-array alignment, valid column structs, known result payload targets (`Asset`, `Chooser`, or `Class`), soft-reference asset resolution, and bounded-scan completeness. Warnings do not make `valid=false`; errors do. |
 
-The read layer is reflection-only and does not hard-link new Chooser internals.
-Actions remain visible when the optional Chooser plugin is disabled.
+The read layer is reflection-first; when Chooser is enabled it uses the
+engine-owned `GetContextData()` view so root context inheritance stays exact.
+The dependency remains behind the existing `WITH_CHOOSER` gate, and actions
+remain visible when the optional Chooser plugin is disabled.
 Asset-dependent calls then return an explicit optional-dependency error;
 `list_chooser_tables` can still report any registry metadata that is visible.
 
