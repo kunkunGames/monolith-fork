@@ -116,9 +116,9 @@ UHT records, import libraries, and DLLs under the plugin's own
 | Engine | Gate | Result | Evidence |
 |---|---|---|---|
 | UE 5.7 | Physically isolated full editor target build | PASS — the first review build rejected the enum raw-value fallback's mixed shared-pointer conditional; after replacing it with explicit typed returns, the exact source compiled and linked all 403/403 actions with `Result: Succeeded`. | Rejected: `D:\P4\MonolithChooserUE57Host\Chooser-FinalReview2-Build-UE57-20260730.log`; accepted: `D:\P4\MonolithChooserUE57Host\Chooser-FinalReview3-Build-UE57-20260731.log` |
-| UE 5.7 | Final affected DLL | PASS — 2,892,288 bytes, SHA-256 `D1A375551E2426576E631C6E830C63A1AB141E7662D60D2A55CA397344A2145E`. | `D:\P4\MonolithChooserUE57Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithAnimation.dll` |
+| UE 5.7 | Final affected DLL | PASS — final 4/4 incremental compile/link after the subobject and deduplication hardening; 2,892,800 bytes, SHA-256 `3F5349C7417DDE1FCA9FB886E7FEB3B6154E0AE188165059E37421B26CB51ED5`. | `D:\P4\MonolithChooserUE57Host\Chooser-FinalReview4-Build-UE57-20260731.log`; `D:\P4\MonolithChooserUE57Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithAnimation.dll` |
 | UE 5.8 | Physically isolated full editor target build | PASS — the exact source compiled and linked all 403/403 actions with `Result: Succeeded`. | `D:\P4\MonolithChooserUE58Host\Chooser-FinalReview-Build-UE58-20260731.log` |
-| UE 5.8 | Final affected DLL | PASS — 2,722,816 bytes, SHA-256 `B38898382AC5AA777F4CCFD98FC22F828E0DF2AF01F4899E38FA3DD3460FDFFF`. | `D:\P4\MonolithChooserUE58Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithAnimation.dll` |
+| UE 5.8 | Final affected DLL | PASS — one concurrent attempt stopped before source compilation because another UBT process held the shared user log; the required standalone rerun compiled/linked 4/4 actions. Final DLL is 2,723,328 bytes, SHA-256 `1C0E70CED4E780D91C5CCA3A2A23386D5696D0356DED05D7E542A69212C271BA`. | Non-source infrastructure stop: `D:\P4\MonolithChooserUE58Host\Chooser-FinalReview4-Build-UE58-20260731.log`; accepted: `D:\P4\MonolithChooserUE58Host\Chooser-FinalReview5-Build-UE58-20260731.log`; `D:\P4\MonolithChooserUE58Host\Plugins\Monolith\Binaries\Win64\UnrealEditor-MonolithAnimation.dll` |
 
 The UE 5.7 compiler error was caused by a conditional expression attempting to
 combine `TSharedRef<FJsonValueString>` and
@@ -155,8 +155,8 @@ Automation RunTests Monolith.Chooser.Read
 
 | Engine | Success | Failed / not run | Test errors | Final marker | Log |
 |---|---:|---:|---:|---|---|
-| UE 5.7 | 6 | 0 | 0 | `TEST COMPLETE. EXIT CODE: 0` | `D:\P4\MonolithChooserUE57Host\ChooserRead-UE57-FinalReview-20260731.log` |
-| UE 5.8 | 6 | 0 | 0 | `TEST COMPLETE. EXIT CODE: 0` | `D:\P4\MonolithChooserUE58Host\ChooserRead-UE58-FinalReview-20260731.log` |
+| UE 5.7 | 6 | 0 | 0 | `TEST COMPLETE. EXIT CODE: 0` | `D:\P4\MonolithChooserUE57Host\ChooserRead-UE57-FinalReview2-20260731.log` |
+| UE 5.8 | 6 | 0 | 0 | `TEST COMPLETE. EXIT CODE: 0` | `D:\P4\MonolithChooserUE58Host\ChooserRead-UE58-FinalReview2-20260731.log` |
 
 The six tests on each engine are:
 
@@ -240,7 +240,7 @@ any excluded feature class.
 
 ---
 
-## AI review remediation, head `4348741c`
+## AI review remediation, head `9184f5c6`
 
 | Review finding | Root fix |
 | --- | --- |
