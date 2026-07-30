@@ -51,6 +51,8 @@ Each module owns a specific domain:
 | **MonolithEditor** | `editor`, `animation` | Build triggers, live compile, log capture, crash context, scene capture, texture import |
 | **MonolithConfig** | `config` | INI resolution, explain, diff, search |
 | **MonolithIndex** | `project`, `collection` | SQLite FTS5 deep project indexer and Content Browser collection management |
+| **MonolithConfig** | `config`, `localization` | INI/CVar inspection plus guarded StringTable culture, validation, mutation, and CSV round-trip workflows |
+| **MonolithIndex** | `project` | SQLite FTS5 deep project indexer |
 | **MonolithSource** | `source` | Engine source lookup, call graphs, class hierarchy |
 | **MonolithSourceControl** | `source_control` | Provider-backed file preparation and bounded Perforce opened/path mapping |
 | **MonolithUI** | `ui` | Widget Blueprint CRUD, templates, styling, animation, settings scaffolding, accessibility |
