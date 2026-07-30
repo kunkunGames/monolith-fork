@@ -5,7 +5,7 @@ description: Use when managing editor asset Collections via Monolith MCP - creat
 
 # unreal-collection
 
-**13 actions** via `collection_query(action, params)`. Action names below are the live registry surface; call `monolith_discover` for exact parameter schemas.
+**13 actions** via `collection_query({ action, params })`. Action names below are the live registry surface; call `monolith_discover` for exact parameter schemas.
 
 ## Discovery
 
@@ -51,19 +51,19 @@ Numbered recipes use only the actions in the table above. Run `describe_query("a
 ### Recipe 1 — Build and verify a static collection
 
 1. Find the asset paths to add with **unreal-project-search** (FTS search, references, dependencies, type filtering); collect their `/Game/...` paths — this namespace has no asset-search action.
-2. `collection_query("create_collection", { name, share_type: "local", storage_mode: "static" })` `[w]` — create the empty static collection (use `validate_collection_name` first, or `create_unique_collection_name` when the base name may already exist).
-3. `collection_query("add_assets", { name, share_type: "local", asset_paths: [ ... ] })` `[w]` — add the harvested paths in one call via `asset_paths` (or a single `asset_path`).
-4. `collection_query("contains_asset", { name, asset_path, share_type: "local" })` — spot-check a known member resolved.
-5. `collection_query("list_assets", { name, share_type: "local", recursive: "self" })` — list the full membership to confirm the count and contents; widen `recursive` to `children`/`parents`/`all` only when checking a collection hierarchy.
+2. `collection_query({ action: "create_collection", params: { name, share_type: "local", storage_mode: "static" } })` `[w]` — create the empty static collection (use `validate_collection_name` first, or `create_unique_collection_name` when the base name may already exist).
+3. `collection_query({ action: "add_assets", params: { name, share_type: "local", asset_paths: [ ... ] } })` `[w]` — add the harvested paths in one call via `asset_paths` (or a single `asset_path`).
+4. `collection_query({ action: "contains_asset", params: { name, asset_path, share_type: "local" } })` — spot-check a known member resolved.
+5. `collection_query({ action: "list_assets", params: { name, share_type: "local", recursive: "self" } })` — list the full membership to confirm the count and contents; widen `recursive` to `children`/`parents`/`all` only when checking a collection hierarchy.
 
-Pitfall — deletion: `collection_query("delete_collection", { name, share_type: "local" })` `[w]` resolves both stored static members and live dynamic-query members, then refuses a non-empty collection unless you pass `force: true`. Run `list_assets` first and only set `force: true` when you intend to drop a populated collection.
+Pitfall — deletion: `collection_query({ action: "delete_collection", params: { name, share_type: "local" } })` `[w]` resolves both stored static members and live dynamic-query members, then refuses a non-empty collection unless you pass `force: true`. Run `list_assets` first and only set `force: true` when you intend to drop a populated collection.
 
 ### Recipe 2 — Build and verify a dynamic (query) collection
 
-1. `collection_query("create_collection", { name, share_type: "local", storage_mode: "dynamic" })` `[w]` — create the collection in dynamic mode so its membership comes from a saved query, not a fixed asset list (`validate_collection_name` first, or `create_unique_collection_name` when the base name may already exist).
-2. `collection_query("set_dynamic_query", { name, share_type: "local", query_text: "<query>" })` `[w]` — set the saved-search query that defines membership; build the query against the assets you found with **unreal-project-search**.
-3. `collection_query("get_dynamic_query", { name, share_type: "local" })` — read the stored query text back to confirm it persisted exactly as written.
-4. `collection_query("list_assets", { name, share_type: "local", recursive: "self" })` — list the assets the query currently resolves to and confirm the count and contents match the intent.
+1. `collection_query({ action: "create_collection", params: { name, share_type: "local", storage_mode: "dynamic" } })` `[w]` — create the collection in dynamic mode so its membership comes from a saved query, not a fixed asset list (`validate_collection_name` first, or `create_unique_collection_name` when the base name may already exist).
+2. `collection_query({ action: "set_dynamic_query", params: { name, share_type: "local", query_text: "<query>" } })` `[w]` — set the saved-search query that defines membership; build the query against the assets you found with **unreal-project-search**.
+3. `collection_query({ action: "get_dynamic_query", params: { name, share_type: "local" } })` — read the stored query text back to confirm it persisted exactly as written.
+4. `collection_query({ action: "list_assets", params: { name, share_type: "local", recursive: "self" } })` — list the assets the query currently resolves to and confirm the count and contents match the intent.
 
 Pitfall — dynamic vs static membership: a dynamic collection has no fixed member list, so `add_assets`/`remove_assets` do not apply; change membership only by editing the query with `set_dynamic_query`. Conversely, a static collection has no query, so `set_dynamic_query`/`get_dynamic_query` are not valid for it. Pick `storage_mode` at `create_collection` time — it cannot be flipped later by these actions. `get_collection`, `list_collections`, `list_assets`, and `contains_asset` resolve dynamic membership against the active Content Browser asset set, so their counts and membership change as matching assets are added or removed elsewhere. `list_collections` shares one enumeration across all of its returned dynamic rows. A newly created dynamic collection resolves to zero assets until a non-empty query is saved. `Path=/Game/Foo` matches the package folder; do not include the Content Browser's `/All` virtual prefix or an asset leaf. Nested dynamic `Collection=<name>` references are supported; an invalid nested query or reference cycle fails the owning read with an explicit error rather than returning an incomplete result. `set_collection_color` is intentionally membership-independent, so it can repair presentation metadata even when a saved dynamic query is invalid.
 

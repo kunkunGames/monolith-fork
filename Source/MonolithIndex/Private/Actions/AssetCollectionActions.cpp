@@ -60,7 +60,9 @@ namespace MonolithCollection
 	static bool GetStorageMode(const TSharedPtr<FJsonObject>& Params, ECollectionStorageMode::Type& OutMode, FString& OutError)
 	{
 		FString StorageMode;
-		if (Params.IsValid() && Params->HasField(TEXT("storage_mode")))
+		const bool bHasStorageMode =
+			Params.IsValid() && Params->HasField(TEXT("storage_mode"));
+		if (bHasStorageMode)
 		{
 			if (!Params->HasTypedField<EJson::String>(TEXT("storage_mode")))
 			{
@@ -68,8 +70,15 @@ namespace MonolithCollection
 				return false;
 			}
 			StorageMode = Params->GetStringField(TEXT("storage_mode"));
+			if (StorageMode.IsEmpty())
+			{
+				// The storage mode cannot be changed after creation, so an explicit
+				// empty value must not silently produce a Static collection.
+				OutError = TEXT("storage_mode must be a non-empty string: static or dynamic");
+				return false;
+			}
 		}
-		if (StorageMode.IsEmpty() || StorageMode.Equals(TEXT("static"), ESearchCase::IgnoreCase))
+		if (!bHasStorageMode || StorageMode.Equals(TEXT("static"), ESearchCase::IgnoreCase))
 		{
 			OutMode = ECollectionStorageMode::Static;
 			return true;
@@ -389,6 +398,33 @@ namespace MonolithCollection
 					TEXT("Cyclic dynamic collection reference detected at '%s'"),
 					*Collection.Name.ToString());
 				return false;
+			}
+
+			// A nested reference reaches TestDynamicQuery directly, bypassing the
+			// unconfigured-empty handling in CompileDynamicCollectionFilter. Without
+			// this check an empty saved query becomes a text filter that matches
+			// every asset, so a parent referencing a newly created dynamic child
+			// would resolve to the entire catalog instead of zero members.
+			FString NestedQueryText;
+			FText NestedQueryError;
+			if (!Container()->GetDynamicQueryText(
+				Collection.Name,
+				Collection.Type,
+				NestedQueryText,
+				&NestedQueryError))
+			{
+				EvaluationError = NestedQueryError.IsEmpty()
+					? FString::Printf(
+						TEXT("Failed to read dynamic query for collection '%s'"),
+						*Collection.Name.ToString())
+					: NestedQueryError.ToString();
+				OutMatches = false;
+				return false;
+			}
+			if (NestedQueryText.IsEmpty())
+			{
+				OutMatches = false;
+				return true;
 			}
 
 			ActiveDynamicCollections.Add(Collection);
@@ -797,6 +833,21 @@ namespace MonolithCollection
 						return true;
 					}
 
+					if (bCountsOnly)
+					{
+						// One shared visited set replaces the per-collection sets, so
+						// an asset reachable under several virtual paths is still
+						// counted exactly once for every matching collection.
+						bool bAlreadyVisited = false;
+						VisitedAssets.Add(
+							AssetData.GetSoftObjectPath(),
+							&bAlreadyVisited);
+						if (bAlreadyVisited)
+						{
+							return true;
+						}
+					}
+
 					FDynamicCollectionExpressionContext Context(
 						Item, KnownCollections);
 					for (const FDynamicCollectionFilter& Filter : Filters)
@@ -811,10 +862,17 @@ namespace MonolithCollection
 						}
 						if (bMatches)
 						{
-							CollectionCache
-								.FindChecked(Filter.Collection)
-								.UniqueAssets.Add(
+							FCachedResolution& Resolution =
+								CollectionCache.FindChecked(Filter.Collection);
+							if (bCountsOnly)
+							{
+								++Resolution.MatchCount;
+							}
+							else
+							{
+								Resolution.UniqueAssets.Add(
 									AssetData.GetSoftObjectPath());
+							}
 						}
 					}
 					return true;
@@ -829,6 +887,11 @@ namespace MonolithCollection
 			{
 				FCachedResolution& Resolution =
 					CollectionCache.FindChecked(Filter.Collection);
+				if (bCountsOnly)
+				{
+					Resolution.bSucceeded = true;
+					continue;
+				}
 				Resolution.Assets.Reserve(
 					Resolution.UniqueAssets.Num());
 				for (const FSoftObjectPath& Asset
@@ -893,12 +956,66 @@ namespace MonolithCollection
 		struct FCachedResolution
 		{
 			bool bSucceeded = false;
+			int32 MatchCount = 0;
 			TSet<FSoftObjectPath> UniqueAssets;
 			TArray<FSoftObjectPath> Assets;
 		};
 
+		/**
+		 * Switches the session to counting mode. Callers that only need
+		 * asset_count - list_collections is the hot one - then never retain a
+		 * per-collection membership array, so peak memory stops growing with the
+		 * sum of all memberships. Deduplication moves to a single shared set,
+		 * which is bounded by the catalog rather than by catalog x collections.
+		 */
+		void SetCountsOnly(bool bInCountsOnly)
+		{
+			bCountsOnly = bInCountsOnly;
+		}
+
+		bool IsCountsOnly() const { return bCountsOnly; }
+
+		bool ResolveCount(
+			const FCollectionNameType& Collection,
+			int32& OutCount,
+			FString& OutError)
+		{
+			if (!bPrepared)
+			{
+				TArray<FCollectionNameType> SingleCollection;
+				SingleCollection.Add(Collection);
+				if (!Prepare(SingleCollection, OutError))
+				{
+					return false;
+				}
+			}
+			if (!PreparationError.IsEmpty())
+			{
+				OutError = PreparationError;
+				return false;
+			}
+			const FCachedResolution* Resolution =
+				CollectionCache.Find(Collection);
+			if (!Resolution || !Resolution->bSucceeded)
+			{
+				OutError = FString::Printf(
+					TEXT(
+						"Dynamic resolution session was not prepared "
+						"for collection '%s'"),
+					*Collection.Name.ToString());
+				return false;
+			}
+			OutCount = bCountsOnly
+				? Resolution->MatchCount
+				: Resolution->Assets.Num();
+			return true;
+		}
+
 		bool bPrepared = false;
+		bool bCountsOnly = false;
 		FString PreparationError;
+		// Only populated in counting mode, where per-collection sets are not kept.
+		TSet<FSoftObjectPath> VisitedAssets;
 		TMap<FCollectionNameType, FCachedResolution> CollectionCache;
 	};
 
@@ -986,6 +1103,91 @@ namespace MonolithCollection
 		return true;
 	}
 
+	/**
+	 * Resolves only the membership count. When SharedDynamicSession is in counting
+	 * mode this never materializes a per-collection asset array, which is what
+	 * keeps list_collections from retaining every dynamic membership at once.
+	 */
+	static bool ResolveCollectionAssetCount(
+		const FCollectionNameType& RootCollection,
+		ECollectionRecursionFlags::Flags Recursion,
+		int32& OutCount,
+		FString& OutError,
+		FDynamicCollectionResolutionSession* SharedDynamicSession = nullptr)
+	{
+		if (!SharedDynamicSession || !SharedDynamicSession->IsCountsOnly())
+		{
+			TArray<FSoftObjectPath> Assets;
+			if (!ResolveCollectionAssets(
+				RootCollection, Recursion, Assets, OutError, SharedDynamicSession))
+			{
+				return false;
+			}
+			OutCount = Assets.Num();
+			return true;
+		}
+
+		TArray<FCollectionNameType> CollectionScope;
+		GatherCollectionScope(RootCollection, Recursion, CollectionScope);
+
+		// Static membership is small and already deduplicated by the container, so
+		// it is still gathered exactly. Only dynamic membership is counted.
+		TSet<FSoftObjectPath> StaticAssets;
+		TArray<FCollectionNameType> DynamicCollections;
+		for (const FCollectionNameType& Collection : CollectionScope)
+		{
+			ECollectionStorageMode::Type StorageMode;
+			if (!Container()->GetCollectionStorageMode(
+				Collection.Name, Collection.Type, StorageMode))
+			{
+				OutError = FString::Printf(
+					TEXT("Failed to read storage mode for collection '%s'"),
+					*Collection.Name.ToString());
+				return false;
+			}
+
+			if (StorageMode == ECollectionStorageMode::Static)
+			{
+				TArray<FSoftObjectPath> StoredAssets;
+				if (!Container()->GetAssetsInCollection(
+					Collection.Name,
+					Collection.Type,
+					StoredAssets,
+					ECollectionRecursionFlags::Self))
+				{
+					OutError = FString::Printf(
+						TEXT("Failed to read assets for collection '%s'"),
+						*Collection.Name.ToString());
+					return false;
+				}
+				StaticAssets.Append(StoredAssets);
+				continue;
+			}
+
+			DynamicCollections.Add(Collection);
+		}
+
+		if (!SharedDynamicSession->Prepare(DynamicCollections, OutError))
+		{
+			return false;
+		}
+
+		int32 DynamicCount = 0;
+		for (const FCollectionNameType& Collection : DynamicCollections)
+		{
+			int32 CollectionCount = 0;
+			if (!SharedDynamicSession->ResolveCount(
+				Collection, CollectionCount, OutError))
+			{
+				return false;
+			}
+			DynamicCount += CollectionCount;
+		}
+
+		OutCount = StaticAssets.Num() + DynamicCount;
+		return true;
+	}
+
 	static bool CollectionToJson(
 		const FCollectionNameType& Collection,
 		TSharedPtr<FJsonObject>& OutObject,
@@ -1011,17 +1213,19 @@ namespace MonolithCollection
 			TEXT("storage_mode"),
 			StorageModeToString(StorageMode));
 
-		TArray<FSoftObjectPath> Assets;
-		if (!ResolveCollectionAssets(
+		// Only the count is consumed here, so a counting session avoids retaining a
+		// membership array per listed dynamic collection.
+		int32 AssetCount = 0;
+		if (!ResolveCollectionAssetCount(
 			Collection,
 			ECollectionRecursionFlags::Self,
-			Assets,
+			AssetCount,
 			OutError,
 			SharedDynamicSession))
 		{
 			return false;
 		}
-		Obj->SetNumberField(TEXT("asset_count"), Assets.Num());
+		Obj->SetNumberField(TEXT("asset_count"), AssetCount);
 		if (StorageMode == ECollectionStorageMode::Dynamic)
 		{
 			FString QueryText;
@@ -1206,6 +1410,10 @@ FMonolithActionResult FAssetCollectionActions::ListCollections(const TSharedPtr<
 
 	MonolithCollection::FDynamicCollectionResolutionSession
 		DynamicResolutionSession;
+	// This endpoint reports asset_count and nothing else, so membership arrays are
+	// never retained: peak memory stays bounded by the catalog instead of growing
+	// with the sum of every listed dynamic collection's membership.
+	DynamicResolutionSession.SetCountsOnly(true);
 	FString DynamicResolutionError;
 	if (!DynamicResolutionSession.Prepare(
 		DynamicCollections, DynamicResolutionError))

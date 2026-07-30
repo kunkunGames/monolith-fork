@@ -62,9 +62,9 @@
 
 | Action | Params | Description |
 |--------|--------|-------------|
-| `list_collections` | `share_type` (`all`) | List collections with share type, storage mode, resolved asset count, dynamic query text, and optional color; all requested dynamic entries share one asset enumeration |
+| `list_collections` | `share_type` (`all`) | List collections with share type, storage mode, resolved asset count, dynamic query text, and optional color; all requested dynamic entries share one asset enumeration, and that enumeration runs in counting mode so no per-collection membership array is retained |
 | `get_collection` | `name` (required), `share_type` (`local`) | Return one collection's details with current resolved asset count |
-| `create_collection` | `name` (required), `share_type` (`local`), `storage_mode` (`static`) | Create a static or dynamic collection |
+| `create_collection` | `name` (required), `share_type` (`local`), `storage_mode` (`static`) | Create a static or dynamic collection. The default applies only when `storage_mode` is absent; an explicitly empty value returns `-32602` because the mode is immutable after creation |
 | `delete_collection` | `name` (required), `share_type` (`local`), `force` (`false`) | Delete a collection; resolved static or dynamic membership requires `force=true` |
 | `add_assets` | `name` (required), `share_type` (`local`), `asset_path` or `asset_paths[]` | Add at least one soft object path to a static collection |
 | `remove_assets` | `name` (required), `share_type` (`local`), `asset_path` or `asset_paths[]` | Remove at least one soft object path from a static collection |
