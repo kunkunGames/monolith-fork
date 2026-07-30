@@ -3,9 +3,35 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
 #include "AssetRegistry/AssetData.h"
+#include "Misc/PackageName.h"
+#include "Misc/Paths.h"
+#include "UObject/ObjectRedirector.h"
 #include "UObject/SoftObjectPath.h"
 #include "UObject/UObjectHash.h"
 #include "UObject/Package.h"
+
+bool FMonolithAssetUtils::IsProjectOwnedPackage(const FString& PackageName)
+{
+	if (!FPackageName::IsValidLongPackageName(PackageName, false))
+	{
+		return false;
+	}
+
+	FString PackageFilename;
+	if (!FPackageName::TryConvertLongPackageNameToFilename(
+			PackageName,
+			PackageFilename,
+			FPackageName::GetAssetPackageExtension()))
+	{
+		return false;
+	}
+
+	PackageFilename = FPaths::ConvertRelativePathToFull(PackageFilename);
+	FPaths::NormalizeFilename(PackageFilename);
+	FString ProjectDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+	FPaths::NormalizeDirectoryName(ProjectDirectory);
+	return FPaths::IsUnderDirectory(PackageFilename, ProjectDirectory);
+}
 
 FString FMonolithAssetUtils::ResolveAssetPath(const FString& InPath)
 {
@@ -60,6 +86,25 @@ UObject* FMonolithAssetUtils::LoadAssetByPath(UClass* ExpectedClass, const FStri
 	}
 
 	UClass* LookupClass = ExpectedClass ? ExpectedClass : UObject::StaticClass();
+	const bool bResolveTypedRedirectors = ExpectedClass && ExpectedClass != UObject::StaticClass();
+	auto TryResolveTypedRedirector = [ExpectedClass, bResolveTypedRedirectors](UObject* Object) -> UObject*
+	{
+		if (!bResolveTypedRedirectors)
+		{
+			return nullptr;
+		}
+
+		if (UObjectRedirector* Redirector = Cast<UObjectRedirector>(Object))
+		{
+			UObject* Destination = Redirector->DestinationObject;
+			if (Destination && Destination->IsA(ExpectedClass))
+			{
+				return Destination;
+			}
+		}
+
+		return nullptr;
+	};
 
 	// -------------------------------------------------------------------------
 	// Tier 1: Normalize. ResolveAssetPath handles /Content/->/Game/, relative
@@ -113,6 +158,10 @@ UObject* FMonolithAssetUtils::LoadAssetByPath(UClass* ExpectedClass, const FStri
 				{
 					return Loaded;
 				}
+				if (UObject* Redirected = TryResolveTypedRedirector(Loaded))
+				{
+					return Redirected;
+				}
 				// Class mismatch in registry — authoritative, do NOT fall through.
 				return nullptr;
 			}
@@ -132,6 +181,10 @@ UObject* FMonolithAssetUtils::LoadAssetByPath(UClass* ExpectedClass, const FStri
 			{
 				return Found;
 			}
+			if (UObject* Redirected = TryResolveTypedRedirector(Found))
+			{
+				return Redirected;
+			}
 			// In-memory class mismatch is also terminal.
 			return nullptr;
 		}
@@ -148,6 +201,10 @@ UObject* FMonolithAssetUtils::LoadAssetByPath(UClass* ExpectedClass, const FStri
 		{
 			return DiskObj;
 		}
+		if (UObject* Redirected = TryResolveTypedRedirector(DiskObj))
+		{
+			return Redirected;
+		}
 	}
 
 	if (ExpectedClass && ExpectedClass != UObject::StaticClass())
@@ -158,11 +215,46 @@ UObject* FMonolithAssetUtils::LoadAssetByPath(UClass* ExpectedClass, const FStri
 			{
 				return DiskObj2;
 			}
+			if (UObject* Redirected = TryResolveTypedRedirector(DiskObj2))
+			{
+				return Redirected;
+			}
 		}
 	}
 
 	UE_LOG(LogMonolith, Warning, TEXT("Failed to load asset: %s (tried: %s)"), *AssetPath, *NormalizedFull);
 	return nullptr;
+}
+
+bool FMonolithAssetUtils::TryLoadAssetByPath(
+	UClass* ExpectedClass,
+	const FString& AssetPath,
+	UObject*& OutAsset,
+	FString& OutResolvedPath,
+	FString& OutError)
+{
+	OutAsset = nullptr;
+	OutResolvedPath = ResolveAssetPath(AssetPath);
+	OutError.Reset();
+
+	if (OutResolvedPath.IsEmpty())
+	{
+		OutError = TEXT("Asset path must be a non-empty string");
+		return false;
+	}
+
+	UClass* EffectiveClass = ExpectedClass ? ExpectedClass : UObject::StaticClass();
+	OutAsset = LoadAssetByPath(EffectiveClass, OutResolvedPath);
+	if (!OutAsset)
+	{
+		OutError = FString::Printf(
+			TEXT("Failed to load asset '%s' as %s"),
+			*OutResolvedPath,
+			*EffectiveClass->GetName());
+		return false;
+	}
+
+	return true;
 }
 
 bool FMonolithAssetUtils::AssetExists(const FString& AssetPath)

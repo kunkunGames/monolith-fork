@@ -202,6 +202,7 @@ public:
 		return *this;
 	}
 
+
 	// Adds machine-readable inclusive numeric bounds to an existing parameter.
 	// Runtime handlers must still reject invalid values; this is the discovery contract.
 	FParamSchemaBuilder& Range(const FString& Name, double MinValue, double MaxValue)
@@ -257,6 +258,7 @@ public:
 
 private:
 	TSharedPtr<FJsonObject> Schema = MakeShared<FJsonObject>();
+
 	TMap<FString, TSharedPtr<FJsonObject>> ParamsByName;
 
 	void DisableStringEncodedComplexRecovery(const FString& Name)

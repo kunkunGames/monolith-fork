@@ -327,6 +327,7 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 	// strings. batch_execute has long carried a local string-parse fallback for
 	// its `operations` param ("Claude Code quirk"); every other array/object
 	// param silently arrived as a string and failed its handler's typed field
+
 	// lookup ("<param> array is required" with the value right there). Recover
 	// centrally: when the schema declares array/object and the incoming value
 	// is a string that parses as that JSON kind, replace it with the parsed
