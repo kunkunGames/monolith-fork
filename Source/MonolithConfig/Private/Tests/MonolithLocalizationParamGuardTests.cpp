@@ -870,6 +870,18 @@ bool FMonolithParamGuardLocalizationStringTableLifecycleTest::RunTest(const FStr
 			TEXT("Error moving file"),
 			EAutomationExpectedErrorFlags::Contains,
 			1);
+		AddExpectedError(
+			TEXT("MoveFile was unable to move"),
+			EAutomationExpectedErrorFlags::Contains,
+			10);
+		AddExpectedError(
+			TEXT("Failed to move"),
+			EAutomationExpectedErrorFlags::Contains,
+			1);
+		AddExpectedError(
+			TEXT("Error saving"),
+			EAutomationExpectedErrorFlags::Contains,
+			1);
 		const FMonolithActionResult Result =
 			FMonolithToolRegistry::Get().ExecuteAction(
 				TEXT("localization"),
