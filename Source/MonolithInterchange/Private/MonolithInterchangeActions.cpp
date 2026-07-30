@@ -732,6 +732,34 @@ namespace
 		return StringArrayToJson(Sorted);
 	}
 
+	/**
+	 * Loads a destination package that exists on disk but has not been indexed or
+	 * loaded yet, so its objects are visible to the rollback snapshot below.
+	 *
+	 * Without this, an overwrite target discovered only by DoesPackageExist (an
+	 * Asset Registry startup scan is still running, or the file was copied in out
+	 * of band) is absent from the snapshot. If typed validation then fails, the
+	 * overwritten object is classified as newly created and force-deleted,
+	 * destroying a pre-existing user asset.
+	 */
+	void EnsureDestinationPackageLoadedForSnapshot(const FString& PackageName)
+	{
+		if (PackageName.IsEmpty()
+			|| !FPackageName::IsValidLongPackageName(PackageName))
+		{
+			return;
+		}
+		if (FindPackage(nullptr, *PackageName) != nullptr)
+		{
+			return;
+		}
+		if (!FPackageName::DoesPackageExist(PackageName))
+		{
+			return;
+		}
+		LoadPackage(nullptr, *PackageName, LOAD_NoWarn | LOAD_Quiet);
+	}
+
 	TSet<FName> SnapshotAssetObjectPathsUnder(const FString& DestinationPath)
 	{
 		TSet<FName> ObjectPaths;
@@ -948,6 +976,13 @@ namespace
 		const bool bRequiresTypedResultValidation =
 			RequestedKind != ERequestedImportKind::Any &&
 			RequestedKind != ERequestedImportKind::Scene;
+		if (bRequiresTypedResultValidation)
+		{
+			// The snapshot only sees registry rows and loaded objects, so an
+			// existing-on-disk overwrite target must be loaded before it is taken
+			// or rollback would delete a pre-existing user asset.
+			EnsureDestinationPackageLoadedForSnapshot(ResolvedPackage);
+		}
 		const TSet<FName> PreExistingObjectPaths =
 			bRequiresTypedResultValidation
 				? SnapshotAssetObjectPathsUnder(DestinationPath)
@@ -1735,16 +1770,66 @@ FMonolithActionResult FMonolithInterchangeActions::UpdateReimportPath(const TSha
 
 	Result->SetBoolField(TEXT("can_reimport_after_update"), bCanReimportAfterUpdate);
 	Result->SetBoolField(TEXT("readback_matches"), bReadbackMatches);
-	Result->SetStringField(
-		TEXT("status"),
-		bReadbackMatches ? TEXT("updated_reimport_path") : TEXT("error"));
+
+	bool bPreviousPathsRestored = false;
 	if (!bReadbackMatches)
 	{
+		// UpdateReimportPath has already mutated the asset. Returning a bare
+		// "error" would let a caller treat this as a no-op and retry against
+		// changed metadata, so the previous path is restored when possible and the
+		// resulting state is reported explicitly.
+		if (ExistingSourceFiles.IsValidIndex(ExpectedIndex))
+		{
+			const FString PreviousSource = ExistingSourceFiles[ExpectedIndex];
+			FReimportManager::Instance()->UpdateReimportPath(
+				Asset,
+				PreviousSource,
+				SourceFileIndex);
+
+			TArray<FString> RestoredSourceFiles;
+			if (FReimportManager::Instance()->CanReimport(Asset, &RestoredSourceFiles)
+				&& RestoredSourceFiles.IsValidIndex(ExpectedIndex))
+			{
+				const FString NormalizedRestored =
+					NormalizeSourceFile(RestoredSourceFiles[ExpectedIndex]);
+				const FString NormalizedPrevious = NormalizeSourceFile(PreviousSource);
+#if PLATFORM_WINDOWS
+				bPreviousPathsRestored = NormalizedRestored.Equals(
+					NormalizedPrevious,
+					ESearchCase::IgnoreCase);
+#else
+				bPreviousPathsRestored = NormalizedRestored.Equals(
+					NormalizedPrevious,
+					ESearchCase::CaseSensitive);
+#endif
+				UpdatedSourceFiles = MoveTemp(RestoredSourceFiles);
+			}
+		}
+
+		Result->SetBoolField(TEXT("mutation_committed"), true);
+		Result->SetBoolField(
+			TEXT("previous_source_files_restored"),
+			bPreviousPathsRestored);
+		Result->SetBoolField(TEXT("partial_mutation"), !bPreviousPathsRestored);
+
 		AddMessage(
 			Messages,
 			TEXT("reimport_path_readback_mismatch"),
 			TEXT("The registered reimport handler did not report the requested source path after UpdateReimportPath."));
+		if (!bPreviousPathsRestored)
+		{
+			AddMessage(
+				Messages,
+				TEXT("reimport_path_rollback_failed"),
+				TEXT("The previous source path could not be restored; the asset's reimport metadata is in an indeterminate state and must not be retried blindly."));
+		}
 	}
+
+	Result->SetStringField(
+		TEXT("status"),
+		bReadbackMatches
+			? TEXT("updated_reimport_path")
+			: (bPreviousPathsRestored ? TEXT("error") : TEXT("partial_mutation")));
 	Result->SetArrayField(TEXT("messages"), Messages);
 	Result->SetArrayField(TEXT("source_files"), SourceFilesToJson(UpdatedSourceFiles));
 	TArray<UObject*> Objects;
