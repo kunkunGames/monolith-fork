@@ -51,10 +51,10 @@ The typed import entrypoints (`import_mesh`/`import_skeletal_mesh`/`import_textu
 
 | Action | Signature | Purpose |
 |--------|-----------|---------|
-| `[w] import_asset` | `source_file*` `destination_path*` `conflict_policy*` (`fail`/`overwrite`/`rename`) `allow_external?=false` `confirm?=false` `dry_run?=false` | Import one source file with actual translator/factory and collision checks |
-| `[w] import_assets` | `source_files*` (array) `destination_path*` `conflict_policy*` `allow_external?=false` `confirm?=false` `dry_run?=false` | Import multiple source files, one result row per source |
-| `[w] import_mesh` | _(same as import_asset)_ | Configure static-mesh import and verify a `UStaticMesh` result |
-| `[w] import_skeletal_mesh` | _(same as import_asset)_ | Configure FBX skeletal import and verify a `USkeletalMesh` result |
+| `[w] import_asset` | `source_file*` `destination_path*` `conflict_policy*` (`fail`/`overwrite`/`rename`) `allow_external?=false` `confirm?=false` `dry_run?=false` | Import one source file with actual translator/factory and collision checks; scene/mesh formats require `fail` plus a dedicated empty destination |
+| `[w] import_assets` | `source_files*` (array) `destination_path*` `conflict_policy*` `allow_external?=false` `confirm?=false` `dry_run?=false` | Import multiple single-output source files, one result row per source; scene/mesh sources must be imported individually |
+| `[w] import_mesh` | _(same as import_asset)_ | Configure static-mesh import and verify a `UStaticMesh` result under the multi-output guard |
+| `[w] import_skeletal_mesh` | _(same as import_asset)_ | Configure FBX skeletal import and verify a `USkeletalMesh` result under the multi-output guard |
 | `[w] import_texture` | _(same as import_asset)_ | Require a texture source and verify a `UTexture` result |
 | `[w] import_audio` | _(same as import_asset)_ | Require wave audio and verify a `USoundWave` result |
 | `[w] import_scene` | _(same as import_asset)_ | Require a scene-capable source and scene factory |
@@ -63,10 +63,10 @@ The typed import entrypoints (`import_mesh`/`import_skeletal_mesh`/`import_textu
 
 | Action | Signature | Purpose |
 |--------|-----------|---------|
-| `[w] reimport_asset` | `asset_path*` `source_file?` `source_file_index?=-1` `allow_external?=false` `confirm?=false` `dry_run?=false` | Reimport one asset via Unreal's reimport manager |
+| `[w] reimport_asset` | `asset_path*` `source_file?` `source_file_index?=-1` `allow_external?=false` `confirm?=false` `dry_run?=false` | Reimport one asset; a replacement source must be a non-empty string compatible with the asset kind |
 | `[w] reimport_assets` | `asset_paths*` (array) `allow_external?=false` `confirm?=false` `dry_run?=false` | Validate stored sources, then reimport multiple assets |
 | `[w] update_reimport_path` | `asset_path*` `source_file*` `source_file_index?=-1` `allow_external?=false` `confirm?=false` `dry_run?=false` | Repoint an asset's reimport source path |
-| `[w] export_asset` | `asset_path*` `file_path*` `replace_existing?=false` `allow_external?=false` `confirm?=false` `dry_run?=false` | Export one asset to a local file after path validation |
+| `[w] export_asset` | `asset_path*` `file_path*` `replace_existing?=false` `allow_external?=false` `confirm?=false` `dry_run?=false` | Export one asset to a local file after root, directory-collision, and exporter validation |
 
 ## Common Workflows
 
@@ -74,9 +74,9 @@ The typed import entrypoints (`import_mesh`/`import_skeletal_mesh`/`import_textu
 # Check a source file is importable before committing to a destination.
 interchange_query("can_import", { "source_file": "Imports/hero.fbx" })
 
-# Import a mesh through the typed entrypoint with a dry run first, then for real (conflict_policy is required).
-interchange_query("import_mesh", { "source_file": "Imports/hero.fbx", "destination_path": "/Game/Meshes", "conflict_policy": "rename", "dry_run": true })
-interchange_query("import_mesh", { "source_file": "Imports/hero.fbx", "destination_path": "/Game/Meshes", "conflict_policy": "rename", "confirm": true })
+# Import a mesh through the typed entrypoint into a new dedicated destination.
+interchange_query("import_mesh", { "source_file": "Imports/hero.fbx", "destination_path": "/Game/Imports/Hero_20260731", "conflict_policy": "fail", "dry_run": true })
+interchange_query("import_mesh", { "source_file": "Imports/hero.fbx", "destination_path": "/Game/Imports/Hero_20260731", "conflict_policy": "fail", "confirm": true })
 
 # Reimport an existing asset, then read back its import source metadata.
 interchange_query("reimport_asset", { "asset_path": "/Game/Meshes/Hero", "confirm": true })
@@ -95,6 +95,8 @@ interchange_query("export_asset", { "asset_path": "/Game/Meshes/Hero", "file_pat
 - Relative import paths resolve under the project directory; relative export paths resolve under `Saved`. Absolute external paths require `allow_external: true`.
 - Default-root checks reject any source/output path that traverses a symlink or junction below an allowed root. Use a direct path; only use `allow_external: true` after caller-side policy explicitly permits it.
 - Import and reimport are high-impact mutations (`[w]`): `conflict_policy` is required, and writes need `confirm: true` unless `dry_run: true`. Use `dry_run` plus `can_import` / `can_reimport` first.
+- Scene and mesh importers can create secondary materials, textures, and scene packages whose names are not known at preflight. Import one such source at a time with `conflict_policy: "fail"` into a new dedicated destination. `destination_emptiness_indeterminate` means the bounded inspection could not prove safety; choose a new path instead of retrying blindly.
+- A provided reimport `source_file` is not a generic override: it must be an exact non-empty string and compatible with the target asset class. `replacement_source_incompatible` must be corrected before confirmation.
 - Typed imports can fail after Unreal creates objects. `rollback_complete=true` means Monolith removed every new returned asset; `status=partial_import` / `partial_mutation=true` means something remained and must be inspected before retrying. Do not collapse that state into an ordinary error.
 - Do not assume `[w]` actions can be reverted with editor Undo. Verify the resulting asset/import metadata after a confirmed write, and treat exported files as normal filesystem side effects.
 - A successful dry run means the concrete importer, reimport handler, or exporter exists; it is not inferred from module presence alone.

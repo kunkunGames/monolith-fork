@@ -56,6 +56,19 @@ namespace
 		}
 	};
 
+	struct FDestinationContentInspection
+	{
+		bool bComplete = false;
+		bool bEmpty = false;
+		int32 AssetRegistryRows = 0;
+		int32 LoadedAssetsVisited = 0;
+		int32 FilesystemEntriesVisited = 0;
+		FString FirstConflict;
+	};
+
+	constexpr int32 MaxDestinationFilesystemEntries = 10000;
+	constexpr int32 MaxDestinationLoadedAssets = 1000000;
+
 	const TCHAR* ImportKindToString(ERequestedImportKind Kind)
 	{
 		switch (Kind)
@@ -435,9 +448,246 @@ namespace
 		}
 	}
 
+	ERequestedImportKind InferImportKindFromAsset(const UObject* Asset)
+	{
+		if (Asset && Asset->IsA<UStaticMesh>())
+		{
+			return ERequestedImportKind::StaticMesh;
+		}
+		if (Asset && Asset->IsA<USkeletalMesh>())
+		{
+			return ERequestedImportKind::SkeletalMesh;
+		}
+		if (Asset && Asset->IsA<UTexture>())
+		{
+			return ERequestedImportKind::Texture;
+		}
+		if (Asset && Asset->IsA<USoundWave>())
+		{
+			return ERequestedImportKind::Audio;
+		}
+		return ERequestedImportKind::Any;
+	}
+
+	bool ImportMayProduceSecondaryAssets(
+		const FInterchangeFormatDef* Format,
+		ERequestedImportKind RequestedKind)
+	{
+		if (RequestedKind == ERequestedImportKind::Texture ||
+			RequestedKind == ERequestedImportKind::Audio)
+		{
+			return false;
+		}
+
+		if (RequestedKind == ERequestedImportKind::Scene ||
+			RequestedKind == ERequestedImportKind::StaticMesh ||
+			RequestedKind == ERequestedImportKind::SkeletalMesh)
+		{
+			return true;
+		}
+
+		if (!Format)
+		{
+			return false;
+		}
+
+		const FString Category(Format->Category);
+		return Category == TEXT("mesh") || Category == TEXT("scene");
+	}
+
 	bool IsGamePackagePath(const FString& PackagePath)
 	{
 		return PackagePath == TEXT("/Game") || PackagePath.StartsWith(TEXT("/Game/"));
+	}
+
+	FDestinationContentInspection InspectDestinationContent(const FString& DestinationPath)
+	{
+		FDestinationContentInspection Inspection;
+		if (!FPackageName::IsValidLongPackageName(DestinationPath, false) ||
+			!IsGamePackagePath(DestinationPath))
+		{
+			return Inspection;
+		}
+
+		FAssetRegistryModule& AssetRegistryModule =
+			FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+		IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
+		TArray<FAssetData> AssetRows;
+		AssetRegistry.GetAssetsByPath(
+			FName(*DestinationPath),
+			AssetRows,
+			true,
+			false);
+		Inspection.AssetRegistryRows = AssetRows.Num();
+		if (AssetRows.Num() > 0)
+		{
+			const FAssetData& FirstAsset = AssetRows[0];
+			Inspection.bComplete = true;
+			Inspection.bEmpty = false;
+			Inspection.FirstConflict = FString::Printf(
+				TEXT("%s.%s"),
+				*FirstAsset.PackageName.ToString(),
+				*FirstAsset.AssetName.ToString());
+			return Inspection;
+		}
+		if (AssetRegistry.IsLoadingAssets())
+		{
+			return Inspection;
+		}
+
+		const FString DestinationPrefix = DestinationPath + TEXT("/");
+		for (TObjectIterator<UObject> ObjectIt; ObjectIt; ++ObjectIt)
+		{
+			++Inspection.LoadedAssetsVisited;
+			if (Inspection.LoadedAssetsVisited > MaxDestinationLoadedAssets)
+			{
+				return Inspection;
+			}
+
+			UObject* Object = *ObjectIt;
+			if (!Object || !Object->IsAsset() || !Object->GetOutermost())
+			{
+				continue;
+			}
+
+			const FString PackageName = Object->GetOutermost()->GetName();
+			if (PackageName == DestinationPath || PackageName.StartsWith(DestinationPrefix))
+			{
+				Inspection.bComplete = true;
+				Inspection.bEmpty = false;
+				Inspection.FirstConflict = Object->GetPathName();
+				return Inspection;
+			}
+		}
+
+		const FString DestinationDirectory =
+			FPackageName::LongPackageNameToFilename(DestinationPath);
+		if (!IFileManager::Get().DirectoryExists(*DestinationDirectory))
+		{
+			Inspection.bComplete = true;
+			Inspection.bEmpty = true;
+			return Inspection;
+		}
+
+		bool bBudgetExceeded = false;
+		bool bFoundPackageFile = false;
+		const bool bTraversalCompleted = IFileManager::Get().IterateDirectoryRecursively(
+			*DestinationDirectory,
+			[&Inspection, &bBudgetExceeded, &bFoundPackageFile](
+				const TCHAR* FilenameOrDirectory,
+				bool bIsDirectory)
+			{
+				++Inspection.FilesystemEntriesVisited;
+				if (Inspection.FilesystemEntriesVisited > MaxDestinationFilesystemEntries)
+				{
+					bBudgetExceeded = true;
+					return false;
+				}
+				if (bIsDirectory)
+				{
+					return true;
+				}
+
+				const FString Extension =
+					FPaths::GetExtension(FilenameOrDirectory, true).ToLower();
+				if (Extension == TEXT(".uasset") ||
+					Extension == TEXT(".umap") ||
+					Extension == TEXT(".utxt"))
+				{
+					bFoundPackageFile = true;
+					Inspection.FirstConflict = FilenameOrDirectory;
+					return false;
+				}
+				return true;
+			});
+
+		if (bFoundPackageFile)
+		{
+			Inspection.bComplete = true;
+			Inspection.bEmpty = false;
+			return Inspection;
+		}
+		if (bBudgetExceeded)
+		{
+			return Inspection;
+		}
+		if (!bTraversalCompleted)
+		{
+			return Inspection;
+		}
+
+		Inspection.bComplete = true;
+		Inspection.bEmpty = true;
+		return Inspection;
+	}
+
+	bool AreEquivalentSourceExtensions(const FString& A, const FString& B)
+	{
+		if (A.Equals(B, ESearchCase::IgnoreCase))
+		{
+			return true;
+		}
+		return (A.Equals(TEXT("jpg"), ESearchCase::IgnoreCase) &&
+				B.Equals(TEXT("jpeg"), ESearchCase::IgnoreCase)) ||
+			(A.Equals(TEXT("jpeg"), ESearchCase::IgnoreCase) &&
+				B.Equals(TEXT("jpg"), ESearchCase::IgnoreCase));
+	}
+
+	bool IsReplacementSourceCompatible(
+		UObject* Asset,
+		const FString& SourceFile,
+		const TArray<FString>& ExistingSources,
+		ERequestedImportKind& OutKind,
+		FString& OutReason)
+	{
+		OutKind = InferImportKindFromAsset(Asset);
+		const FString Extension = FPaths::GetExtension(SourceFile, false).ToLower();
+		const FInterchangeFormatDef* Format = FindFormatDef(Extension);
+		if (!Format)
+		{
+			OutReason = FString::Printf(
+				TEXT("No supported import format is registered for replacement extension '%s'."),
+				*Extension);
+			return false;
+		}
+
+		if (OutKind != ERequestedImportKind::Any)
+		{
+			if (!IsFormatCompatibleWithImportKind(Format, OutKind))
+			{
+				OutReason = FString::Printf(
+					TEXT("Replacement extension '%s' is incompatible with asset class %s."),
+					*Extension,
+					Asset ? *Asset->GetClass()->GetName() : TEXT("<null>"));
+				return false;
+			}
+			if (!GetImportBackendAvailability(SourceFile, OutKind).IsAvailable())
+			{
+				OutReason = FString::Printf(
+					TEXT("No registered import backend can consume replacement extension '%s' for asset class %s."),
+					*Extension,
+					Asset ? *Asset->GetClass()->GetName() : TEXT("<null>"));
+				return false;
+			}
+			return true;
+		}
+
+		for (const FString& ExistingSource : ExistingSources)
+		{
+			const FString ExistingExtension =
+				FPaths::GetExtension(ExistingSource, false).ToLower();
+			if (!ExistingExtension.IsEmpty() &&
+				AreEquivalentSourceExtensions(ExistingExtension, Extension))
+			{
+				return true;
+			}
+		}
+
+		OutReason = FString::Printf(
+			TEXT("Asset class %s has no typed compatibility contract and replacement extension '%s' does not match any stored source extension."),
+			Asset ? *Asset->GetClass()->GetName() : TEXT("<null>"),
+			*Extension);
+		return false;
 	}
 
 	TSharedPtr<FJsonObject> ValidateDestinationPackage(const FString& DestinationPath)
@@ -812,7 +1062,8 @@ namespace
 		const FString& SourceFile,
 		const TSharedPtr<FJsonObject>& Params,
 		ERequestedImportKind RequestedKind = ERequestedImportKind::Any,
-		TSet<FName>* ProspectivePackages = nullptr)
+		TSet<FName>* ProspectivePackages = nullptr,
+		bool bMultiSourceBatch = false)
 	{
 		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
 		TArray<TSharedPtr<FJsonValue>> Messages;
@@ -860,6 +1111,12 @@ namespace
 			FPackageName::IsValidLongPackageName(DestinationPath, false) &&
 			IsGamePackagePath(DestinationPath);
 		const bool bFormatCompatible = IsFormatCompatibleWithImportKind(Format, RequestedKind);
+		const bool bMayProduceSecondaryAssets =
+			ImportMayProduceSecondaryAssets(Format, RequestedKind);
+		const FDestinationContentInspection DestinationInspection =
+			bDestinationValid && bMayProduceSecondaryAssets
+				? InspectDestinationContent(DestinationPath)
+				: FDestinationContentInspection();
 		const FImportBackendAvailability Backend =
 			bFileExists && bFormatCompatible
 				? GetImportBackendAvailability(NormalizedSource, RequestedKind)
@@ -904,6 +1161,30 @@ namespace
 		Row->SetStringField(TEXT("resolved_asset_name"), ResolvedAssetName);
 		Row->SetStringField(TEXT("resolved_package"), ResolvedPackage);
 		Row->SetBoolField(TEXT("likely_package_conflict"), bLikelyConflict);
+		Row->SetBoolField(
+			TEXT("may_produce_secondary_assets"),
+			bMayProduceSecondaryAssets);
+		Row->SetBoolField(
+			TEXT("multi_source_batch"),
+			bMultiSourceBatch);
+		Row->SetBoolField(
+			TEXT("destination_inspection_complete"),
+			DestinationInspection.bComplete);
+		Row->SetBoolField(
+			TEXT("destination_proven_empty"),
+			DestinationInspection.bComplete && DestinationInspection.bEmpty);
+		Row->SetNumberField(
+			TEXT("destination_asset_registry_rows"),
+			DestinationInspection.AssetRegistryRows);
+		Row->SetNumberField(
+			TEXT("destination_loaded_objects_visited"),
+			DestinationInspection.LoadedAssetsVisited);
+		Row->SetNumberField(
+			TEXT("destination_filesystem_entries_visited"),
+			DestinationInspection.FilesystemEntriesVisited);
+		Row->SetStringField(
+			TEXT("destination_first_conflict"),
+			DestinationInspection.FirstConflict);
 
 		if (!bFileExists)
 		{
@@ -929,6 +1210,43 @@ namespace
 		if (ConflictPolicy != TEXT("fail") && ConflictPolicy != TEXT("overwrite") && ConflictPolicy != TEXT("rename"))
 		{
 			AddMessage(Messages, TEXT("invalid_conflict_policy"), TEXT("conflict_policy must be fail, overwrite, or rename."));
+		}
+		if (bMayProduceSecondaryAssets && bMultiSourceBatch)
+		{
+			AddMessage(
+				Messages,
+				TEXT("multi_output_batch_unsupported"),
+				TEXT("Scene and mesh sources can create secondary packages whose names are importer-defined. Import one such source at a time into a dedicated empty destination."));
+		}
+		if (bMayProduceSecondaryAssets &&
+			ConflictPolicy != TEXT("fail") &&
+			(ConflictPolicy == TEXT("overwrite") || ConflictPolicy == TEXT("rename")))
+		{
+			AddMessage(
+				Messages,
+				TEXT("multi_output_conflict_policy_unsupported"),
+				TEXT("Scene and mesh sources can create secondary packages, so overwrite and rename cannot be proven collision-safe. Use conflict_policy=fail with a dedicated empty destination."));
+		}
+		if (bMayProduceSecondaryAssets && bDestinationValid)
+		{
+			if (!DestinationInspection.bComplete)
+			{
+				AddMessage(
+					Messages,
+					TEXT("destination_emptiness_indeterminate"),
+					TEXT("Destination content could not be exhaustively inspected within the registry/object/filesystem bounds. Choose a new dedicated destination path."));
+			}
+			else if (!DestinationInspection.bEmpty)
+			{
+				AddMessage(
+					Messages,
+					TEXT("multi_output_destination_not_empty"),
+					FString::Printf(
+						TEXT("Scene and mesh imports require a dedicated empty destination; first conflict: %s"),
+						DestinationInspection.FirstConflict.IsEmpty()
+							? TEXT("<unknown>")
+							: *DestinationInspection.FirstConflict));
+			}
 		}
 		if (ConflictPolicy == TEXT("fail") && bLikelyConflict)
 		{
@@ -1181,9 +1499,29 @@ namespace
 		}
 
 		FString PreferredSource;
-		if (Params.IsValid())
+		const bool bPreferredSourceProvided =
+			Params.IsValid() && Params->HasField(TEXT("source_file"));
+		if (bPreferredSourceProvided)
 		{
-			Params->TryGetStringField(TEXT("source_file"), PreferredSource);
+			if (!Params->HasTypedField<EJson::String>(TEXT("source_file")))
+			{
+				AddMessage(
+					Messages,
+					TEXT("invalid_source_file"),
+					TEXT("Optional param 'source_file' must be a non-empty string when provided."));
+			}
+			else
+			{
+				PreferredSource = Params->GetStringField(TEXT("source_file"));
+				PreferredSource.TrimStartAndEndInline();
+				if (PreferredSource.IsEmpty())
+				{
+					AddMessage(
+						Messages,
+						TEXT("invalid_source_file"),
+						TEXT("Optional param 'source_file' must be a non-empty string when provided."));
+				}
+			}
 		}
 		const bool bReplacesAllSources = !PreferredSource.IsEmpty() && SourceFileIndex == INDEX_NONE;
 
@@ -1234,7 +1572,8 @@ namespace
 		if (!PreferredSource.IsEmpty())
 		{
 			const FString NormalizedSource = NormalizeSourceFile(PreferredSource);
-			if (!FPaths::FileExists(NormalizedSource))
+			const bool bReplacementExists = FPaths::FileExists(NormalizedSource);
+			if (!bReplacementExists)
 			{
 				AddMessage(Messages, TEXT("source_missing"), FString::Printf(TEXT("Source file does not exist: %s"), *NormalizedSource));
 			}
@@ -1248,6 +1587,32 @@ namespace
 						? TEXT("Replacement source traverses a symlink or junction below an allowed root.")
 						: TEXT("Source file is outside project/content/saved roots. Pass allow_external=true only after caller-side policy allows it."));
 			}
+
+			ERequestedImportKind ReplacementKind = ERequestedImportKind::Any;
+			FString CompatibilityReason;
+			const bool bReplacementCompatible = IsReplacementSourceCompatible(
+				Asset,
+				NormalizedSource,
+				SourceFilenames,
+				ReplacementKind,
+				CompatibilityReason);
+			Row->SetStringField(
+				TEXT("replacement_import_kind"),
+				ImportKindToString(ReplacementKind));
+			Row->SetBoolField(
+				TEXT("replacement_source_compatible"),
+				bReplacementCompatible);
+			Row->SetStringField(
+				TEXT("replacement_compatibility_reason"),
+				CompatibilityReason);
+			if (!bReplacementCompatible)
+			{
+				AddMessage(
+					Messages,
+					TEXT("replacement_source_incompatible"),
+					CompatibilityReason);
+			}
+
 			PreferredSource = NormalizedSource;
 			Row->SetStringField(TEXT("preferred_source_file"), PreferredSource);
 		}
@@ -1626,7 +1991,8 @@ FMonolithActionResult FMonolithInterchangeActions::ImportAssets(const TSharedPtr
 				SourceFile,
 				Params,
 				ERequestedImportKind::Any,
-				bDryRun ? &ProspectivePackages : nullptr)));
+				bDryRun ? &ProspectivePackages : nullptr,
+				SourceFiles.Num() > 1)));
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -1905,9 +2271,19 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 	bool bReplaceExisting = false;
 	Params->TryGetBoolField(TEXT("replace_existing"), bReplaceExisting);
 	const bool bFileExists = !NormalizedFilePath.IsEmpty() && FPaths::FileExists(NormalizedFilePath);
+	const bool bPathIsDirectory =
+		!NormalizedFilePath.IsEmpty() &&
+		IFileManager::Get().DirectoryExists(*NormalizedFilePath);
 	if (!NormalizedFilePath.IsEmpty() && !ValidateOutputFileRoot(NormalizedFilePath, bAllowExternal))
 	{
 		AddMessage(Messages, TEXT("external_output_blocked"), TEXT("Output path is outside project/content/saved roots. Pass allow_external=true only after caller-side policy allows it."));
+	}
+	if (bPathIsDirectory)
+	{
+		AddMessage(
+			Messages,
+			TEXT("output_path_is_directory"),
+			TEXT("file_path resolves to an existing directory, not a writable output file."));
 	}
 	if (bFileExists && !bReplaceExisting)
 	{
@@ -1934,6 +2310,7 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 	Result->SetStringField(TEXT("asset_class"), Asset->GetClass()->GetName());
 	Result->SetStringField(TEXT("file_path"), NormalizedFilePath);
 	Result->SetBoolField(TEXT("file_exists"), bFileExists);
+	Result->SetBoolField(TEXT("path_is_directory"), bPathIsDirectory);
 	Result->SetBoolField(TEXT("replace_existing"), bReplaceExisting);
 	Result->SetBoolField(TEXT("dry_run"), bDryRun);
 	Result->SetBoolField(TEXT("exporter_available"), Exporter != nullptr);

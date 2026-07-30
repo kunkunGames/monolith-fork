@@ -39,8 +39,8 @@ No security benchmark, metadata-analysis feature, reinforcement-learning feature
 | Group | Actions | Expected behavior |
 |-------|---------|-------------------|
 | Discovery | `get_supported_formats`, `can_import`, `can_reimport`, `get_import_data` | Read-only format, backend, reimport-handler, path, and source-data inspection. |
-| Import | `import_asset`, `import_assets`, `import_scene`, `import_mesh`, `import_skeletal_mesh`, `import_texture`, `import_audio` | Validate a concrete backend, typed compatibility, link-safe source path, `/Game` destination, collision policy, confirmation, and dry-run gates before mutation. Batch preview includes intra-batch prospective conflicts. |
-| Reimport/export | `update_reimport_path`, `reimport_asset`, `reimport_assets`, `export_asset` | Validate handler availability, every relevant source, output path, exporter, confirmation, and post-update readback before reporting success. |
+| Import | `import_asset`, `import_assets`, `import_scene`, `import_mesh`, `import_skeletal_mesh`, `import_texture`, `import_audio` | Validate a concrete backend, typed compatibility, link-safe source path, `/Game` destination, collision policy, confirmation, and dry-run gates before mutation. Batch preview includes intra-batch prospective conflicts. Scene/mesh formats additionally require one source, `fail`, and a destination proven empty through complete bounded inspection. |
+| Reimport/export | `update_reimport_path`, `reimport_asset`, `reimport_assets`, `export_asset` | Validate handler availability, every relevant source, replacement-source type/backend compatibility, output file shape, exporter, confirmation, and post-update readback before reporting success. |
 
 Live `monolith_discover` returned exactly 15 actions and did not advertise `import_with_options`.
 
@@ -143,6 +143,10 @@ This proves the new namespace remains discoverable when an MCP client starts bef
 | Nonnumeric source index fell back to all/default sources | Both reimport handlers use exact JSON number/integer validation; live string input returned `invalid_source_file_index`. |
 | Interchange engine plugin was not declared | `Monolith.uplugin` enables `Interchange`; UE 5.7 and UE 5.8 host builds both load the hard module dependency. |
 | Skill promised transaction-wrapped external writes | `[w]` now means side effects, documents handler/filesystem Undo limits, and uses supported on-demand schema discovery. |
+| Optional replacement `source_file` of the wrong JSON type silently used stored metadata | Presence-aware validation returns `invalid_source_file`; the malformed value can no longer turn into a different reimport operation. |
+| Scene/mesh imports checked only the primary predicted package | Multi-output imports are restricted to one source, `conflict_policy=fail`, and a destination proven empty by Asset Registry, loaded-object, and bounded filesystem checks. Unknown secondary package names can no longer collide with existing content or sibling batch rows. |
+| Replacement reimport source was not checked against the target asset type | Typed assets require format compatibility and a registered backend; unknown asset types require an existing-source extension match. Incompatible replacements return `replacement_source_incompatible`. |
+| Export accepted a directory whose name ended in a supported extension | Preflight records `path_is_directory=true` and returns `output_path_is_directory` before dry-run success or filesystem mutation. |
 
 ---
 

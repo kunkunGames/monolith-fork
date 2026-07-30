@@ -11,6 +11,54 @@
 #include "MonolithInterchangeImportRollback.h"
 #include "UObject/Package.h"
 
+namespace
+{
+	bool HasMessageCode(
+		const TSharedPtr<FJsonObject>& Payload,
+		const FString& Code)
+	{
+		if (!Payload.IsValid())
+		{
+			return false;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Messages = nullptr;
+		if (!Payload->TryGetArrayField(TEXT("messages"), Messages) || !Messages)
+		{
+			return false;
+		}
+
+		for (const TSharedPtr<FJsonValue>& MessageValue : *Messages)
+		{
+			const TSharedPtr<FJsonObject> Message = MessageValue->AsObject();
+			if (Message.IsValid() &&
+				Message->HasTypedField<EJson::String>(TEXT("code")) &&
+				Message->GetStringField(TEXT("code")) == Code)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> GetFirstRow(const FMonolithActionResult& Result)
+	{
+		if (!Result.bSuccess || !Result.Result.IsValid())
+		{
+			return nullptr;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+		if (!Result.Result->TryGetArrayField(TEXT("rows"), Rows) ||
+			!Rows ||
+			Rows->Num() == 0)
+		{
+			return nullptr;
+		}
+		return (*Rows)[0]->AsObject();
+	}
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardInterchangeImportMalformedParamsTest, "Monolith.ParamGuard.MonolithInterchange.ImportRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithParamGuardInterchangeImportMalformedParamsTest::RunTest(const FString& Parameters)
@@ -320,6 +368,118 @@ bool FMonolithParamGuardInterchangeImportMalformedParamsTest::RunTest(const FStr
 		Params->SetStringField(
 			TEXT("asset_path"),
 			TEXT("/Engine/EngineResources/DefaultTexture.DefaultTexture"));
+		Params->SetBoolField(TEXT("source_file"), true);
+		Params->SetBoolField(TEXT("dry_run"), true);
+
+		const FMonolithActionResult Result =
+			Registry.ExecuteAction(TEXT("interchange"), TEXT("reimport_asset"), Params);
+		const TSharedPtr<FJsonObject> Row = GetFirstRow(Result);
+		TestTrue(
+			TEXT("reimport_asset returns a row for a mistyped optional source_file"),
+			Row.IsValid());
+		TestTrue(
+			TEXT("mistyped optional source_file is rejected instead of falling back to stored metadata"),
+			HasMessageCode(Row, TEXT("invalid_source_file")));
+	}
+
+	{
+		const FString FixtureId = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+		const FString FixtureRoot =
+			FPaths::ProjectSavedDir() / TEXT("Automation/MonolithInterchange") / FixtureId;
+		const FString SourceA = FixtureRoot / TEXT("scene_a.fbx");
+		const FString SourceB = FixtureRoot / TEXT("scene_b.fbx");
+		IFileManager::Get().MakeDirectory(*FixtureRoot, true);
+		TestTrue(
+			TEXT("first multi-output fixture was written"),
+			FFileHelper::SaveStringToFile(TEXT("guard-only fbx fixture A"), *SourceA));
+		TestTrue(
+			TEXT("second multi-output fixture was written"),
+			FFileHelper::SaveStringToFile(TEXT("guard-only fbx fixture B"), *SourceB));
+
+		const FString DestinationPath =
+			TEXT("/Game/Tests/Monolith/Interchange/MultiOutput_") + FixtureId;
+		{
+			TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+			Params->SetStringField(TEXT("source_file"), SourceA);
+			Params->SetStringField(TEXT("destination_path"), DestinationPath);
+			Params->SetStringField(TEXT("conflict_policy"), TEXT("rename"));
+			Params->SetBoolField(TEXT("dry_run"), true);
+
+			const FMonolithActionResult Result =
+				Registry.ExecuteAction(TEXT("interchange"), TEXT("import_scene"), Params);
+			const TSharedPtr<FJsonObject> Row = GetFirstRow(Result);
+			TestTrue(
+				TEXT("scene import returns a guarded multi-output row"),
+				Row.IsValid());
+			TestTrue(
+				TEXT("scene rename policy is rejected because secondary package names are importer-defined"),
+				HasMessageCode(Row, TEXT("multi_output_conflict_policy_unsupported")));
+		}
+
+		{
+			TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+			TArray<TSharedPtr<FJsonValue>> Sources;
+			Sources.Add(MakeShared<FJsonValueString>(SourceA));
+			Sources.Add(MakeShared<FJsonValueString>(SourceB));
+			Params->SetArrayField(TEXT("source_files"), Sources);
+			Params->SetStringField(TEXT("destination_path"), DestinationPath);
+			Params->SetStringField(TEXT("conflict_policy"), TEXT("fail"));
+			Params->SetBoolField(TEXT("dry_run"), true);
+
+			const FMonolithActionResult Result =
+				Registry.ExecuteAction(TEXT("interchange"), TEXT("import_assets"), Params);
+			const TSharedPtr<FJsonObject> Row = GetFirstRow(Result);
+			TestTrue(
+				TEXT("multi-source scene batch returns a guarded row"),
+				Row.IsValid());
+			TestTrue(
+				TEXT("multi-source scene batch is rejected before unknown secondary outputs can collide"),
+				HasMessageCode(Row, TEXT("multi_output_batch_unsupported")));
+		}
+
+		TestTrue(
+			TEXT("multi-output fixture directory was removed"),
+			IFileManager::Get().DeleteDirectory(*FixtureRoot, false, true));
+	}
+
+	{
+		const FString FixtureId = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+		const FString ReplacementSource =
+			FPaths::ProjectSavedDir() /
+			TEXT("Automation/MonolithInterchange") /
+			(FixtureId + TEXT(".wav"));
+		IFileManager::Get().MakeDirectory(*FPaths::GetPath(ReplacementSource), true);
+		TestTrue(
+			TEXT("replacement compatibility fixture was written"),
+			FFileHelper::SaveStringToFile(TEXT("guard-only wav fixture"), *ReplacementSource));
+
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(
+			TEXT("asset_path"),
+			TEXT("/Engine/EngineResources/DefaultTexture.DefaultTexture"));
+		Params->SetStringField(TEXT("source_file"), ReplacementSource);
+		Params->SetBoolField(TEXT("dry_run"), true);
+
+		const FMonolithActionResult Result =
+			Registry.ExecuteAction(TEXT("interchange"), TEXT("reimport_asset"), Params);
+		const TSharedPtr<FJsonObject> Row = GetFirstRow(Result);
+		TestTrue(
+			TEXT("replacement compatibility validation returns a row"),
+			Row.IsValid());
+		TestTrue(
+			TEXT("audio replacement is rejected for a texture asset"),
+			HasMessageCode(Row, TEXT("replacement_source_incompatible")));
+
+		TestTrue(
+			TEXT("replacement compatibility fixture was removed"),
+			IFileManager::Get().Delete(*ReplacementSource, false, true, true));
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(
+			TEXT("asset_path"),
+			TEXT("/Engine/EngineResources/DefaultTexture.DefaultTexture"));
 		Params->SetStringField(
 			TEXT("file_path"),
 			FPaths::ProjectSavedDir() / TEXT("Automation/MonolithInterchange/default.unsupported"));
@@ -338,6 +498,43 @@ bool FMonolithParamGuardInterchangeImportMalformedParamsTest::RunTest(const FStr
 				TEXT("unsupported extension has no matching exporter"),
 				Result.Result->GetBoolField(TEXT("exporter_available")));
 		}
+	}
+
+	{
+		const FString DirectoryPath =
+			FPaths::ConvertRelativePathToFull(
+				FPaths::ProjectSavedDir() /
+				TEXT("Automation/MonolithInterchange") /
+				(FGuid::NewGuid().ToString(EGuidFormats::Digits) + TEXT(".png")));
+		TestTrue(
+			TEXT("directory-shaped export fixture was created"),
+			IFileManager::Get().MakeDirectory(*DirectoryPath, true));
+
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(
+			TEXT("asset_path"),
+			TEXT("/Engine/EngineResources/DefaultTexture.DefaultTexture"));
+		Params->SetStringField(TEXT("file_path"), DirectoryPath);
+		Params->SetBoolField(TEXT("dry_run"), true);
+
+		const FMonolithActionResult Result =
+			Registry.ExecuteAction(TEXT("interchange"), TEXT("export_asset"), Params);
+		TestTrue(
+			TEXT("directory-shaped export preflight returns structured data"),
+			Result.bSuccess && Result.Result.IsValid());
+		TestTrue(
+			TEXT("existing directory is rejected as an output file"),
+			HasMessageCode(Result.Result, TEXT("output_path_is_directory")));
+		if (Result.Result.IsValid())
+		{
+			TestTrue(
+				TEXT("export response reports the directory collision"),
+				Result.Result->GetBoolField(TEXT("path_is_directory")));
+		}
+
+		TestTrue(
+			TEXT("directory-shaped export fixture was removed"),
+			IFileManager::Get().DeleteDirectory(*DirectoryPath, false, true));
 	}
 
 	{
