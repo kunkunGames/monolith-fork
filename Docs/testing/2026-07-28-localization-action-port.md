@@ -2,11 +2,11 @@
 
 | | |
 |---|---|
-| Date | 2026-07-28; review hardening reverified 2026-07-30 |
+| Date | 2026-07-28; review hardening reverified 2026-07-31 |
 | Branch | `agent/localization-string-tables` |
 | Base | `kunkunGames/monolith-fork@ee1dae25f9a90a45ae768abbfcb0d9356810b0c4` |
-| Verified source commit | `2d38cd0a34e42f52bdbbbf2aac5bec80a2a20b1f` |
-| Scope | Ten guarded `localization` actions plus review hardening for exact complex types, aggregate output bounds, object/package identity, lossless metadata/CSV fidelity, numeric bounds, and physical path containment |
+| Verified source commit | `70de45ec4646ee5f6f775abbc48518ca900004ff` |
+| Scope | Ten guarded `localization` actions plus review hardening for exact complex types, aggregate output bounds, object/package identity, lossless metadata/CSV fidelity, spreadsheet-formula safety, atomic save-failure rollback, numeric bounds, and physical path containment |
 | Excluded | Security, benchmark, invocation-log/metadata features, reinforcement learning |
 
 ---
@@ -21,7 +21,7 @@
 | Type safety | Reject scalar coercion, fractional integer limits, null optionals, malformed arrays/metadata, metadata identity ambiguity, and JSON-string recovery for schema-marked exact complex parameters before mutation |
 | File safety | Require lexical project containment and reject every symlink/junction component below the project directory |
 | Output safety | Bound `list_string_tables` entries across the full returned table set and cap validation issue rows without losing total counts |
-| Done criteria | 10 catalog actions, two successful editor links, 6/6 focused tests per engine, live UE 5.8 MCP contract proof, zero accepted-run warnings/errors, zero residual test assets/CSV files |
+| Done criteria | 10 catalog actions, two successful editor links, 6/6 focused tests per engine, live UE 5.8 MCP contract proof, zero unexpected accepted-run warnings/errors, zero residual test assets/CSV files |
 
 The host projects are disposable verification fixtures outside the Monolith checkout. Each host's `Plugins\Monolith` junction resolves to the exact source commit listed above.
 
@@ -41,8 +41,8 @@ $env:MONOLITH_RELEASE_BUILD = "1"
 
 | Engine | Host project | Result | Linked DLL | SHA256 |
 |--------|--------------|--------|------------|--------|
-| UE 5.7 | `D:\P4\MonolithLocalizationUE57Host\MonolithLocalizationUE57Host.uproject` | PASS, final localization action/test compile and editor link (`LocalizationActionPort-Review2-Build-UE57-20260730-023143.out.log`) | 584704 bytes | `2BAAFC17566B6D4A0AE71E069D795FED39701631160129802948E4B49E9D9A9F` |
-| UE 5.8 | `D:\P4\MonolithLocalizationUE58Host\MonolithLocalizationUE58Host.uproject` | PASS, final localization action/test compile and editor link (`LocalizationActionPort-Review2-Build-UE58-20260730-023403.out.log`) | 562176 bytes | `463527BEF14DDFBD95E8982B390B8DE9CAE4E3888B34F35A170E38BFCFED241C` |
+| UE 5.7 | `D:\P4\MonolithLocalizationFinalUE57Host\MonolithLocalizationFinalUE57Host.uproject` | PASS, clean-host full editor link, 434/434 actions (`LocalizationActionPort-FinalClean-Build-UE57-20260731-014726.log`) | 613376 bytes | `248C08E174536AEAA78A24C36B656BE01F1656CF4AB1F19B34A895527B7EF74A` |
+| UE 5.8 | `D:\P4\MonolithLocalizationUE58Host\MonolithLocalizationUE58Host.uproject` | PASS, final localization action/test compile and editor link, 4/4 actions (`LocalizationActionPort-FinalHead-Build-UE58-20260731-014510.log`) | 589824 bytes | `735EB7281966FEF1DB1FFD56A2DAC82B109EE45F12E672EB9C2CAFF2ED5D2524` |
 
 The disposable hosts contain no project `Source/*Target.cs`, so the accepted builds use the shared `UnrealEditor` target. An earlier UE 5.7 attempt with the nonexistent `MonolithLocalizationUE57HostEditor` target failed in Rules assembly before compiling Monolith and is excluded from the evidence set (`LocalizationActionPort-Review2-Build-UE57-20260730-022624.out.log`). Each accepted UBT invocation used a unique `-Log=...` path to avoid the process-global default `Log.txt` lock.
 
@@ -60,10 +60,10 @@ The disposable hosts contain no project `Source/*Target.cs`, so the accepted bui
 
 | Engine | Report | Succeeded | With warnings | Failed | Not run | Test warnings | Test errors |
 |--------|--------|-----------|---------------|--------|---------|---------------|-------------|
-| UE 5.7 | `D:\P4\MonolithLocalizationUE57Host\Saved\Automation\LocalizationActionPort-Review2-Accepted-UE57-20260730-023308\index.json` | 6 | 0 | 0 | 0 | 0 | 0 |
-| UE 5.8 | `D:\P4\MonolithLocalizationUE58Host\Saved\Automation\LocalizationActionPort-Review2-Accepted-UE58-20260730-023435\index.json` | 6 | 0 | 0 | 0 | 0 | 0 |
+| UE 5.7 | `D:\P4\MonolithLocalizationFinalUE57Host\Saved\Automation\LocalizationActionPort-FinalClean-UE57-20260731-015014\index.json` | 6 | 0 | 0 | 0 | 0 | 0 |
+| UE 5.8 | `D:\P4\MonolithLocalizationUE58Host\Saved\Automation\LocalizationActionPort-FinalHead-UE58-20260731-014601\index.json` | 6 | 0 | 0 | 0 | 0 | 0 |
 
-Accepted automation logs are `D:\P4\MonolithLocalizationUE57Host\Saved\Logs\LocalizationActionPort-Review2-Accepted-Automation-UE57-20260730-023308.log` and `D:\P4\MonolithLocalizationUE58Host\Saved\Logs\LocalizationActionPort-Review2-Accepted-Automation-UE58-20260730-023435.log`. The command-line INI override keeps the automation-only hosts from binding the default MCP port `9316`, which belongs to the active Speed editor.
+Accepted automation logs are `D:\P4\MonolithLocalizationFinalUE57Host\Saved\Logs\LocalizationActionPort-FinalClean-Automation-UE57-20260731-015014.log` and `D:\P4\MonolithLocalizationUE58Host\Saved\Logs\LocalizationActionPort-FinalHead-Automation-UE58-20260731-014601.log`. The command-line INI override keeps the automation-only hosts from binding the default MCP port `9316`, which belongs to the active Speed editor. The save-failure case acquires the package file exclusively, declares the resulting engine diagnostics as expected, and proves that `SAVE_NoError` returns a structured action error rather than terminating the commandlet.
 
 | Test | Verified contract |
 |------|-------------------|
@@ -72,7 +72,7 @@ Accepted automation logs are `D:\P4\MonolithLocalizationUE57Host\Saved\Logs\Loca
 | `LocalizationStringTableCreateDryRun` | Dry-run reports intent and creates no asset |
 | `LocalizationStringTableRejectsMalformedParams` | Missing/malformed handler inputs fail explicitly |
 | `LocalizationStrictJsonTypes` | Wrong JSON types, numeric strings, fractional integers, nulls, encoded complex strings, huge integral limits, mismatched object/package names, and whitespace metadata keys are rejected without coercion or overflow |
-| `LocalizationStringTableLifecycle` | Two in-memory tables prove aggregate list-entry bounds and 205→200+5 issue truncation; present-empty versus absent metadata survives CSV export/replace-import; reserved/whitespace metadata is rejected; UE 5.8 notes survive; cleanup succeeds |
+| `LocalizationStringTableLifecycle` | Two in-memory tables prove aggregate list-entry bounds and 205→200+5 issue truncation; present-empty versus absent metadata and formula-looking/literal-apostrophe values survive CSV export/replace-import; an exclusive package handle proves save failure returns explicitly and restores rows, metadata, notes, and the original dirty flag; reserved/whitespace metadata is rejected; cleanup succeeds |
 
 ---
 
@@ -97,6 +97,9 @@ Accepted automation logs are `D:\P4\MonolithLocalizationUE57Host\Saved\Logs\Loca
 | Validation could serialize every issue | `issues` grew with every invalid entry | Count all issues but serialize at most 200 rows; expose full/returned/truncated counts and derive `valid` from the full total | Focused and live probes report 205 total, 200 returned, 5 truncated |
 | Explicit object names could disagree with package names during creation | Asset-path splitting trusted the object segment independently of the package leaf | Reject mismatched object/package names before asset creation | Focused guard and live `/Game/.../Foo.Bar` rejection |
 | Metadata headers could hide identity changes in whitespace or case | Trimming silently changed CSV headers and StringTable metadata uses case-insensitive `FName` identity | Reject edge whitespace, reserved names, and normalized collisions before mutation/export/import | Focused header/set/export guards plus live whitespace rejection |
+| Present-empty metadata was still missed by unchanged-import detection | `GetMetaData` returns `""` for both an absent field and a present empty field | Use presence-aware enumeration before comparing each incoming metadata value | Lifecycle removes the field after export, then proves replace import reports `changed=true` and recreates it |
+| Formula guard stripped legitimate leading apostrophes | A bare `'` prefix could not distinguish an emitted guard from user content such as `'=literal` | Emit the versioned `'__monolith_formula_guard_v1__:` marker, double a literal marker prefix, and decode only validated guards | Lifecycle round-trips formula-looking source/metadata cells and literal apostrophe content exactly |
+| Save-failure rollback left an initially clean package dirty and could terminate a commandlet | Rows and notes were restored after `UPackage::SavePackage` failed, but the pre-mutation dirty flag was not; default save flags could route an ordinary file-access error through the fatal output device | Snapshot `UPackage::IsDirty()` before `Modify`, restore it after rebuilding the rollback snapshot, and set `SAVE_NoError` so the action can return its structured error | Lifecycle exclusively locks the target package file, verifies explicit non-fatal save failure, exact row restoration, and `IsDirty()==false` on UE 5.7 and UE 5.8 |
 
 ---
 

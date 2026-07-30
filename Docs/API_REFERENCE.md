@@ -785,7 +785,7 @@ Add, replace, or remove one metadata field on a StringTable entry. An empty stri
 
 ### `localization.import_string_table_csv`
 
-Import `key`, `source_string`, and optional metadata columns from a CSV into an existing StringTable. Header names must be unique case-insensitively and must not have leading/trailing whitespace. Monolith exports may include the structural `__monolith_metadata_presence_v1` column, whose per-row JSON string array distinguishes a present empty metadata value from an absent field. The importer validates that list against actual metadata columns; legacy CSV files without the structural column retain the prior rule that an empty metadata cell is absent. On UE 5.8, `replace_existing=true` preserves developer notes for keys that are re-imported.
+Import `key`, `source_string`, and optional metadata columns from a CSV into an existing StringTable. Header names must be unique case-insensitively and must not have leading/trailing whitespace. Monolith exports may include the structural `__monolith_metadata_presence_v1` column, whose per-row JSON string array distinguishes a present empty metadata value from an absent field; change detection preserves that distinction instead of comparing empty values alone. The importer validates that list against actual metadata columns; legacy CSV files without the structural column retain the prior rule that an empty metadata cell is absent. It removes only a validated versioned spreadsheet guard and therefore preserves literal leading apostrophes. On UE 5.8, `replace_existing=true` preserves developer notes for keys that are re-imported. If a requested save fails, entries, metadata, notes, and the original package dirty state are restored.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -798,7 +798,7 @@ Import `key`, `source_string`, and optional metadata columns from a CSV into an 
 
 ### `localization.export_string_table_csv`
 
-Export a StringTable to a CSV under the project directory. When metadata columns exist, export adds the structural `__monolith_metadata_presence_v1` column so present empty strings round-trip without being materialized on rows where the field was absent. Export fails if a metadata key has leading/trailing whitespace or case-insensitively collides with `key`, `source_string`, or the presence column, preventing an ambiguous or destructive re-import.
+Export a StringTable to a CSV under the project directory. When metadata columns exist, export adds the structural `__monolith_metadata_presence_v1` column so present empty strings round-trip without being materialized on rows where the field was absent. Formula-looking cells receive the collision-safe `'__monolith_formula_guard_v1__:` prefix; an existing marker prefix is doubled so import can distinguish protection from literal content, including `'=literal`. Export fails if a metadata key has leading/trailing whitespace or case-insensitively collides with `key`, `source_string`, or the presence column, preventing an ambiguous or destructive re-import.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
