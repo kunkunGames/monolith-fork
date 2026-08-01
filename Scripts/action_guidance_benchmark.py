@@ -1053,7 +1053,7 @@ def validate_action_contracts(
     """Fail closed when curated benchmark assumptions drift from a catalog.
 
     ``schema_loader`` is optional so offline corpus tests can still validate
-    action identity against the bundled catalog.  Live generation supplies it
+    action identity against the generated source catalog.  Live generation supplies it
     and additionally verifies required/invalid parameter fixtures.
     """
     available: Dict[str, set[str]] = {}

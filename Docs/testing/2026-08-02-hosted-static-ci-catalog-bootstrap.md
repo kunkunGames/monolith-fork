@@ -22,6 +22,7 @@
 |---|---|
 | Catalog generate plus `--check` | Current snapshot with the exact action count produced by the source tree |
 | Static checker self-test | Clean fixture plus missing/reordered prerequisite regression cases pass |
+| ActionGuidance source contract | Static action identities validate against the generated source catalog rather than requiring a release-only `Binaries` bundle |
 | Workflow ordering audit | Generator command precedes `ci_static_checks.py` and both exact tokens are configured |
 | Git hygiene | Generated JSON remains ignored and absent from the commit |
 | Hosted follow-up | New master run no longer reports the missing catalog or ActionGuidance missing-file blockers |

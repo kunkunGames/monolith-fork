@@ -499,7 +499,7 @@ class GenerationTests(unittest.TestCase):
             manifest_path.write_text('{"sentinel":true}\n', encoding="utf-8")
             # This fixture intentionally models only the catalog-identity
             # boundary. Production static-action coverage is exercised against
-            # the immutable bundled catalog by test_action_guidance_benchmark.py.
+            # the generated source catalog by test_action_guidance_benchmark.py.
             with mock.patch.object(
                 agb,
                 "read_generation_catalog_fingerprint",
