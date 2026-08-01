@@ -142,6 +142,17 @@ binary state outside the source diff. The only integration change under
 claimed green, but the differential shows that this v0.22 integration introduced
 no new blocker in those existing failing contracts.
 
+After publication, GitHub Actions run `30711596980` executed the repository's
+static-only `Hosted Static CI` job against
+`135572da39beaf4e71d9fea4abc4ec9b799efd44` and completed with 10 blockers and
+24 advisories. The same eight directly rerun benchmark contracts retained their
+pre-integration failure signatures. The clean hosted checkout additionally had
+no ignored generated catalog, offline executable, or project-shaped `.uproject`
+host, so ActionGuidance/catalog and inventory/project-root checks also failed at
+their existing artifact/environment boundary. The remote merge is therefore not
+claimed hosted-CI green; the exact run is
+`https://github.com/kunkunGames/monolith/actions/runs/30711596980`.
+
 ## 7. Local-Work and Visual Boundary
 
 The primary `Plugins\Monolith` checkout advanced from
