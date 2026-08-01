@@ -59,6 +59,10 @@
 #include "AnimationStateMachineGraph.h"
 #include "AnimationGraphSchema.h"
 #include "AnimStateNode.h"
+// UAnimStateNodeBase — the virtual GetStateName()/GetBoundGraph() pair the strict scope
+// resolver matches on (covers conduits/aliases too, not just UAnimStateNode). Included
+// explicitly rather than transitively via AnimStateNode.h for the -DisableUnity pass.
+#include "AnimStateNodeBase.h"
 #include "EdGraphSchema_K2_Actions.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
@@ -165,15 +169,17 @@ void FMonolithAbpWriteActions::RegisterActions(FMonolithToolRegistry& Registry)
 	// CDO is regenerated from the graph nodes — this action edits the authoritative
 	// source so the change persists.
 	Registry.RegisterAction(TEXT("animation"), TEXT("set_anim_graph_node_property"),
-		TEXT("Mutate a property on an existing anim graph node's internal FAnimNode struct (e.g. ModifyBone.BoneToModify.BoneName, ModifyBone.RotationMode, TwoBoneIK.EffectorLocationSpace). Persists across compile — writes to the source UAnimGraphNode, not the CDO."),
+		TEXT("Mutate a property on an existing anim graph node's internal FAnimNode struct (e.g. ModifyBone.BoneToModify.BoneName, ModifyBone.RotationMode, TwoBoneIK.EffectorLocationSpace). Persists across compile — writes to the source UAnimGraphNode, not the CDO. ")
+		TEXT("SCOPE IS AUTHORITATIVE: if graph_name/state_name is supplied and does not resolve to exactly one graph, this ERRORS — it never falls back to the all-graphs search (node ids repeat across graphs, so a fallback silently writes to an unrelated layer). Omit both to keep the all-graphs search. ")
+		TEXT("Responds with resolved_graph_path (root-to-leaf, e.g. 'Standing Stance/Standing States/Stop/Stop States/Plant Left Foot') alongside old_value/new_value, so a caller can assert WHERE the write landed."),
 		FMonolithActionHandler::CreateStatic(&HandleSetAnimGraphNodeProperty),
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
-			.Required(TEXT("node_id"), TEXT("string"), TEXT("Node UObject name (e.g. 'AnimGraphNode_ModifyBone_7') — same id surfaced by get_graph_summary / add_anim_graph_node response"))
+			.Required(TEXT("node_id"), TEXT("string"), TEXT("Node UObject name (e.g. 'AnimGraphNode_ModifyBone_7') — same id surfaced by get_graph_summary / add_anim_graph_node response. NOT unique across graphs; scope it."))
 			.Required(TEXT("property_path"), TEXT("string"), TEXT("Dotted property path inside the node's inner FAnimNode struct (e.g. 'BoneToModify.BoneName', 'RotationMode', 'EffectorLocationSpace', 'Alpha'). Do NOT prefix with 'Node.'."))
 			.Required(TEXT("value"), TEXT("string"), TEXT("Value as text — same format as ImportText in the Details panel. Enums: bare name (e.g. 'BMM_Additive', 'BCS_ComponentSpace'). FName: bare name. Struct: '(Field=Value,...)'."))
-			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Graph name to scope the search (default: searches all graphs)"))
-			.Optional(TEXT("state_name"), TEXT("string"), TEXT("State name to narrow the search to a specific state's inner graph"))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Graph name to scope the search — matched against EVERY graph including nested state machines. With state_name it narrows (owning state machine graph OR the state's inner graph). Supplied-but-unresolved, or matching more than one graph, is an ERROR. Default: searches all graphs."))
+			.Optional(TEXT("state_name"), TEXT("string"), TEXT("State name to scope the search to that state's inner graph, at ANY nesting depth (e.g. 'Plant Left Foot' under Standing States/Stop/Stop States). Supplied-but-unresolved, or matching more than one state, is an ERROR — pair it with graph_name to disambiguate sibling states."))
 			.Build());
 
 	// --- configure_pose_history_node (Sprint 4.2) ---
@@ -898,6 +904,142 @@ UEdGraphNode* FindNodeByName(UAnimBlueprint* ABP, const FString& NodeName, UEdGr
 		}
 	}
 	return nullptr;
+}
+
+/**
+ * Build a '/'-separated path of graph names from the ABP root down to Graph, by walking
+ * the outer chain (a state's inner graph is outered to its UAnimStateNode, which is
+ * outered to the state machine graph, and so on). Reported so a caller can assert WHERE
+ * a write landed, not just what it replaced.
+ *
+ *   "Standing Stance/Standing States/Stop/Stop States/Plant Left Foot"
+ */
+FString BuildGraphPath(UEdGraph* Graph)
+{
+	TArray<FString> Segments;
+	for (UObject* Cursor = Graph; Cursor; Cursor = Cursor->GetOuter())
+	{
+		if (UEdGraph* AsGraph = Cast<UEdGraph>(Cursor))
+		{
+			Segments.Add(AsGraph->GetName());
+		}
+	}
+
+	FString Path;
+	for (int32 i = Segments.Num() - 1; i >= 0; --i)
+	{
+		if (!Path.IsEmpty()) Path += TEXT("/");
+		Path += Segments[i];
+	}
+	return Path;
+}
+
+/**
+ * STRICT scope resolution for set_anim_graph_node_property.
+ *
+ * Returns false (with OutError) whenever a SUPPLIED scope cannot be resolved to exactly
+ * one graph. Callers must NOT degrade to the global node search on failure: node ids are
+ * not unique across graphs, so a global fallback writes to an unrelated layer while the
+ * asset still compiles and still validates. See
+ * Docs/bugs/2026-07-31-set-anim-graph-node-property-silent-global-fallback.md.
+ *
+ * Differences from ResolveTargetGraph, all deliberate:
+ *  - Enumerates with UBlueprint::GetAllGraphs, which recurses UEdGraph::SubGraphs
+ *    (Blueprint.cpp:1984 -> EdGraph.cpp:323). NESTED state machines therefore resolve
+ *    ("Standing States/Stop/Stop States/Plant Left Foot"); ResolveTargetGraph only walks
+ *    FunctionGraphs plus one level of state machine. This is the same enumeration
+ *    set_anim_node_pin_binding's node resolver already relies on, which is why that action
+ *    can reach these graphs today and this one could not.
+ *  - Collects EVERY candidate and errors on ambiguity instead of returning the first hit
+ *    (sibling states such as Plant Left/Right Foot hold identical node ids).
+ *  - Treats graph_name as a narrowing filter when state_name is also supplied, matching
+ *    either the owning state machine graph or the state's own inner graph.
+ */
+bool ResolveScopeGraphStrict(UAnimBlueprint* ABP, const FString& GraphName, const FString& StateName,
+                             UEdGraph*& OutGraph, FString& OutError)
+{
+	OutGraph = nullptr;
+
+	TArray<UEdGraph*> AllGraphs;
+	ABP->GetAllGraphs(AllGraphs);
+
+	TArray<UEdGraph*> Candidates;
+
+	if (!StateName.IsEmpty())
+	{
+		for (UEdGraph* Graph : AllGraphs)
+		{
+			if (!Graph) continue;
+			for (UEdGraphNode* Node : Graph->Nodes)
+			{
+				UAnimStateNodeBase* StateNode = Cast<UAnimStateNodeBase>(Node);
+				if (!StateNode || StateNode->GetStateName() != StateName) continue;
+
+				UEdGraph* Inner = StateNode->GetBoundGraph();
+				if (!Inner) continue;
+
+				// graph_name, when supplied alongside state_name, narrows the match: it may
+				// name either the owning state machine graph or the state's inner graph.
+				if (!GraphName.IsEmpty()
+					&& Graph->GetName() != GraphName
+					&& Inner->GetName() != GraphName)
+				{
+					continue;
+				}
+				Candidates.AddUnique(Inner);
+			}
+		}
+
+		if (Candidates.Num() == 0)
+		{
+			OutError = GraphName.IsEmpty()
+				? FString::Printf(
+					TEXT("Scope not found: state_name='%s' does not resolve to any state's inner graph in this Animation Blueprint. ")
+					TEXT("Refusing to fall back to a global node search — node ids are not unique across graphs, so a fallback can write to an unrelated layer."),
+					*StateName)
+				: FString::Printf(
+					TEXT("Scope not found: state_name='%s' with graph_name='%s' does not resolve to any state's inner graph in this Animation Blueprint. ")
+					TEXT("Refusing to fall back to a global node search — node ids are not unique across graphs, so a fallback can write to an unrelated layer."),
+					*StateName, *GraphName);
+			return false;
+		}
+	}
+	else
+	{
+		for (UEdGraph* Graph : AllGraphs)
+		{
+			if (Graph && Graph->GetName() == GraphName)
+			{
+				Candidates.AddUnique(Graph);
+			}
+		}
+
+		if (Candidates.Num() == 0)
+		{
+			OutError = FString::Printf(
+				TEXT("Scope not found: graph_name='%s' does not match any graph in this Animation Blueprint (nested state machine graphs included). ")
+				TEXT("Refusing to fall back to a global node search — node ids are not unique across graphs, so a fallback can write to an unrelated layer."),
+				*GraphName);
+			return false;
+		}
+	}
+
+	if (Candidates.Num() > 1)
+	{
+		FString PathList;
+		for (UEdGraph* Candidate : Candidates)
+		{
+			if (!PathList.IsEmpty()) PathList += TEXT(", ");
+			PathList += BuildGraphPath(Candidate);
+		}
+		OutError = FString::Printf(
+			TEXT("Ambiguous scope: %d graphs match (%s). Refusing to pick one — narrow it by supplying BOTH graph_name (the owning state machine) and state_name."),
+			Candidates.Num(), *PathList);
+		return false;
+	}
+
+	OutGraph = Candidates[0];
+	return true;
 }
 
 /** Build a JSON array describing a node's pins. */
@@ -1904,18 +2046,31 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleSetAnimGraphNodeProperty(c
 	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
 	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 
-	// Optional graph scope — same resolution as connect_anim_graph_pins.
+	// Optional graph scope. A SUPPLIED scope is AUTHORITATIVE: if it does not resolve to
+	// exactly one graph this errors out. It used to silently fall through to the global
+	// node search, which wrote to a same-id node in an unrelated layer — invisible,
+	// because the asset still compiles and still validates. Omitting the scope entirely
+	// keeps the documented global search.
+	const bool bScopeSupplied = !StateName.IsEmpty() || !GraphName.IsEmpty();
 	UEdGraph* ScopeGraph = nullptr;
-	if (!StateName.IsEmpty() || (!GraphName.IsEmpty() && !GraphName.Equals(TEXT("AnimGraph"), ESearchCase::IgnoreCase)))
+	if (bScopeSupplied)
 	{
-		FString GraphError;
-		ScopeGraph = ResolveTargetGraph(ABP, GraphName, StateName, GraphError);
+		FString ScopeError;
+		if (!ResolveScopeGraphStrict(ABP, GraphName, StateName, ScopeGraph, ScopeError))
+		{
+			return FMonolithActionResult::Error(ScopeError);
+		}
 	}
 
 	UEdGraphNode* FoundNode = FindNodeByName(ABP, NodeId, ScopeGraph);
 	if (!FoundNode)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Node '%s' not found"), *NodeId));
+		return FMonolithActionResult::Error(bScopeSupplied
+			? FString::Printf(
+				TEXT("Node '%s' not found in scope '%s'. The scope resolved, so no global search was attempted — ")
+				TEXT("a fallback could write to a same-id node in an unrelated graph."),
+				*NodeId, *BuildGraphPath(ScopeGraph))
+			: FString::Printf(TEXT("Node '%s' not found"), *NodeId));
 	}
 
 	UAnimGraphNode_Base* AnimNode = Cast<UAnimGraphNode_Base>(FoundNode);
@@ -1989,6 +2144,9 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleSetAnimGraphNodeProperty(c
 	Root->SetStringField(TEXT("property_path"), PropertyPath);
 	Root->SetStringField(TEXT("old_value"), OldValueText);
 	Root->SetStringField(TEXT("new_value"), NewValueText);
+	// WHERE the write landed, root-to-leaf. Reported for every write (scoped or global) so
+	// a caller can assert the target rather than inferring it from old_value alone.
+	Root->SetStringField(TEXT("resolved_graph_path"), BuildGraphPath(AnimNode->GetGraph()));
 	return FMonolithActionResult::Success(Root);
 }
 

@@ -276,7 +276,7 @@ Wraps `USkeleton::CompatibleSkeletons` — the canonical UE5 mechanism that lets
 | `connect_anim_graph_pins` | Wire two pins inside an ABP graph |
 | `set_state_animation` | Assign an animation asset to a state machine state |
 | `add_variable_get` | Place a `K2Node_VariableGet` in an ABP anim graph for reading AnimInstance member variables. Validates the variable exists on the skeleton class before spawning |
-| `set_anim_graph_node_property` | Set a property on a previously-placed anim graph node via reflection |
+| `set_anim_graph_node_property` | Set a property on a previously-placed anim graph node via reflection. **Scope is authoritative:** a supplied `graph_name` / `state_name` that does not resolve to exactly one graph is an error — it never falls back to the all-graphs search, because node ids repeat across graphs and a fallback silently writes to an unrelated layer. Omitting both keeps the all-graphs search (the documented default). Scope resolution enumerates via `UBlueprint::GetAllGraphs`, so **nested** state machines resolve at any depth (`Standing States → Stop → Stop States → Plant Left Foot`); `state_name` targets a state's inner graph, and pairing it with `graph_name` (the owning state machine) disambiguates sibling states. The response carries `resolved_graph_path` — the root-to-leaf path of the node actually written — beside `old_value` / `new_value`, so a caller can assert *where* a write landed |
 
 **ABP Graph Authoring (14 — ABP-authoring pack)** — namespace `animation`. Pose-composition, slot, cached-pose, output-wiring, blend, sync, layered-blend, Control Rig, and linked-layer anim-graph node authoring. Composes with the existing `add_anim_graph_node` / `connect_anim_graph_pins` write surface.
 
