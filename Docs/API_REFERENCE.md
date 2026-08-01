@@ -747,6 +747,8 @@ Generic asset lifecycle and package-graph workflows. **20 actions.** The namespa
 
 All `asset` actions require native JSON arrays/objects rather than JSON-encoded strings. Boolean parameters, including nested and compatibility top-level texture settings, must be JSON booleans; strings such as `"true"`/`"false"` return `-32602` instead of being coerced by UE 5.7. Import handlers also reject unknown enum values, malformed integers, and duplicate setting sources with `-32602`; they do not silently choose a default for invalid input. File texture import succeeds only when the exact requested package is produced. Font import uses exact output names by default and performs source/output preflight before creating packages.
 
+`asset.import_texture_from_bytes` bounds allocations before image decompression: base64 payloads may decode to at most 256 MiB of compressed data, image axes may not exceed 16,384 pixels, and the expected BGRA8 surface may not exceed 512 MiB. Limit violations return `-32602` before package creation or replacement mutation.
+
 Reflected soft-reference inspection first accepts an already loaded object, then queries the live AssetRegistry for mounted content. This applies equally to project, engine, and plugin content roots; an unregistered or missing `/Engine/...` or `/PluginName/...` asset reports `exists=false` and produces `unresolved_soft_reference`. `/Script/...` class paths are valid non-asset references and are not reported as missing.
 
 For exhaustive parameter schemas, call `describe_query("action_schema", target_namespace="asset", target_action="<action>")`. The authoritative implementation contract is [`specs/SPEC_MonolithAsset.md`](specs/SPEC_MonolithAsset.md).

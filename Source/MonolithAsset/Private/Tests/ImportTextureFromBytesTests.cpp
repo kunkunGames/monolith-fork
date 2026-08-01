@@ -3,7 +3,9 @@
 
 // Core / test
 #include "CoreMinimal.h"
+#include "MonolithAssetTextureIngestInternal.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/Crc.h"
 #include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
 #include "Misc/PackagePath.h"
@@ -73,6 +75,36 @@ namespace
         TArray<FColor> Pixels;
         Pixels.Init(Color, Width * Height);
         return EncodePngB64(Width, Height, Pixels);
+    }
+
+    void WritePngUint32(TArray<uint8>& Bytes, int32 Offset, uint32 Value)
+    {
+        Bytes[Offset + 0] = static_cast<uint8>((Value >> 24) & 0xff);
+        Bytes[Offset + 1] = static_cast<uint8>((Value >> 16) & 0xff);
+        Bytes[Offset + 2] = static_cast<uint8>((Value >> 8) & 0xff);
+        Bytes[Offset + 3] = static_cast<uint8>(Value & 0xff);
+    }
+
+    FString MakePngWithHeaderDimensionsB64(uint32 Width, uint32 Height)
+    {
+        TArray<uint8> PngBytes;
+        if (!FBase64::Decode(MakeSolidPngB64(FColor::Red), PngBytes)
+            || PngBytes.Num() < 33
+            || PngBytes[12] != 'I'
+            || PngBytes[13] != 'H'
+            || PngBytes[14] != 'D'
+            || PngBytes[15] != 'R')
+        {
+            return FString();
+        }
+
+        // A PNG IHDR stores width/height as big-endian uint32 values. Recompute
+        // its CRC so SetCompressed accepts the header, while leaving the tiny
+        // IDAT payload untouched; the action must reject before GetRaw sees it.
+        WritePngUint32(PngBytes, 16, Width);
+        WritePngUint32(PngBytes, 20, Height);
+        WritePngUint32(PngBytes, 29, FCrc::MemCrc32(PngBytes.GetData() + 12, 17));
+        return FBase64::Encode(PngBytes);
     }
 
     FString MakeUniqueTestAssetPath(const TCHAR* Prefix)
@@ -209,7 +241,7 @@ namespace
             Package->SetDirtyFlag(false);
             Package->MarkAsGarbage();
         }
-        CollectGarbage(RF_NoFlags);
+        CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
         for (const FString& PackageFilename : GetTexturePackageFilenames(AssetPath))
         {
             IFileManager::Get().Delete(
@@ -219,6 +251,85 @@ namespace
                 /*Quiet=*/true);
         }
     }
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithAssetTextureDecodeBoundsTest,
+    "MonolithAsset.ImportTextureFromBytes.DecodeBounds",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithAssetTextureDecodeBoundsTest::RunTest(const FString& Parameters)
+{
+    using namespace MonolithAsset::TextureIngestInternal;
+
+    TestEqual(
+        TEXT("exact base64 size accounts for padding"),
+        FBase64::GetDecodedDataSize(TEXT("TQ==")),
+        uint32{1});
+    TestEqual(
+        TEXT("maximum base64 size remains an intentionally looser upper bound"),
+        FBase64::GetMaxDecodedDataSize(4),
+        uint32{3});
+
+    int64 ExpectedBytes = 0;
+    FString Error;
+    TestTrue(
+        TEXT("2x2 BGRA8 is accepted"),
+        ValidateDecodedImageBounds(2, 2, ExpectedBytes, Error));
+    TestEqual(TEXT("2x2 BGRA8 byte count"), ExpectedBytes, int64{16});
+    TestTrue(TEXT("valid dimensions have no error"), Error.IsEmpty());
+
+    TestTrue(
+        TEXT("the largest square within the byte budget is accepted"),
+        ValidateDecodedImageBounds(11585, 11585, ExpectedBytes, Error));
+    TestTrue(TEXT("accepted square stays within byte budget"), ExpectedBytes <= MaxDecodedImageBytes);
+
+    TestFalse(
+        TEXT("16K square is rejected before decode because BGRA8 exceeds the byte budget"),
+        ValidateDecodedImageBounds(16384, 16384, ExpectedBytes, Error));
+    TestTrue(TEXT("byte-budget rejection is explicit"), Error.Contains(TEXT("byte limit")));
+
+    TestFalse(
+        TEXT("per-axis limit is enforced before decode"),
+        ValidateDecodedImageBounds(MaxDecodedImageDimension + 1, 1, ExpectedBytes, Error));
+    TestTrue(TEXT("dimension rejection is explicit"), Error.Contains(TEXT("per-axis limit")));
+
+    TestFalse(
+        TEXT("zero width is rejected"),
+        ValidateDecodedImageBounds(0, 1, ExpectedBytes, Error));
+    TestTrue(TEXT("invalid dimensions are explicit"), Error.Contains(TEXT("invalid dimensions")));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithAssetTextureDecodeBoundsActionTest,
+    "MonolithAsset.ImportTextureFromBytes.DecodeBoundsAction",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithAssetTextureDecodeBoundsActionTest::RunTest(const FString& Parameters)
+{
+    const FString AssetPath = MakeUniqueTestAssetPath(TEXT("DecodeBounds"));
+    TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+    Params->SetStringField(TEXT("destination"), AssetPath);
+    Params->SetStringField(TEXT("format_hint"), TEXT("png"));
+    Params->SetStringField(
+        TEXT("bytes_b64"),
+        MakePngWithHeaderDimensionsB64(16384, 16384));
+
+    const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("asset"), TEXT("import_texture_from_bytes"), Params);
+
+    TestFalse(TEXT("oversized decoded surface is rejected"), Result.bSuccess);
+    TestEqual(TEXT("decoded bounds use invalid-params code"), Result.ErrorCode, -32602);
+    TestTrue(
+        *FString::Printf(
+            TEXT("decoded byte-budget error is explicit (actual: %s)"),
+            *Result.ErrorMessage),
+        Result.ErrorMessage.Contains(TEXT("decoded BGRA8 byte limit")));
+    TestNull(TEXT("oversized header does not create a texture"), FindTextureAtPackagePath(AssetPath));
+    TestFalse(TEXT("oversized header does not save a package"), UEditorAssetLibrary::DoesAssetExist(AssetPath));
+    CleanupSavedTextureAtPackagePath(AssetPath);
+    return true;
 }
 
 /**
