@@ -7,10 +7,12 @@
 result available to Speed's local `Plugins\Monolith` checkout without losing
 user-owned Git or Perforce work
 
-**Result:** Fork v0.22 behavior was ported onto the current origin architecture;
-UE 5.7 and UE 5.8 strict non-unity builds, focused editor automation, offline
-query packaging, release validation, and static-contract differential checks
-passed at the documented boundary
+**Result:** Fork v0.22 behavior was ported onto the current origin architecture
+and published to `kunkunGames/monolith:master`; the result was then merged with
+Speed's local Monolith history. UE 5.7 and UE 5.8 strict non-unity builds,
+focused editor automation, offline query packaging, release validation, local
+byte preservation, and static-contract differential checks passed at the
+documented boundary
 
 ---
 
@@ -31,8 +33,16 @@ retired ownership and duplicate implementations. The integration instead
 replayed the fork's still-relevant behavior as cohesive commits on
 `origin/master`, then records the fork tip as an explicit merge parent.
 
-The source tree used for build and test verification was
-`79f209a3ae5802de6cb8072a2664429ff53bd043`.
+The remote semantic source tree was `79f209a3ae5802de6cb8072a2664429ff53bd043`.
+Merge commit `135572da39beaf4e71d9fea4abc4ec9b799efd44` records
+`kunkunGames/monolith-fork:master` as the second parent without changing that
+verified tree and is the published `kunkunGames/monolith:master` tip.
+
+Speed's divergent local history was then merged in an isolated worktree. Build
+failures exposed lifecycle, package-residency, version-gate, and shared-helper
+contract mismatches; those were resolved at their owning module boundaries. The
+exact local code tree used for final build, automation, and offline-query proof
+is `3ef280a268c35617fd67d01826d03bd1b7fa8efd`.
 
 ## 2. High-ROI Semantic Integration
 
@@ -57,8 +67,8 @@ from that host's `.uproject` `EngineAssociation`.
 
 | Engine | Build contract | Result |
 |---|---|---|
-| UE 5.7 | `Strict`, `WarningsAsErrors`, `DisableUnity`, `NoUBTMakefiles`, all requested Monolith modules | Passed; final link completed and the version-only confirmation completed 7/7 actions |
-| UE 5.8 | Same contract and module coverage | Passed; clean exact-source build completed 949/949 actions, then the v0.22 stamp rebuild completed 902/902 actions |
+| UE 5.7 | `Strict`, `WarningsAsErrors`, `DisableUnity`, `NoUBTMakefiles`, all requested Monolith modules | Passed; exact local integration linked successfully and its final confirmation completed 67/67 actions |
+| UE 5.8 | Same contract and module coverage | Passed; clean exact-local-source build completed 900/900 actions |
 
 No existing Speed editor, headless editor, PIE process, or build host was
 terminated or bypassed to obtain these results.
@@ -82,8 +92,8 @@ Monolith.Core.McpHostRole.Classification
 
 | Engine | Report | Result |
 |---|---|---|
-| UE 5.7 | `Saved\BuildHosts\Monolith-origin-v0-22-integration-UE57\Saved\Automation\MonolithOriginSync\final-79f209a3-UE57-20260802-024532\index.json` | 26/26 completed; zero failed, not-run, or in-process tests |
-| UE 5.8 | `Saved\BuildHosts\Monolith-origin-v0-22-integration-UE58\Saved\Automation\MonolithOriginSync\final-79f209a3-UE58-20260802-024646\index.json` | 26/26 completed; zero failed, not-run, or in-process tests |
+| UE 5.7 | `Saved\BuildHosts\Monolith-origin-v0-22-integration-UE57\Saved\Automation\MonolithOriginSync\final-3ef280a2-UE57-20260802-032946\index.json` | 25 clean successes plus 1 warning-success; zero failed, not-run, or in-process tests |
+| UE 5.8 | `Saved\BuildHosts\Monolith-origin-v0-22-integration-UE58\Saved\Automation\MonolithOriginSync\final-3ef280a2-UE58-20260802-033027\index.json` | 25 clean successes plus 1 warning-success; zero failed, not-run, or in-process tests |
 
 One PCG large-graph case completed successfully with its existing intentional
 action-overwrite and AssetRegistry cleanup warnings; the other 25 cases were
@@ -97,10 +107,10 @@ all release gates used the current source:
 
 | Verification | Result |
 |---|---|
-| Generated catalog | Current, 2,074 actions across 61 namespaces |
-| Immutable query bundle | Source hash `c8429d0120de7888`; executable SHA-256 `a1ee16f6dc539629d581200ee989bc417e4d49973f773fba5a88357c11b96a91` |
+| Generated catalog | Current, 2,079 actions across 61 namespaces; semantic SHA-256 `20e64ec18e101841ebe2107298f8e4c6ff7ea988ef7f605d3fab6b30b5a62883` |
+| Immutable query bundle | Source hash `b74c52beac12abc3`; executable SHA-256 `0e434bf10669307217350519a7ec59b4c8f6f8179c7d8c9544794578f6d94a66` |
 | `monolith_query.exe --version` | Plugin `0.22.0`, parity `2026-05-29.1` |
-| `monolith_query.exe monolith status` | Loaded the generated snapshot and reported all 2,074 actions |
+| `monolith_query.exe monolith status` | Loaded the generated snapshot and reported all 2,079 actions |
 | Windows PowerShell 5.1 release-body self-test | Passed 7 reject and 2 accept cases |
 | Python release/catalog tests | 18/18 passed |
 | `git diff --check` | Passed |
@@ -134,11 +144,22 @@ no new blocker in those existing failing contracts.
 
 ## 7. Local-Work and Visual Boundary
 
-Before publication, the primary Speed checkout's dirty Git bytes and Perforce
-ownership are hashed and audited. The remote merge is prepared in a clean
-worktree first; local advancement is allowed only if those dirty bytes remain
-identical and task files are assigned to a numbered changelist without moving
-existing CL 1325 or CL 1407 work.
+The primary `Plugins\Monolith` checkout advanced from
+`c745cc4e819467d58b5ab47c30ff2a06f527c098` to the verified local integration
+through a scoped safety stash. All 14 pre-existing modified files and the one
+pre-existing untracked verification record were restored and checked against
+their pre-merge SHA-256 values; all 15 hashes matched exactly, including mixed
+CRLF/LF files. Existing Perforce ownership in CL 1325, CL 1407, and CL 1408 was
+not moved.
+
+The integration delta was reconciled narrowly into task CL 1411: 22 adds, 123
+edits, and 4 deletes. Two overlapping working-tree paths were deliberately
+excluded from the task reconcile: `Docs\specs\SPEC_MonolithUI.md` remains owned
+by CL 1407, while the pre-existing unowned modification in
+`Source\MonolithIndex\MonolithIndex.Build.cs` remains byte-identical and is not
+silently claimed by this task. The clean Git integration contains the v0.22
+versions of both files; their primary-checkout working copies remain the
+user-owned overlays until those separate changes are resolved.
 
 Screenshot verification is not applicable. This change integrates Git history,
 C++, scripts, and documentation without a runtime visual, gameplay, UI, VFX,
