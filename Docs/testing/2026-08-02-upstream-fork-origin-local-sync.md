@@ -12,7 +12,8 @@ and published to `kunkunGames/monolith:master`; the result was then merged with
 Speed's local Monolith history. UE 5.7 and UE 5.8 strict non-unity builds,
 focused editor automation, offline query packaging, release validation, local
 byte preservation, and static-contract differential checks passed at the
-documented boundary
+documented boundary. The clean-checkout catalog regressions found by the first
+hosted run were repaired before the final local synchronization
 
 ---
 
@@ -33,10 +34,13 @@ retired ownership and duplicate implementations. The integration instead
 replayed the fork's still-relevant behavior as cohesive commits on
 `origin/master`, then records the fork tip as an explicit merge parent.
 
-The remote semantic source tree was `79f209a3ae5802de6cb8072a2664429ff53bd043`.
+The remote semantic plugin source tree was `79f209a3ae5802de6cb8072a2664429ff53bd043`.
 Merge commit `135572da39beaf4e71d9fea4abc4ec9b799efd44` records
 `kunkunGames/monolith-fork:master` as the second parent without changing that
-verified tree and is the published `kunkunGames/monolith:master` tip.
+verified tree. Clean-checkout CI contract fixes then advanced the published
+`kunkunGames/monolith:master` tip to
+`3683c00e066f312c526a8054477c990519f967ab` without changing the verified C++
+module tree.
 
 Speed's divergent local history was then merged in an isolated worktree. Build
 failures exposed lifecycle, package-residency, version-gate, and shared-helper
@@ -121,37 +125,38 @@ they are not part of the source integration commit.
 
 ## 6. Static-CI Differential Boundary
 
-The full static checker reported ten benchmark blockers in both the integrated
-worktree and the clean pre-integration `origin/master` baseline. Eight directly
-reported contract-test failures were rerun one by one against both trees and
-had identical exit status and failure signatures:
+The first full static comparison reported ten blockers in both the integrated
+worktree and the clean pre-integration `origin/master` baseline. Eight direct
+benchmark contract tests were rerun one by one against both trees and had
+identical exit status and failure signatures:
 
 | Existing contract family | Baseline | Integrated tree |
 |---|---|---|
 | SourceIndex and ProjectIndex benchmark contracts | Failed | Same failure |
 | AssetEditing and AI capability benchmark contracts | Failed | Same failure |
-| ActionGuidance and common task corpus | Failed | Same failure |
+| ActionGuidance routing weight and common task corpus | Failed | Same failure |
 | Schema-completeness enumeration and CI inventory | Failed | Same failure |
 
-The dominant environment error is the existing project-root guard expecting one
-`.uproject` beside `Plugins` while a bare Git worktree has none. Offline-parity
-and accepted-binary inventory findings likewise depend on ignored database and
-binary state outside the source diff. The only integration change under
-`Scripts`, `Benchmarks`, or `.github` is the independently passing
-`Scripts\verify_release_body.ps1` hardening. Therefore the full static run is not
-claimed green, but the differential shows that this v0.22 integration introduced
-no new blocker in those existing failing contracts.
+The dominant remaining environment error is the existing project-root guard
+expecting one `.uproject` beside `Plugins` while a bare Git worktree has none.
+Offline-parity inventory also requires the ignored release-only
+`Binaries\monolith_query.exe`. Those eight baseline contracts remain separate
+from this v0.22 integration and are not reclassified as passing.
 
-After publication, GitHub Actions run `30711596980` executed the repository's
-static-only `Hosted Static CI` job against
-`135572da39beaf4e71d9fea4abc4ec9b799efd44` and completed with 10 blockers and
-24 advisories. The same eight directly rerun benchmark contracts retained their
-pre-integration failure signatures. The clean hosted checkout additionally had
-no ignored generated catalog, offline executable, or project-shaped `.uproject`
-host, so ActionGuidance/catalog and inventory/project-root checks also failed at
-their existing artifact/environment boundary. The remote merge is therefore not
-claimed hosted-CI green; the exact run is
-`https://github.com/kunkunGames/monolith/actions/runs/30711596980`.
+The hosted progression makes the integration-owned boundary explicit:
+
+| Run | Commit | Result | Interpretation |
+|---|---|---|---|
+| `30711596980` | `135572da39beaf4e71d9fea4abc4ec9b799efd44` | 10 blockers, 24 advisories | First clean checkout exposed a missing generated source catalog in addition to the eight baseline contracts. |
+| `30714369700` | `e5d6923c9e05472bea28c0e52b02c50b474557a7` | 9 blockers, 24 advisories | Workflow generation removed the offline-snapshot blocker; ActionGuidance still incorrectly depended on a release bundle. |
+| `30714512827` | `3683c00e066f312c526a8054477c990519f967ab` | 8 blockers, 24 advisories | ActionGuidance now validates against the generated source catalog; both clean-checkout regressions are gone. |
+
+A separate detached clean-worktree proof confirmed the final contract with no
+`Binaries\monolith_query.current.json`: source generation produced 2,074 actions,
+its immediate `--check` passed, ActionGuidance passed, and the static-checker
+self-test passed. The final hosted run remains red only for the eight documented
+baseline contracts and is not claimed green:
+`https://github.com/kunkunGames/monolith/actions/runs/30714512827`.
 
 ## 7. Local-Work and Visual Boundary
 
