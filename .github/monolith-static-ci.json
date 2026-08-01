@@ -306,6 +306,10 @@
   },
   "workflow": {
     "hosted_static_workflow": ".github/workflows/ci.yml",
+    "required_ordered_tokens": [
+      "python Tools/MonolithQuery/generate_monolith_catalog_snapshot.py",
+      "python Scripts/ci_static_checks.py --config .github/monolith-static-ci.json --github check"
+    ],
     "forbidden_tokens": [
       "RunUAT",
       "RunUBT",

@@ -656,6 +656,16 @@ def check_workflow_scope(ctx: CheckContext) -> None:
         if token in text:
             ctx.block("workflow", f"Hosted static CI workflow contains forbidden token: {token}", hosted)
 
+    previous_position = -1
+    for token in config.get("required_ordered_tokens", []):
+        position = text.find(str(token))
+        if position < 0:
+            ctx.block("workflow", f"Hosted static CI workflow is missing required token: {token}", hosted)
+            continue
+        if position <= previous_position:
+            ctx.block("workflow", f"Hosted static CI workflow token is out of order: {token}", hosted)
+        previous_position = max(previous_position, position)
+
     for duplicate in config.get("duplicate_workflow_paths", []):
         duplicate_path = ctx.path(str(duplicate))
         if duplicate_path.exists():
@@ -1185,7 +1195,7 @@ def check_benchmark_contract_tests(ctx: CheckContext) -> None:
 
 
 def check_offline_catalog_snapshot(ctx: CheckContext) -> None:
-    """Block when the tracked source snapshot drifts from action registrations."""
+    """Block when the generated source snapshot drifts from action registrations."""
     config = ctx.config.get("offline_catalog_snapshot", {})
     if not config.get("enabled", False):
         return
@@ -1202,7 +1212,11 @@ def check_offline_catalog_snapshot(ctx: CheckContext) -> None:
         ctx.block("offline-catalog-snapshot", "Offline catalog generator is missing", generator)
         return
     if not snapshot.is_file():
-        ctx.block("offline-catalog-snapshot", "Tracked offline catalog snapshot is missing", snapshot)
+        ctx.block(
+            "offline-catalog-snapshot",
+            "Generated offline catalog snapshot is missing; run the configured generator before static checks",
+            snapshot,
+        )
         return
 
     timeout = float(config.get("timeout_seconds", 60))
@@ -1242,7 +1256,7 @@ def check_offline_catalog_snapshot(ctx: CheckContext) -> None:
     if proc.returncode != 0:
         ctx.block(
             "offline-catalog-snapshot",
-            f"Tracked source snapshot drifted from action registrations (exit {proc.returncode}): "
+            f"Generated source snapshot drifted from action registrations (exit {proc.returncode}): "
             f"{_subprocess_tail(proc.stdout, proc.stderr)}. Regenerate with "
             "python Tools/MonolithQuery/generate_monolith_catalog_snapshot.py",
             snapshot,
@@ -1691,7 +1705,10 @@ def write_selftest_fixture(root: Path) -> tuple[dict[str, Any], Path]:
     (root / ".claude/agents").mkdir(parents=True)
     (root / "Benchmarks/Foo").mkdir(parents=True)
     (root / "Scripts").mkdir(parents=True)
-    (root / ".github/workflows/ci.yml").write_text("name: CI\n", encoding="utf-8")
+    (root / ".github/workflows/ci.yml").write_text(
+        "name: CI\nrun: generate_catalog\nrun: static_check\n",
+        encoding="utf-8",
+    )
     config = {
         "plugin_descriptor": "auto",
         "source_dir": "Source",
@@ -1715,6 +1732,7 @@ def write_selftest_fixture(root: Path) -> tuple[dict[str, Any], Path]:
         "proxy_smoke": {"enabled": False},
         "workflow": {
             "hosted_static_workflow": ".github/workflows/ci.yml",
+            "required_ordered_tokens": ["run: generate_catalog", "run: static_check"],
             "forbidden_tokens": ["RunUBT"],
             "duplicate_workflow_paths": [".github/workflows/static-ci.yml"],
         },
@@ -1969,6 +1987,14 @@ def run_selftest() -> int:
             "forbidden hosted workflow token",
             "workflow",
             lambda root: (root / ".github/workflows/ci.yml").write_text("run: RunUBT\n", encoding="utf-8"),
+        ),
+        (
+            "required hosted workflow order",
+            "workflow",
+            lambda root: (root / ".github/workflows/ci.yml").write_text(
+                "name: CI\nrun: static_check\nrun: generate_catalog\n",
+                encoding="utf-8",
+            ),
         ),
         (
             "benchmark task count drift",
