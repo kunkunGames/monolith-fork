@@ -63,4 +63,42 @@ bool FMonolithEditorModalDiagnosticsTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithEditorModalTelemetryPairingTest,
+	"Monolith.Editor.ModalDiagnostics.PairedTelemetry",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithEditorModalTelemetryPairingTest::RunTest(const FString& Parameters)
+{
+	FMonolithModalTelemetryState State;
+	const FDateTime OpenedAt(2026, 7, 22, 10, 0, 0);
+	State.RecordOpen(42, TEXT("Compiling Shaders"), TOptional<bool>(true), OpenedAt);
+
+	const FMonolithModalCloseRecord ProgressClose =
+		State.RecordClose(42, OpenedAt + FTimespan::FromSeconds(2.5));
+	TestTrue(TEXT("context close matches its open"), ProgressClose.bMatched);
+	TestEqual(TEXT("context identifier is stable"), ProgressClose.Identifier, static_cast<int64>(42));
+	TestEqual(TEXT("progress classification survives until close"), ProgressClose.OpenEvent, FString(TEXT("MODAL_PROGRESS")));
+	TestEqual(TEXT("slow-task state survives until close"), ProgressClose.SlowTask, FString(TEXT("true")));
+	TestEqual(TEXT("title survives until close"), ProgressClose.Title, FString(TEXT("Compiling Shaders")));
+	TestTrue(TEXT("open age is paired and measured"), FMath::IsNearlyEqual(ProgressClose.OpenAgeSeconds, 2.5));
+	TestEqual(TEXT("matched close removes open record"), State.NumOpen(), 0);
+
+	const FMonolithModalCloseRecord UnmatchedClose = State.RecordClose(99, OpenedAt);
+	TestFalse(TEXT("unseen context close is explicitly unmatched"), UnmatchedClose.bMatched);
+	TestEqual(TEXT("unseen close retains its context identifier"), UnmatchedClose.Identifier, static_cast<int64>(99));
+
+	const int64 OuterId = State.RecordLegacyOpen(TEXT("Outer"), OpenedAt);
+	const int64 InnerId = State.RecordLegacyOpen(TEXT("Inner"), OpenedAt + FTimespan::FromSeconds(1.0));
+	const FMonolithModalCloseRecord InnerClose =
+		State.RecordLegacyClose(OpenedAt + FTimespan::FromSeconds(2.0));
+	const FMonolithModalCloseRecord OuterClose =
+		State.RecordLegacyClose(OpenedAt + FTimespan::FromSeconds(3.0));
+	TestEqual(TEXT("legacy nested close is LIFO (inner)"), InnerClose.Identifier, InnerId);
+	TestEqual(TEXT("legacy nested close is LIFO (outer)"), OuterClose.Identifier, OuterId);
+	TestEqual(TEXT("legacy open lacks authoritative classification"), InnerClose.SlowTask, FString(TEXT("unknown")));
+	TestEqual(TEXT("all legacy records are consumed"), State.NumOpen(), 0);
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

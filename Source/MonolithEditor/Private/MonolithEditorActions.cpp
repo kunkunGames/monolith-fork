@@ -1,6 +1,7 @@
 ﻿#include "MonolithEditorActions.h"
 #include "MonolithAutomationSession.h"
 #include "MonolithEditorGifTiming.h"
+#include "MonolithMapLoadPreflight.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithObjectTraversal.h"
@@ -95,7 +96,6 @@
 // Scripting action includes (HOFF 7)
 #include "IPythonScriptPlugin.h"
 #include "PythonScriptTypes.h"
-#include "LevelEditorSubsystem.h"
 #include "Editor.h"
 
 // run_console_command needs world / PC access
@@ -131,7 +131,6 @@
 #include "Animation/AnimInstance.h"
 #include "GameFramework/Pawn.h"
 #include "Misc/ScopeExit.h"           // ON_SCOPE_EXIT (always-unbind the PostPIEStarted handle)
-#include "UObject/GarbageCollection.h" // CollectGarbage / GARBAGE_COLLECTION_KEEPFLAGS (#5/#6 world-leak fix)
 
 // create_nav_harness_map: actor spawning + reflective property set + registry dispatch
 #include "Engine/StaticMeshActor.h"
@@ -663,6 +662,7 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		FMonolithActionHandler::CreateStatic(&HandleRunPieSmoke),
 		FParamSchemaBuilder()
 			.OptionalAssetPath(TEXT("map"), TEXT("Level asset path to load before PIE (e.g. /Game/Tests/Monolith/Maps/M_Harness). Omit to use the current editor level."))
+			.Optional(TEXT("dirty_policy"), TEXT("string"), TEXT("When map is provided and the current editor world is dirty: refuse (default) or discard. discard records dirty_packages_acknowledged_for_discard; only confirmed releases appear in discarded_dirty_packages."), TEXT("refuse"))
 			.Optional(TEXT("marker"), TEXT("string"), TEXT("Marker token emitted to the log; post-marker pattern matching counts only lines after it. Default MONOLITH_SMOKE."), TEXT("MONOLITH_SMOKE"))
 			.Optional(TEXT("duration"), TEXT("number"), TEXT("Seconds the editor loop advances PIE before the session auto-completes (clamped 0-120). Default 5."), TEXT("5"))
 			.Optional(TEXT("sample_vars"), TEXT("array"), TEXT("AnimInstance variable names sampled each frame. Default [GroundSpeed, bShouldMove, DesiredYawDelta]."))
@@ -704,6 +704,7 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		FMonolithActionHandler::CreateStatic(&HandleCapturePieMovementClip),
 		FParamSchemaBuilder()
 			.OptionalAssetPath(TEXT("map"), TEXT("Level asset path to load before PIE. Omit to use the current editor level."))
+			.Optional(TEXT("dirty_policy"), TEXT("string"), TEXT("When map is provided and the current editor world is dirty: refuse (default) or discard. discard records dirty_packages_acknowledged_for_discard; only confirmed releases appear in discarded_dirty_packages."), TEXT("refuse"))
 			.Optional(TEXT("marker"), TEXT("string"), TEXT("Log marker token. Default MONOLITH_CLIP."), TEXT("MONOLITH_CLIP"))
 			.Optional(TEXT("duration"), TEXT("number"), TEXT("Seconds the editor loop advances PIE before the session auto-completes (clamped 0-120). Default 5."), TEXT("5"))
 			.Optional(TEXT("capture_interval"), TEXT("number"), TEXT("Seconds between captured frames (clamped 0.05-5). Default 0.25."), TEXT("0.25"))
@@ -731,6 +732,7 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		FMonolithActionHandler::CreateStatic(&HandleCreateNavHarnessMap),
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("path"), TEXT("Asset path for the new UWorld (e.g. /Game/Tests/Monolith/Maps/M_NavHarness)."))
+			.Optional(TEXT("dirty_policy"), TEXT("string"), TEXT("When the current editor world is dirty: refuse before creating the target asset (default) or discard. discard records dirty_packages_acknowledged_for_discard; only confirmed releases appear in discarded_dirty_packages."), TEXT("refuse"))
 			.Optional(TEXT("floor"), TEXT("object"), TEXT("{location:[x,y,z], scale:[x,y,z], mesh:\"/Engine/BasicShapes/Plane\"}. Omitted = a default 50x50m plane at origin."))
 			.Optional(TEXT("nav_bounds"), TEXT("object"), TEXT("{location:[x,y,z], extent:[x,y,z]} for the NavMeshBoundsVolume. Omitted = bounds sized to the floor."))
 			.Optional(TEXT("camera"), TEXT("object"), TEXT("{location:[x,y,z], rotation:[p,y,r]} for a spawned ACameraActor."))
@@ -747,6 +749,7 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		FMonolithActionHandler::CreateStatic(&HandleAuthorMapSettings),
 		FParamSchemaBuilder()
 			.OptionalAssetPath(TEXT("path"), TEXT("UWorld to author. Omitted = the currently-open editor world. If provided, the map is loaded as the active editor world first."))
+			.Optional(TEXT("dirty_policy"), TEXT("string"), TEXT("When path is provided and the current editor world is dirty: refuse (default) or discard. discard records dirty_packages_acknowledged_for_discard; only confirmed releases appear in discarded_dirty_packages."), TEXT("refuse"))
 			.Optional(TEXT("game_mode_override"), TEXT("string"), TEXT("Class path for the GameMode Override (AWorldSettings::DefaultGameMode). Blueprint paths are `_C` normalized; native paths (/Script/...) work directly. Must resolve to an AGameModeBase subclass."))
 			.Optional(TEXT("player_starts"), TEXT("array"), TEXT("[{location:[x,y,z], rotation:[p,y,r], name:\"Start_0\"}, ...] spawned as APlayerStart actors."))
 			.Optional(TEXT("actors"), TEXT("array"), TEXT("[{class:\"/Game/.../BP_Foo.BP_Foo_C\" or /Script/Engine.PointLight, location:[x,y,z], rotation:[p,y,r], folder:\"...\", properties:{...}}, ...] — native or Blueprint actor instances with reflective property defaults."))
@@ -759,6 +762,7 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		FParamSchemaBuilder()
 			.EnableValidation()
 			.OptionalAssetPath(TEXT("path"), TEXT("UWorld to author. Omitted = the currently-open editor world. If provided, the map is loaded as the active editor world first."))
+			.Optional(TEXT("dirty_policy"), TEXT("string"), TEXT("When path is provided and the current editor world is dirty: refuse (default) or discard. discard records dirty_packages_acknowledged_for_discard; only confirmed releases appear in discarded_dirty_packages."), TEXT("refuse"))
 			.Required(TEXT("property_name"), TEXT("string"), TEXT("Reflected AWorldSettings property name to set, e.g. DefaultGameplayExperience."))
 			.Required(TEXT("value"), TEXT("any"), TEXT("JSON value to assign. Strings can be asset/object/class paths; arrays set array properties."))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save the map package after applying a change. Default false."), TEXT("false"))
@@ -1258,7 +1262,10 @@ FMonolithActionResult FMonolithEditorActions::HandleGetBuildErrors(const TShared
 	// future calls report nothing before it. Returns immediately with the new baseline —
 	// the canonical "I just triggered a build, ignore all prior log noise" reset.
 	bool bClearBaseline = false;
-	Params->TryGetBoolField(TEXT("clear_baseline"), bClearBaseline);
+	if (Params->HasField(TEXT("clear_baseline")) && !Params->TryGetBoolField(TEXT("clear_baseline"), bClearBaseline))
+	{
+		return FMonolithActionResult::Error(TEXT("clear_baseline must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (bClearBaseline)
 	{
 		LastCompileTimestamp = FPlatformTime::Seconds();
@@ -7458,6 +7465,28 @@ FMonolithActionResult FMonolithEditorActions::HandleRunPython(const TSharedPtr<F
 	return FMonolithActionResult::Success(Result);
 }
 
+namespace
+{
+	FMonolithActionResult ErrorWithMapLoadDisposition(
+		const MonolithEditorMapLoad::FMapLoadResult& LoadResult,
+		const FString& ErrorMessage,
+		int32 ErrorCode = -32603,
+		TSharedPtr<FJsonObject> ExistingErrorData = nullptr)
+	{
+		TSharedPtr<FJsonObject> ErrorData = ExistingErrorData.IsValid()
+			? ExistingErrorData
+			: MakeShared<FJsonObject>();
+		MonolithEditorMapLoad::AppendDirtyPackageDisposition(ErrorData, LoadResult);
+
+		FMonolithActionResult Result = FMonolithActionResult::Error(ErrorMessage, ErrorCode);
+		if (!ErrorData->Values.IsEmpty())
+		{
+			Result.WithErrorData(ErrorData);
+		}
+		return Result;
+	}
+}
+
 FMonolithActionResult FMonolithEditorActions::HandleLoadLevel(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Path;
@@ -7478,71 +7507,22 @@ FMonolithActionResult FMonolithEditorActions::HandleLoadLevel(const TSharedPtr<F
 		return FMonolithActionResult::Error(TEXT("GEditor is null — load_level requires editor context."));
 	}
 
-	ULevelEditorSubsystem* LevelEd = GEditor->GetEditorSubsystem<ULevelEditorSubsystem>();
-	if (!LevelEd)
+	const MonolithEditorMapLoad::FMapLoadResult LoadResult =
+		MonolithEditorMapLoad::LoadLevelWithPreflight(Path, Params);
+	if (!LoadResult.bLoadAttempted)
 	{
-		return FMonolithActionResult::Error(TEXT("ULevelEditorSubsystem is unavailable."));
+		return ErrorWithMapLoadDisposition(LoadResult, LoadResult.Error);
 	}
-
-	FString DirtyPolicy;
-	Params->TryGetStringField(TEXT("dirty_policy"), DirtyPolicy);
-	if (!DirtyPolicy.IsEmpty() && DirtyPolicy != TEXT("refuse") && DirtyPolicy != TEXT("discard"))
-	{
-		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("Invalid dirty_policy '%s' — expected 'refuse' (default) or 'discard'."), *DirtyPolicy));
-	}
-
-	// Dirty-current-map guard (fail-closed): LoadLevel discards the current world
-	// WITHOUT a save prompt (it runs unattended), so unsaved changes to the current
-	// map or its external actor packages would be lost silently. Refuse unless the
-	// caller explicitly passes dirty_policy:"discard". Checked before the PIE guard
-	// so a refusal has no side effects (no PIE teardown).
-	TArray<FString> DirtyWorldPackages;
-	CollectDirtyCurrentWorldPackages(DirtyWorldPackages);
-	if (DirtyWorldPackages.Num() > 0 && DirtyPolicy != TEXT("discard"))
-	{
-		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("Refusing load_level: the current level has unsaved changes that would be discarded ")
-			TEXT("silently (LoadLevel runs unattended — no save prompt). Dirty packages: [%s]. ")
-			TEXT("Save them (save_packages) or pass dirty_policy:\"discard\" to lose them explicitly."),
-			*FString::Join(DirtyWorldPackages, TEXT(", "))));
-	}
-
-	// #6 world-leak guard: never LoadLevel while a PIE world is still resident — the
-	// deferred EndPlayMap teardown would assert "World Memory Leaks" in EditorDestroyWorld.
-	FString PieGuardError;
-	if (!EnsureNoResidentPieWorldBeforeMapLoad(PieGuardError))
-	{
-		return FMonolithActionResult::Error(PieGuardError);
-	}
-
-	// Second world-leak class: a stale rooted in-memory copy of the TARGET world (from a
-	// scripting load) survives the purge and fatals the editor. Refuse instead.
-	FString StaleWorldError;
-	if (!EnsureNoStaleResidentTargetWorld(Path, StaleWorldError))
-	{
-		return FMonolithActionResult::Error(StaleWorldError);
-	}
-
-	const bool bLoaded = LevelEd->LoadLevel(Path);
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetBoolField(TEXT("ok"), bLoaded);
-	Result->SetBoolField(TEXT("loaded"), bLoaded);
+	Result->SetBoolField(TEXT("ok"), LoadResult.bLoaded);
+	Result->SetBoolField(TEXT("loaded"), LoadResult.bLoaded);
 	Result->SetStringField(TEXT("path"), Path);
-	if (DirtyWorldPackages.Num() > 0)
-	{
-		TArray<TSharedPtr<FJsonValue>> Discarded;
-		for (const FString& PackageName : DirtyWorldPackages)
-		{
-			Discarded.Add(MakeShared<FJsonValueString>(PackageName));
-		}
-		Result->SetArrayField(TEXT("discarded_dirty_packages"), Discarded);
-	}
 	Result->SetStringField(TEXT("message"),
-		bLoaded
+		LoadResult.bLoaded
 			? FString::Printf(TEXT("Loaded level '%s'."), *Path)
-			: FString::Printf(TEXT("ULevelEditorSubsystem::LoadLevel returned false for '%s'. Verify the asset exists and is a UWorld."), *Path));
+			: LoadResult.Error);
+	MonolithEditorMapLoad::AppendDirtyPackageDisposition(Result, LoadResult);
 
 	return FMonolithActionResult::Success(Result);
 }
@@ -8239,30 +8219,23 @@ namespace MonolithEditorPieSmoke
 		}
 	}
 
-	// Load the requested map into the editor before PIE (optional). Returns false +
-	// OutError when a map path was given but failed to load.
-	static bool LoadMapIfRequested(const TSharedPtr<FJsonObject>& Params, FString& OutError)
+	// Load the requested map through the same fail-closed preflight used by every
+	// editor map transition. Returns false with the full load result when a map path
+	// was supplied but safety checks or loading failed, preserving discard telemetry.
+	static bool LoadMapIfRequested(
+		const TSharedPtr<FJsonObject>& Params,
+		MonolithEditorMapLoad::FMapLoadResult& OutLoadResult)
 	{
+		OutLoadResult = MonolithEditorMapLoad::FMapLoadResult();
 		FString MapPath;
 		if (!Params.IsValid() || !Params->TryGetStringField(TEXT("map"), MapPath) || MapPath.IsEmpty())
 		{
 			return true; // No map requested — use the current editor level.
 		}
-		if (!GEditor)
+
+		OutLoadResult = MonolithEditorMapLoad::LoadLevelWithPreflight(MapPath, Params);
+		if (!OutLoadResult.bLoadAttempted || !OutLoadResult.bLoaded)
 		{
-			OutError = TEXT("GEditor unavailable — cannot load map for PIE smoke.");
-			return false;
-		}
-		// #5 world-leak guard (same policy as load_level): refuse / drive-teardown +
-		// GC before LoadLevel so the resident PIE world is gone first.
-		if (!EnsureNoResidentPieWorldBeforeMapLoad(OutError))
-		{
-			return false;
-		}
-		ULevelEditorSubsystem* LevelEd = GEditor->GetEditorSubsystem<ULevelEditorSubsystem>();
-		if (!LevelEd || !LevelEd->LoadLevel(MapPath))
-		{
-			OutError = FString::Printf(TEXT("Failed to load map '%s' for PIE smoke."), *MapPath);
 			return false;
 		}
 		return true;
@@ -9046,10 +9019,10 @@ FMonolithActionResult FMonolithEditorActions::HandleRunPieSmoke(const TSharedPtr
 	const bool bSuppressModals = CompileMode.Equals(TEXT("suppress"), ESearchCase::IgnoreCase);
 
 	// Optional map load before PIE.
-	FString LoadError;
-	if (!LoadMapIfRequested(Params, LoadError))
+	MonolithEditorMapLoad::FMapLoadResult MapLoadResult;
+	if (!LoadMapIfRequested(Params, MapLoadResult))
 	{
-		return FMonolithActionResult::Error(LoadError);
+		return ErrorWithMapLoadDisposition(MapLoadResult, MapLoadResult.Error);
 	}
 
 	// PIE pre-flight: scan for errored Blueprints AFTER any map load (the loaded level
@@ -9063,12 +9036,14 @@ FMonolithActionResult FMonolithEditorActions::HandleRunPieSmoke(const TSharedPtr
 			TSharedPtr<FJsonObject> ErrObj = MakeShared<FJsonObject>();
 			ErrObj->SetNumberField(TEXT("errored_blueprint_count"), Errored.Num());
 			ErrObj->SetArrayField(TEXT("errored_blueprints"), ErroredBlueprintsToJson(Errored));
-			return FMonolithActionResult::Error(
+			return ErrorWithMapLoadDisposition(
+				MapLoadResult,
 				FString::Printf(TEXT("run_pie_smoke refused: %d Blueprint(s) have unresolved compile errors. ")
 					TEXT("Starting PIE would raise a blocking modal that freezes the editor + MCP server. ")
 					TEXT("Fix the Blueprints, or pass on_compile_errors=\"suppress\" to PIE anyway."),
-					Errored.Num()))
-				.WithErrorData(ErrObj);
+					Errored.Num()),
+				-32603,
+				ErrObj);
 		}
 	}
 
@@ -9087,7 +9062,9 @@ FMonolithActionResult FMonolithEditorActions::HandleRunPieSmoke(const TSharedPtr
 	FString StartError;
 	if (!StartPieInternal(StartError, bSuppressModals))
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to start PIE: %s"), *StartError));
+		return ErrorWithMapLoadDisposition(
+			MapLoadResult,
+			FString::Printf(TEXT("Failed to start PIE: %s"), *StartError));
 	}
 
 	// Emit the marker now; the observer counts only post-marker log lines. PIE may not
@@ -9117,6 +9094,7 @@ FMonolithActionResult FMonolithEditorActions::HandleRunPieSmoke(const TSharedPtr
 	Result->SetBoolField(TEXT("started"), true);
 	Result->SetStringField(TEXT("marker"), Marker);
 	Result->SetNumberField(TEXT("duration"), Duration);
+	MonolithEditorMapLoad::AppendDirtyPackageDisposition(Result, MapLoadResult);
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -9268,10 +9246,10 @@ FMonolithActionResult FMonolithEditorActions::StartTimeseriesSession(const TShar
 	}
 
 	// Optional map load before PIE.
-	FString LoadError;
-	if (!LoadMapIfRequested(Params, LoadError))
+	MonolithEditorMapLoad::FMapLoadResult MapLoadResult;
+	if (!LoadMapIfRequested(Params, MapLoadResult))
 	{
-		return FMonolithActionResult::Error(LoadError);
+		return ErrorWithMapLoadDisposition(MapLoadResult, MapLoadResult.Error);
 	}
 
 	// Compile-error gate (same policy as run_pie_smoke: refuse a broken world by default).
@@ -9286,17 +9264,21 @@ FMonolithActionResult FMonolithEditorActions::StartTimeseriesSession(const TShar
 			TSharedPtr<FJsonObject> ErrObj = MakeShared<FJsonObject>();
 			ErrObj->SetNumberField(TEXT("errored_blueprint_count"), Errored.Num());
 			ErrObj->SetArrayField(TEXT("errored_blueprints"), ErroredBlueprintsToJson(Errored));
-			return FMonolithActionResult::Error(
+			return ErrorWithMapLoadDisposition(
+				MapLoadResult,
 				FString::Printf(TEXT("sample_pie_timeseries refused: %d Blueprint(s) have unresolved compile errors. ")
-					TEXT("Fix them, or pass on_compile_errors=\"suppress\" to PIE anyway."), Errored.Num()))
-				.WithErrorData(ErrObj);
+					TEXT("Fix them, or pass on_compile_errors=\"suppress\" to PIE anyway."), Errored.Num()),
+				-32603,
+				ErrObj);
 		}
 	}
 
 	FString StartError;
 	if (!StartPieInternal(StartError, bSuppressModals))
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to start PIE: %s"), *StartError));
+		return ErrorWithMapLoadDisposition(
+			MapLoadResult,
+			FString::Printf(TEXT("Failed to start PIE: %s"), *StartError));
 	}
 
 	UWorld* PieWorld = FindActivePieWorld();
@@ -9336,6 +9318,7 @@ FMonolithActionResult FMonolithEditorActions::StartTimeseriesSession(const TShar
 	Result->SetBoolField(TEXT("started"), true);
 	Result->SetNumberField(TEXT("duration"), Duration);
 	Result->SetStringField(TEXT("note"), TEXT("Poll with poll_pie_smoke; stop with stop_pie_smoke. Time-series under 'timeseries'; provocation fire log under 'provocations'."));
+	MonolithEditorMapLoad::AppendDirtyPackageDisposition(Result, MapLoadResult);
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -9482,10 +9465,10 @@ FMonolithActionResult FMonolithEditorActions::HandleCapturePieMovementClip(const
 		return FMonolithActionResult::Error(OutputDirError);
 	}
 
-	FString LoadError;
-	if (!LoadMapIfRequested(Params, LoadError))
+	MonolithEditorMapLoad::FMapLoadResult MapLoadResult;
+	if (!LoadMapIfRequested(Params, MapLoadResult))
 	{
-		return FMonolithActionResult::Error(LoadError);
+		return ErrorWithMapLoadDisposition(MapLoadResult, MapLoadResult.Error);
 	}
 
 	// #8 resolve stages + fire pre_pie synchronously before PIE start (see HandleRunPieSmoke).
@@ -9498,7 +9481,9 @@ FMonolithActionResult FMonolithEditorActions::HandleCapturePieMovementClip(const
 	FString StartError;
 	if (!StartPieInternal(StartError))
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to start PIE: %s"), *StartError));
+		return ErrorWithMapLoadDisposition(
+			MapLoadResult,
+			FString::Printf(TEXT("Failed to start PIE: %s"), *StartError));
 	}
 
 	UWorld* PieWorld = FindActivePieWorld();
@@ -9528,6 +9513,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCapturePieMovementClip(const
 	Result->SetStringField(TEXT("resolved_output_dir"), OutputDir);   // explicit alias for callers
 	Result->SetNumberField(TEXT("duration"), Duration);
 	Result->SetNumberField(TEXT("capture_interval"), Interval);
+	MonolithEditorMapLoad::AppendDirtyPackageDisposition(Result, MapLoadResult);
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -9983,33 +9969,41 @@ FMonolithActionResult FMonolithEditorActions::HandleCreateNavHarnessMap(const TS
 
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 
-	// 1. Create the blank UWorld via the existing editor.create_empty_map action,
-	//    then load it as the active editor world so spawns + nav target it.
+	// 1. Refuse unsafe transitions BEFORE creating the target asset, then create the
+	// blank UWorld and load it through the single shared map-load wrapper. The wrapper
+	// rechecks target residency after UWorldFactory has produced its standalone object.
+	const MonolithEditorMapLoad::FMapLoadResult MapLoadResult =
+		MonolithEditorMapLoad::LoadLevelWithPreflight(
+			MapPath,
+			Params,
+			[&Registry, &MapPath](FString& OutError)
+			{
+				TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+				CreateParams->SetStringField(TEXT("path"), MapPath);
+				const FMonolithActionResult CreateRes =
+					Registry.ExecuteAction(TEXT("editor"), TEXT("create_empty_map"), CreateParams);
+				if (!CreateRes.bSuccess)
+				{
+				OutError = FString::Printf(TEXT("create_empty_map failed: %s"), *CreateRes.ErrorMessage);
+				return false;
+				}
+				return true;
+			});
+	if (!MapLoadResult.bLoadAttempted || !MapLoadResult.bLoaded)
 	{
-		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
-		CreateParams->SetStringField(TEXT("path"), MapPath);
-		const FMonolithActionResult CreateRes = Registry.ExecuteAction(TEXT("editor"), TEXT("create_empty_map"), CreateParams);
-		if (!CreateRes.bSuccess)
-		{
-			return FMonolithActionResult::Error(FString::Printf(
-				TEXT("create_empty_map failed: %s"), *CreateRes.ErrorMessage));
-		}
-	}
-
-	ULevelEditorSubsystem* LevelEd = GEditor->GetEditorSubsystem<ULevelEditorSubsystem>();
-	if (!LevelEd || !LevelEd->LoadLevel(MapPath))
-	{
-		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("Created map but failed to load '%s' as the editor world."), *MapPath));
+		return ErrorWithMapLoadDisposition(MapLoadResult, MapLoadResult.Error);
 	}
 
 	UWorld* World = GEditor->GetEditorWorldContext().World();
 	if (!World)
 	{
-		return FMonolithActionResult::Error(TEXT("No editor world after loading the harness map."));
+		return ErrorWithMapLoadDisposition(
+			MapLoadResult,
+			TEXT("No editor world after loading the harness map."));
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	MonolithEditorMapLoad::AppendDirtyPackageDisposition(Result, MapLoadResult);
 	TArray<TSharedPtr<FJsonValue>> SpawnedActors;
 
 	FActorSpawnParameters SpawnParams;
@@ -10028,7 +10022,8 @@ FMonolithActionResult FMonolithEditorActions::HandleCreateNavHarnessMap(const TS
 			if (!ParseVec3Param(*FloorObj, TEXT("location"), FloorLoc, VecError) ||
 				!ParseVec3Param(*FloorObj, TEXT("scale"), FloorScale, VecError))
 			{
-				return FMonolithActionResult::Error(VecError, FMonolithJsonUtils::ErrInvalidParams);
+				return ErrorWithMapLoadDisposition(
+					MapLoadResult, VecError, FMonolithJsonUtils::ErrInvalidParams);
 			}
 			FString MeshOverride;
 			if ((*FloorObj)->TryGetStringField(TEXT("mesh"), MeshOverride) && !MeshOverride.IsEmpty())
@@ -10071,7 +10066,8 @@ FMonolithActionResult FMonolithEditorActions::HandleCreateNavHarnessMap(const TS
 			if (!ParseVec3Param(*CamObj, TEXT("location"), CamLoc, VecError) ||
 				!ParseVec3Param(*CamObj, TEXT("rotation"), CamRot, VecError))
 			{
-				return FMonolithActionResult::Error(VecError, FMonolithJsonUtils::ErrInvalidParams);
+				return ErrorWithMapLoadDisposition(
+					MapLoadResult, VecError, FMonolithJsonUtils::ErrInvalidParams);
 			}
 
 			ACameraActor* Cam = World->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), CamLoc,
@@ -10109,7 +10105,8 @@ FMonolithActionResult FMonolithEditorActions::HandleCreateNavHarnessMap(const TS
 				FString VecError;
 				if (!ParseVec3Param(TpObj, TEXT("location"), Loc, VecError))
 				{
-					return FMonolithActionResult::Error(VecError, FMonolithJsonUtils::ErrInvalidParams);
+					return ErrorWithMapLoadDisposition(
+						MapLoadResult, VecError, FMonolithJsonUtils::ErrInvalidParams);
 				}
 
 				ATargetPoint* Tp = World->SpawnActor<ATargetPoint>(ATargetPoint::StaticClass(), Loc, FRotator::ZeroRotator, SpawnParams);
@@ -10177,7 +10174,8 @@ FMonolithActionResult FMonolithEditorActions::HandleCreateNavHarnessMap(const TS
 				if (!ParseVec3Param(ActorObj, TEXT("location"), Loc, VecError) ||
 					!ParseVec3Param(ActorObj, TEXT("rotation"), Rot, VecError))
 				{
-					return FMonolithActionResult::Error(VecError, FMonolithJsonUtils::ErrInvalidParams);
+					return ErrorWithMapLoadDisposition(
+						MapLoadResult, VecError, FMonolithJsonUtils::ErrInvalidParams);
 				}
 
 				AActor* Spawned = World->SpawnActor<AActor>(ActorClass, Loc,
@@ -10248,7 +10246,8 @@ FMonolithActionResult FMonolithEditorActions::HandleCreateNavHarnessMap(const TS
 			FString VecError;
 			if (!SpawnPlayerStarts(World, *StartsArr, SpawnParams, SpawnedActors, Spawned, VecError))
 			{
-				return FMonolithActionResult::Error(VecError, FMonolithJsonUtils::ErrInvalidParams);
+				return ErrorWithMapLoadDisposition(
+					MapLoadResult, VecError, FMonolithJsonUtils::ErrInvalidParams);
 			}
 			Result->SetNumberField(TEXT("player_starts_spawned"), Spawned);
 		}
@@ -10265,7 +10264,8 @@ FMonolithActionResult FMonolithEditorActions::HandleCreateNavHarnessMap(const TS
 			if (!ParseVec3Param(*NavObj, TEXT("location"), NavLoc, VecError) ||
 				!ParseVec3Param(*NavObj, TEXT("extent"), NavExtent, VecError))
 			{
-				return FMonolithActionResult::Error(VecError, FMonolithJsonUtils::ErrInvalidParams);
+				return ErrorWithMapLoadDisposition(
+					MapLoadResult, VecError, FMonolithJsonUtils::ErrInvalidParams);
 			}
 		}
 
@@ -10289,7 +10289,10 @@ FMonolithActionResult FMonolithEditorActions::HandleCreateNavHarnessMap(const TS
 		{
 			if (!Params->TryGetNumberField(TEXT("nav_timeout"), NavTimeout))
 			{
-				return FMonolithActionResult::Error(TEXT("nav_timeout must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+				return ErrorWithMapLoadDisposition(
+					MapLoadResult,
+					TEXT("nav_timeout must be a number"),
+					FMonolithJsonUtils::ErrInvalidParams);
 			}
 		}
 
@@ -10371,27 +10374,8 @@ FMonolithActionResult FMonolithEditorActions::HandleAuthorMapSettings(const TSha
 		return FMonolithActionResult::Error(TEXT("author_map_settings requires a params object."));
 	}
 
-	// Resolve the target world: load `path` as the active editor world if provided,
-	// otherwise author whatever map is currently open.
-	FString MapPath;
-	const bool bHasPath = Params->TryGetStringField(TEXT("path"), MapPath) && !MapPath.IsEmpty();
-	if (bHasPath)
-	{
-		ULevelEditorSubsystem* LevelEd = GEditor->GetEditorSubsystem<ULevelEditorSubsystem>();
-		if (!LevelEd || !LevelEd->LoadLevel(MapPath))
-		{
-			return FMonolithActionResult::Error(FString::Printf(
-				TEXT("Failed to load '%s' as the editor world."), *MapPath));
-		}
-	}
-
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		return FMonolithActionResult::Error(TEXT("No editor world to author."));
-	}
-
-	// Require at least one authoring directive so a no-op call can't silently dirty.
+	// Validate the authoring intent before any path-driven map transition. A malformed
+	// no-op request must never discard the current world and only then report an error.
 	const bool bHasGameMode = Params->HasField(TEXT("game_mode_override"));
 	const bool bHasStarts = Params->HasField(TEXT("player_starts"));
 	const bool bHasActors = Params->HasField(TEXT("actors"));
@@ -10401,7 +10385,30 @@ FMonolithActionResult FMonolithEditorActions::HandleAuthorMapSettings(const TSha
 			TEXT("author_map_settings requires at least one of: game_mode_override, player_starts, actors."));
 	}
 
+	// Resolve the target world: load `path` as the active editor world if provided,
+	// otherwise author whatever map is currently open.
+	FString MapPath;
+	const bool bHasPath = Params->TryGetStringField(TEXT("path"), MapPath) && !MapPath.IsEmpty();
+	MonolithEditorMapLoad::FMapLoadResult MapLoadResult;
+	if (bHasPath)
+	{
+		MapLoadResult = MonolithEditorMapLoad::LoadLevelWithPreflight(MapPath, Params);
+		if (!MapLoadResult.bLoadAttempted || !MapLoadResult.bLoaded)
+		{
+			return ErrorWithMapLoadDisposition(MapLoadResult, MapLoadResult.Error);
+		}
+	}
+
+	UWorld* World = GEditor->GetEditorWorldContext().World();
+	if (!World)
+	{
+		return ErrorWithMapLoadDisposition(
+			MapLoadResult,
+			TEXT("No editor world to author."));
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	MonolithEditorMapLoad::AppendDirtyPackageDisposition(Result, MapLoadResult);
 	TArray<TSharedPtr<FJsonValue>> SpawnedActors;
 
 	FActorSpawnParameters SpawnParams;
@@ -10439,7 +10446,8 @@ FMonolithActionResult FMonolithEditorActions::HandleAuthorMapSettings(const TSha
 			FString VecError;
 			if (!SpawnPlayerStarts(World, *StartsArr, SpawnParams, SpawnedActors, Spawned, VecError))
 			{
-				return FMonolithActionResult::Error(VecError, FMonolithJsonUtils::ErrInvalidParams);
+				return ErrorWithMapLoadDisposition(
+					MapLoadResult, VecError, FMonolithJsonUtils::ErrInvalidParams);
 			}
 			Result->SetNumberField(TEXT("player_starts_spawned"), Spawned);
 		}
@@ -10484,7 +10492,8 @@ FMonolithActionResult FMonolithEditorActions::HandleAuthorMapSettings(const TSha
 				if (!ParseVec3Param(ActorObj, TEXT("location"), Loc, VecError) ||
 					!ParseVec3Param(ActorObj, TEXT("rotation"), Rot, VecError))
 				{
-					return FMonolithActionResult::Error(VecError, FMonolithJsonUtils::ErrInvalidParams);
+					return ErrorWithMapLoadDisposition(
+						MapLoadResult, VecError, FMonolithJsonUtils::ErrInvalidParams);
 				}
 
 				AActor* Spawned = World->SpawnActor<AActor>(ActorClass, Loc,
@@ -10588,13 +10597,13 @@ FMonolithActionResult FMonolithEditorActions::HandleSetWorldSettingsProperty(con
 
 	FString MapPath;
 	const bool bHasPath = Params->TryGetStringField(TEXT("path"), MapPath) && !MapPath.IsEmpty();
+	MonolithEditorMapLoad::FMapLoadResult MapLoadResult;
 	if (bHasPath)
 	{
-		ULevelEditorSubsystem* LevelEd = GEditor->GetEditorSubsystem<ULevelEditorSubsystem>();
-		if (!LevelEd || !LevelEd->LoadLevel(MapPath))
+		MapLoadResult = MonolithEditorMapLoad::LoadLevelWithPreflight(MapPath, Params);
+		if (!MapLoadResult.bLoadAttempted || !MapLoadResult.bLoaded)
 		{
-			return FMonolithActionResult::Error(FString::Printf(
-				TEXT("Failed to load '%s' as the editor world."), *MapPath));
+			return ErrorWithMapLoadDisposition(MapLoadResult, MapLoadResult.Error);
 		}
 	}
 
@@ -10602,13 +10611,16 @@ FMonolithActionResult FMonolithEditorActions::HandleSetWorldSettingsProperty(con
 	AWorldSettings* WorldSettings = World ? World->GetWorldSettings() : nullptr;
 	if (!WorldSettings)
 	{
-		return FMonolithActionResult::Error(TEXT("No editor world settings object is available."));
+		return ErrorWithMapLoadDisposition(
+			MapLoadResult,
+			TEXT("No editor world settings object is available."));
 	}
 
 	FProperty* Property = WorldSettings->GetClass()->FindPropertyByName(FName(*PropertyName));
 	if (!Property)
 	{
-		return FMonolithActionResult::Error(
+		return ErrorWithMapLoadDisposition(
+			MapLoadResult,
 			FString::Printf(TEXT("WorldSettings class '%s' has no reflected property named '%s'."),
 				*WorldSettings->GetClass()->GetPathName(),
 				*PropertyName),
@@ -10616,7 +10628,8 @@ FMonolithActionResult FMonolithEditorActions::HandleSetWorldSettingsProperty(con
 	}
 	if (Property->HasAnyPropertyFlags(CPF_Transient))
 	{
-		return FMonolithActionResult::Error(
+		return ErrorWithMapLoadDisposition(
+			MapLoadResult,
 			FString::Printf(TEXT("Property '%s' is transient and cannot be authored onto the map package."), *PropertyName),
 			FMonolithJsonUtils::ErrInvalidParams);
 	}
@@ -10637,7 +10650,8 @@ FMonolithActionResult FMonolithEditorActions::HandleSetWorldSettingsProperty(con
 	FString WhyUnsupported;
 	if (!TryApplyJsonValueToProperty(Property, ScratchPtr, Value, WorldSettings, WhyUnsupported))
 	{
-		return FMonolithActionResult::Error(
+		return ErrorWithMapLoadDisposition(
+			MapLoadResult,
 			FString::Printf(TEXT("Could not apply value to '%s': %s"), *PropertyName, *WhyUnsupported),
 			FMonolithJsonUtils::ErrInvalidParams);
 	}
@@ -10653,7 +10667,8 @@ FMonolithActionResult FMonolithEditorActions::HandleSetWorldSettingsProperty(con
 		WhyUnsupported.Reset();
 		if (!TryApplyJsonValueToProperty(Property, ValuePtr, Value, WorldSettings, WhyUnsupported))
 		{
-			return FMonolithActionResult::Error(
+			return ErrorWithMapLoadDisposition(
+				MapLoadResult,
 				FString::Printf(TEXT("Could not apply value to '%s': %s"), *PropertyName, *WhyUnsupported),
 				FMonolithJsonUtils::ErrInvalidParams);
 		}
@@ -10678,7 +10693,7 @@ FMonolithActionResult FMonolithEditorActions::HandleSetWorldSettingsProperty(con
 			bSaved = SaveRes.bSuccess;
 			if (!SaveRes.bSuccess)
 			{
-				return FMonolithActionResult::Error(SaveRes.ErrorMessage, -32603);
+				return ErrorWithMapLoadDisposition(MapLoadResult, SaveRes.ErrorMessage, -32603);
 			}
 		}
 	}
@@ -10694,6 +10709,7 @@ FMonolithActionResult FMonolithEditorActions::HandleSetWorldSettingsProperty(con
 	Result->SetStringField(TEXT("property_type"), Property->GetClass()->GetName());
 	Result->SetStringField(TEXT("before"), BeforeExport);
 	Result->SetStringField(TEXT("after"), AfterExport);
+	MonolithEditorMapLoad::AppendDirtyPackageDisposition(Result, MapLoadResult);
 	return FMonolithActionResult::Success(Result);
 }
 

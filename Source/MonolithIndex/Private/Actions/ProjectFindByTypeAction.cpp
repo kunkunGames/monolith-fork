@@ -51,7 +51,7 @@ FMonolithActionResult FProjectFindByTypeAction::Execute(const TSharedPtr<FJsonOb
 	if (Params->HasField(TEXT("limit")))
 	{
 		double LimitValue = 0.0;
-		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		if (!Params->HasTypedField(TEXT("limit"), EJson::Number) || !Params->TryGetNumberField(TEXT("limit"), LimitValue))
 		{
 			return FMonolithActionResult::Error(TEXT("'limit' parameter must be a number"), -32602);
 		}
@@ -63,7 +63,7 @@ FMonolithActionResult FProjectFindByTypeAction::Execute(const TSharedPtr<FJsonOb
 	if (Params->HasField(TEXT("offset")))
 	{
 		double OffsetValue = 0.0;
-		if (!Params->TryGetNumberField(TEXT("offset"), OffsetValue))
+		if (!Params->HasTypedField(TEXT("offset"), EJson::Number) || !Params->TryGetNumberField(TEXT("offset"), OffsetValue))
 		{
 			return FMonolithActionResult::Error(TEXT("'offset' parameter must be a number"), -32602);
 		}
@@ -79,9 +79,12 @@ FMonolithActionResult FProjectFindByTypeAction::Execute(const TSharedPtr<FJsonOb
 	}
 
 	FString ModuleFilter;
-	if (Params->HasField(TEXT("module")) && !Params->TryGetStringField(TEXT("module"), ModuleFilter))
+	if (Params->HasField(TEXT("module")))
 	{
-		return FMonolithActionResult::Error(TEXT("'module' parameter must be a string"), -32602);
+		if (!Params->HasTypedField(TEXT("module"), EJson::String) || !Params->TryGetStringField(TEXT("module"), ModuleFilter))
+		{
+			return FMonolithActionResult::Error(TEXT("'module' parameter must be a string"), -32602);
+		}
 	}
 
 	UMonolithIndexSubsystem* Subsystem = GEditor->GetEditorSubsystem<UMonolithIndexSubsystem>();

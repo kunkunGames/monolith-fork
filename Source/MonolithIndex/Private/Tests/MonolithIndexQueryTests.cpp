@@ -4,6 +4,7 @@
 #include "MonolithIndexDatabase.h"
 #include "MonolithIndexReview.h"
 #include "MonolithIndexSubsystem.h"
+#include "ProjectSearchTextProjection.h"
 #include "HAL/PlatformFileManager.h"
 #include "Misc/Paths.h"
 #include "SQLiteDatabase.h"
@@ -57,6 +58,71 @@ bool FProjectSearchOffsetRejectsWrongTypeTest::RunTest(const FString& Parameters
 
 	TestFalse(TEXT("Search action should reject wrong offset type"), Result.bSuccess);
 	TestEqual(TEXT("Error code should be invalid params"), Result.ErrorCode, -32602);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectSearchIntegerParamsRejectFractionalTest, "Monolith.IndexGuard.Project.SearchIntegerParamsRejectFractional", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FProjectSearchIntegerParamsRejectFractionalTest::RunTest(const FString& Parameters)
+{
+	{
+		auto Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("query"), TEXT("Health"));
+		Params->SetNumberField(TEXT("limit"), 1.5);
+
+		const FMonolithActionResult Result = FProjectSearchAction::Execute(Params);
+		TestFalse(TEXT("Search action should reject a fractional limit"), Result.bSuccess);
+		TestEqual(TEXT("Fractional limit error code should be invalid params"), Result.ErrorCode, -32602);
+	}
+
+	{
+		auto Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("query"), TEXT("Health"));
+		Params->SetNumberField(TEXT("offset"), 2.5);
+
+		const FMonolithActionResult Result = FProjectSearchAction::Execute(Params);
+		TestFalse(TEXT("Search action should reject a fractional offset"), Result.bSuccess);
+		TestEqual(TEXT("Fractional offset error code should be invalid params"), Result.ErrorCode, -32602);
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectSearchUnicodeProjectionTest, "Monolith.IndexGuard.Project.SearchUnicodeProjection", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FProjectSearchUnicodeProjectionTest::RunTest(const FString& Parameters)
+{
+	FString Emoji;
+	if constexpr (sizeof(TCHAR) == 4)
+	{
+		Emoji.AppendChar(static_cast<TCHAR>(0x1F600));
+	}
+	else
+	{
+		Emoji.AppendChar(static_cast<TCHAR>(0xD83D));
+		Emoji.AppendChar(static_cast<TCHAR>(0xDE00));
+	}
+
+	FString Value;
+	for (int32 Index = 0; Index < MonolithProjectSearchText::PreviewCodePoints + 1; ++Index)
+	{
+		Value += Emoji;
+	}
+
+	TestEqual(
+		TEXT("Search projection counts Unicode code points rather than UTF code units"),
+		MonolithProjectSearchText::CountUnicodeCodePoints(Value),
+		MonolithProjectSearchText::PreviewCodePoints + 1);
+
+	const FString Preview = MonolithProjectSearchText::LeftUnicodeCodePoints(
+		Value,
+		MonolithProjectSearchText::PreviewCodePoints);
+	TestEqual(
+		TEXT("Search projection returns exactly the bounded number of code points"),
+		MonolithProjectSearchText::CountUnicodeCodePoints(Preview),
+		MonolithProjectSearchText::PreviewCodePoints);
+	TestTrue(TEXT("Search projection preserves the final complete code point"), Preview.EndsWith(Emoji));
 
 	return true;
 }

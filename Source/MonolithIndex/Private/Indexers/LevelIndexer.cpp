@@ -16,20 +16,22 @@
 #include "WorldPartition/WorldPartition.h"
 #include "Subsystems/WorldSubsystem.h"
 
-namespace
+namespace MonolithLevelIndexerInternal
 {
-	bool TeardownLoadedWorldForIndexing(UWorld* World, UPackage* Package, bool bWasAlreadyLoaded)
+	bool TeardownLoadedWorldForIndexing(
+		UWorld* World,
+		UPackage* Package,
+		const FMonolithPackageResidency& Residency)
 	{
 		if (!World || !Package)
 		{
 			return false;
 		}
-
-		// Issue #81: a world that was already resident before this indexing pass is
-		// referenced elsewhere. Uninitializing it, destroying it, or stripping
-		// RF_Standalone would strand those references, so leave it exactly as found.
-		if (bWasAlreadyLoaded)
+		if (Residency.WasAlreadyLoaded())
 		{
+			// This world belongs to another editor workflow. Do not uninitialize its
+			// WorldPartition/subsystems or strip RF_Standalone merely because the
+			// indexer observed it.
 			return false;
 		}
 
@@ -56,7 +58,7 @@ namespace
 		}
 
 		World->ClearFlags(RF_Standalone);
-		return FMonolithMemoryHelper::TryUnloadPackage(World, bWasAlreadyLoaded);
+		return FMonolithMemoryHelper::TryUnloadPackage(World, Residency);
 	}
 }
 
@@ -127,9 +129,10 @@ bool FLevelIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedAsset
 			int64 LevelAssetId = DB.GetAssetId(WorldData.PackageName.ToString());
 			if (LevelAssetId < 0) continue;
 
-			// Capture residency BEFORE LoadPackage (issue #81): a world already resident
-			// (e.g. an open level) must keep RF_Standalone; only strip what this pass loads.
-			const bool bWasLoaded = FindPackage(nullptr, *WorldData.PackageName.ToString()) != nullptr;
+			// Package residency, rather than only UWorld visibility, is the ownership
+			// boundary for LoadPackage: pre-existing packages must remain untouched.
+			const FMonolithPackageResidency Residency =
+				FMonolithMemoryHelper::CapturePackageResidency(WorldData.PackageName);
 
 			// Load the package to access level data without initializing gameplay
 			UPackage* Package = LoadPackage(nullptr, *WorldData.PackageName.ToString(), LOAD_NoWarn | LOAD_Quiet);
@@ -144,7 +147,7 @@ bool FLevelIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedAsset
 			if (!World || !World->PersistentLevel)
 			{
 				// Mark package for unload even if we couldn't find the world
-				FMonolithMemoryHelper::TryUnloadPackage(Package, bWasLoaded);
+				FMonolithMemoryHelper::TryUnloadPackage(Package, Residency);
 				continue;
 			}
 
@@ -222,7 +225,7 @@ bool FLevelIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedAsset
 					// The actively-open editor world is already excluded by the World != EditorWorld guard above;
 					// this additionally covers a world resident via any other outstanding reference. Mirror
 					// TryUnloadPackage's early-return: a world we didn't load is left intact (indexing already ran).
-					if (!bWasLoaded)
+					if (!Residency.WasAlreadyLoaded())
 					{
 						// Unregister every landscape proxy's components BEFORE teardown so the grass-builder destructor
 						// (driven by CleanupWorld below) never dereferences the null World->Scene. See the block comment
@@ -258,7 +261,10 @@ bool FLevelIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedAsset
 				}
 				else
 				{
-					TeardownLoadedWorldForIndexing(World, Package, bWasLoaded);
+					MonolithLevelIndexerInternal::TeardownLoadedWorldForIndexing(
+						World,
+						Package,
+						Residency);
 				}
 			}
 

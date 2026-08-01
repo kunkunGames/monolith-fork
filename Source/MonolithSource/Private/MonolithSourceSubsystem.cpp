@@ -69,8 +69,12 @@ void UMonolithSourceSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	// DB reads stay available regardless of indexing activation. Writer hooks
 	// and the startup catch-up run are conditional.
+	const FMonolithActivation Activation = UMonolithSettings::GetActivation();
 	SetAutomaticIndexingEnabled(true);
-	StartPreferredIndex();
+	if (IsIndexingWorkEnabled())
+	{
+		StartPreferredIndex(Activation.bIndexingUserSet);
+	}
 }
 
 void UMonolithSourceSubsystem::Deinitialize()
@@ -109,7 +113,13 @@ bool UMonolithSourceSubsystem::IsIndexingWorkEnabled() const
 {
 	const UMonolithSettings* Settings = GetDefault<UMonolithSettings>();
 	return bAutomaticIndexingEnabled
-		&& (!Settings || Settings->bEnableSource);
+		&& (!Settings || Settings->bEnableSource)
+		&& UMonolithSettings::IsIndexingActivated();
+}
+
+bool UMonolithSourceSubsystem::CanAcceptIndexRequest() const
+{
+	return IsIndexingWorkEnabled() && !bIsIndexing;
 }
 
 void UMonolithSourceSubsystem::SetAutomaticIndexingEnabled(bool bEnabled)
@@ -149,7 +159,7 @@ void UMonolithSourceSubsystem::SetAutomaticIndexingEnabled(bool bEnabled)
 	}
 }
 
-bool UMonolithSourceSubsystem::StartPreferredIndex()
+bool UMonolithSourceSubsystem::StartPreferredIndex(bool bAllowFullBootstrap)
 {
 	check(IsInGameThread());
 
@@ -168,11 +178,27 @@ bool UMonolithSourceSubsystem::StartPreferredIndex()
 	}
 
 	const FString DbPath = GetDatabasePath();
-	if (FPlatformFileManager::Get().GetPlatformFile().FileExists(*DbPath))
+	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+	const bool bDatabaseFileExists = PlatformFile.FileExists(*DbPath);
+	if (bDatabaseFileExists && Database.IsValid() && Database->IsOpen())
 	{
 		return TriggerProjectReindexInternal();
 	}
-	return TriggerReindexInternal();
+	if (bDatabaseFileExists)
+	{
+		UE_LOG(LogMonolithSource, Error,
+			TEXT("EngineSource.db exists at %s but could not be opened; refusing an automatic clean rebuild that would discard the existing engine index. Resolve the open failure, then run source.trigger_reindex explicitly if a rebuild is genuinely wanted."),
+			*DbPath);
+		return false;
+	}
+	if (bAllowFullBootstrap)
+	{
+		return TriggerReindexInternal();
+	}
+
+	UE_LOG(LogMonolithSource, Log,
+		TEXT("EngineSource.db is not available; inherited activation does not start an engine-wide bootstrap. Run Monolith.StartIndexing to create it explicitly."));
+	return false;
 }
 
 // ============================================================

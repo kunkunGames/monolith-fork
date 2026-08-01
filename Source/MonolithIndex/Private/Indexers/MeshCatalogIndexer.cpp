@@ -121,8 +121,8 @@ bool FMeshCatalogIndexer::IndexAsset(const FAssetData& AssetData, UObject* Loade
 		{
 			const FAssetData& MeshAssetData = MeshAssets[j];
 
-			// Capture residency BEFORE GetAsset() may load it (issue #81).
-			const bool bWasLoaded = MeshAssetData.IsAssetLoaded();
+			const FMonolithPackageResidency Residency =
+				FMonolithMemoryHelper::CapturePackageResidency(MeshAssetData.PackageName);
 			UStaticMesh* Mesh = Cast<UStaticMesh>(MeshAssetData.GetAsset());
 			if (!Mesh)
 			{
@@ -133,7 +133,7 @@ bool FMeshCatalogIndexer::IndexAsset(const FAssetData& AssetData, UObject* Loade
 			FStaticMeshRenderData* RenderData = Mesh->GetRenderData();
 			if (!RenderData || RenderData->LODResources.Num() == 0)
 			{
-				FMonolithMemoryHelper::TryUnloadPackage(Mesh, bWasLoaded);
+				FMonolithMemoryHelper::TryUnloadPackage(Mesh, Residency);
 				Errors++;
 				continue;
 			}
@@ -232,7 +232,7 @@ bool FMeshCatalogIndexer::IndexAsset(const FAssetData& AssetData, UObject* Loade
 			}
 
 			// Mark mesh for unloading to free render data memory
-			FMonolithMemoryHelper::TryUnloadPackage(Mesh, bWasLoaded);
+			FMonolithMemoryHelper::TryUnloadPackage(Mesh, Residency);
 		}
 
 		BatchNumber++;

@@ -36,15 +36,21 @@ bool FMonolithPieInjectKeyContractTest::RunTest(const FString& Parameters)
 	if (TestTrue(TEXT("key schema exists"), InjectKeyInfo->ParamSchema->TryGetObjectField(TEXT("key"), KeySchema)
 		&& KeySchema && KeySchema->IsValid()))
 	{
-		TestEqual(TEXT("key is a string"), (*KeySchema)->GetStringField(TEXT("type")), FString(TEXT("string")));
-		TestTrue(TEXT("key is required"), (*KeySchema)->GetBoolField(TEXT("required")));
+		FString KeyType;
+		TestTrue(TEXT("key type exists"), (*KeySchema)->TryGetStringField(TEXT("type"), KeyType));
+		TestEqual(TEXT("key is a string"), KeyType, FString(TEXT("string")));
+		bool bKeyRequired = false;
+		TestTrue(TEXT("key required exists"), (*KeySchema)->TryGetBoolField(TEXT("required"), bKeyRequired));
+		TestTrue(TEXT("key is required"), bKeyRequired);
 	}
 
 	const TSharedPtr<FJsonObject>* EventSchema = nullptr;
 	if (TestTrue(TEXT("event schema exists"), InjectKeyInfo->ParamSchema->TryGetObjectField(TEXT("event"), EventSchema)
 		&& EventSchema && EventSchema->IsValid()))
 	{
-		TestEqual(TEXT("event defaults to tap"), (*EventSchema)->GetStringField(TEXT("default")), FString(TEXT("tap")));
+		FString EventDefault;
+		TestTrue(TEXT("event default exists"), (*EventSchema)->TryGetStringField(TEXT("default"), EventDefault));
+		TestEqual(TEXT("event defaults to tap"), EventDefault, FString(TEXT("tap")));
 		const TArray<TSharedPtr<FJsonValue>>* EnumValues = nullptr;
 		if (TestTrue(TEXT("event enum exists"), (*EventSchema)->TryGetArrayField(TEXT("enum"), EnumValues) && EnumValues))
 		{
@@ -123,11 +129,17 @@ bool FMonolithPieStartWithUrlOptionsContractTest::RunTest(const FString& Paramet
 		StartInfo->ParamSchema->TryGetObjectField(TEXT("url_options"), OptionsSchema)
 			&& OptionsSchema && OptionsSchema->IsValid()))
 	{
-		TestEqual(TEXT("url_options is an array"), (*OptionsSchema)->GetStringField(TEXT("type")), FString(TEXT("array")));
-		TestTrue(TEXT("url_options is required"), (*OptionsSchema)->GetBoolField(TEXT("required")));
+		FString OptionsType;
+		TestTrue(TEXT("url_options type exists"), (*OptionsSchema)->TryGetStringField(TEXT("type"), OptionsType));
+		TestEqual(TEXT("url_options is an array"), OptionsType, FString(TEXT("array")));
+		bool bOptionsRequired = false;
+		TestTrue(TEXT("url_options required exists"), (*OptionsSchema)->TryGetBoolField(TEXT("required"), bOptionsRequired));
+		TestTrue(TEXT("url_options is required"), bOptionsRequired);
+		FString OptionsDesc;
+		TestTrue(TEXT("url_options description exists"), (*OptionsSchema)->TryGetStringField(TEXT("description"), OptionsDesc));
 		TestTrue(
 			TEXT("url_options schema description uses valid JSON double quotes"),
-			(*OptionsSchema)->GetStringField(TEXT("description")).Contains(TEXT("[\"TagChaseDirectStart=1\"]")));
+			OptionsDesc.Contains(TEXT("[\"TagChaseDirectStart=1\"]")));
 	}
 
 	TestFalse(

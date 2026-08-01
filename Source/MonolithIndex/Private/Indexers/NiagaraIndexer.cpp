@@ -67,8 +67,8 @@ bool FNiagaraIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedAss
 			int64 NiagaraAssetId = DB.GetAssetId(NiagaraAssetData.PackageName.ToString());
 			if (NiagaraAssetId < 0) continue;
 
-			// Capture residency BEFORE GetAsset() may load it (issue #81).
-			const bool bWasLoaded = NiagaraAssetData.IsAssetLoaded();
+			const FMonolithPackageResidency Residency =
+				FMonolithMemoryHelper::CapturePackageResidency(NiagaraAssetData.PackageName);
 			UNiagaraSystem* System = Cast<UNiagaraSystem>(NiagaraAssetData.GetAsset());
 			if (!System) continue;
 
@@ -76,7 +76,7 @@ bool FNiagaraIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedAss
 			SystemsIndexed++;
 
 			// Mark for unloading
-			FMonolithMemoryHelper::TryUnloadPackage(System, bWasLoaded);
+			FMonolithMemoryHelper::TryUnloadPackage(System, Residency);
 		}
 
 		BatchNumber++;

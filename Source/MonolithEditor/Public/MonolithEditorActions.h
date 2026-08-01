@@ -233,8 +233,8 @@ private:
 	static bool StopPieInternal();
 
 	// Find the active PIE world context's UWorld, or nullptr when no PIE is running.
-	// Public: the anonymous-namespace map-load guard (EnsureNoResidentPieWorldBeforeMapLoad)
-	// and lifecycle reporting read this read-only PIE-residency probe from free-function scope.
+	// Public: the shared MonolithMapLoadPreflight helper and lifecycle reporting read
+	// this read-only PIE-residency probe from free-function scope.
 public:
 	static class UWorld* FindActivePieWorld();
 };

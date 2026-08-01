@@ -647,7 +647,6 @@ static TArray<TSharedPtr<FJsonValue>> AddEventNodeFunctionParametersToJsonValues
 	{
 		return Params;
 	}
-
 	for (TFieldIterator<FProperty> PropIt(Func); PropIt && (PropIt->PropertyFlags & CPF_Parm); ++PropIt)
 	{
 		const FProperty* Prop = *PropIt;
@@ -862,62 +861,40 @@ static TSharedPtr<FJsonObject> MakeAddEventNodeErrorData(
 	return ErrorData;
 }
 
-// ============================================================
-//  Shared SwitchEnum / CallFunction resolution (add_node + resolve_node)
-// ============================================================
-//
-// One implementation of the FR7 enum lookup and the FR8 function-reference
-// resolution so the real write (HandleAddNode) and the dry-run preview
-// (HandleResolveNode) can never diverge.
-
-// Resolve the UEnum for a SwitchEnum node. Handles a bare/E-prefixed short name,
-// a /Script path (already-loaded types via TryFindTypeSlow), and an UNLOADED
-// UserDefinedEnum asset path (LoadObject — TryFindTypeSlow/FindFirstObject only
-// see already-loaded types). Returns nullptr when nothing resolves.
-static UEnum* ResolveSwitchEnumType(const FString& EnumType)
+// SetFromFunction configures node behavior (purity, enum expansion, and so on),
+// but its self-scope inference comes from the node's owning graph. resolve_node
+// deliberately uses a transient preview graph whose stand-in native class has no
+// ClassGeneratedBy; FMemberReference can therefore mistake any other native class
+// (also ClassGeneratedBy == nullptr) for self. Restamp the reference from the real
+// Blueprint context so native function-library previews resolve exactly like the
+// authored node while retaining SetFromFunction's behavioral side effects.
+static void SetCallFunctionFromResolvedFunction(
+	UK2Node_CallFunction* CallNode,
+	UBlueprint* SelfBP,
+	UFunction* Function)
 {
-	if (EnumType.IsEmpty())
-	{
-		return nullptr;
-	}
+	CallNode->SetFromFunction(Function);
 
-	const bool bIsPath = EnumType.Contains(TEXT("/"));
-
-	UEnum* FoundEnum = UClass::TryFindTypeSlow<UEnum>(EnumType);
-	if (!FoundEnum && !bIsPath && !EnumType.StartsWith(TEXT("E")))
+	UClass* SelfClass = SelfBP ? SelfBP->SkeletonGeneratedClass.Get() : nullptr;
+	if (!SelfClass && SelfBP)
 	{
-		FoundEnum = UClass::TryFindTypeSlow<UEnum>(FString::Printf(TEXT("E%s"), *EnumType));
+		SelfClass = SelfBP->GeneratedClass.Get();
 	}
-	// Legacy short-name fallback (keeps prior behaviour for anything TryFindTypeSlow misses).
-	if (!FoundEnum && !bIsPath)
-	{
-		FoundEnum = FindFirstObject<UEnum>(*EnumType, EFindFirstObjectOptions::NativeFirst);
-		if (!FoundEnum && !EnumType.StartsWith(TEXT("E")))
-		{
-			FoundEnum = FindFirstObject<UEnum>(*FString::Printf(TEXT("E%s"), *EnumType), EFindFirstObjectOptions::NativeFirst);
-		}
-	}
-	// Asset-path fallback: load an unloaded UserDefinedEnum from its object path.
-	if (!FoundEnum && bIsPath)
-	{
-		FoundEnum = LoadObject<UEnum>(nullptr, *EnumType);
-	}
-	return FoundEnum;
+	UClass* OwnerClass = Function ? Function->GetOwnerClass() : nullptr;
+	const bool bSelfContext = SelfClass && OwnerClass && SelfClass->IsChildOf(OwnerClass);
+	CallNode->FunctionReference.SetFromField<UFunction>(Function, bSelfContext, OwnerClass);
 }
 
 // Stamp a CallFunction reference onto CallNode from FuncName + optional
-// TargetClassName, using SelfBP as the self-context Blueprint (may be null in a
-// dry-run without asset_path). A function authored ON a Blueprint is referenced by
-// MEMBER — SetSelfMember for the self BP (stores no class, survives skeleton
-// regeneration) or SetExternalMember with the AUTHORITATIVE GeneratedClass for
-// another BP (never SkeletonGeneratedClass, which is transient). Native C++
-// functions keep SetFromFunction. Does NOT AllocateDefaultPins — the caller does,
-// so add_node and the dry-run each control node placement. Returns true on
-// success; on failure fills OutError and returns false. On success,
-// OutResolvedFunction (if non-null) receives the resolved UFunction so callers
-// can pick the palette-correct node class from its metadata.
-static bool ResolveCallFunctionReference(UK2Node_CallFunction* CallNode, UBlueprint* SelfBP,
-	const FString& FuncName, const FString& TargetClassName, FString& OutError,
+// TargetClassName, using SelfBP as the self-context Blueprint. Blueprint-authored
+// functions use member references so they survive skeleton regeneration; native
+// functions retain SetFromFunction. The caller owns pin allocation and placement.
+static bool ResolveCallFunctionReference(
+	UK2Node_CallFunction* CallNode,
+	UBlueprint* SelfBP,
+	const FString& FuncName,
+	const FString& TargetClassName,
+	FString& OutError,
 	UFunction** OutResolvedFunction = nullptr)
 {
 	if (!CallNode)
@@ -926,7 +903,6 @@ static bool ResolveCallFunctionReference(UK2Node_CallFunction* CallNode, UBluepr
 		return false;
 	}
 
-	// Blueprint-callable wrappers use the K2_ prefix (GetActorLocation → K2_GetActorLocation).
 	TArray<FName> FuncNameCandidates;
 	FuncNameCandidates.Add(FName(*FuncName));
 	if (!FuncName.StartsWith(TEXT("K2_")))
@@ -934,61 +910,68 @@ static bool ResolveCallFunctionReference(UK2Node_CallFunction* CallNode, UBluepr
 		FuncNameCandidates.Add(FName(*FString::Printf(TEXT("K2_%s"), *FuncName)));
 	}
 
-	// Find the first candidate name present on a class (walks the super chain).
-	auto FindCandidateOn = [&FuncNameCandidates](UClass* Cls) -> UFunction*
+	auto FindCandidateOn = [&FuncNameCandidates](UClass* Class) -> UFunction*
 	{
-		if (!Cls) return nullptr;
+		if (!Class)
+		{
+			return nullptr;
+		}
 		for (const FName& Candidate : FuncNameCandidates)
 		{
-			if (UFunction* F = Cls->FindFunctionByName(Candidate)) return F;
+			if (UFunction* Function = Class->FindFunctionByName(Candidate))
+			{
+				return Function;
+			}
 		}
 		return nullptr;
 	};
 
 	if (!TargetClassName.IsEmpty())
 	{
-		// Resolve target_class. A Blueprint may arrive as an asset path, a '_C'
-		// generated-class path/name, or a bare BP name; a native class as a
-		// bare/prefixed C++ name. Try the Blueprint interpretation first.
 		UBlueprint* TargetBP = nullptr;
 		{
-			FString BpPath = TargetClassName;
-			// Normalize a generated-class ref to the BP asset path:
-			//   "/Game/Foo/BP_Bar.BP_Bar_C" → "/Game/Foo/BP_Bar"; "BP_Bar_C" → "BP_Bar".
-			if (BpPath.EndsWith(TEXT("_C")))
+			FString BlueprintPath = TargetClassName;
+			if (BlueprintPath.EndsWith(TEXT("_C")))
 			{
-				int32 DotIdx = INDEX_NONE;
-				if (BpPath.FindLastChar(TEXT('.'), DotIdx))
+				int32 DotIndex = INDEX_NONE;
+				if (BlueprintPath.FindLastChar(TEXT('.'), DotIndex))
 				{
-					BpPath = BpPath.Left(DotIdx);
+					BlueprintPath = BlueprintPath.Left(DotIndex);
 				}
 				else
 				{
-					BpPath = BpPath.LeftChop(2);
+					BlueprintPath = BlueprintPath.LeftChop(2);
 				}
 			}
-			if (BpPath.Contains(TEXT("/")))
+			if (BlueprintPath.Contains(TEXT("/")))
 			{
 				TSharedPtr<FJsonObject> Synthetic = MakeShared<FJsonObject>();
-				Synthetic->SetStringField(TEXT("asset_path"), BpPath);
+				Synthetic->SetStringField(TEXT("asset_path"), BlueprintPath);
 				FString ResolvedPath;
 				TargetBP = MonolithBlueprintInternal::LoadBlueprintFromParams(Synthetic, ResolvedPath);
 			}
 		}
 
-		// Native / loaded-class resolution (also picks up a bare-name BP via its
-		// "_C" generated class, from which we recover the owning UBlueprint).
 		UClass* TargetClass = nullptr;
 		if (!TargetBP)
 		{
 			TargetClass = FindFirstObject<UClass>(*TargetClassName, EFindFirstObjectOptions::NativeFirst);
 			if (!TargetClass && !TargetClassName.StartsWith(TEXT("U")))
-				TargetClass = FindFirstObject<UClass>(*FString::Printf(TEXT("U%s"), *TargetClassName), EFindFirstObjectOptions::NativeFirst);
+			{
+				TargetClass = FindFirstObject<UClass>(
+					*FString::Printf(TEXT("U%s"), *TargetClassName),
+					EFindFirstObjectOptions::NativeFirst);
+			}
 			if (!TargetClass && TargetClassName.StartsWith(TEXT("U")))
+			{
 				TargetClass = FindFirstObject<UClass>(*TargetClassName.Mid(1), EFindFirstObjectOptions::NativeFirst);
+			}
 			if (!TargetClass && !TargetClassName.EndsWith(TEXT("_C")))
-				TargetClass = FindFirstObject<UClass>(*FString::Printf(TEXT("%s_C"), *TargetClassName), EFindFirstObjectOptions::NativeFirst);
-
+			{
+				TargetClass = FindFirstObject<UClass>(
+					*FString::Printf(TEXT("%s_C"), *TargetClassName),
+					EFindFirstObjectOptions::NativeFirst);
+			}
 			if (TargetClass)
 			{
 				TargetBP = Cast<UBlueprint>(TargetClass->ClassGeneratedBy);
@@ -997,55 +980,61 @@ static bool ResolveCallFunctionReference(UK2Node_CallFunction* CallNode, UBluepr
 
 		if (TargetBP)
 		{
-			// Blueprint function. Consult the skeleton class first (it carries
-			// just-added functions before the next full compile), then the
-			// generated class.
-			UClass* SkelClass = TargetBP->SkeletonGeneratedClass;
-			UClass* GenClass  = TargetBP->GeneratedClass;
-			UFunction* BpFunc = FindCandidateOn(SkelClass);
-			if (!BpFunc) BpFunc = FindCandidateOn(GenClass);
-			if (!BpFunc)
+			UClass* SkeletonClass = TargetBP->SkeletonGeneratedClass;
+			UClass* GeneratedClass = TargetBP->GeneratedClass;
+			UFunction* BlueprintFunction = FindCandidateOn(SkeletonClass);
+			if (!BlueprintFunction)
+			{
+				BlueprintFunction = FindCandidateOn(GeneratedClass);
+			}
+			if (!BlueprintFunction)
 			{
 				OutError = FString::Printf(
 					TEXT("Function '%s' not found on Blueprint '%s' (also tried K2_ prefix). Ensure the function exists and is BlueprintCallable."),
-					*FuncName, *TargetClassName);
+					*FuncName,
+					*TargetClassName);
 				return false;
 			}
-			const FName ResolvedName = BpFunc->GetFName();
-			if (OutResolvedFunction) *OutResolvedFunction = BpFunc;
 
+			const FName ResolvedName = BlueprintFunction->GetFName();
+			if (OutResolvedFunction)
+			{
+				*OutResolvedFunction = BlueprintFunction;
+			}
 			if (SelfBP && TargetBP == SelfBP)
 			{
-				// Self-context call: store no class so it survives recompiles.
 				CallNode->FunctionReference.SetSelfMember(ResolvedName);
 			}
 			else
 			{
-				if (!GenClass)
+				if (!GeneratedClass)
 				{
 					OutError = FString::Printf(
 						TEXT("Target Blueprint '%s' has no GeneratedClass (needs compile). Compile it, then retry."),
 						*TargetClassName);
 					return false;
 				}
-				// External member: authoritative GeneratedClass, NOT the skeleton.
-				CallNode->FunctionReference.SetExternalMember(ResolvedName, GenClass);
+				CallNode->FunctionReference.SetExternalMember(ResolvedName, GeneratedClass);
 			}
 			return true;
 		}
-		else if (TargetClass)
+
+		if (TargetClass)
 		{
-			// Native C++ class: SetFromFunction (computes self-context + parent).
-			UFunction* Func = FindCandidateOn(TargetClass);
-			if (!Func)
+			UFunction* Function = FindCandidateOn(TargetClass);
+			if (!Function)
 			{
 				OutError = FString::Printf(
 					TEXT("Function '%s' not found on class '%s' (also tried K2_ prefix). Ensure the function is BlueprintCallable."),
-					*FuncName, *TargetClassName);
+					*FuncName,
+					*TargetClassName);
 				return false;
 			}
-			if (OutResolvedFunction) *OutResolvedFunction = Func;
-			CallNode->SetFromFunction(Func);
+			if (OutResolvedFunction)
+			{
+				*OutResolvedFunction = Function;
+			}
+			SetCallFunctionFromResolvedFunction(CallNode, SelfBP, Function);
 			return true;
 		}
 
@@ -1055,47 +1044,44 @@ static bool ResolveCallFunctionReference(UK2Node_CallFunction* CallNode, UBluepr
 		return false;
 	}
 
-	// No target_class. Check SelfBP's own class chain first so a BP-authored
-	// function binds as a self member instead of an arbitrary external match.
-	UClass* SkelClass = SelfBP ? SelfBP->SkeletonGeneratedClass : nullptr;
-	UClass* GenClass  = SelfBP ? SelfBP->GeneratedClass : nullptr;
-	UFunction* SelfFunc = FindCandidateOn(SkelClass);
-	if (!SelfFunc) SelfFunc = FindCandidateOn(GenClass);
-
-	// "Own" == declared on SelfBP's class (not inherited from a native super).
-	// Inherited native members (e.g. K2_GetActorLocation) keep the SetFromFunction
-	// path, which stamps the correct native parent class.
-	const bool bIsOwnBpFunction = SelfFunc &&
-		(SelfFunc->GetOwnerClass() == SkelClass || SelfFunc->GetOwnerClass() == GenClass);
-
-	if (SelfFunc && OutResolvedFunction)
+	UClass* SkeletonClass = SelfBP ? SelfBP->SkeletonGeneratedClass : nullptr;
+	UClass* GeneratedClass = SelfBP ? SelfBP->GeneratedClass : nullptr;
+	UFunction* SelfFunction = FindCandidateOn(SkeletonClass);
+	if (!SelfFunction)
 	{
-		*OutResolvedFunction = SelfFunc;
+		SelfFunction = FindCandidateOn(GeneratedClass);
 	}
-	if (bIsOwnBpFunction)
+
+	const bool bIsOwnBlueprintFunction = SelfFunction &&
+		(SelfFunction->GetOwnerClass() == SkeletonClass || SelfFunction->GetOwnerClass() == GeneratedClass);
+	if (SelfFunction && OutResolvedFunction)
 	{
-		CallNode->FunctionReference.SetSelfMember(SelfFunc->GetFName());
+		*OutResolvedFunction = SelfFunction;
+	}
+	if (bIsOwnBlueprintFunction)
+	{
+		CallNode->FunctionReference.SetSelfMember(SelfFunction->GetFName());
 		return true;
 	}
-	if (SelfFunc)
+	if (SelfFunction)
 	{
-		// Inherited member resolved on the self chain — deterministic owner.
-		CallNode->SetFromFunction(SelfFunc);
+		SetCallFunctionFromResolvedFunction(CallNode, SelfBP, SelfFunction);
 		return true;
 	}
 
-	// Widget Blueprints bias toward UWidget-derived owners so name collisions
-	// (e.g. SetVisibility) resolve to the UMG widget the author meant rather than
-	// an arbitrary first-match engine class.
-	UFunction* Func = FindFunctionAcrossLoadedClasses(FuncNameCandidates, IsWidgetBlueprintContext(SelfBP));
-	if (!Func)
+	UFunction* Function = FindFunctionAcrossLoadedClasses(FuncNameCandidates, IsWidgetBlueprintContext(SelfBP));
+	if (!Function)
 	{
 		OutError = FString::Printf(
-			TEXT("Function '%s' not found in any loaded class (also tried K2_ prefix)"), *FuncName);
+			TEXT("Function '%s' not found in any loaded class (also tried K2_ prefix)"),
+			*FuncName);
 		return false;
 	}
-	if (OutResolvedFunction) *OutResolvedFunction = Func;
-	CallNode->SetFromFunction(Func);
+	if (OutResolvedFunction)
+	{
+		*OutResolvedFunction = Function;
+	}
+	SetCallFunctionFromResolvedFunction(CallNode, SelfBP, Function);
 	return true;
 }
 
@@ -1157,6 +1143,49 @@ static void BindVariableNodeReference(UK2Node_Variable* VarNode, UBlueprint* BP,
 		}
 	}
 	VarNode->VariableReference.SetSelfMember(VarFName);
+}
+
+// ============================================================
+//  Shared SwitchEnum / CallFunction resolution (add_node + resolve_node)
+// ============================================================
+//
+// One implementation of the FR7 enum lookup and the FR8 function-reference
+// resolution so the real write (HandleAddNode) and the dry-run preview
+// (HandleResolveNode) can never diverge.
+
+// Resolve the UEnum for a SwitchEnum node. Handles a bare/E-prefixed short name,
+// a /Script path (already-loaded types via TryFindTypeSlow), and an UNLOADED
+// UserDefinedEnum asset path (LoadObject — TryFindTypeSlow/FindFirstObject only
+// see already-loaded types). Returns nullptr when nothing resolves.
+static UEnum* ResolveSwitchEnumType(const FString& EnumType)
+{
+	if (EnumType.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	const bool bIsPath = EnumType.Contains(TEXT("/"));
+
+	UEnum* FoundEnum = UClass::TryFindTypeSlow<UEnum>(EnumType);
+	if (!FoundEnum && !bIsPath && !EnumType.StartsWith(TEXT("E")))
+	{
+		FoundEnum = UClass::TryFindTypeSlow<UEnum>(FString::Printf(TEXT("E%s"), *EnumType));
+	}
+	// Legacy short-name fallback (keeps prior behaviour for anything TryFindTypeSlow misses).
+	if (!FoundEnum && !bIsPath)
+	{
+		FoundEnum = FindFirstObject<UEnum>(*EnumType, EFindFirstObjectOptions::NativeFirst);
+		if (!FoundEnum && !EnumType.StartsWith(TEXT("E")))
+		{
+			FoundEnum = FindFirstObject<UEnum>(*FString::Printf(TEXT("E%s"), *EnumType), EFindFirstObjectOptions::NativeFirst);
+		}
+	}
+	// Asset-path fallback: load an unloaded UserDefinedEnum from its object path.
+	if (!FoundEnum && bIsPath)
+	{
+		FoundEnum = LoadObject<UEnum>(nullptr, *EnumType);
+	}
+	return FoundEnum;
 }
 
 // ============================================================
@@ -3554,7 +3583,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleBatchExecute(const TS
 
 	for (int32 i = 0; i < Ops.Num(); ++i)
 	{
-		TSharedPtr<FJsonObject> Op = Ops[i]->AsObject();
+		const TSharedPtr<FJsonObject>* OpPtr;
+		TSharedPtr<FJsonObject> Op = Ops[i]->TryGetObject(OpPtr) ? *OpPtr : nullptr;
 		TSharedRef<FJsonObject> RO = MakeShared<FJsonObject>();
 		RO->SetNumberField(TEXT("index"), i);
 
@@ -4235,7 +4265,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNodesBulk(const TS
 
 	for (int32 i = 0; i < NodesArr.Num(); ++i)
 	{
-		TSharedPtr<FJsonObject> Entry = NodesArr[i]->AsObject();
+		const TSharedPtr<FJsonObject>* EntryPtr;
+		TSharedPtr<FJsonObject> Entry = NodesArr[i]->TryGetObject(EntryPtr) ? *EntryPtr : nullptr;
 		if (!Entry.IsValid())
 		{
 			// Skip invalid entries silently — can't report without a temp_id
@@ -4258,7 +4289,7 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNodesBulk(const TS
 		}
 
 		// Apply auto_layout position if the entry doesn't already specify one and auto_layout is on
-		if (bAutoLayout && !Entry->HasTypedField<EJson::Array>(TEXT("position")))
+		if (bAutoLayout && !Entry->HasTypedField(TEXT("position"), EJson::Array))
 		{
 			int32 Col = i % 5;
 			int32 Row = i / 5;
@@ -4370,7 +4401,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleConnectPinsBulk(const
 
 	for (int32 i = 0; i < ConnArr.Num(); ++i)
 	{
-		TSharedPtr<FJsonObject> Entry = ConnArr[i]->AsObject();
+		const TSharedPtr<FJsonObject>* EntryPtr;
+		TSharedPtr<FJsonObject> Entry = ConnArr[i]->TryGetObject(EntryPtr) ? *EntryPtr : nullptr;
 
 		TSharedRef<FJsonObject> RO = MakeShared<FJsonObject>();
 		RO->SetNumberField(TEXT("index"), i);
@@ -4474,7 +4506,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleSetPinDefaultsBulk(co
 
 	for (int32 i = 0; i < DefaultsArr.Num(); ++i)
 	{
-		TSharedPtr<FJsonObject> Entry = DefaultsArr[i]->AsObject();
+		const TSharedPtr<FJsonObject>* EntryPtr;
+		TSharedPtr<FJsonObject> Entry = DefaultsArr[i]->TryGetObject(EntryPtr) ? *EntryPtr : nullptr;
 
 		TSharedRef<FJsonObject> RO = MakeShared<FJsonObject>();
 		RO->SetNumberField(TEXT("index"), i);
@@ -6025,7 +6058,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleSetTimelineKeys(const
 	int32 KeyCount = 0;
 	for (const TSharedPtr<FJsonValue>& KeyVal : KeysArr)
 	{
-		const TSharedPtr<FJsonObject>& KeyObj = KeyVal->AsObject();
+		const TSharedPtr<FJsonObject>* KeyObjPtr;
+		TSharedPtr<FJsonObject> KeyObj = KeyVal->TryGetObject(KeyObjPtr) ? *KeyObjPtr : nullptr;
 		if (!KeyObj.IsValid()) continue;
 
 		double Time = 0.0;
