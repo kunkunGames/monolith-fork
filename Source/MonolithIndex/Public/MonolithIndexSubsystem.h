@@ -99,7 +99,11 @@ public:
 
 	// --- Query API (called by MCP actions) ---
 	TArray<FSearchResult> Search(const FString& Query, int32 Limit = 50);
-	TArray<FSearchResult> Search(const FString& Query, int32 Limit, const FProjectSearchOptions& Options);
+	TArray<FSearchResult> Search(
+		const FString& Query,
+		int32 Limit,
+		const FProjectSearchOptions& Options,
+		FString* OutError = nullptr);
 	TSharedPtr<FJsonObject> FindReferences(const FString& PackagePath);
 	TArray<FIndexedAsset> FindByType(const FString& AssetClass, int32 Limit = 100, int32 Offset = 0);
 	TArray<FIndexedAsset> FindByType(const FString& AssetClass, const FString& ModuleFilter, int32 Limit, int32 Offset);

@@ -5840,7 +5840,9 @@ public:
         json results = json::array();
 
         auto add_matches = [&](const std::string& fts_table, const std::string& sql, const std::string& match_source) {
-            if (!object_exists(db, "table", fts_table)) return;
+            if (!object_exists(db, "table", fts_table))
+                die("project search failed: required FTS table '" + fts_table +
+                    "' is missing; run project health and repair_fts only when health recommends it");
             std::string filtered_sql = sql;
             std::vector<std::string> params = {q};
             const size_t order_by = filtered_sql.rfind(" ORDER BY ");
@@ -5857,9 +5859,17 @@ public:
                 params.push_back("%" + escape_sql_like(path_filter) + "%");
             }
             filtered_sql.insert(insert_at, filters);
-            auto rows = query(db,
-                filtered_sql + " LIMIT " + std::to_string(candidate_limit) + ";",
-                params);
+            Rows rows;
+            std::string query_error;
+            if (!query_rows_ok(
+                    db,
+                    filtered_sql + " LIMIT " + std::to_string(candidate_limit) + ";",
+                    params,
+                    rows,
+                    query_error)) {
+                die("project search failed in '" + match_source + "': " + query_error +
+                    "; run project health and repair_fts only when health recommends it");
+            }
             for (auto& r : rows) {
                 const std::string full_match_value = r.get("match_value");
                 auto [projected_match_value, match_value_truncated] = compact_match_value(full_match_value, detail);

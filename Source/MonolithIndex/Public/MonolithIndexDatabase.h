@@ -289,7 +289,11 @@ public:
 	// (OR of all K-token subsets); 0 (default) keeps the pure AND-prefix behavior.
 	static FString EscapeFTS(const FString& Query, int32 MinShouldMatchPct = 0);
 	TArray<FSearchResult> FullTextSearch(const FString& Query, int32 Limit = 50);
-	TArray<FSearchResult> FullTextSearch(const FString& Query, int32 Limit, const FProjectSearchOptions& Options);
+	TArray<FSearchResult> FullTextSearch(
+		const FString& Query,
+		int32 Limit,
+		const FProjectSearchOptions& Options,
+		FString* OutError = nullptr);
 
 	// --- Stats ---
 	TSharedPtr<FJsonObject> GetStats();

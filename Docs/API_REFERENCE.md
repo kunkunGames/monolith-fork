@@ -1471,6 +1471,7 @@ Full-text search across all indexed project assets, nodes, variables, and parame
 
 Results are ranked by bm25 column weighting (name >> body) fused across FTS tables via RRF, with a de-spaced CamelCase streak superset and an `identifier_split` supplemental value for CamelCase/snake token recall.
 Compact results report `match_value_length` in Unicode code points and never split a UTF-16 surrogate pair or UTF-8 sequence at the 240-code-point boundary.
+All required FTS sources are queried atomically. If a table is missing or SQLite prepare, bind, or step fails, live MCP returns `-32603` with `project.health` guidance and the offline CLI exits with an error; neither path returns already-fused partial rows or disguises the failure as an empty successful search.
 
 ### `project.find_references`
 

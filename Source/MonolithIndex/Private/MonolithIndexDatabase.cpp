@@ -1345,10 +1345,25 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 	return FullTextSearch(Query, Limit, FProjectSearchOptions::AssetNodeOnly());
 }
 
-TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Query, int32 Limit, const FProjectSearchOptions& Options)
+TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(
+	const FString& Query,
+	int32 Limit,
+	const FProjectSearchOptions& Options,
+	FString* OutError)
 {
 	TArray<FSearchResult> Results;
-	if (!IsOpen()) return Results;
+	if (OutError)
+	{
+		OutError->Reset();
+	}
+	if (!IsOpen())
+	{
+		if (OutError)
+		{
+			*OutError = TEXT("Project index database is not open.");
+		}
+		return Results;
+	}
 	const int32 ClampedLimit = FMath::Clamp(Limit, 1, 1001);
 	const int32 PageOffset = FMath::Max(Options.Offset, 0);
 	const FString FTSQuery = EscapeFTS(Query, Options.MinShouldMatchPct);
@@ -1375,6 +1390,22 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 	// (higher = better AFTER fusion), and the representative provenance is the first (i.e.
 	// highest-priority-table, best-rank) contribution seen for that asset.
 	TMap<FString, FSearchResult> Fused;
+	bool bSearchFailed = false;
+	auto FailSearch = [&](const FString& Stage, const FString& Detail)
+	{
+		if (bSearchFailed)
+		{
+			return;
+		}
+		bSearchFailed = true;
+		const FString Message = FString::Printf(TEXT("%s: %s"), *Stage, *Detail);
+		if (OutError)
+		{
+			*OutError = Message;
+		}
+		UE_LOG(LogMonolithIndex, Error, TEXT("Project FTS search failed — %s"), *Message);
+		Fused.Reset();
+	};
 
 	// Q6 (PRD AssetSearchSemanticSearch): optional pushed-down scope filters. asset_class is
 	// an exact indexed match (idx_assets_class); package_path is a substring LIKE on the
@@ -1392,6 +1423,10 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 
 	auto AddMatches = [&](const FString& SQL, const FString& MatchSource)
 	{
+		if (bSearchFailed)
+		{
+			return;
+		}
 		FString FinalSQL = SQL;
 		if (!ScopeClause.IsEmpty())
 		{
@@ -1402,17 +1437,37 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 		FSQLitePreparedStatement Stmt;
 		if (!Stmt.Create(*Database, *FinalSQL))
 		{
+			FailSearch(
+				FString::Printf(TEXT("failed to prepare the '%s' search query"), *MatchSource),
+				Database->GetLastError());
 			return;
 		}
 		int32 BindIdx = 1;
-		Stmt.SetBindingValueByIndex(BindIdx++, FTSQuery);
-		if (!Options.AssetClassFilter.IsEmpty()) Stmt.SetBindingValueByIndex(BindIdx++, Options.AssetClassFilter);
-		if (!EscapedPath.IsEmpty()) Stmt.SetBindingValueByIndex(BindIdx++, EscapedPath);
-		Stmt.SetBindingValueByIndex(BindIdx++, static_cast<int64>(OversampleLimit));
+		bool bBindingsValid = Stmt.SetBindingValueByIndex(BindIdx++, FTSQuery);
+		if (!Options.AssetClassFilter.IsEmpty())
+		{
+			bBindingsValid = Stmt.SetBindingValueByIndex(BindIdx++, Options.AssetClassFilter) && bBindingsValid;
+		}
+		if (!EscapedPath.IsEmpty())
+		{
+			bBindingsValid = Stmt.SetBindingValueByIndex(BindIdx++, EscapedPath) && bBindingsValid;
+		}
+		bBindingsValid =
+			Stmt.SetBindingValueByIndex(BindIdx++, static_cast<int64>(OversampleLimit))
+			&& bBindingsValid;
+		if (!bBindingsValid)
+		{
+			FailSearch(
+				FString::Printf(TEXT("failed to bind the '%s' search query"), *MatchSource),
+				Database->GetLastError());
+			return;
+		}
 
 		const float SourceWeight = SourceWeightFor(MatchSource);
 		int32 RankPos = 0;
-		while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		int32 StepErrorCode = 0;
+		ESQLitePreparedStatementStepResult StepResult = ESQLitePreparedStatementStepResult::Done;
+		while ((StepResult = Stmt.Step(&StepErrorCode)) == ESQLitePreparedStatementStepResult::Row)
 		{
 			const float Contribution = SourceWeight / (RRFConstant + static_cast<float>(RankPos));
 			const int32 ThisRankPos = RankPos;
@@ -1456,6 +1511,21 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 				R.BestRank = ThisRankPos;
 			}
 			Fused.Add(R.AssetPath, MoveTemp(R));
+		}
+		if (StepResult != ESQLitePreparedStatementStepResult::Done)
+		{
+			FString Detail = Database->GetLastError();
+			if (Detail.IsEmpty() && StepErrorCode != 0)
+			{
+				Detail = FSQLiteDatabase::GetErrorForCode(StepErrorCode);
+			}
+			if (Detail.IsEmpty())
+			{
+				Detail = TEXT("SQLite did not complete the statement.");
+			}
+			FailSearch(
+				FString::Printf(TEXT("failed while stepping the '%s' search query"), *MatchSource),
+				Detail);
 		}
 	};
 
@@ -1525,6 +1595,10 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 			"FROM fts_asset_search_values f JOIN asset_search_values sv ON sv.id = f.rowid JOIN assets a ON a.id = sv.asset_id "
 			"WHERE fts_asset_search_values MATCH ? ORDER BY f.rank LIMIT ?;"),
 			TEXT("supplemental_value"));
+	}
+	if (bSearchFailed)
+	{
+		return Results;
 	}
 
 	// Q4: materialize the fused per-asset results and rank by accumulated RRF score

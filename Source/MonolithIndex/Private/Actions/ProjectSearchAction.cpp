@@ -211,7 +211,15 @@ FMonolithActionResult FProjectSearchAction::Execute(const TSharedPtr<FJsonObject
 	{
 		return FMonolithActionResult::Error(TEXT("'offset' + 'limit' exceeds the project.search max window"), -32602);
 	}
-	TArray<FSearchResult> SearchResults = Subsystem->Search(Query, QueryLimit, Options);
+	FString SearchError;
+	TArray<FSearchResult> SearchResults = Subsystem->Search(Query, QueryLimit, Options, &SearchError);
+	if (!SearchError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Project search failed: %s"), *SearchError),
+			-32603)
+			.WithHint(TEXT("Run project.health to check the index, then use project.repair_fts only when health reports an FTS problem."));
+	}
 	const bool bTruncated = SearchResults.Num() > Limit;
 	if (bTruncated)
 	{
