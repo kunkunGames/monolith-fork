@@ -168,6 +168,52 @@ public:
 	bool HasAttemptedRiskBootstrap() const { return bRiskBootstrapAttempted; }
 	void MarkRiskBootstrapAttempted()       { bRiskBootstrapAttempted = true; }
 
+	/**
+	 * Re-arm the risk lazy bootstrap without waiting for a module reload.
+	 * Called from UMonolithReflectionIntelSettings::PostEditChangeProperty so a
+	 * Risk-category settings edit takes effect on the NEXT risk_query.
+	 *
+	 * RiskLastFailureTime must be cleared alongside the latch: the 5-second
+	 * retry throttle would otherwise swallow the first post-edit attempt and
+	 * the edit would still look like a no-op.
+	 */
+	void ClearRiskBootstrapAttempted()
+	{
+		bRiskBootstrapAttempted = false;
+		RiskLastFailureTime = 0.0;
+	}
+
+	/**
+	 * Resolve the git repositories the risk indexer should mine.
+	 *
+	 * Settings->GitRepoRoots non-empty REPLACES the auto-resolved set (same
+	 * override semantics as UHTArtefactRoot). Auto-resolution is:
+	 *   - the project root itself, when it holds a `.git` entry;
+	 *   - every immediate `Plugins/<X>` that holds one (one level, no recursion);
+	 *   - when Settings->bProbeAncestorsForGitRoot and the project root has no
+	 *     `.git` of its own, the nearest ancestor directory that does.
+	 *
+	 * A nested plugin repository is kept even when an ancestor repository was
+	 * also added: git treats a nested repository as untracked, so the two file
+	 * sets are disjoint and both are needed.
+	 *
+	 * `.git` is probed as a directory OR a file so submodule / worktree
+	 * checkouts (which write a `.git` FILE holding a gitdir pointer) resolve.
+	 *
+	 * Returns absolute, forward-slashed, de-duplicated roots with no trailing
+	 * slash. OutSkipped (optional) receives {path, reason} for every candidate
+	 * that was rejected — this is what the risk diagnostics surface reports.
+	 */
+	static TArray<FString> ResolveGitRepoRoots(TArray<TPair<FString, FString>>* OutSkipped);
+
+	/**
+	 * One actionable sentence for "no git repository was found to mine".
+	 * Single definition so the indexer's log line, the empty-result
+	 * `diagnostics` block and `risk_query("get_mining_status")` cannot drift
+	 * into telling the user three different things.
+	 */
+	static FString GetRiskNoReposHint();
+
 	/** Phase 3a cppreflect-bootstrap-latch accessors. Same shape as decision
 	 *  and risk latches — re-armed on module reload via StartupModule(). */
 	bool HasAttemptedCppReflectBootstrap() const { return bCppReflectBootstrapAttempted; }
@@ -309,9 +355,24 @@ public:
 	const TArray<FString>& GetLastNetworkScannedRoots() const { return LastNetworkScannedRoots; }
 	const TArray<TPair<FString, FString>>& GetLastNetworkSkippedRoots() const { return LastNetworkSkippedRoots; }
 
+	/** Risk equivalents — the roots RunRiskIndexersOnce last handed to
+	 *  FGitCoChangeIndexer, and the candidates ResolveGitRepoRoots rejected.
+	 *  Surfaced by risk_query("get_mining_status") and by the empty-result
+	 *  diagnostics block, so "risk_query returned nothing" always carries a
+	 *  reason instead of forcing the caller to read source. */
+	bool HasRiskMiningRun() const { return bRiskMiningRun; }
+	const TArray<FString>& GetLastRiskScannedRoots() const { return LastRiskScannedRoots; }
+	const TArray<TPair<FString, FString>>& GetLastRiskSkippedRoots() const { return LastRiskSkippedRoots; }
+	const FString& GetLastRiskMiningStatus() const { return LastRiskMiningStatus; }
+
 private:
 	TArray<FString>                  LastCppReflectScannedRoots;
 	TArray<TPair<FString, FString>>  LastCppReflectSkippedRoots; // {path, reason}
 	TArray<FString>                  LastNetworkScannedRoots;
 	TArray<TPair<FString, FString>>  LastNetworkSkippedRoots;
+
+	bool                             bRiskMiningRun = false;
+	TArray<FString>                  LastRiskScannedRoots;
+	TArray<TPair<FString, FString>>  LastRiskSkippedRoots;       // {path, reason}
+	FString                          LastRiskMiningStatus;
 };

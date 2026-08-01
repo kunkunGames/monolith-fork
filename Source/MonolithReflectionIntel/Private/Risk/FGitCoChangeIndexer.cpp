@@ -72,8 +72,13 @@ namespace
 		return true;
 	}
 
-	/** True if `RepoRoot/.git` exists as a directory. Diversion working trees lack this. */
-	bool IsNestedGitRepo(const FString& RepoRoot)
+	/**
+	 * True if `RepoRoot/.git` exists. Probed as a directory OR a file: a
+	 * submodule or `git worktree` checkout writes a `.git` FILE holding a
+	 * `gitdir:` pointer, and `git -C <root> log` works against either form.
+	 * A working tree under any other version-control system has neither.
+	 */
+	bool IsGitRepoRoot(const FString& RepoRoot)
 	{
 		IPlatformFile& Pf = FPlatformFileManager::Get().GetPlatformFile();
 		const FString GitDir = RepoRoot / TEXT(".git");
@@ -182,11 +187,11 @@ bool FGitCoChangeIndexer::Run(
 			++ReposSkipped;
 			continue;
 		}
-		if (!IsNestedGitRepo(Root))
+		if (!IsGitRepoRoot(Root))
 		{
 			UE_LOG(LogMonolithReflectionIntel, Verbose,
-				TEXT("GitCoChangeIndexer: skipping non-git root '%s' "
-					 "(no `.git` — Diversion-only or external tree)"), *Root);
+				TEXT("GitCoChangeIndexer: skipping root '%s' "
+					 "(no `.git` entry — not a git repository root)"), *Root);
 			++ReposSkipped;
 			continue;
 		}
@@ -200,6 +205,52 @@ bool FGitCoChangeIndexer::Run(
 				*Root, *Err);
 			++ErrorRepoCount;
 			continue;
+		}
+
+		// Rebase this repository's repo-relative paths into the project-relative
+		// key space BEFORE tallying, so churn keys, pair keys and the noise
+		// filter all operate on the same shape FHotspotScorer joins against.
+		// Doing it here rather than at write time keeps pair ordering correct:
+		// a shared prefix preserves lexicographic order, but dropped rows must
+		// not leave dangling pair halves behind.
+		FString PrefixToAdd, PrefixToStrip;
+		ComputeChurnPathRebase(Root, ProjectRoot, PrefixToAdd, PrefixToStrip);
+		if (!PrefixToAdd.IsEmpty() || !PrefixToStrip.IsEmpty())
+		{
+			int32 DroppedOutsideProject = 0;
+			for (FGitCommitFileTouches& Commit : Commits)
+			{
+				TArray<FString> Rebased;
+				Rebased.Reserve(Commit.Files.Num());
+				for (const FString& File : Commit.Files)
+				{
+					FString Mapped = File;
+					if (!PrefixToStrip.IsEmpty())
+					{
+						if (!Mapped.StartsWith(PrefixToStrip, ESearchCase::IgnoreCase))
+						{
+							// Tracked by the enclosing repository but outside the
+							// project subtree — nothing in this project can join
+							// against it.
+							++DroppedOutsideProject;
+							continue;
+						}
+						Mapped.RightChopInline(PrefixToStrip.Len(), EAllowShrinking::No);
+					}
+					if (!PrefixToAdd.IsEmpty())
+					{
+						Mapped = PrefixToAdd + Mapped;
+					}
+					Rebased.Add(MoveTemp(Mapped));
+				}
+				Commit.Files = MoveTemp(Rebased);
+			}
+			if (DroppedOutsideProject > 0)
+			{
+				UE_LOG(LogMonolithReflectionIntel, Verbose,
+					TEXT("GitCoChangeIndexer: '%s' — dropped %d file touches outside the project subtree"),
+					*Root, DroppedOutsideProject);
+			}
 		}
 
 		TMap<TPair<FString, FString>, int32> Pairs;
@@ -226,12 +277,91 @@ bool FGitCoChangeIndexer::Run(
 		TEXT("GitCoChangeIndexer: %d repos scanned (%d skipped, %d errors), "
 			 "%d co-change pairs, %d churn rows"),
 		ReposScanned, ReposSkipped, ErrorRepoCount, TotalPairs, TotalChurnRows);
-	UE_LOG(LogMonolithReflectionIntel, Log, TEXT("%s"), *OutStatus);
+
+	// "Mined nothing, and it was not because a repo errored" is the whole of
+	// issue #119's symptom, and it used to be reported only at Verbose — which
+	// is why the reporter had to read source to find out why `risk_query`
+	// returned empty. Say it at Warning, with the fix attached.
+	const bool bNothingToMine =
+		(ReposScanned == 0) && (ReposSkipped > 0 || GitRepoRoots.Num() == 0);
+	if (bNothingToMine)
+	{
+		OutStatus += TEXT(" | ");
+		OutStatus += FMonolithReflectionIntelModule::GetRiskNoReposHint();
+		UE_LOG(LogMonolithReflectionIntel, Warning, TEXT("%s"), *OutStatus);
+	}
+	else
+	{
+		UE_LOG(LogMonolithReflectionIntel, Log, TEXT("%s"), *OutStatus);
+	}
 
 	// Handover doc item #1 — stamp the risk code-version on success.
 	MonolithRIMeta::WriteStoredVersion(DB, TEXT("risk"),
 		MonolithRIMeta::GetIndexerCodeVersion(TEXT("risk")));
+
+	// Stamp the CONFIGURATION fingerprint beside it (issue #119). Computed from
+	// the INPUT array, unmodified — FRiskQueryAdapter::GetRawDB computes the
+	// same value from ResolveGitRepoRoots' output, so writer and reader are
+	// hashing byte-identical inputs through one shared function.
+	MonolithRIMeta::WriteStoredVersion(DB, MonolithRIMeta::GetRiskConfigSubsystemKey(),
+		MonolithRIMeta::ComputeRiskConfigFingerprint(GitRepoRoots));
 	return true;
+}
+
+void FGitCoChangeIndexer::ComputeChurnPathRebase(
+	const FString& AbsRepoRoot,
+	const FString& AbsProjectRoot,
+	FString& OutPrefixToAdd,
+	FString& OutPrefixToStrip)
+{
+	OutPrefixToAdd.Reset();
+	OutPrefixToStrip.Reset();
+
+	auto TrimTrailingSlash = [](const FString& In)
+	{
+		FString Out = In;
+		while (Out.Len() > 1
+			&& Out.EndsWith(TEXT("/"), ESearchCase::CaseSensitive)
+			&& !Out.EndsWith(TEXT(":/"), ESearchCase::CaseSensitive))
+		{
+			Out.LeftChopInline(1, EAllowShrinking::No);
+		}
+		return Out;
+	};
+
+	const FString Repo = TrimTrailingSlash(AbsRepoRoot);
+	const FString Project = TrimTrailingSlash(AbsProjectRoot);
+
+	// Repository IS the project root — `git log` paths are already
+	// project-relative. Nothing to do.
+	if (Repo.Equals(Project, ESearchCase::IgnoreCase))
+	{
+		return;
+	}
+
+	// Repository sits UNDER the project — prepend its offset, e.g. a repo at
+	// <Project>/Plugins/Monolith turns `Source/X.cpp` into
+	// `Plugins/Monolith/Source/X.cpp`.
+	const FString ProjectWithSlash = Project + TEXT("/");
+	if (Repo.StartsWith(ProjectWithSlash, ESearchCase::IgnoreCase))
+	{
+		OutPrefixToAdd = Repo.Mid(ProjectWithSlash.Len()) + TEXT("/");
+		return;
+	}
+
+	// Repository is an ANCESTOR of the project — its paths carry the project's
+	// own folder offset, e.g. `MyProject/Plugins/X/Source/Y.cpp`. Strip that
+	// offset; rows that lack it are outside the project subtree and the caller
+	// drops them.
+	const FString RepoWithSlash = Repo + TEXT("/");
+	if (Project.StartsWith(RepoWithSlash, ESearchCase::IgnoreCase))
+	{
+		OutPrefixToStrip = Project.Mid(RepoWithSlash.Len()) + TEXT("/");
+		return;
+	}
+
+	// Unrelated absolute root — there is no project-relative form, so the paths
+	// are stored exactly as the repository reports them.
 }
 
 // ============================================================================

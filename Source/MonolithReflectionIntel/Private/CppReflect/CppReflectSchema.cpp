@@ -29,8 +29,9 @@ namespace MonolithCppReflectSchema
 		// is missing, so `get_uclass` / `list_ufunctions` responses surface real
 		// lines and an absolute file path without forcing a separate
 		// `source_query` call. The joined path is ABSOLUTE (e.g.
-		// "D:/Unreal Projects/.../Foo.h") because the symbol index stores full
-		// paths; engine files outside the project dir don't relativise cleanly.
+		// "<Drive>:/<Projects>/<Project>/Source/.../Foo.h") because the symbol
+		// index stores full paths; engine files outside the project dir don't
+		// relativise cleanly.
 		// The join is name-only, so for two classes sharing a name it may surface
 		// the wrong file/line. Empty path / 0 line still means "unknown". The
 		// tree-sitter Phase 3b pass will fill the columns itself.
