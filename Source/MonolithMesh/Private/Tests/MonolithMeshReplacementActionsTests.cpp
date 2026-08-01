@@ -14,6 +14,7 @@
 #include "Misc/SecureHash.h"
 #include "MonolithActionExecutionGuard.h"
 #include "MonolithMeshReplacementActions.h"
+#include "MonolithObjectTraversal.h"
 #include "MonolithToolRegistry.h"
 #include "PackageTools.h"
 #include "PhysicsEngine/BodySetup.h"
@@ -616,10 +617,10 @@
 						// success before the UObject allocation is actually purged.
 						LiveObjects.AddUnique(PackageShell);
 						TArray<UObject*> RemainingObjects;
-						GetObjectsWithPackage(
+						MonolithObjectTraversal::GetObjectsWithPackage(
 							PackageShell,
 							RemainingObjects,
-							EGetObjectsFlags::IncludeNestedObjects);
+							true);
 						for (UObject* Object : RemainingObjects)
 						{
 							if (Object)

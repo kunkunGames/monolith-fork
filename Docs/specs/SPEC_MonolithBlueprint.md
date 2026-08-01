@@ -2,13 +2,15 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.21.3 (Beta)
+**Version:** 0.22.0 (Beta)
 
 ---
 
 ## MonolithBlueprint
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, BlueprintGraph, EnhancedInput, Json, JsonUtilities
+
+**Engine compatibility:** Blueprint-owned object traversal and StringTable writes use the MonolithCore compatibility boundaries. Component value reads classify an explicitly supplied `None` independently from resolution failure, so the selected component cannot be silently substituted.
 
 ### Classes
 
@@ -35,8 +37,8 @@
 | `get_cdo_properties` | `asset_path`, `category_filter?`, `include_parent_defaults?`, `owner_class_filter?`, `name_pattern?`, `exclude_categories?` | Reflects all CDO properties of a Blueprint class with current default values. Optional filters compose: `category_filter` (case-insensitive substring on `Category` metadata), `include_parent_defaults` (bool, walks parent CDO chain), `owner_class_filter` (case-insensitive substring on owner class name — skips inherited `AActor`/`APawn`/`ACharacter` in one parameter, PR #57), `name_pattern` (case-insensitive substring on property name, PR #57), `exclude_categories` (string array, case-insensitive exact match against `Category` — e.g. `["Replication", "Cooking", "HLOD"]`, PR #57). All filter params default to `null`/empty (no-op). Cuts JSON payload by ~90% in typical AActor-subclass inspection flows. |
 | `get_execution_flow` | `asset_path`, `entry_point` | Linearized exec trace from entry point. Handles branching (multiple exec outputs). MaxDepth=100 |
 | `search_nodes` | `asset_path`, `query` | Case-insensitive search by title, class name, or function name |
-| `get_components` | `asset_path` | List all components in the component hierarchy |
-| `get_component_details` | `asset_path`, `component_name` | Full property reflection for a named component. When the component is not an SCS node, **falls back to the inherited native component** off the parent-class CDO subobject (same `GetComponents()` enumeration as `get_components`) and reflects its defaults — including `skeletal_mesh`, `anim_class`, `animation_mode`, and `is_inherited_native` for `USkeletalMeshComponent`-derived natives (2026-06-07). Previously returned nothing for inherited natives (e.g. a data-only child's inherited `Mesh`). |
+| `get_components` | `asset_path` | List all components in the component hierarchy. Returns `components` (this Blueprint's SCS tree), `inherited_native_components` (native subobjects read off **this Blueprint's own CDO**, with `native_components_source` = `cdo_native` or `parent_cdo_fallback`), and `inherited_components` (components declared on a **parent Blueprint's** SCS, each with `defining_class`, `has_override`, `source`). |
+| `get_component_details` | `asset_path`, `component_name` | Full property reflection for a named component. Resolves through the shared component resolver (below), so it covers SCS components, inherited native subobjects, and components inherited from a parent Blueprint. Reports `source` (one of five values), `resolved_component` (the real name — a Character's mesh is `CharacterMesh0`), and `note` when the value carries a caveat. `is_inherited_native` is retained for back-compat and equals `source == "cdo_native"`. For `USkeletalMeshComponent`-derived components it also surfaces `skeletal_mesh`, `anim_class`, `animation_mode`. |
 | `get_functions` | `asset_path` | List all functions with signatures, access, and purity flags |
 | `get_event_dispatchers` | `asset_path` | List all event dispatchers with parameter signatures |
 | `get_parent_class` | `asset_path` | Return the parent class of the Blueprint |
@@ -45,9 +47,12 @@
 | `search_functions` | `query?`, `class_filter?`, `include_inherited?`, `pure_only?`, `limit?`, `detail_level?`, `offset?`, `cursor?`, `fields?` | Search Blueprint-callable native functions. At least one of `query` or `class_filter` is required. Default `detail_level=minimal` returns function identity plus `input_count`/`output_count`; use `detail_level=standard` to include `inputs[]`/`outputs[]` parameter arrays. `offset` pages matches (session-cache order) and the response adds the common list-projection contract (`total`, `returned`, `next_cursor`, `limits`, `projection`); `fields` projects rows to the requested keys with a warning for unknown names. |
 
 **Variable CRUD (7)**
+
+> **Pin-type grammar rule (issue #115).** Enum pins are ALWAYS `PC_Byte` + the `UEnum` as `PinSubCategoryObject`. `PC_Enum` is a type-*picker* category only — `FPinTypeTreeInfo` rewrites it to `PC_Byte` the moment the editor builds a pin type, and `FKismetCompilerUtilities::CreatePropertyOnScope` has no `PC_Enum` branch at all, so a `PC_Enum`-categorised variable falls through to the generic `FIntProperty` fallback and every Get/Set/call pin derived from it comes out an `int`. Never construct a pin type with `PC_Enum`. All variable/parameter/field type strings across the plugin funnel through one grammar, `MonolithPinTypeGrammar` (`MonolithCore/Public/MonolithPinTypeGrammar.h`); `enum:<Name>` accepts a native short name (with an `E`-prefix retry), a `UUserDefinedEnum` asset short name, or a full object path. **Recovery for an asset already broken this way:** `set_variable_type` (`blueprint change_variable_type`) with `enum:<Name>` repairs member variables in place — recreating the variable does not help, because the old grammar re-broke it.
+
 | Action | Params | Description |
 |--------|--------|-------------|
-| `add_variable` | `asset_path`, `variable_name`, `variable_type` | Add a new variable to the Blueprint |
+| `add_variable` | `asset_path`, `variable_name`, `variable_type` | Add a new variable to the Blueprint. `variable_type` is parsed strictly (`MonolithPinTypeGrammar::TryParsePinType`): an unresolvable `enum:` / `struct:` / `object:` / `class:` / `softobject:` / `softclass:` sub-object, an unknown base token, or a bad container value type is an error with a reason, not a silently mistyped variable. |
 | `remove_variable` | `asset_path`, `variable_name` | Remove a variable by name |
 | `rename_variable` | `asset_path`, `old_name`, `new_name` | Rename a variable |
 | `set_variable_type` | `asset_path`, `variable_name`, `variable_type` | Change a variable's type |
@@ -71,7 +76,7 @@ Reconcile the member-variable surface of one class against another by name + typ
 | `remove_component` | `asset_path`, `component_name` | Remove a component by name |
 | `rename_component` | `asset_path`, `old_name`, `new_name` | Rename a component |
 | `reparent_component` | `asset_path`, `component_name`, `new_parent` | Change a component's parent in the hierarchy |
-| `set_component_property` | `asset_path`, `component_name`, `property_name`, `value` | Set a property on a component via reflection. As of 2026-06-07, when the target is an inherited native component (CDO subobject, no SCS node) it uses the structural-modify + `CompileBlueprint` persistence handshake so the override survives reload; SCS-template writes keep the lighter `MarkBlueprintAsModified` path. |
+| `set_component_property` | `asset_path`, `component_name`, `property_name`, `value` | Set a property on a component via reflection. Resolves through the shared component resolver (below) with **write intent**, so a component inherited from a parent Blueprint gets an Inheritable Component Handler override on *this* Blueprint rather than mutating the parent's template. Returns `source`, `resolved_component`, and `persisted`. `cdo_native` and `ich_override` writes use the structural-modify + `CompileBlueprint` persistence handshake so the override survives reload; SCS-template writes keep the lighter `MarkBlueprintAsModified` path. |
 | `duplicate_component` | `asset_path`, `component_name`, `new_name` | Duplicate a component with all its settings. An explicit `new_name` that already exists is rejected with "A component named '<name>' already exists" (2026-06-18, mirrors `add_component`/`rename_component`); only the auto-generated `<name>_Copy` default falls through to a `_N` suffix. |
 
 **Graph Management (10)**
@@ -84,7 +89,7 @@ Reconcile the member-variable surface of one class against another by name + typ
 | `add_macro` | `asset_path`, `macro_name` | Add a new macro graph |
 | `add_event_dispatcher` | `asset_path`, `name` | Add a new event dispatcher. Rejects a duplicate name with "Event dispatcher already exists". |
 | `remove_event_dispatcher` / `set_event_dispatcher_params` | `asset_path`, `dispatcher_name` (alias `name`) | Remove / set params on a dispatcher. As of 2026-06-18 `dispatcher_name` is optional and `name` is an accepted alias, so the param matches `add_event_dispatcher` (which uses `name`). |
-| `set_function_params` | `asset_path`, `function_name`, `params` | Set input/output parameters on a function |
+| `set_function_params` | `asset_path`, `function_name`, `params` | Set input/output parameters on a function. Every requested pin type is parsed strictly and **up front**, before any pin is created; invalid or unresolved tokens fail with a reason and leave the signature unchanged. `set_event_dispatcher_params` applies the same atomic validation before replacing dispatcher pins. |
 | `implement_interface` | `asset_path`, `interface_class` | Add an interface to the Blueprint. `interface_class` resolves a C++ interface by class name OR a Blueprint Interface asset by `/Game` path or short asset name (2026-06-18). |
 | `remove_interface` | `asset_path`, `interface_class` | Remove an interface from the Blueprint (same `interface_class` resolution as `implement_interface`). |
 | `reparent_blueprint` | `asset_path`, `new_parent_class` | Change the Blueprint's parent class |
@@ -169,7 +174,7 @@ MCP server is running.
 | `scaffold_locomotion_input` | `asset_path`, ... | Scaffold locomotion Enhanced Input wiring (input action / mapping references) on a character Blueprint. |
 | `validate_animbp_variable_contract` | `asset_path`, ... | Validate that a character Blueprint's Anim Blueprint exposes the variables the locomotion/motion-matching graph expects (the variable contract), reporting missing/mismatched entries. Read-only. |
 | `scaffold_motion_matching_character` | `asset_path`, ... | Composite: assemble a Motion-Matching-ready character Blueprint — anim class, movement preset, components, locomotion input, and the variable contract — in one call. The `mesh` option now writes the skeletal mesh via `SetSkeletalMeshAsset` with the structural-modify + compile persistence handshake. |
-| `get_inherited_component_override` | `bp_path`, `component`, `property_name` (opt) | READ-ONLY: report the effective value(s) of a component override on a child Blueprint, resolving the effective template (CDO subobject for inherited native, ICH for SCS-inherited), and classifying `source` (`cdo_native` / `ich` / `scs`). Default property set: AnimClass, SkeletalMesh, AnimationMode. |
+| `get_inherited_component_override` | `bp_path` (alias `asset_path`), `component`, `property_name` (opt) | READ-ONLY: report the effective value(s) of a component override on a child Blueprint. Resolves through the shared component resolver (below) and classifies `source` (`scs` / `cdo_native` / `ich_override` / `inherited_scs` / `parent_cdo_fallback`). Never creates an override. Default property set: AnimClass, SkeletalMesh, AnimationMode. |
 
 > **`EnhancedInput` dep (2026-06-07)** added to `MonolithBlueprint.Build.cs` for `scaffold_locomotion_input` (Enhanced Input action / mapping-context resolution).
 
@@ -212,7 +217,81 @@ Boolean params in the DataTable maintenance pack must be JSON booleans. String v
 > - **`get_cdo_properties`** — the canonical verify path for a *standalone or pre-existing* DataAsset you did NOT just write through `seed_data_asset` (independent live read of any DataAsset's values; routes through the same shared `FMonolithReflectionReader` serializer).
 > - `project.get_asset_details` is **neither** — it is the stale indexed snapshot, not a live verify, and should not be used to confirm a write.
 
-> **Inherited native component count (2026-06-07).** `get_blueprint_info` now reports `native_component_count` alongside the existing SCS-node `component_count` — a data-only child of a C++ `ACharacter`-like parent (no SCS nodes) previously reported `component_count: 0` despite inheriting native components. Pairs with `get_component_details`' inherited-native fallback above.
+> **Inherited native component count (2026-06-07).** `get_blueprint_info` now reports `native_component_count` alongside the existing SCS-node `component_count` — a data-only child of a C++ `ACharacter`-like parent (no SCS nodes) previously reported `component_count: 0` despite inheriting native components. `native_component_count` deliberately stays keyed on `ParentClass`: it is counting *natives*, which is correct.
+
+### Component resolver (2026-08-01, issue #116 + PR #102 part 1)
+
+`MonolithBlueprint/Private/MonolithBlueprintComponentResolver.{h,cpp}` is **the** component resolver for the
+module. Every read and write action that needs "the component template named X on Blueprint B" goes through
+`Resolve(BP, CompName, RequiredClass, bCreateIchOverride)`. It replaced five independent resolvers, three of
+which disagreed about which class-default object to read.
+
+**The bug it fixes.** `get_component_details` read `BP->ParentClass`'s CDO — the *native class template*, i.e.
+Epic's C++ constructor defaults — while `set_component_property` wrote `BP->GeneratedClass`'s. Read and write
+were aimed at different objects, so a Character Blueprint that overrode its capsule half-height to 96 read back
+88 (`ACharacter::InitCapsuleSize`'s native default), and mesh / anim-class / movement values came back as Epic's
+rather than the project's. The read path now uses the Blueprint's own CDO.
+
+**Resolution order.** Exact names beat aliases: steps 2/3/4 match by name and are constrained only by the
+caller's `RequiredClass`; the alias class narrows step 5 alone.
+
+1. **Alias normalisation** — the alias table carries its own target class (see below).
+2. **This Blueprint's SCS** — `FindSCSNode`, which already matches the variable name or the `_GEN_VARIABLE`
+   template name. → `source: scs`
+3. **This Blueprint's own CDO**, by exact name. SCS templates are outered to the generated class and suffixed
+   `_GEN_VARIABLE`, so `GetComponents()` here can only return native default subobjects — which is why step 3
+   can safely precede step 4. → `source: cdo_native`
+4. **Parent-Blueprint SCS chain** (`UBlueprint::GetBlueprintHierarchyFromClass`; SCS components are not on any
+   CDO). An existing ICH override wins; otherwise get-or-create one when `bCreateIchOverride`, else report the
+   parent's template read-only. → `source: ich_override` or `inherited_scs`
+5. **Alias class fallback**, scanning CDO natives, then this Blueprint's SCS, then the inherited SCS chain.
+   Two matches within one tier is reported as an ambiguity with the candidate names, never silently resolved
+   to the first.
+6. **Terminal `parent_cdo_fallback`** — read-only. Reached *only* when `BP->GeneratedClass` is null or
+   `GetDefaultObject(false)` returns null (never-compiled, freshly reparented, or loaded without a compile).
+   Falls back to the native parent's CDO and attaches a `note` saying the values are native defaults pending a
+   recompile. A write never reaches this tier: it gets a distinct error naming the missing generated class.
+   **Guard ordering matters** — steps 3-5 all dereference the CDO, so step 6's condition is evaluated first.
+7. **Miss** — an error listing the available component names.
+
+**`source` values (response contract):** `scs`, `cdo_native`, `ich_override`, `inherited_scs`,
+`parent_cdo_fallback`.
+
+**Alias table.** Each alias carries its own target class. The old table was a bare name list, so the class
+fallback matched the *caller's* `RequiredClass` — and `get_inherited_component_override` must pass
+`UActorComponent` to serve any component, so `Mesh` matched whatever component came first on the CDO (a
+Character's `CollisionCylinder`). That was issue #116 bug 2; the mechanism was a lost class constraint, not a
+name mixup.
+
+| Alias | Target class | Typical resolution |
+|-------|--------------|--------------------|
+| `Mesh`, `SkeletalMesh` | `USkeletalMeshComponent` | `CharacterMesh0` on a Character |
+| `StaticMesh` | `UStaticMeshComponent` | the actor's static mesh |
+| `CharacterMovement`, `Movement` | `UCharacterMovementComponent` | `CharMoveComp` on a Character |
+| `Capsule`, `CapsuleComponent` | `UCapsuleComponent` | `CollisionCylinder` on a Character |
+| `Root`, `RootComponent` | `USceneComponent` | `AActor::GetRootComponent()`, else the SCS scene root |
+
+An empty `component_name` means "the single component of `RequiredClass`" — how `apply_movement_preset` and
+`apply_locomotion_speed_band` find the movement component without knowing the engine's private name.
+
+**Write-path hardening (PR #102 part 1 + four additions).**
+
+- `Key.IsValid() && BP->ParentClass->IsChildOf(Key.GetComponentOwner())` before creating an override, matching
+  both engine call sites (`SubobjectData.cpp`, `SSCSEditor.cpp`). A legacy or reparented SCS node with a zeroed
+  `VariableGuid` yields an invalid key and `CreateOverridenComponentTemplate` would only warn and return null.
+- Null / non-`UBlueprintGeneratedClass` `GeneratedClass` is rejected **before** calling
+  `UBlueprint::GetInheritableComponentHandler(true)`, which does `CastChecked<UBlueprintGeneratedClass>` and
+  would otherwise take the editor down from an ordinary MCP call.
+- `[Kismet] bEnableInheritableComponents=false` returns null from the accessor; that is reported as a
+  configuration answer rather than "component not found".
+- `ICH->Modify()` is called before `CreateOverridenComponentTemplate`. The engine's own call sites skip it
+  because they run inside an editor transaction Monolith does not have.
+- **Write before compile, always.** `CompileBlueprint` runs `UInheritableComponentHandler::ValidateTemplates`,
+  which prunes any record identical to its archetype and renames the pruned template into the transient
+  package. Creating an override and compiling before writing silently discards it, and writing a value equal
+  to the parent's is a silent no-op. `set_component_property` therefore re-resolves read-only after the compile
+  and reports `persisted: true/false` with a `note` on the pruned case, instead of echoing a possibly-dangling
+  pointer.
 
 *CurveTable (5) — first CurveTable surface in Monolith*
 | Action | Params | Description |

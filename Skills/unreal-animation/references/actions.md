@@ -58,6 +58,8 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `[w] connect_anim_graph_pins` | `asset_path*`, `source_node*`, `source_pin*`, `target_node*`, `target_pin*`, `graph_name?`, `state_name?`, `compile=true` | Wire two node pins |
 | `[w] add_variable_get` | `asset_path*`, `variable_name*`, `graph_name=AnimGraph`, `state_name?`, `position_x=0`, `position_y=0` | Place a variable Get node |
 | `[w] set_anim_graph_node_property` | `asset_path*`, `node_id*`, `property_path*`, `value*`, `graph_name?`, `state_name?` | Mutate a node's FAnimNode property |
+| `[w] add_anim_layer_graph` | `asset_path*`, `layer_name*`, `input_poses?`, `compile=true` | Create an ABP-native animation-layer graph on the animation schema, with Output Pose and optional named pose inputs |
+| `[w] add_linked_anim_layer` | `asset_path*`, `layer_name*`, `interface_class?`, `instance_class?`, `graph_name=AnimGraph`, `position_x=200`, `position_y=0` | Add a linked layer node; interface layers win, otherwise an ABP-native layer binds as self |
 | `[w] auto_layout` | `asset_path*`, `graph_name=AnimGraph`, `formatter=auto` | Auto-layout graph (Blueprint Assist) |
 | **Notifies** | | |
 | `get_sequence_notifies` | `asset_path*` | List all notifies, including `montage_tick_type` readback |

@@ -1,4 +1,5 @@
 #include "MonolithLevelSequenceModule.h"
+#include "MonolithCoreDelegates.h"
 #include "MonolithLevelSequenceActions.h"
 #include "MonolithLevelSequenceIndexer.h"
 #include "MonolithMovieRenderQueueActions.h"
@@ -28,7 +29,7 @@ void FMonolithLevelSequenceModule::StartupModule()
 
 	if (Settings->bIndexLevelSequences)
 	{
-		PostEngineInitHandle = FCoreDelegates::GetOnPostEngineInit().AddLambda([this]()
+		PostEngineInitHandle = MonolithCoreDelegates::GetPostEngineInit().AddLambda([this]()
 		{
 			if (GEditor)
 			{
@@ -46,7 +47,7 @@ void FMonolithLevelSequenceModule::ShutdownModule()
 {
 	if (PostEngineInitHandle.IsValid())
 	{
-		FCoreDelegates::GetOnPostEngineInit().Remove(PostEngineInitHandle);
+		MonolithCoreDelegates::GetPostEngineInit().Remove(PostEngineInitHandle);
 		PostEngineInitHandle.Reset();
 	}
 

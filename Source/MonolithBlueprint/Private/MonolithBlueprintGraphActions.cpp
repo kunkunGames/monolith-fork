@@ -1,6 +1,7 @@
 #include "MonolithBlueprintGraphActions.h"
 #include "MonolithBlueprintInternal.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithPinTypeGrammar.h"
 #include "MonolithParamSchema.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "BlueprintEditorLibrary.h"
@@ -57,6 +58,71 @@ namespace
 		return Out;
 	}
 
+	struct FParsedUserPin
+	{
+		FName Name;
+		FEdGraphPinType Type;
+	};
+
+	bool ParseUserPins(
+		const TArray<TSharedPtr<FJsonValue>>* Values,
+		TArray<FParsedUserPin>& OutPins,
+		FString& OutError)
+	{
+		OutPins.Reset();
+		OutError.Reset();
+		if (!Values)
+		{
+			return true;
+		}
+
+		OutPins.Reserve(Values->Num());
+		TSet<FName> SeenNames;
+		for (int32 Index = 0; Index < Values->Num(); ++Index)
+		{
+			const TSharedPtr<FJsonValue>& Value = (*Values)[Index];
+			const TSharedPtr<FJsonObject>* Object = nullptr;
+			if (!Value.IsValid() || !Value->TryGetObject(Object) || !Object || !Object->IsValid())
+			{
+				OutError = FString::Printf(
+					TEXT("Pin at index %d must be a JSON object with string fields 'name' and 'type'."),
+					Index);
+				return false;
+			}
+
+			FString PinName;
+			FString TypeString;
+			(*Object)->TryGetStringField(TEXT("name"), PinName);
+			(*Object)->TryGetStringField(TEXT("type"), TypeString);
+			if (PinName.IsEmpty() || TypeString.IsEmpty())
+			{
+				OutError = FString::Printf(
+					TEXT("Pin at index %d requires non-empty string fields 'name' and 'type'."),
+					Index);
+				return false;
+			}
+
+			FParsedUserPin& Parsed = OutPins.AddDefaulted_GetRef();
+			Parsed.Name = FName(*PinName);
+			if (SeenNames.Contains(Parsed.Name))
+			{
+				OutError = FString::Printf(TEXT("Duplicate pin name '%s' at index %d."), *PinName, Index);
+				OutPins.Reset();
+				return false;
+			}
+			SeenNames.Add(Parsed.Name);
+			if (!MonolithPinTypeGrammar::TryParsePinType(
+				TypeString, Parsed.Type, OutError))
+			{
+				OutError = FString::Printf(
+					TEXT("Pin '%s' at index %d: %s"), *PinName, Index, *OutError);
+				OutPins.Reset();
+				return false;
+			}
+		}
+		return true;
+	}
+
 	TArray<FString> RemoveEventDispatcherAcceptedParameters()
 	{
 		TArray<FString> Values;
@@ -108,32 +174,19 @@ namespace
 
 	FString BlueprintGraphKind(const UBlueprint* BP, const UEdGraph* Graph, FString* OutInterfaceName = nullptr)
 	{
-		if (OutInterfaceName)
-		{
-			OutInterfaceName->Reset();
-		}
 		if (!BP || !Graph)
 		{
+			if (OutInterfaceName)
+			{
+				OutInterfaceName->Reset();
+			}
 			return TEXT("unknown");
 		}
 
-		UEdGraph* MutableGraph = const_cast<UEdGraph*>(Graph);
-		if (BP->UbergraphPages.Contains(MutableGraph)) return TEXT("event_graph");
-		if (BP->FunctionGraphs.Contains(MutableGraph)) return TEXT("function");
-		if (BP->MacroGraphs.Contains(MutableGraph)) return TEXT("macro");
-		if (BP->DelegateSignatureGraphs.Contains(MutableGraph)) return TEXT("delegate_signature");
-		for (const FBPInterfaceDescription& Iface : BP->ImplementedInterfaces)
-		{
-			if (Iface.Graphs.Contains(MutableGraph))
-			{
-				if (OutInterfaceName && Iface.Interface)
-				{
-					*OutInterfaceName = Iface.Interface->GetName();
-				}
-				return TEXT("interface");
-			}
-		}
-		return TEXT("unknown");
+		FString IgnoredInterfaceName;
+		FString& InterfaceName = OutInterfaceName ? *OutInterfaceName : IgnoredInterfaceName;
+		return MonolithBlueprintInternal::ClassifyGraphType(
+			BP, const_cast<UEdGraph*>(Graph), InterfaceName);
 	}
 
 	TArray<TSharedPtr<FJsonValue>> BlueprintGraphCatalogJsonValues(const UBlueprint* BP)
@@ -145,14 +198,16 @@ namespace
 		}
 
 		TArray<UEdGraph*> AllGraphs;
-		const_cast<UBlueprint*>(BP)->GetAllGraphs(AllGraphs);
+		MonolithBlueprintInternal::GetAllGraphsUnique(const_cast<UBlueprint*>(BP), AllGraphs);
 		Graphs.Reserve(AllGraphs.Num());
-		for (const UEdGraph* Graph : AllGraphs)
+		for (UEdGraph* Graph : AllGraphs)
 		{
 			if (!Graph) continue;
 
 			FString InterfaceName;
-			const FString Kind = BlueprintGraphKind(BP, Graph, &InterfaceName);
+			FString ParentGraph;
+			const FString Kind = MonolithBlueprintInternal::ClassifyGraphType(
+				BP, Graph, InterfaceName, &ParentGraph);
 			TSharedPtr<FJsonObject> GraphObj = MakeShared<FJsonObject>();
 			GraphObj->SetStringField(TEXT("name"), Graph->GetName());
 			GraphObj->SetStringField(TEXT("graph_kind"), Kind);
@@ -160,6 +215,10 @@ namespace
 			if (!InterfaceName.IsEmpty())
 			{
 				GraphObj->SetStringField(TEXT("interface"), InterfaceName);
+			}
+			if (!ParentGraph.IsEmpty())
+			{
+				GraphObj->SetStringField(TEXT("parent_graph"), ParentGraph);
 			}
 			Graphs.Add(MakeShared<FJsonValueObject>(GraphObj));
 		}
@@ -1224,72 +1283,52 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleSetFunctionParams(co
 		return FMonolithActionResult::Error(FString::Printf(TEXT("No FunctionEntry node found in: %s"), *FuncName));
 	}
 
-	int32 InputsAdded = 0;
-	int32 OutputsAdded = 0;
-
-	// Process inputs — add as user-defined pins on the entry node
 	const TArray<TSharedPtr<FJsonValue>>* InputsArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("inputs"), InputsArray) && InputsArray)
-	{
-		for (const TSharedPtr<FJsonValue>& InputVal : *InputsArray)
-		{
-			const TSharedPtr<FJsonObject>* InputObj = nullptr;
-			if (!InputVal->TryGetObject(InputObj) || !InputObj) continue;
-
-			FString PinName, TypeStr;
-			(*InputObj)->TryGetStringField(TEXT("name"), PinName);
-			(*InputObj)->TryGetStringField(TEXT("type"), TypeStr);
-
-			if (PinName.IsEmpty() || TypeStr.IsEmpty()) continue;
-
-			FEdGraphPinType PinType = MonolithBlueprintInternal::ParsePinTypeFromString(TypeStr);
-			EntryNode->CreateUserDefinedPin(FName(*PinName), PinType, EGPD_Output);
-			++InputsAdded;
-		}
-	}
-
-	// Process outputs — add as user-defined pins on the result node
+	Params->TryGetArrayField(TEXT("inputs"), InputsArray);
 	const TArray<TSharedPtr<FJsonValue>>* OutputsArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("outputs"), OutputsArray) && OutputsArray)
+	Params->TryGetArrayField(TEXT("outputs"), OutputsArray);
+
+	// Parse both sides before touching the graph. A bad type must not leave a
+	// partially-authored signature (for example valid inputs plus an invalid enum
+	// output) behind when the action returns an error.
+	TArray<FParsedUserPin> ParsedInputs;
+	TArray<FParsedUserPin> ParsedOutputs;
+	FString TypeError;
+	if (!ParseUserPins(InputsArray, ParsedInputs, TypeError)
+		|| !ParseUserPins(OutputsArray, ParsedOutputs, TypeError))
 	{
-		if (!ResultNode)
-		{
-			// Create a result node if one doesn't exist
-			FGraphNodeCreator<UK2Node_FunctionResult> Creator(*Graph);
-			ResultNode = Creator.CreateNode();
-			ResultNode->NodePosX = EntryNode ? EntryNode->NodePosX + 400 : 0;
-			ResultNode->NodePosY = EntryNode ? EntryNode->NodePosY : 0;
-			Creator.Finalize();
-		}
-
-		for (const TSharedPtr<FJsonValue>& OutputVal : *OutputsArray)
-		{
-			const TSharedPtr<FJsonObject>* OutputObj = nullptr;
-			if (!OutputVal->TryGetObject(OutputObj) || !OutputObj) continue;
-
-			FString PinName, TypeStr;
-			(*OutputObj)->TryGetStringField(TEXT("name"), PinName);
-			(*OutputObj)->TryGetStringField(TEXT("type"), TypeStr);
-
-			if (PinName.IsEmpty() || TypeStr.IsEmpty()) continue;
-
-			FEdGraphPinType PinType = MonolithBlueprintInternal::ParsePinTypeFromString(TypeStr);
-			ResultNode->CreateUserDefinedPin(FName(*PinName), PinType, EGPD_Input);
-			++OutputsAdded;
-		}
+		return FMonolithActionResult::Error(TypeError, FMonolithJsonUtils::ErrInvalidParams);
 	}
-
-	if (InputsAdded == 0 && OutputsAdded == 0)
+	if (ParsedInputs.IsEmpty() && ParsedOutputs.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("No valid inputs or outputs provided"));
+	}
+
+	for (const FParsedUserPin& Input : ParsedInputs)
+	{
+		EntryNode->CreateUserDefinedPin(Input.Name, Input.Type, EGPD_Output);
+	}
+
+	if (!ParsedOutputs.IsEmpty() && !ResultNode)
+	{
+		// Create a result node if one doesn't exist.
+		FGraphNodeCreator<UK2Node_FunctionResult> Creator(*Graph);
+		ResultNode = Creator.CreateNode();
+		ResultNode->NodePosX = EntryNode->NodePosX + 400;
+		ResultNode->NodePosY = EntryNode->NodePosY;
+		Creator.Finalize();
+	}
+	for (const FParsedUserPin& Output : ParsedOutputs)
+	{
+		ResultNode->CreateUserDefinedPin(Output.Name, Output.Type, EGPD_Input);
 	}
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
 
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("function_name"), FuncName);
-	Root->SetNumberField(TEXT("inputs_added"), InputsAdded);
-	Root->SetNumberField(TEXT("outputs_added"), OutputsAdded);
+	Root->SetNumberField(TEXT("inputs_added"), ParsedInputs.Num());
+	Root->SetNumberField(TEXT("outputs_added"), ParsedOutputs.Num());
 	return FMonolithActionResult::Success(Root);
 }
 
@@ -1768,6 +1807,15 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleSetEventDispatcherPa
 			TEXT("No FunctionEntry node found in dispatcher signature graph: %s"), *DispatcherName));
 	}
 
+	// Validate the complete replacement before removing any existing pins. This
+	// keeps the operation atomic when a requested enum type cannot be resolved.
+	TArray<FParsedUserPin> ParsedParams;
+	FString TypeError;
+	if (!ParseUserPins(ParamsArray, ParsedParams, TypeError))
+	{
+		return FMonolithActionResult::Error(TypeError, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	// Clear existing user-defined pins safely — iterate a copy since removal mutates the array
 	TArray<TSharedPtr<FUserPinInfo>> PinsToRemove = EntryNode->UserDefinedPins;
 	for (const TSharedPtr<FUserPinInfo>& PinInfo : PinsToRemove)
@@ -1779,20 +1827,9 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleSetEventDispatcherPa
 	}
 
 	// Add new params
-	int32 ParamsAdded = 0;
-	for (const TSharedPtr<FJsonValue>& ParamVal : *ParamsArray)
+	for (const FParsedUserPin& Param : ParsedParams)
 	{
-		const TSharedPtr<FJsonObject>* ParamObj = nullptr;
-		if (!ParamVal->TryGetObject(ParamObj) || !ParamObj) continue;
-
-		FString PinName, TypeStr;
-		(*ParamObj)->TryGetStringField(TEXT("name"), PinName);
-		(*ParamObj)->TryGetStringField(TEXT("type"), TypeStr);
-		if (PinName.IsEmpty() || TypeStr.IsEmpty()) continue;
-
-		FEdGraphPinType PinType = MonolithBlueprintInternal::ParsePinTypeFromString(TypeStr);
-		EntryNode->CreateUserDefinedPin(FName(*PinName), PinType, EGPD_Output);
-		++ParamsAdded;
+		EntryNode->CreateUserDefinedPin(Param.Name, Param.Type, EGPD_Output);
 	}
 
 	// Reconstruct the node to apply pin changes
@@ -1801,6 +1838,6 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleSetEventDispatcherPa
 
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("dispatcher_name"), DispatcherName);
-	Root->SetNumberField(TEXT("params_set"), ParamsAdded);
+	Root->SetNumberField(TEXT("params_set"), ParsedParams.Num());
 	return FMonolithActionResult::Success(Root);
 }

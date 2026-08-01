@@ -1081,6 +1081,35 @@ bool FProjectDetectChangesEscapesPathWildcardsTest::RunTest(const FString& Param
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FProjectSearchDatabaseFailureIsNotEmptySuccessTest,
+	"Monolith.IndexGuard.Project.SearchDatabaseFailureIsNotEmptySuccess",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectSearchDatabaseFailureIsNotEmptySuccessTest::RunTest(const FString& Parameters)
+{
+	FMonolithIndexDatabase Db;
+	const FString DbPath = FPaths::CreateTempFilename(
+		*FPaths::ProjectIntermediateDir(), TEXT("MonolithIdxSearchFailure"), TEXT(".sqlite"));
+	TestTrue(TEXT("temporary DB opens"), Db.Open(DbPath));
+
+	FSQLiteDatabase* Raw = Db.GetRawDatabase();
+	TestTrue(TEXT("asset FTS fixture removed"), Raw && Raw->Execute(TEXT("DROP TABLE fts_assets;")));
+
+	FString SearchError;
+	const TArray<FSearchResult> Results = Db.FullTextSearch(
+		TEXT("Asset"),
+		10,
+		FProjectSearchOptions::AssetNodeOnly(),
+		&SearchError);
+	TestEqual(TEXT("failed search returns no partial rows"), Results.Num(), 0);
+	TestFalse(TEXT("failed search reports an explicit error"), SearchError.IsEmpty());
+	TestTrue(TEXT("error identifies the failed source query"), SearchError.Contains(TEXT("asset")));
+
+	Db.Close();
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*DbPath);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectPreMergeCheckPassTest, "Monolith.IndexGuard.Project.PreMergeCheckPass", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FProjectPreMergeCheckPassTest::RunTest(const FString& Parameters)
 {

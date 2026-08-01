@@ -2,13 +2,15 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.21.3 (Beta)
+**Version:** 0.22.0 (Beta)
 
 ---
 
 ## MonolithConfig
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, AssetTools, Json, JsonUtilities, Projects, DeveloperSettings; Localization public headers and runtime-loaded `ILocalizationModule` interface only
+
+**Engine compatibility:** Localization mutations use `MonolithStringTableCompat::SetSourceString`; UE 5.8 developer notes are preserved, while UE 5.7 uses the supported two-argument write contract.
 
 ### Classes
 

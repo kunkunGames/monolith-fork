@@ -6,6 +6,7 @@
 #include "MonolithLocalizationTargetConfig.h"
 #include "MonolithParamSchema.h"
 #include "MonolithSettings.h"
+#include "MonolithStringTableCompat.h"
 
 #include "AssetToolsModule.h"
 #include "Async/Async.h"
@@ -86,28 +87,6 @@ namespace
 		FString SourceString;
 		TMap<FString, FString> Metadata;
 	};
-
-	void SetSourceStringCompat(
-		const FStringTableRef& Table,
-		const FTextKey& Key,
-		const FString& SourceString,
-		const FString* PreservedDevNotes = nullptr)
-	{
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8 && WITH_EDITORONLY_DATA
-		FString DevNotes = PreservedDevNotes ? *PreservedDevNotes : FString();
-		if (!PreservedDevNotes)
-		{
-			if (const FStringTableEntryConstPtr ExistingEntry = Table->FindEntry(Key))
-			{
-				DevNotes = ExistingEntry->GetDevNotes();
-			}
-		}
-		Table->SetSourceString(Key, SourceString, DevNotes);
-#else
-		(void)PreservedDevNotes;
-		Table->SetSourceString(Key, SourceString);
-#endif
-	}
 
 	FMonolithActionResult InvalidParams(const FString& Message)
 	{
@@ -4172,7 +4151,7 @@ FMonolithActionResult FMonolithLocalizationActions::SetStringEntry(const TShared
 
 	Table->Modify();
 	FStringTableRef MutableTable = Table->GetMutableStringTable();
-	SetSourceStringCompat(MutableTable, TextKey, SourceString);
+	MonolithStringTableCompat::SetSourceString(MutableTable, TextKey, SourceString);
 	for (const TPair<FString, FString>& Pair : MetadataToSet)
 	{
 		MutableTable->SetMetaData(TextKey, FName(*Pair.Key), Pair.Value);
@@ -4491,9 +4470,9 @@ FMonolithActionResult FMonolithLocalizationActions::ImportStringTableCsv(const T
 		{
 			const FTextKey TextKey(Row.Key);
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8 && WITH_EDITORONLY_DATA
-			SetSourceStringCompat(MutableTable, TextKey, Row.SourceString, PreservedDevNotes.Find(Row.Key));
+			MonolithStringTableCompat::SetSourceString(MutableTable, TextKey, Row.SourceString, PreservedDevNotes.Find(Row.Key));
 #else
-			SetSourceStringCompat(MutableTable, TextKey, Row.SourceString);
+			MonolithStringTableCompat::SetSourceString(MutableTable, TextKey, Row.SourceString);
 #endif
 			for (const TPair<FString, FString>& MetadataPair : Row.Metadata)
 			{
@@ -4512,13 +4491,13 @@ FMonolithActionResult FMonolithLocalizationActions::ImportStringTableCsv(const T
 			{
 				const FTextKey RollbackKey(RollbackRow.Key);
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8 && WITH_EDITORONLY_DATA
-				SetSourceStringCompat(
+				MonolithStringTableCompat::SetSourceString(
 					RollbackTable,
 					RollbackKey,
 					RollbackRow.SourceString,
 					RollbackDevNotes.Find(RollbackRow.Key));
 #else
-				SetSourceStringCompat(
+				MonolithStringTableCompat::SetSourceString(
 					RollbackTable,
 					RollbackKey,
 					RollbackRow.SourceString);

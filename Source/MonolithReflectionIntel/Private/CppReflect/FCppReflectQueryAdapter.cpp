@@ -69,9 +69,10 @@ namespace
 	 * equality JOIN of the two path forms would never match, so we instead reuse
 	 * the SAME name-only symbol match that already powers the line lookup and
 	 * additionally read the joined absolute path. The path is returned verbatim
-	 * (absolute, e.g. "D:/Unreal Projects/.../Foo.h") — not relativised, because
-	 * engine-source files live outside the project dir and would relativise to
-	 * fragile "../../../" forms; an absolute path stays unambiguously navigable.
+	 * (absolute, e.g. "<Drive>:/<Projects>/<Project>/Source/.../Foo.h") — not
+	 * relativised, because engine-source files live outside the project dir and
+	 * would relativise to fragile "../../../" forms; an absolute path stays
+	 * unambiguously navigable.
 	 *
 	 * Name-only lookup is a best-effort compromise: same-named classes in
 	 * different modules collapse to the first symbol hit, so both the line AND the

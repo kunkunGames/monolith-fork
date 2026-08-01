@@ -32,11 +32,6 @@ public class MonolithCore : ModuleRules
 			"SourceControl"
 		});
 
-		if (Target.Platform == UnrealTargetPlatform.Win64)
-		{
-			PublicSystemLibraries.Add("bcrypt.lib");
-		}
-
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"SourceControl"

@@ -2,6 +2,7 @@
 #include "MonolithBlueprintInternal.h"
 #include "MonolithPackagePathValidator.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithPinTypeGrammar.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithBulkFillTypes.h"
@@ -174,6 +175,66 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedSt
 		return FMonolithActionResult::Error(FString::Printf(TEXT("save_path must not end with '/': %s"), *SavePath));
 	}
 
+	struct FParsedStructField
+	{
+		FString Name;
+		FString TypeString;
+		FString DefaultValue;
+		FEdGraphPinType PinType;
+	};
+
+	// Validate and parse every field before creating a package or struct. Input
+	// validation is all-or-nothing: malformed entries, duplicate names, unknown
+	// types, and unresolved named types cannot leave a default-only/partial asset.
+	TArray<FParsedStructField> ParsedFields;
+	ParsedFields.Reserve(FieldsArray->Num());
+	TSet<FName> SeenFieldNames;
+	for (int32 InputIndex = 0; InputIndex < FieldsArray->Num(); ++InputIndex)
+	{
+		const TSharedPtr<FJsonValue>& FieldValue = (*FieldsArray)[InputIndex];
+		const TSharedPtr<FJsonObject>* FieldObject = nullptr;
+		if (!FieldValue.IsValid()
+			|| !FieldValue->TryGetObject(FieldObject)
+			|| !FieldObject
+			|| !FieldObject->IsValid())
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("Field at index %d must be a JSON object."), InputIndex),
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
+
+		FParsedStructField& ParsedField = ParsedFields.AddDefaulted_GetRef();
+		(*FieldObject)->TryGetStringField(TEXT("name"), ParsedField.Name);
+		(*FieldObject)->TryGetStringField(TEXT("type"), ParsedField.TypeString);
+		(*FieldObject)->TryGetStringField(TEXT("default_value"), ParsedField.DefaultValue);
+		if (ParsedField.Name.IsEmpty() || ParsedField.TypeString.IsEmpty())
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(
+					TEXT("Field at index %d requires non-empty string fields 'name' and 'type'."),
+					InputIndex),
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
+
+		const FName FieldName(*ParsedField.Name);
+		if (SeenFieldNames.Contains(FieldName))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("Duplicate struct field name '%s' at index %d."), *ParsedField.Name, InputIndex),
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
+		SeenFieldNames.Add(FieldName);
+
+		FString TypeError;
+		if (!MonolithPinTypeGrammar::TryParsePinType(
+			ParsedField.TypeString, ParsedField.PinType, TypeError))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("Field '%s' at index %d: %s"), *ParsedField.Name, InputIndex, *TypeError),
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
+
 	// Guard against existing asset (same pattern as create_blueprint)
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 	FAssetData ExistingAsset = AR.GetAssetByObjectPath(FSoftObjectPath(SavePath + TEXT(".") + AssetName));
@@ -206,41 +267,17 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedSt
 	TArray<TSharedPtr<FJsonValue>> FieldResults;
 	int32 FieldIndex = 0;
 
-	for (const TSharedPtr<FJsonValue>& FieldVal : *FieldsArray)
+	for (const FParsedStructField& Field : ParsedFields)
 	{
-		const TSharedPtr<FJsonObject>* FieldObjPtr = nullptr;
-		if (!FieldVal.IsValid() || !FieldVal->TryGetObject(FieldObjPtr) || !FieldObjPtr || !(*FieldObjPtr).IsValid())
-		{
-			FieldResults.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("Field %d: skipped (not a valid JSON object)"), FieldIndex)));
-			FieldIndex++;
-			continue;
-		}
-
-		const TSharedPtr<FJsonObject>& FieldObj = *FieldObjPtr;
-		FString FieldName;
-		FieldObj->TryGetStringField(TEXT("name"), FieldName);
-		FString TypeStr;
-		FieldObj->TryGetStringField(TEXT("type"), TypeStr);
-
-		if (FieldName.IsEmpty() || TypeStr.IsEmpty())
-		{
-			FieldResults.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("Field %d: skipped (missing name or type)"), FieldIndex)));
-			FieldIndex++;
-			continue;
-		}
-
-		// Parse the type string to FEdGraphPinType
-		FEdGraphPinType PinType = MonolithBlueprintInternal::ParsePinTypeFromString(TypeStr);
-
 		// The first field replaces the default member created by CreateUserDefinedStruct.
 		// Subsequent fields need AddVariable.
 		if (FieldIndex > 0)
 		{
-			bool bAdded = FStructureEditorUtils::AddVariable(Struct, PinType);
+			bool bAdded = FStructureEditorUtils::AddVariable(Struct, Field.PinType);
 			if (!bAdded)
 			{
 				TSharedPtr<FJsonObject> FieldResult = MakeShared<FJsonObject>();
-				FieldResult->SetStringField(TEXT("name"), FieldName);
+				FieldResult->SetStringField(TEXT("name"), Field.Name);
 				FieldResult->SetStringField(TEXT("error"), TEXT("AddVariable failed"));
 				FieldResults.Add(MakeShared<FJsonValueObject>(FieldResult));
 				FieldIndex++;
@@ -253,7 +290,7 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedSt
 			TArray<FStructVariableDescription>& VarDesc = FStructureEditorUtils::GetVarDesc(Struct);
 			if (VarDesc.Num() > 0)
 			{
-				FStructureEditorUtils::ChangeVariableType(Struct, VarDesc[0].VarGuid, PinType);
+				FStructureEditorUtils::ChangeVariableType(Struct, VarDesc[0].VarGuid, Field.PinType);
 			}
 		}
 
@@ -266,23 +303,21 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedSt
 			FGuid VarGuid = VarDesc[DescIndex].VarGuid;
 
 			// Rename the variable to the desired display name
-			FStructureEditorUtils::RenameVariable(Struct, VarGuid, FieldName);
+			FStructureEditorUtils::RenameVariable(Struct, VarGuid, Field.Name);
 
 			// Set default value if provided
-			FString DefaultValue;
-			FieldObj->TryGetStringField(TEXT("default_value"), DefaultValue);
-			if (!DefaultValue.IsEmpty())
+			if (!Field.DefaultValue.IsEmpty())
 			{
-				FStructureEditorUtils::ChangeVariableDefaultValue(Struct, VarGuid, DefaultValue);
+				FStructureEditorUtils::ChangeVariableDefaultValue(Struct, VarGuid, Field.DefaultValue);
 			}
 
 			TSharedPtr<FJsonObject> FieldResult = MakeShared<FJsonObject>();
-			FieldResult->SetStringField(TEXT("name"), FieldName);
-			FieldResult->SetStringField(TEXT("type"), TypeStr);
+			FieldResult->SetStringField(TEXT("name"), Field.Name);
+			FieldResult->SetStringField(TEXT("type"), Field.TypeString);
 			FieldResult->SetStringField(TEXT("guid"), VarGuid.ToString());
-			if (!DefaultValue.IsEmpty())
+			if (!Field.DefaultValue.IsEmpty())
 			{
-				FieldResult->SetStringField(TEXT("default_value"), DefaultValue);
+				FieldResult->SetStringField(TEXT("default_value"), Field.DefaultValue);
 			}
 			FieldResults.Add(MakeShared<FJsonValueObject>(FieldResult));
 		}

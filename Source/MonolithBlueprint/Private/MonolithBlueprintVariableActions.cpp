@@ -1,6 +1,7 @@
 #include "MonolithBlueprintVariableActions.h"
 #include "MonolithBlueprintInternal.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithPinTypeGrammar.h"
 #include "MonolithParamSchema.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "EdGraphSchema_K2.h"
@@ -290,41 +291,18 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleAddVariable(const
 	}
 
 	FName VarName(*Name);
-	FEdGraphPinType PinType = MonolithBlueprintInternal::ParsePinTypeFromString(TypeStr);
 
-	// If the resolved type is the bool fallback but the caller didn't ask for bool,
-	// the type string was unrecognized — return a clear error instead of silently creating a bool.
+	// TryParsePinType fails BY TOKEN, which closes the gap the old guard left open:
+	// it only caught an unrecognised base token (bool fallback) and deliberately
+	// waved through every "known prefixed type", so an unresolvable enum:Bogus /
+	// struct:Bogus / object:Bogus silently created a variable with a null
+	// sub-category object — a plain byte / bool / broken variable (issue #115).
+	FEdGraphPinType PinType;
+	FString TypeError;
+	if (!MonolithPinTypeGrammar::TryParsePinType(TypeStr, PinType, TypeError))
 	{
-		// Extract base type (strip container prefix for the check)
-		FString BaseForCheck = TypeStr;
-		for (const TCHAR* Prefix : { TEXT("array:"), TEXT("set:"), TEXT("map:") })
-		{
-			if (TypeStr.StartsWith(Prefix))
-			{
-				BaseForCheck = TypeStr.Mid(FCString::Strlen(Prefix));
-				break;
-			}
-		}
-		// Known prefixed types that ParsePinTypeFromString handles correctly
-		const bool bKnownPrefixedType =
-			BaseForCheck.StartsWith(TEXT("object:")) ||
-			BaseForCheck.StartsWith(TEXT("class:"))  ||
-			BaseForCheck.StartsWith(TEXT("struct:"))  ||
-			BaseForCheck.StartsWith(TEXT("enum:"))   ||
-			BaseForCheck.StartsWith(TEXT("softobject:")) ||
-			BaseForCheck.StartsWith(TEXT("softclass:"));
-		const bool bCallerWantsBool =
-			BaseForCheck.Equals(TEXT("bool"), ESearchCase::IgnoreCase);
-
-		if (!bCallerWantsBool && !bKnownPrefixedType &&
-			PinType.PinCategory == UEdGraphSchema_K2::PC_Boolean)
-		{
-			return FMonolithActionResult::Error(FString::Printf(
-				TEXT("Unknown variable type '%s'. Valid types: bool, byte, int, int64, float, double, string, text, name, Vector, Rotator, Transform, LinearColor. "
-				     "For structs use struct:<Name>, objects use object:<Class>, enums use enum:<Name>. "
-				     "Container types: array:<type>, set:<type>, map:<key>:<value>."),
-				*TypeStr));
-		}
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Invalid variable type '%s': %s"), *TypeStr, *TypeError));
 	}
 
 	FString DefaultValue;
@@ -534,7 +512,12 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleSetVariableType(c
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Variable not found: %s"), *Name));
 	}
 
-	FEdGraphPinType NewType = MonolithBlueprintInternal::ParsePinTypeFromString(TypeStr);
+	FEdGraphPinType NewType;
+	FString TypeError;
+	if (!MonolithPinTypeGrammar::TryParsePinType(TypeStr, NewType, TypeError))
+	{
+		return FMonolithActionResult::Error(TypeError, FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FBlueprintEditorUtils::ChangeMemberVariableType(BP, VarName, NewType);
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
 
@@ -663,7 +646,12 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleAddLocalVariable(
 			TEXT("Graph '%s' is not a function graph — local variables are only supported in functions"), *FunctionName));
 	}
 
-	FEdGraphPinType PinType = MonolithBlueprintInternal::ParsePinTypeFromString(TypeStr);
+	FEdGraphPinType PinType;
+	FString TypeError;
+	if (!MonolithPinTypeGrammar::TryParsePinType(TypeStr, PinType, TypeError))
+	{
+		return FMonolithActionResult::Error(TypeError, FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString DefaultValue;
 	Params->TryGetStringField(TEXT("default_value"), DefaultValue);
 
@@ -810,7 +798,12 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleAddReplicatedVari
 	}
 
 	FName VarName(*VarNameStr);
-	FEdGraphPinType PinType = MonolithBlueprintInternal::ParsePinTypeFromString(TypeStr);
+	FEdGraphPinType PinType;
+	FString TypeError;
+	if (!MonolithPinTypeGrammar::TryParsePinType(TypeStr, PinType, TypeError))
+	{
+		return FMonolithActionResult::Error(TypeError, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Check for name collision
 	for (const FBPVariableDescription& Existing : BP->NewVariables)

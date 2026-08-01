@@ -1,6 +1,7 @@
 #include "MonolithMotionMatchingScaffoldActions.h"
 #include "MonolithBlueprintInternal.h"
 #include "MonolithBlueprintComponentActions.h"
+#include "MonolithBlueprintComponentResolver.h"
 #include "MonolithBlueprintCDOActions.h"
 #include "MonolithBlueprintCompileActions.h"
 #include "MonolithBlueprintGraphActions.h"
@@ -46,7 +47,7 @@ void FMonolithMotionMatchingScaffoldActions::RegisterActions(FMonolithToolRegist
 			 "graph contains no Motion Matching node. Marks the Blueprint modified."),
 		FMonolithActionHandler::CreateStatic(&HandleSetAnimClass),
 		FParamSchemaBuilder()
-			.RequiredAssetPath(TEXT("bp_path"), TEXT("Character/actor Blueprint asset path"))
+			.RequiredAssetPath(TEXT("bp_path"), TEXT("Character/actor Blueprint asset path"), { TEXT("asset_path") })
 			.Required(TEXT("component"), TEXT("string"), TEXT("Skeletal mesh component variable name (e.g. 'Mesh' on a Character BP)"))
 			.RequiredAssetPath(TEXT("anim_bp_path"), TEXT("Animation Blueprint asset path whose generated class becomes the AnimClass"))
 			.Build());
@@ -58,7 +59,7 @@ void FMonolithMotionMatchingScaffoldActions::RegisterActions(FMonolithToolRegist
 			 "Marks the Blueprint modified."),
 		FMonolithActionHandler::CreateStatic(&HandleApplyMovementPreset),
 		FParamSchemaBuilder()
-			.RequiredAssetPath(TEXT("bp_path"), TEXT("Character Blueprint asset path"))
+			.RequiredAssetPath(TEXT("bp_path"), TEXT("Character Blueprint asset path"), { TEXT("asset_path") })
 			.Required(TEXT("preset"), TEXT("string"), TEXT("Preset name: 'orient_to_movement' | 'strafe_controller_desired'"))
 			.Build());
 
@@ -69,7 +70,7 @@ void FMonolithMotionMatchingScaffoldActions::RegisterActions(FMonolithToolRegist
 			 "(Pose History node bGenerateTrajectory)."),
 		FMonolithActionHandler::CreateStatic(&HandleAddEngineComponentTyped),
 		FParamSchemaBuilder()
-			.RequiredAssetPath(TEXT("bp_path"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("bp_path"), TEXT("Blueprint asset path"), { TEXT("asset_path") })
 			.Required(TEXT("component_type"), TEXT("string"), TEXT("UActorComponent subclass friendly name (e.g. 'SpringArmComponent')"))
 			.Required(TEXT("component_name"), TEXT("string"), TEXT("Variable name for the new component"))
 			.Build());
@@ -80,7 +81,7 @@ void FMonolithMotionMatchingScaffoldActions::RegisterActions(FMonolithToolRegist
 			 "/ connect_pins_bulk. Marks the Blueprint modified."),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldLocomotionInput),
 		FParamSchemaBuilder()
-			.RequiredAssetPath(TEXT("bp_path"), TEXT("Character Blueprint asset path"))
+			.RequiredAssetPath(TEXT("bp_path"), TEXT("Character Blueprint asset path"), { TEXT("asset_path") })
 			.RequiredAssetPath(TEXT("imc_path"), TEXT("Asset path for the new InputMappingContext"))
 			.Required(TEXT("actions"), TEXT("array"), TEXT("Array of {name, value_type} — value_type one of Digital(bool)/Axis1D/Axis2D/Axis3D. One UInputAction asset created per entry."))
 			.Build());
@@ -92,7 +93,7 @@ void FMonolithMotionMatchingScaffoldActions::RegisterActions(FMonolithToolRegist
 		FMonolithActionHandler::CreateStatic(&HandleValidateAnimBpVariableContract),
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("abp_path"), TEXT("Animation Blueprint asset path"))
-			.RequiredAssetPath(TEXT("bp_path"), TEXT("Character Blueprint asset path"))
+			.RequiredAssetPath(TEXT("bp_path"), TEXT("Character Blueprint asset path"), { TEXT("asset_path") })
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("scaffold_motion_matching_character"),
@@ -102,7 +103,7 @@ void FMonolithMotionMatchingScaffoldActions::RegisterActions(FMonolithToolRegist
 			 "Trajectory is AnimBP-side (bGenerateTrajectory) — no trajectory component is added. Compiles the BP."),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldMotionMatchingCharacter),
 		FParamSchemaBuilder()
-			.RequiredAssetPath(TEXT("bp_path"), TEXT("Character Blueprint asset path (created if absent, reparented if present)"))
+			.RequiredAssetPath(TEXT("bp_path"), TEXT("Character Blueprint asset path (created if absent, reparented if present)"), { TEXT("asset_path") })
 			.Optional(TEXT("parent_class"), TEXT("string"), TEXT("Parent class for a newly-created BP (default 'Character')"), TEXT("Character"))
 			.RequiredAssetPath(TEXT("anim_bp_path"), TEXT("Animation Blueprint asset path"))
 			.OptionalAssetPath(TEXT("mesh"), TEXT("Skeletal mesh asset to assign to the mesh component (optional)"))
@@ -111,15 +112,17 @@ void FMonolithMotionMatchingScaffoldActions::RegisterActions(FMonolithToolRegist
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("get_inherited_component_override"),
 		TEXT("READ-ONLY: report the effective value(s) of a component override on a child Blueprint. "
-			 "Resolves the effective component template (CDO subobject for an inherited native component "
-			 "like a Character's mesh, or the Inheritable Component Handler override for an SCS-inherited "
-			 "component), reads the requested property (or a default set: AnimClass, SkeletalMesh, "
-			 "AnimationMode) by reflection, and reports 'source' (cdo_native / ich / scs). This is the "
-			 "verified read of what set_anim_class / set_mesh / set_component_property actually persisted."),
+			 "Resolves the effective component template (this Blueprint's own CDO subobject for an inherited "
+			 "native component like a Character's mesh, this Blueprint's Inheritable Component Handler override "
+			 "for a component inherited from a parent Blueprint, or the parent's template when there is no "
+			 "override), reads the requested property (or a default set: AnimClass, SkeletalMesh, AnimationMode) "
+			 "by reflection, and reports 'source' (scs / cdo_native / ich_override / inherited_scs / "
+			 "parent_cdo_fallback). Never creates an override. This is the verified read of what set_anim_class / "
+			 "set_mesh / set_component_property actually persisted."),
 		FMonolithActionHandler::CreateStatic(&HandleGetInheritedComponentOverride),
 		FParamSchemaBuilder()
-			.RequiredAssetPath(TEXT("bp_path"), TEXT("Child Blueprint asset path"))
-			.Required(TEXT("component"), TEXT("string"), TEXT("Component variable name or alias (e.g. 'Mesh' resolves to a Character's CharacterMesh0)"))
+			.RequiredAssetPath(TEXT("bp_path"), TEXT("Child Blueprint asset path"), { TEXT("asset_path") })
+			.Required(TEXT("component"), TEXT("string"), TEXT("Component variable name or alias (Mesh/SkeletalMesh, StaticMesh, CharacterMovement/Movement, Capsule/CapsuleComponent, Root/RootComponent)"))
 			.Optional(TEXT("property_name"), TEXT("string"), TEXT("Single property to read; if omitted, a default set is reported (AnimClass, SkeletalMesh, AnimationMode)"))
 			.Build());
 
@@ -191,7 +194,7 @@ void FMonolithMotionMatchingScaffoldActions::RegisterActions(FMonolithToolRegist
 			 "modify -> compile for the inherited native CMC). Returns the applied values + the band echo."),
 		FMonolithActionHandler::CreateStatic(&HandleApplyLocomotionSpeedBand),
 		FParamSchemaBuilder()
-			.RequiredAssetPath(TEXT("bp_path"), TEXT("Character Blueprint asset path"))
+			.RequiredAssetPath(TEXT("bp_path"), TEXT("Character Blueprint asset path"), { TEXT("asset_path") })
 			.Required(TEXT("walk_speed"),  TEXT("number"), TEXT("Walk band speed (documented; BT picks within the cap)"))
 			.Required(TEXT("run_speed"),   TEXT("number"), TEXT("Run band speed; becomes the MaxWalkSpeed cap unless max_walk_speed overrides"))
 			.Required(TEXT("crouch_speed"),TEXT("number"), TEXT("Crouch band speed; written to MaxWalkSpeedCrouched"))
@@ -214,85 +217,6 @@ namespace
 		TSharedRef<FJsonObject> Sub = MakeShared<FJsonObject>();
 		Sub->SetStringField(TEXT("asset_path"), AssetPath);
 		return Sub;
-	}
-
-	/**
-	 * Shared component resolver: resolve a component on a Blueprint by alias, exact
-	 * variable name, OR class — consistently for 5.1 / 5.2 / 5.3.
-	 *
-	 * Resolution order:
-	 *   1. SCS-added node by exact (case-insensitive) variable name.
-	 *   2. Native/inherited component on the CDO by exact name (e.g. "CharacterMesh0",
-	 *      "CharMoveComp", or any author-named component).
-	 *   3. Friendly alias (or empty name) → first component of the requested class on
-	 *      the CDO. On a Character BP the inherited skeletal mesh is "CharacterMesh0"
-	 *      (ACharacter::MeshComponentName) and the movement comp is "CharMoveComp"
-	 *      (CharacterMovementComponentName) — so "Mesh"/"SkeletalMesh"/"CharacterMovement"
-	 *      never match by name. We fall back to class match, which tolerates the engine's
-	 *      private native component names without the caller knowing them.
-	 *
-	 * RequiredClass constrains every match; pass UActorComponent::StaticClass() for "any".
-	 * Aliases is the set of friendly names that trigger the class fallback.
-	 */
-	UActorComponent* ResolveComponentOnBP(
-		UBlueprint* BP,
-		const FString& CompName,
-		UClass* RequiredClass,
-		const TArray<FString>& Aliases)
-	{
-		if (!BP || !RequiredClass) return nullptr;
-
-		const bool bIsAlias = Aliases.ContainsByPredicate(
-			[&CompName](const FString& A) { return A.Equals(CompName, ESearchCase::IgnoreCase); });
-
-		// 1) SCS-added node by exact name (author-defined components).
-		if (!CompName.IsEmpty() && BP->SimpleConstructionScript)
-		{
-			if (USCS_Node* Node = BP->SimpleConstructionScript->FindSCSNode(FName(*CompName)))
-			{
-				if (Node->ComponentTemplate && Node->ComponentTemplate->IsA(RequiredClass))
-				{
-					return Node->ComponentTemplate;
-				}
-			}
-		}
-
-		if (!BP->GeneratedClass) return nullptr;
-		UObject* CDO = BP->GeneratedClass->GetDefaultObject(/*bCreateIfNeeded=*/false);
-		AActor* CDOActor = Cast<AActor>(CDO);
-		if (!CDOActor) return nullptr;
-
-		TArray<UActorComponent*> Comps;
-		CDOActor->GetComponents(Comps);
-
-		// 2) Native/inherited component by exact name (e.g. "CharacterMesh0", custom name).
-		if (!CompName.IsEmpty() && !bIsAlias)
-		{
-			for (UActorComponent* Comp : Comps)
-			{
-				if (!Comp || !Comp->IsA(RequiredClass)) continue;
-				if (Comp->GetName().Equals(CompName, ESearchCase::IgnoreCase) ||
-					Comp->GetFName() == FName(*CompName))
-				{
-					return Comp;
-				}
-			}
-		}
-
-		// 3) Alias OR empty name → first component of the required class on the CDO.
-		//    Resolves "Mesh"/"SkeletalMesh" → CharacterMesh0 and the CMC lookup → CharMoveComp.
-		if (bIsAlias || CompName.IsEmpty())
-		{
-			for (UActorComponent* Comp : Comps)
-			{
-				if (Comp && Comp->IsA(RequiredClass))
-				{
-					return Comp;
-				}
-			}
-		}
-
-		return nullptr;
 	}
 
 	/**
@@ -380,19 +304,22 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleSetAnimClass
 			TEXT("Animation Blueprint '%s' has no GeneratedClass (compile it first)"), *AnimBpPath));
 	}
 
-	// Resolve by alias-or-name-or-class. "Mesh"/"SkeletalMesh" are friendly aliases that
-	// fall back to the skeletal-mesh component on the CDO (ACharacter's is "CharacterMesh0",
-	// NOT "Mesh"); an explicit exact name ("CharacterMesh0" or a custom name) still works.
-	UActorComponent* MeshComp = ResolveComponentOnBP(
-		BP, CompName, USkeletalMeshComponent::StaticClass(),
-		{ TEXT("Mesh"), TEXT("SkeletalMesh") });
-	USkeletalMeshComponent* SMC = Cast<USkeletalMeshComponent>(MeshComp);
+	// Shared resolver. "Mesh"/"SkeletalMesh" are aliases carrying USkeletalMeshComponent as their
+	// own target class (ACharacter's mesh is "CharacterMesh0", NOT "Mesh"); an explicit exact name
+	// still wins. Write intent — a mesh inherited from a parent Blueprint gets this Blueprint's own
+	// ICH override rather than having the parent's template mutated underneath it.
+	const MonolithBlueprintComponentResolver::FResult MeshResolved =
+		MonolithBlueprintComponentResolver::Resolve(
+			BP, CompName, USkeletalMeshComponent::StaticClass(), /*bCreateIchOverride=*/true);
+	USkeletalMeshComponent* SMC = Cast<USkeletalMeshComponent>(MeshResolved.Template);
 	if (!SMC)
 	{
-		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("Skeletal mesh component '%s' not found on '%s' "
-				 "(use 'Mesh'/'SkeletalMesh' alias, the exact name e.g. 'CharacterMesh0', or a custom name)"),
-			*CompName, *BpPath));
+		return FMonolithActionResult::Error(MeshResolved.Error.IsEmpty()
+			? FString::Printf(
+				TEXT("Skeletal mesh component '%s' not found on '%s' "
+					 "(use 'Mesh'/'SkeletalMesh' alias, the exact name e.g. 'CharacterMesh0', or a custom name)"),
+				*CompName, *BpPath)
+			: MeshResolved.Error);
 	}
 
 	// Warn (do not fail) if the AnimBP graph has no Motion Matching node.
@@ -404,11 +331,11 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleSetAnimClass
 	// the direct field write + PostEditChange is the asset-time path mirrored by
 	// set_component_property's setter discipline.
 	//
-	// PERSISTENCE: the mesh component is an INHERITED NATIVE component (ACharacter's
-	// CharacterMesh0 has no SCS node, so no Inheritable Component Handler override exists).
-	// The write lands on the CDO subobject directly. MarkBlueprintAsModified alone does NOT
-	// re-serialise that CDO override — it silently reverts on the next reload/recompile.
-	// The CDO override only persists if the Blueprint is structurally modified AND recompiled.
+	// PERSISTENCE: on a Character the mesh is an INHERITED NATIVE component (ACharacter's
+	// CharacterMesh0 has no SCS node), so the write lands on the CDO subobject; on a child of a
+	// Blueprint parent it lands on the ICH override the resolver just created. MarkBlueprintAsModified
+	// alone does NOT re-serialise either — they silently revert on the next reload/recompile.
+	// They persist only if the Blueprint is structurally modified AND recompiled.
 	BP->Modify();
 	SMC->Modify();
 	SMC->SetAnimInstanceClass(ABP->GeneratedClass);
@@ -427,6 +354,11 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleSetAnimClass
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("bp_path"), BpPath);
 	Root->SetStringField(TEXT("component"), CompName);
+	if (!MeshResolved.ResolvedName.IsNone())
+	{
+		Root->SetStringField(TEXT("resolved_component"), MeshResolved.ResolvedName.ToString());
+	}
+	Root->SetStringField(TEXT("source"), MonolithBlueprintComponentResolver::SourceToString(MeshResolved.Source));
 	Root->SetStringField(TEXT("anim_bp_path"), AnimBpPath);
 	Root->SetStringField(TEXT("anim_class"), ABP->GeneratedClass->GetName());
 	Root->SetBoolField(TEXT("motion_matching_node_found"), bHasMMNode);
@@ -472,14 +404,20 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleApplyMovemen
 	{
 		return FMonolithActionResult::Error(TEXT("apply_movement_preset: UCharacterMovementComponent class not found"));
 	}
-	// Empty name → resolver returns the first component of the class on the CDO.
-	UActorComponent* CmcComp = ResolveComponentOnBP(BP, FString(), CmcClass, {});
-	if (!CmcComp)
+	// Empty name → resolver returns the single component of that class. Read-only: we only need
+	// the real variable name to hand to set_component_property, which does its own write resolve.
+	const MonolithBlueprintComponentResolver::FResult CmcResolved =
+		MonolithBlueprintComponentResolver::Resolve(BP, FString(), CmcClass, /*bCreateIchOverride=*/false);
+	if (!CmcResolved.IsValid())
 	{
-		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("apply_movement_preset: no CharacterMovementComponent found on '%s' (is the parent a Character?)"), *BpPath));
+		return FMonolithActionResult::Error(CmcResolved.Error.IsEmpty()
+			? FString::Printf(
+				TEXT("apply_movement_preset: no CharacterMovementComponent found on '%s' (is the parent a Character?)"), *BpPath)
+			: CmcResolved.Error);
 	}
-	const FString CmcName = CmcComp->GetName();
+	const FString CmcName = CmcResolved.ResolvedName.IsNone()
+		? CmcResolved.Template->GetName()
+		: CmcResolved.ResolvedName.ToString();
 
 	// Build the property tree for this preset, then write each via set_component_property
 	// (honours the Details-panel write path + PostEditChange notifications).
@@ -893,37 +831,45 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleScaffoldMoti
 	//     MarkBlueprintAsModified alone reverts it on reload. ---
 	if (!Mesh.IsEmpty())
 	{
-		UActorComponent* MeshComp = ResolveComponentOnBP(
-			BP, TEXT("Mesh"), USkeletalMeshComponent::StaticClass(),
-			{ TEXT("Mesh"), TEXT("SkeletalMesh") });
-		USkeletalMeshComponent* MeshSMC = Cast<USkeletalMeshComponent>(MeshComp);
 		USkeletalMesh* MeshAsset = FMonolithAssetUtils::LoadAssetByPath<USkeletalMesh>(Mesh);
-		if (!MeshSMC)
-		{
-			NoteStep(TEXT("set_mesh"), false, TEXT("no skeletal mesh component found on BP"));
-		}
-		else if (!MeshAsset)
+		if (!MeshAsset)
 		{
 			NoteStep(TEXT("set_mesh"), false, FString::Printf(TEXT("skeletal mesh asset not found: %s"), *Mesh));
 		}
 		else
 		{
-			BP->Modify();
-			MeshSMC->Modify();
-			MeshSMC->SetSkeletalMeshAsset(MeshAsset);
-
-			// The persisted UPROPERTY is SkinnedAsset (SkeletalMeshAsset is Transient); notify
-			// the serialised property so the override is recorded against the CDO subobject.
-			if (FProperty* MeshProp = USkeletalMeshComponent::StaticClass()->FindPropertyByName(TEXT("SkinnedAsset")))
+			// Loading and type-checking the asset is read-only. Request write intent only after
+			// that validation succeeds, because resolving an inherited SCS component may create
+			// this Blueprint's ICH override.
+			const MonolithBlueprintComponentResolver::FResult MeshResolved =
+				MonolithBlueprintComponentResolver::Resolve(
+					BP, TEXT("Mesh"), USkeletalMeshComponent::StaticClass(), /*bCreateIchOverride=*/true);
+			USkeletalMeshComponent* MeshSMC = Cast<USkeletalMeshComponent>(MeshResolved.Template);
+			if (!MeshSMC)
 			{
-				FPropertyChangedEvent ChangeEvent(MeshProp, EPropertyChangeType::ValueSet);
-				MeshSMC->PostEditChangeProperty(ChangeEvent);
+				NoteStep(TEXT("set_mesh"), false, MeshResolved.Error.IsEmpty()
+					? FString(TEXT("no skeletal mesh component found on BP"))
+					: MeshResolved.Error);
 			}
+			else
+			{
+				BP->Modify();
+				MeshSMC->Modify();
+				MeshSMC->SetSkeletalMeshAsset(MeshAsset);
 
-			FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
-			FKismetEditorUtilities::CompileBlueprint(BP);
-			BP->MarkPackageDirty();
-			NoteStep(TEXT("set_mesh"), true, Mesh);
+				// The persisted UPROPERTY is SkinnedAsset (SkeletalMeshAsset is Transient); notify
+				// the serialised property so the override is recorded against the CDO subobject.
+				if (FProperty* MeshProp = USkeletalMeshComponent::StaticClass()->FindPropertyByName(TEXT("SkinnedAsset")))
+				{
+					FPropertyChangedEvent ChangeEvent(MeshProp, EPropertyChangeType::ValueSet);
+					MeshSMC->PostEditChangeProperty(ChangeEvent);
+				}
+
+				FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
+				FKismetEditorUtilities::CompileBlueprint(BP);
+				BP->MarkPackageDirty();
+				NoteStep(TEXT("set_mesh"), true, Mesh);
+			}
 		}
 	}
 
@@ -998,62 +944,19 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleGetInherited
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *BpPath));
 	}
 
-	// Resolve the EFFECTIVE component template. ResolveComponentOnBP returns the SCS
-	// template when the component is author-declared on this BP, otherwise the component
-	// on the CDO (which reflects native defaults + any ICH override + inherited values).
-	UActorComponent* Comp = ResolveComponentOnBP(
-		BP, CompName, UActorComponent::StaticClass(),
-		{ TEXT("Mesh"), TEXT("SkeletalMesh") });
-	if (!Comp)
+	// Shared resolver, read-only. It classifies the tier itself, so the hand-rolled
+	// classification block that used to live here is gone — it compared ICH record template
+	// names against a CDO component's name and could therefore never report 'ich' at all.
+	const MonolithBlueprintComponentResolver::FResult Resolved =
+		MonolithBlueprintComponentResolver::Resolve(
+			BP, CompName, UActorComponent::StaticClass(), /*bCreateIchOverride=*/false);
+	if (!Resolved.IsValid())
 	{
-		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("Component '%s' not found on '%s'"), *CompName, *BpPath));
+		return FMonolithActionResult::Error(Resolved.Error.IsEmpty()
+			? FString::Printf(TEXT("Component '%s' not found on '%s'"), *CompName, *BpPath)
+			: Resolved.Error);
 	}
-
-	// Classify the override source.
-	//   scs        — declared as an SCS node on THIS Blueprint.
-	//   ich        — SCS-inherited from a parent BP with an Inheritable Component Handler override.
-	//   cdo_native — inherited native component (no SCS node anywhere); value read off the CDO.
-	FString SourceClass = TEXT("cdo_native");
-	{
-		bool bIsThisBpScs = false;
-		if (BP->SimpleConstructionScript)
-		{
-			for (USCS_Node* Node : BP->SimpleConstructionScript->GetAllNodes())
-			{
-				if (Node && (Node->GetVariableName() == Comp->GetFName() ||
-					(Node->ComponentTemplate && Node->ComponentTemplate->GetName().Equals(Comp->GetName(), ESearchCase::IgnoreCase))))
-				{
-					bIsThisBpScs = true;
-					break;
-				}
-			}
-		}
-
-		if (bIsThisBpScs)
-		{
-			SourceClass = TEXT("scs");
-		}
-		else if (UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(BP->GeneratedClass))
-		{
-			// An SCS-inherited component (declared on a parent BP) carries its override on
-			// this BP's Inheritable Component Handler. If an ICH exists and holds an override
-			// template matching this component's name, classify as 'ich'; otherwise the value
-			// is the plain inherited/native default read off the CDO.
-			if (UInheritableComponentHandler* ICH = BPGC->GetInheritableComponentHandler(/*bCreateIfNecessary=*/false))
-			{
-				for (auto RecordIt = ICH->CreateRecordIterator(); RecordIt; ++RecordIt)
-				{
-					if (RecordIt->ComponentTemplate &&
-						RecordIt->ComponentTemplate->GetName().Equals(Comp->GetName(), ESearchCase::IgnoreCase))
-					{
-						SourceClass = TEXT("ich");
-						break;
-					}
-				}
-			}
-		}
-	}
+	UActorComponent* Comp = Resolved.Template;
 
 	// Build the property list to read.
 	TArray<FString> PropsToRead;
@@ -1094,9 +997,14 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleGetInherited
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("bp_path"), BpPath);
 	Root->SetStringField(TEXT("component"), CompName);
-	Root->SetStringField(TEXT("resolved_component"), Comp->GetName());
+	Root->SetStringField(TEXT("resolved_component"),
+		Resolved.ResolvedName.IsNone() ? Comp->GetName() : Resolved.ResolvedName.ToString());
 	Root->SetStringField(TEXT("component_class"), Comp->GetClass()->GetName());
-	Root->SetStringField(TEXT("source"), SourceClass);
+	Root->SetStringField(TEXT("source"), MonolithBlueprintComponentResolver::SourceToString(Resolved.Source));
+	if (!Resolved.Note.IsEmpty())
+	{
+		Root->SetStringField(TEXT("note"), Resolved.Note);
+	}
 	Root->SetObjectField(TEXT("properties"), PropsObj);
 	return FMonolithActionResult::Success(Root);
 }
@@ -1715,13 +1623,18 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleApplyLocomot
 	{
 		return FMonolithActionResult::Error(TEXT("apply_locomotion_speed_band: UCharacterMovementComponent class not found"));
 	}
-	UActorComponent* CmcComp = ResolveComponentOnBP(BP, FString(), CmcClass, {});
-	if (!CmcComp)
+	const MonolithBlueprintComponentResolver::FResult CmcResolved =
+		MonolithBlueprintComponentResolver::Resolve(BP, FString(), CmcClass, /*bCreateIchOverride=*/false);
+	if (!CmcResolved.IsValid())
 	{
-		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("apply_locomotion_speed_band: no CharacterMovementComponent found on '%s' (is the parent a Character?)"), *BpPath));
+		return FMonolithActionResult::Error(CmcResolved.Error.IsEmpty()
+			? FString::Printf(
+				TEXT("apply_locomotion_speed_band: no CharacterMovementComponent found on '%s' (is the parent a Character?)"), *BpPath)
+			: CmcResolved.Error);
 	}
-	const FString CmcName = CmcComp->GetName();
+	const FString CmcName = CmcResolved.ResolvedName.IsNone()
+		? CmcResolved.Template->GetName()
+		: CmcResolved.ResolvedName.ToString();
 
 	// Write each CMC cap via set_component_property (Details-panel write path +
 	// PostEditChange), mirroring apply_movement_preset.

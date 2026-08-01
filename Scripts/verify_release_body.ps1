@@ -30,13 +30,17 @@
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]  [string] $Version,
+    # Not declared Mandatory: -SelfTest runs without a release, and a Mandatory
+    # parameter would prompt (and hang) in a non-interactive shell. Validated below.
+    [Parameter(Mandatory = $false)] [string] $Version,
+    # Runs the pre-v2 detector fixtures and exits. Touches no network and no release.
+    [Parameter(Mandatory = $false)] [switch] $SelfTest,
     [Parameter(Mandatory = $false)] [string] $Repo        = "tumourlove/monolith",
     # Defaults to the host project root, which is where make_release.ps1 writes the
-    # zips: this script lives at <ProjectRoot>\Plugins\Monolith\Scripts\, so three
-    # levels up is the project root. Derived rather than hardcoded so the script
-    # works from any clone.
-    [Parameter(Mandatory = $false)] [string] $ArtifactDir = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
+    # zips. Resolve this after parameter binding: Windows PowerShell 5.1 can expose
+    # an empty $PSScriptRoot while evaluating a param-block default, which would
+    # prevent even -SelfTest from reaching its fixtures.
+    [Parameter(Mandatory = $false)] [string] $ArtifactDir
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,6 +52,66 @@ function Fail([string] $Message) {
 }
 function Pass([string] $Message) {
     Write-Host "  [ OK ] $Message" -ForegroundColor Green
+}
+
+# Single source of truth for check 3. See the long comment at that check for why
+# this is deliberately UNANCHORED. -SelfTest proves it both rejects and accepts.
+$script:PreV2MarkerPattern = 'Monolith-SHA256(-UE5\.[0-9]+)?:'
+
+# --- Self-test ----------------------------------------------------------------
+# Guards the one property that matters: the detector must be at least as
+# permissive as the deployed client's unanchored FindNext() matcher, while still
+# accepting a body that carries only the three correct v2 markers. Without this,
+# a future tidy-up re-anchors the regex and silently re-opens the crash path.
+if ($SelfTest) {
+    $H = 'a' * 64
+    $mustReject = @(
+        @{ Name = 'bare marker';        Body = "Monolith-SHA256: $H" },
+        @{ Name = 'markdown bullet';    Body = "- Monolith-SHA256: $H" },
+        @{ Name = 'table cell';         Body = "| Monolith-SHA256: | $H |" },
+        @{ Name = 'prose prefix';       Body = "Legacy zip -- Monolith-SHA256: $H" },
+        @{ Name = 'hash on next line';  Body = "Monolith-SHA256:`n$H" },
+        @{ Name = 'engine-tagged';      Body = "- Monolith-SHA256-UE5.7: $H" },
+        @{ Name = 'indented tagged';    Body = "    Monolith-SHA256-UE5.8: $H" }
+    )
+    $mustAccept = @(
+        @{ Name = 'the three v2 markers'
+           Body = "Monolith-SHA256-v2-UE5.7: $H`nMonolith-SHA256-v2-UE5.8: $H`nMonolith-SHA256-v2: $H" },
+        @{ Name = 'v2 markers in prose/bullets'
+           Body = "- Monolith-SHA256-v2: $H`n| Monolith-SHA256-v2-UE5.7: | $H |" }
+    )
+
+    Write-Host ""
+    Write-Host "Self-test: pre-v2 marker detector" -ForegroundColor Cyan
+    Write-Host ""
+    $bad = 0
+    foreach ($c in $mustReject) {
+        if ([regex]::Matches($c.Body, $script:PreV2MarkerPattern).Count -gt 0) {
+            Pass "rejects $($c.Name)"
+        } else {
+            Fail "MISSED pre-v2 marker: $($c.Name) -- this shape would crash deployed clients"; $bad++
+        }
+    }
+    foreach ($c in $mustAccept) {
+        if ([regex]::Matches($c.Body, $script:PreV2MarkerPattern).Count -eq 0) {
+            Pass "accepts $($c.Name)"
+        } else {
+            Fail "FALSE POSITIVE on $($c.Name) -- this would block every valid release"; $bad++
+        }
+    }
+    Write-Host ""
+    if ($bad -gt 0) { Write-Host "SELF-TEST FAILED ($bad)" -ForegroundColor Red; exit 1 }
+    Write-Host "SELF-TEST PASSED ($($mustReject.Count) reject, $($mustAccept.Count) accept)" -ForegroundColor Green
+    exit 0
+}
+
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    throw "-Version is required (omit it only with -SelfTest)."
+}
+
+if ([string]::IsNullOrWhiteSpace($ArtifactDir)) {
+    # This script lives at <ProjectRoot>\Plugins\Monolith\Scripts\.
+    $ArtifactDir = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
 }
 
 $Tag = "v$Version"
@@ -112,8 +176,27 @@ if ($script:Failures.Count -eq 0) { Pass "All 3 assets present, uploaded, non-em
 # generic fallback is a fatal checkf, so a recognised marker in a release body
 # hard-crashes every un-upgraded Windows client that clicks Install (issues #90/#94).
 # The v2 names are invisible to those parsers, so old clients fail safe.
+#
+# THE DETECTOR MUST BE UNANCHORED -- do not "tidy" this back to '(?m)^\s*...'.
+# The deployed client parser (v0.21.0 MonolithUpdateSubsystem.cpp:338) is
+#     FRegexPattern("Monolith-SHA256:\s*([0-9a-fA-F]{64})(?![0-9a-fA-F])")
+# driven by FindNext(), i.e. unanchored: it matches at ANY column and its \s*
+# spans newlines. A line-anchored gate that only tolerates leading whitespace is
+# strictly weaker than the thing it defends, so all of these used to PASS the
+# gate and still crash the client:
+#     - Monolith-SHA256: <64hex>              (markdown bullet; "-" is not \s)
+#     | Monolith-SHA256: | <64hex> |          (table cell)
+#     Legacy zip -- Monolith-SHA256: <64hex>  (any prose prefix)
+#     Monolith-SHA256:\n<64hex>               (hash on the next line)
+# The first two are ordinary release-note formatting. Mirroring the client's own
+# matching semantics is the only correct gate. Consequence, and it is intended:
+# any PROSE MENTION of a pre-v2 name now fails the gate, which is exactly the
+# documented contract -- the pre-v2 names must never appear in a body again.
+# This cannot false-positive on the v2 names: after the "Monolith-SHA256"
+# literal the optional group cannot consume "-v2", and the required ":" sees "-".
+# Run -SelfTest to prove both halves.
 $body = [string]$rel.body
-$preV2 = [regex]::Matches($body, '(?m)^\s*Monolith-SHA256(-UE5\.[0-9]+)?:')
+$preV2 = [regex]::Matches($body, $script:PreV2MarkerPattern)
 if ($preV2.Count -gt 0) {
     Fail "Body contains $($preV2.Count) PRE-V2 SHA marker(s). These hard-crash every deployed v0.14.7-v0.21.0 Windows client that clicks Install. Remove them."
 } else {

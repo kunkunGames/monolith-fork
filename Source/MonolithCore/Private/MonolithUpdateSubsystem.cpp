@@ -1,14 +1,13 @@
 #include "MonolithUpdateSubsystem.h"
 #include "MonolithCoreModule.h"
+#include "MonolithHashUtils.h"
 #include "MonolithHttpServer.h"
 #include "MonolithSettings.h"
 #include "MonolithJsonUtils.h"
-#include "MonolithSha256.h"
+#include "MonolithUpdateReleaseSelector.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
-#include "HAL/PlatformMisc.h"
-#include "Internationalization/Regex.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
@@ -201,154 +200,64 @@ void UMonolithUpdateSubsystem::CheckForUpdate()
 				// release body carries a matching Monolith-SHA256-v2-UE5.<minor>: marker.
 				const FString EngineTag = FString::Printf(TEXT("UE5.%d"), ENGINE_MINOR_VERSION);
 
-				// Find the zip asset URL.
-				FString ZipUrl;
-				// True once we commit to the engine-tagged asset — drives the stricter
-				// SHA-marker requirement below (no legacy fallback in that case).
-				bool bChoseEngineTaggedAsset = false;
-				const TArray<TSharedPtr<FJsonValue>>* Assets;
-				if (JsonObj->TryGetArrayField(TEXT("assets"), Assets))
+				const FMonolithReleaseZipSelection ZipSelection =
+					MonolithUpdateReleaseSelector::SelectBinaryZip(JsonObj, EngineTag);
+				if (!ZipSelection.IsSuccess())
 				{
-					// Detect a per-engine release: any asset whose name carries a
-					// "-UE5." engine tag. If present we MUST match this engine's tag
-					// (fail-closed) and never silently grab a wrong-engine zip.
-					bool bPerEngineRelease = false;
-					FString FirstZipUrl;     // legacy fallback: first plain .zip
-					FString MatchingZipUrl;  // this engine's per-engine zip
-					for (const TSharedPtr<FJsonValue>& AssetVal : *Assets)
+					if (ZipSelection.Failure == EMonolithReleaseZipFailure::NoMatchingEngineAsset)
 					{
-						const TSharedPtr<FJsonObject>* AssetObj;
-						if (AssetVal->TryGetObject(AssetObj))
-						{
-							FString Name;
-							(*AssetObj)->TryGetStringField(TEXT("name"), Name);
-#if PLATFORM_MAC
-							const bool bTargetPlatformZip = Name.EndsWith(TEXT("-macOS.zip"));
-#elif PLATFORM_LINUX
-							const bool bTargetPlatformZip = Name.EndsWith(TEXT("-Linux.zip"));
-#else
-							const bool bTargetPlatformZip = Name.EndsWith(TEXT(".zip"))
-								&& !Name.EndsWith(TEXT("-macOS.zip"))
-								&& !Name.EndsWith(TEXT("-Linux.zip"));
-#endif
-							if (!bTargetPlatformZip)
-							{
-								continue;
-							}
-							if (Name.Contains(TEXT("-UE5."), ESearchCase::IgnoreCase))
-							{
-								bPerEngineRelease = true;
-							}
-							if (FirstZipUrl.IsEmpty())
-							{
-								(*AssetObj)->TryGetStringField(TEXT("browser_download_url"), FirstZipUrl);
-							}
-							// Bounded-token match: the tag must be immediately followed by
-							// ".zip" or "-" so "UE5.7" never matches "...UE5.70.zip"/"...UE5.17.zip".
-							if (MatchingZipUrl.IsEmpty()
-								&& (Name.Contains(EngineTag + TEXT(".zip"), ESearchCase::IgnoreCase)
-									|| Name.Contains(EngineTag + TEXT("-"), ESearchCase::IgnoreCase)))
-							{
-								(*AssetObj)->TryGetStringField(TEXT("browser_download_url"), MatchingZipUrl);
-							}
-						}
-					}
-
-					if (bPerEngineRelease)
-					{
-						// Per-engine release: require an asset matching THIS engine.
-						if (MatchingZipUrl.IsEmpty())
-						{
-							UE_LOG(LogMonolith, Error,
-								TEXT("No Monolith build for %s in release %s; build from source or wait for a matching release."),
-								*EngineTag, *RemoteVersion);
-
-							FNotificationInfo Info(FText::Format(
-								NSLOCTEXT("Monolith", "UpdateNoEngineAsset",
-									"Monolith auto-update aborted: no {0} build in release {1}. Build from source or wait for a matching release."),
-								FText::FromString(EngineTag), FText::FromString(RemoteVersion)));
-							Info.ExpireDuration = 30.0f;
-							Info.bUseThrobber = false;
-							FSlateNotificationManager::Get().AddNotification(Info);
-							return; // fail-closed: do not install a wrong-engine zip
-						}
-						ZipUrl = MatchingZipUrl;
-						bChoseEngineTaggedAsset = true;
-						UE_LOG(LogMonolith, Log,
-							TEXT("Selected per-engine asset for %s in release %s."), *EngineTag, *RemoteVersion);
+						UE_LOG(LogMonolith, Error,
+							TEXT("No Monolith build for %s in release %s; build from source or wait for a matching release."),
+							*EngineTag, *RemoteVersion);
+						FNotificationInfo Info(FText::Format(
+							NSLOCTEXT("Monolith", "UpdateNoEngineAsset",
+								"Monolith auto-update aborted: no {0} build in release {1}. Build from source or wait for a matching release."),
+							FText::FromString(EngineTag), FText::FromString(RemoteVersion)));
+						Info.ExpireDuration = 30.0f;
+						Info.bUseThrobber = false;
+						FSlateNotificationManager::Get().AddNotification(Info);
 					}
 					else
 					{
-						// Legacy release (no -UE5. assets): first .zip, as before.
-						ZipUrl = FirstZipUrl;
-						if (!ZipUrl.IsEmpty())
-						{
-							UE_LOG(LogMonolith, Log,
-								TEXT("Selected legacy (engine-agnostic) asset in release %s."), *RemoteVersion);
-						}
+						UE_LOG(LogMonolith, Warning,
+							TEXT("Release %s has no downloadable .zip release asset; refusing the GitHub source zipball."),
+							*RemoteVersion);
 					}
-				}
-
-				// Do NOT fallback to zipball_url. Source zipballs lack precompiled
-				// Binaries/ and will break the plugin for non-C++ users.
-				if (ZipUrl.IsEmpty())
-				{
-					UE_LOG(LogMonolith, Warning, TEXT("Release %s has no .zip asset. Aborting update to avoid pulling source zipball."), *RemoteVersion);
 					return;
 				}
 
-				if (!ZipUrl.IsEmpty())
+				const FString& ZipUrl = ZipSelection.Url;
+				const bool bChoseEngineTaggedAsset = ZipSelection.bEngineTagged;
+				if (bChoseEngineTaggedAsset)
+				{
+					UE_LOG(LogMonolith, Log,
+						TEXT("Selected per-engine asset for %s in release %s."), *EngineTag, *RemoteVersion);
+				}
+				else
+				{
+					UE_LOG(LogMonolith, Log,
+						TEXT("Selected legacy (engine-agnostic) asset in release %s."), *RemoteVersion);
+				}
+
 				{
 					FString ReleaseNotes;
 					JsonObj->TryGetStringField(TEXT("body"), ReleaseNotes);
 
-					// Parse the SHA256 marker added by make_release.ps1 (Issue #38).
-					// Unique sentinel prefix prevents collision with prose mentions of
-					// "SHA256" elsewhere in the release body. The trailing
-					// `(?![0-9a-fA-F])` boundary rejects 65+ char strings that would
-					// otherwise silently truncate to 64 and produce a confusing "hash
-					// mismatch" instead of "malformed marker". Stashed on the subsystem;
-					// consumed by OnDownloadComplete.
-					//
-					// "v2" marker generation (Issues #90/#94): updaters prior to the
-					// portable-SHA fix hard-assert the editor when the release notes
-					// carry a marker they recognize (their integrity check calls
-					// FPlatformMisc::GetSHA256Signature, whose generic fallback is a
-					// fatal checkf on platforms without an impl — Windows included).
-					// Releases therefore emit "Monolith-SHA256-v2-*" markers, which
-					// pre-fix updaters do NOT match: their per-engine parse aborts
-					// fail-closed (no marker found -> refuse install with a
-					// notification) and their legacy parse proceeds unverified —
-					// neither path can reach the fatal assert. Only fixed updaters
-					// (this code) parse the v2 names. Do NOT re-emit the old
-					// "Monolith-SHA256[-UE5.x]:" names on any future release.
-					//
-					// Engine-tagged asset -> require the matching
-					// "Monolith-SHA256-v2-<EngineTag>: <hex>" marker and ABORT if
-					// absent; we must NOT fall back to the engine-agnostic
-					// "Monolith-SHA256-v2:" marker, which would be a different
-					// (wrong-engine) hash.
-					// Legacy asset -> use the "Monolith-SHA256-v2:" marker.
+					// Engine-tagged assets require the exact engine + platform v2 marker.
+					// Never fall back to another engine/platform hash. Engine-agnostic
+					// assets retain the historical warning-and-proceed path if their v2
+					// marker is absent.
 					Self->PendingExpectedSha256.Empty();
 					if (bChoseEngineTaggedAsset)
 					{
-						const FString TaggedPrefix = FString::Printf(TEXT("Monolith-SHA256-v2-%s:"), *EngineTag);
-						// Escape the literal '.' in the tag (e.g. "UE5.7" -> "UE5\.7")
-						// so the regex matches a literal dot, not any char.
-						FString EngineTagRegex = EngineTag;
-						EngineTagRegex.ReplaceInline(TEXT("."), TEXT("\\."));
-						const FRegexPattern TaggedHashPattern(
-							FString::Printf(TEXT("Monolith-SHA256-v2-%s:\\s*([0-9a-fA-F]{64})(?![0-9a-fA-F])"), *EngineTagRegex));
-						FRegexMatcher Matcher(TaggedHashPattern, ReleaseNotes);
-						if (Matcher.FindNext())
-						{
-							Self->PendingExpectedSha256 = Matcher.GetCaptureGroup(1).ToLower();
-						}
-						else
+						const FString TaggedMarker = UMonolithUpdateSubsystem::BuildSha256MarkerName(EngineTag);
+						Self->PendingExpectedSha256 = UMonolithUpdateSubsystem::ParseSha256FromReleaseNotes(
+							ReleaseNotes, EngineTag);
+						if (Self->PendingExpectedSha256.IsEmpty())
 						{
 							UE_LOG(LogMonolith, Error,
 								TEXT("Release %s has a %s asset but no '%s' SHA256 marker - refusing to install."),
-								*RemoteVersion, *EngineTag, *TaggedPrefix);
+								*RemoteVersion, *EngineTag, *TaggedMarker);
 
 							FNotificationInfo Info(FText::Format(
 								NSLOCTEXT("Monolith", "UpdateMissingEngineSha",
@@ -365,17 +274,14 @@ void UMonolithUpdateSubsystem::CheckForUpdate()
 						Self->PendingExpectedSha256 = UMonolithUpdateSubsystem::ParseSha256FromReleaseNotes(ReleaseNotes);
 						if (Self->PendingExpectedSha256.IsEmpty())
 						{
+							const FString LegacyMarker = UMonolithUpdateSubsystem::BuildSha256MarkerName();
 							UE_LOG(LogMonolith, Warning,
-								TEXT("Release %s notes do not include a Monolith-SHA256-v2 marker — install will proceed without integrity check."),
-								*RemoteVersion);
+								TEXT("Release %s notes do not include the '%s' marker — install will proceed without integrity check."),
+								*RemoteVersion, *LegacyMarker);
 						}
 					}
 
 					Self->ShowUpdateNotification(RemoteVersion, ZipUrl, ReleaseNotes);
-				}
-				else
-				{
-					UE_LOG(LogMonolith, Warning, TEXT("New version %s available but no download URL found"), *RemoteVersion);
 				}
 			}
 			else
@@ -420,31 +326,110 @@ int32 UMonolithUpdateSubsystem::CompareVersions(const FString& Current, const FS
 	return RPatch - CPatch;
 }
 
-FString UMonolithUpdateSubsystem::ParseSha256FromReleaseNotes(const FString& ReleaseNotes)
+FString UMonolithUpdateSubsystem::BuildSha256MarkerName(
+	const FString& EngineTag,
+	const FString& PlatformTag)
 {
-#if PLATFORM_MAC
-	static const FRegexPattern HashPattern(
-		TEXT("Monolith-macOS-SHA256:\\s*([0-9a-fA-F]{64})(?![0-9a-fA-F])"));
-#elif PLATFORM_LINUX
-	static const FRegexPattern HashPattern(
-		TEXT("Monolith-Linux-SHA256:\\s*([0-9a-fA-F]{64})(?![0-9a-fA-F])"));
-#else
-	// "v2" marker generation (Issues #90/#94): updaters shipped before the portable-SHA
-	// fix hard-assert the editor when release notes carry a marker they recognize, so
-	// make_release.ps1 now emits only "Monolith-SHA256-v2:" and the old
-	// "Monolith-SHA256:" name must never appear in a release body again. The macOS and
-	// Linux markers above are emitted by this fork's own CI and are unaffected: their
-	// platforms have a real FPlatformMisc::GetSHA256Signature implementation, so the
-	// fatal generic fallback that motivated the rename cannot be reached there.
-	static const FRegexPattern HashPattern(
-		TEXT("Monolith-SHA256-v2:\\s*([0-9a-fA-F]{64})(?![0-9a-fA-F])"));
-#endif
-	FRegexMatcher Matcher(HashPattern, ReleaseNotes);
-	if (Matcher.FindNext())
+	FString EffectivePlatform = PlatformTag;
+	if (EffectivePlatform.IsEmpty())
 	{
-		return Matcher.GetCaptureGroup(1).ToLower();
+#if PLATFORM_MAC
+		EffectivePlatform = TEXT("macOS");
+#elif PLATFORM_LINUX
+		EffectivePlatform = TEXT("Linux");
+#elif PLATFORM_WINDOWS
+		EffectivePlatform = TEXT("Windows");
+#else
+		return FString();
+#endif
 	}
-	return TEXT("");
+
+	FString MarkerName;
+	if (EffectivePlatform.Equals(TEXT("Windows"), ESearchCase::IgnoreCase)
+		|| EffectivePlatform.Equals(TEXT("Win64"), ESearchCase::IgnoreCase))
+	{
+		MarkerName = TEXT("Monolith-SHA256-v2");
+	}
+	else if (EffectivePlatform.Equals(TEXT("macOS"), ESearchCase::IgnoreCase)
+		|| EffectivePlatform.Equals(TEXT("Mac"), ESearchCase::IgnoreCase))
+	{
+		MarkerName = TEXT("Monolith-macOS-SHA256-v2");
+	}
+	else if (EffectivePlatform.Equals(TEXT("Linux"), ESearchCase::IgnoreCase))
+	{
+		MarkerName = TEXT("Monolith-Linux-SHA256-v2");
+	}
+	else
+	{
+		return FString();
+	}
+
+	if (!EngineTag.IsEmpty())
+	{
+		if (!EngineTag.StartsWith(TEXT("UE5."), ESearchCase::CaseSensitive) || EngineTag.Len() <= 4)
+		{
+			return FString();
+		}
+		for (int32 Index = 4; Index < EngineTag.Len(); ++Index)
+		{
+			if (!FChar::IsDigit(EngineTag[Index]))
+			{
+				return FString();
+			}
+		}
+		MarkerName += TEXT("-");
+		MarkerName += EngineTag;
+	}
+
+	return MarkerName;
+}
+
+FString UMonolithUpdateSubsystem::ParseSha256FromReleaseNotes(
+	const FString& ReleaseNotes,
+	const FString& EngineTag,
+	const FString& PlatformTag)
+{
+	const FString MarkerName = BuildSha256MarkerName(EngineTag, PlatformTag);
+	if (MarkerName.IsEmpty())
+	{
+		return FString();
+	}
+
+	const FString MarkerPrefix = MarkerName + TEXT(":");
+	int32 SearchOffset = 0;
+	while (SearchOffset < ReleaseNotes.Len())
+	{
+		const int32 MarkerIndex = ReleaseNotes.Find(
+			MarkerPrefix, ESearchCase::CaseSensitive, ESearchDir::FromStart, SearchOffset);
+		if (MarkerIndex == INDEX_NONE)
+		{
+			break;
+		}
+
+		int32 HashStart = MarkerIndex + MarkerPrefix.Len();
+		while (HashStart < ReleaseNotes.Len() && FChar::IsWhitespace(ReleaseNotes[HashStart]))
+		{
+			++HashStart;
+		}
+
+		constexpr int32 Sha256HexLength = 64;
+		const int32 RemainingLength = ReleaseNotes.Len() - HashStart;
+		bool bValidHash = RemainingLength >= Sha256HexLength;
+		const int32 HashEnd = bValidHash ? HashStart + Sha256HexLength : HashStart;
+		for (int32 Index = HashStart; bValidHash && Index < HashEnd; ++Index)
+		{
+			bValidHash = FChar::IsHexDigit(ReleaseNotes[Index]);
+		}
+		if (bValidHash && (HashEnd == ReleaseNotes.Len() || !FChar::IsHexDigit(ReleaseNotes[HashEnd])))
+		{
+			return ReleaseNotes.Mid(HashStart, Sha256HexLength).ToLower();
+		}
+
+		// A malformed occurrence must not hide a later valid exact marker.
+		SearchOffset = MarkerIndex + MarkerPrefix.Len();
+	}
+
+	return FString();
 }
 
 void UMonolithUpdateSubsystem::ShowUpdateNotification(const FString& NewVersion, const FString& ZipUrl, const FString& ReleaseNotes)
@@ -655,20 +640,21 @@ void UMonolithUpdateSubsystem::OnDownloadComplete(const FString& Version, bool b
 		return;
 	}
 
-	// Integrity check against the SHA256 advertised in the release notes
-	// (Issue #38). If the marker was missing in CheckForUpdate, PendingExpectedSha256
-	// is empty and we log a warning + continue (no regression for legacy installs).
-	// Hash MUST run before any disk write so a tampered payload never lands
-	// on the filesystem.
+	// Integrity check against the platform-safe v2 SHA256 release marker. Hashing
+	// uses Monolith's portable FIPS backend and MUST complete before any disk write
+	// so a tampered payload never reaches the filesystem.
 	if (!PendingExpectedSha256.IsEmpty())
 	{
-		// NOT FPlatformMisc::GetSHA256Signature: it has no Windows implementation and
-		// the generic fallback checkf-asserts (GenericPlatformMisc.cpp), killing the
-		// editor from an Install click. MonolithSha256 is portable and cannot fail.
-		FSHA256Signature Signature;
-		MonolithSha256::Compute(Data.GetData(), static_cast<uint64>(Data.Num()), Signature);
-		// FSHA256Signature::ToString() returns lowercase hex; ToLower() is defensive.
-		const FString ActualSha256 = Signature.ToString().ToLower();
+		FString ActualSha256;
+		if (!FMonolithHashUtils::TrySha256Bytes(MakeArrayView(Data), ActualSha256))
+		{
+			UE_LOG(LogMonolith, Error,
+				TEXT("Portable SHA256 calculation failed. Aborting auto-update."));
+			PendingExpectedSha256.Empty();
+			bUpdateInProgress = false;
+			return;
+		}
+		ActualSha256.ToLowerInline();
 		const FString ExpectedLower = PendingExpectedSha256.ToLower();
 
 		if (ActualSha256 != ExpectedLower)

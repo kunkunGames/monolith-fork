@@ -2,13 +2,15 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.21.3 (Beta)
+**Version:** 0.22.0 (Beta)
 
 ---
 
 ## MonolithMaterial
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, MaterialEditor, EditorScriptingUtilities, RenderCore, RHI, Slate, SlateCore, Json, JsonUtilities
+
+**Engine compatibility:** Texture sampler inference uses UE 5.8's `MaterialExpressionUtils` and UE 5.7's `UMaterialExpressionTextureBase` API behind a narrow compile-time boundary; behavior and returned sampler type remain identical.
 
 ### Classes
 

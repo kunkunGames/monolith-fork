@@ -14,10 +14,10 @@
 //   1) `Initialize`: walks `TObjectIterator<UClass>` for everything currently
 //      loaded. Catches stock UMG and any plugin loaded before the editor
 //      subsystem framework comes up.
-//   2) `FCoreDelegates::OnPostEngineInit`: re-walks AFTER all post-init plugin
+//   2) `MonolithCoreDelegates::GetPostEngineInit()`: re-walks AFTER all post-init plugin
 //      modules have loaded. Catches the late-loading marketplace case
 //      (CommonUI, third-party UMG widget packs).
-//      NOTE: The OnPostEngineInit listener is registered from
+//      NOTE: The post-engine-init listener is registered from
 //      `FMonolithUIModule::StartupModule` rather than from this subsystem's
 //      `Initialize`, because editor subsystems initialise AFTER OnPostEngineInit
 //      has already fired. Module startup runs earlier.
@@ -85,7 +85,7 @@ public:
     /**
      * Force a full re-scan of all loaded widget UClasses + curated mapping
      * re-seed. Called by `FMonolithUIModule::StartupModule` from the
-     * `OnPostEngineInit` callback so late-loaded plugins are picked up.
+    * post-engine-init callback so late-loaded plugins are picked up.
      * Public so tests can drive a re-scan when injecting synthetic classes.
      */
     void RescanWidgetTypes();

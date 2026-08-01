@@ -2,13 +2,15 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.21.3 (Beta)
+**Version:** 0.22.0 (Beta)
 
 ---
 
 ## MonolithAnimation
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, AnimGraph, AnimGraphRuntime, BlueprintGraph, AnimationBlueprintLibrary, PoseSearch, BlendStackEditor, AnimationModifiers, EditorScriptingUtilities, Json, JsonUtilities
+
+**Engine compatibility:** ControlRig includes its engine-owned asset base through the version-appropriate public header; MirrorTable refresh and PoseSearch entry replacement use the native UE 5.7/5.8 APIs behind explicit boundaries. Animation indexing captures package residency before loading and releases only what that call acquired.
 
 > **`BlendStackEditor` dep (2026-06-07)** added for the Motion Matching action pack — `build_motion_matching_node` spawns the bound-graph `UAnimGraphNode_MotionMatching` / BlendStack nodes.
 
@@ -276,7 +278,7 @@ Wraps `USkeleton::CompatibleSkeletons` — the canonical UE5 mechanism that lets
 | `connect_anim_graph_pins` | Wire two pins inside an ABP graph |
 | `set_state_animation` | Assign an animation asset to a state machine state |
 | `add_variable_get` | Place a `K2Node_VariableGet` in an ABP anim graph for reading AnimInstance member variables. Validates the variable exists on the skeleton class before spawning |
-| `set_anim_graph_node_property` | Set a property on a previously-placed anim graph node via reflection |
+| `set_anim_graph_node_property` | Set a property on a previously-placed anim graph node via reflection. **Scope is authoritative:** a supplied `graph_name` / `state_name` that does not resolve to exactly one graph is an error — it never falls back to the all-graphs search, because node ids repeat across graphs and a fallback silently writes to an unrelated layer. Omitting both keeps the all-graphs search (the documented default). Scope resolution enumerates via `UBlueprint::GetAllGraphs`, so **nested** state machines resolve at any depth (`Standing States → Stop → Stop States → Plant Left Foot`); `state_name` targets a state's inner graph, and pairing it with `graph_name` (the owning state machine) disambiguates sibling states. The response carries `resolved_graph_path` — the root-to-leaf path of the node actually written — beside `old_value` / `new_value`, so a caller can assert *where* a write landed |
 
 **ABP Graph Authoring (14 — ABP-authoring pack)** — namespace `animation`. Pose-composition, slot, cached-pose, output-wiring, blend, sync, layered-blend, Control Rig, and linked-layer anim-graph node authoring. Composes with the existing `add_anim_graph_node` / `connect_anim_graph_pins` write surface.
 
@@ -294,8 +296,18 @@ Wraps `USkeleton::CompatibleSkeletons` — the canonical UE5 mechanism that lets
 | `set_sync_group` | Set a player node's sync group — `name`, `role`, and `method` — so multiple players advance in lockstep. |
 | `set_layered_blend_bones` | Set per-bone branch filters (each a bone + blend depth) on a Layered Blend Per Bone node. |
 | `add_anim_control_rig_node` | Add a Control Rig anim-graph node. Param: `control_rig_class` — its IO pins regenerate from the resolved Control Rig class. |
-| `add_linked_anim_layer` | Add a Linked Anim Layer node. Params: `layer_name`, optional `interface_class`. |
+| `add_linked_anim_layer` | Add a Linked Anim Layer node. Params: `layer_name`, optional `interface_class`, optional `instance_class`. Resolves `layer_name` against the ABP's implemented `UAnimLayerInterface` graphs first; if no interface declares it, falls back to the ABP's OWN anim layer graphs (see ABP-Native Anim Layers below) and binds a SELF layer. Interface layers take precedence when a name exists in both. Supplying `interface_class` disables the native fallback. `instance_class` is rejected for native/self layers — a self layer has no override implementation to point at. |
 | `add_conduit` | Add a conduit node to a state machine. **Its bound graph is a transition-logic graph, not an anim graph** — a conduit routes transitions through a shared rule rather than holding a pose. |
+
+**ABP-Native Anim Layers** — namespace `animation`. Authors an animation layer that belongs to the Animation Blueprint itself, with no `UAnimLayerInterface` asset involved, so ABP variants do not have to share a layer signature.
+
+| Action | Description |
+|--------|-------------|
+| `add_anim_layer_graph` | Create an ABP-NATIVE animation layer: a `UAnimationGraph` carrying `UAnimationGraphSchema` in the Animation Blueprint's own `FunctionGraphs` — exactly what the editor's My Blueprint → **+** → Animation Layer button produces. The anim schema is what makes the anim compiler emit a real `FAnimBlueprintFunction` for the graph (`blueprint add_function` produces an inert K2 graph instead), and the Output Pose root node is created automatically. Params: `asset_path`, `layer_name`, optional `input_poses` (pose NAMES only — `["InPose"]` or `[{"name": "InPose"}]`, capped at 16, unique across the ABP), optional `compile` (default `true`). Returns `asset_path`, `graph_name`, `graph_class`, `schema_class`, `node_count`, `input_poses`, `compiled`, `saved`. Refuses: a duplicate graph name (it never renames or replaces an incumbent graph), the reserved name `AnimGraph`, a child Animation Blueprint (layers belong to the root ABP), macro libraries, interface Blueprints, and duplicate/empty pose names or a non-array `input_poses`. Populate the layer with the anim-graph authoring actions above, then place a consumer node with `add_linked_anim_layer`, which auto-detects native layers. |
+
+**How a native layer reads back.** It reports in `blueprint list_graphs` as `type: "function"` (so does the stock `AnimGraph` — classification is by which array the graph sits in, not by schema), never appears in `blueprint get_interfaces`, and `animation get_linked_layers` shows the consumer node title `"<Layer>\nAnim Layer (self)"`. A self bind is discriminated in the `add_linked_anim_layer` payload by `interface_class: "<self>"` plus `guid_resolved: false`. `add_anim_layer_graph`'s `graph_class` / `schema_class` are the machine-checkable proof that the graph is a `UAnimationGraph` on the anim schema rather than a K2 graph — no other action reports either field.
+
+> **Ordering constraint.** Self-layer pose pins are resolved against the ABP's `SkeletonGeneratedClass` (`UAnimGraphNode_LinkedAnimLayer::GetTargetSkeletonClass` falls back to it when no interface resolves), so the layer graph must already be compiled into that class when the consumer node is placed. `add_anim_layer_graph(compile=false)` immediately followed by `add_linked_anim_layer` places a node with NO pose pins. Use the default `compile=true`, or recompile before placing. Placing the node against a compiled layer regenerates its pose pins — an output `Pose` plus one input pin per declared input pose.
 
 **Fixes (2026-06-07)**
 - `add_anim_graph_node` — fixed a pre-existing crash when spawning bound-graph nodes (BlendStack / MotionMatching); the spawn path now uses `FGraphNodeCreator` so the node's bound graph is constructed correctly.

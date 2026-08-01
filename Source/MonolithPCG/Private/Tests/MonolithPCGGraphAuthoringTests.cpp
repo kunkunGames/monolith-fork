@@ -12,6 +12,7 @@
 #include "MonolithPCGGraphAuthoringActions.h"
 #include "MonolithPCGResultUtils.h"
 #include "MonolithPCGSettingsResolver.h"
+#include "MonolithObjectTraversal.h"
 #include "MonolithToolRegistry.h"
 
 #include "Elements/PCGAddTag.h"
@@ -2353,10 +2354,10 @@ bool FMonolithPCGGraphContentsReplacementLargeGraphBoundedComparisonTest::RunTes
 		TEXT("Large source contains the requested element count"),
 		SourceGraph->GetNodes().Num(), LargeNodeCount);
 	TArray<UObject*> LargeSourceInnerObjects;
-	GetObjectsWithOuter(
+	MonolithObjectTraversal::GetObjectsWithOuter(
 		SourceGraph,
 		LargeSourceInnerObjects,
-		EGetObjectsFlags::IncludeNestedObjects);
+		true);
 	TestTrue(
 		*FString::Printf(
 			TEXT("Large source exposes at least one node and one settings inner per element (%d inners)"),

@@ -17,6 +17,22 @@ struct FIndexedAsset
 	FString LastModified;
 	FString SavedHash;
 	FString IndexedAt;
+
+	/**
+	 * Schema v3. The value `SavedHash` held when this asset last completed deep
+	 * indexing, written in the SAME transaction as the child rows it produced.
+	 * Empty means "never deep-indexed". Read back by the full-index queue filter
+	 * so an interrupted run resumes instead of redoing finished work.
+	 */
+	FString DeepIndexedHash;
+
+	/**
+	 * Schema v3. How many times a full-index run has STARTED deep indexing this
+	 * asset without finishing it. Bumped in its own committed transaction before
+	 * the work begins and cleared on success, so an asset that kills the editor
+	 * is counted even though its work transaction rolls back.
+	 */
+	int32 DeepIndexAttempts = 0;
 };
 
 struct FIndexedNode
@@ -201,6 +217,40 @@ struct FSearchResult
 	int32 BestRank = MAX_int32;         // best (lowest) 0-based per-table rank position seen
 };
 
+/** What the full-index deep queue filter decides for a single asset. */
+enum class EMonolithDeepIndexQueueDecision : uint8
+{
+	/** Deep-index it: never done, or its content changed since it last was. */
+	Queue,
+
+	/** Already deep-indexed at this exact content hash — a resume must not redo it. */
+	SkipAlreadyIndexed,
+
+	/**
+	 * Two full-index runs began deep indexing this asset and neither finished.
+	 * Treat it as the asset that killed the editor and take it out of the queue,
+	 * otherwise every resume re-attempts it and the crash loops forever.
+	 */
+	SkipPoisonAsset
+};
+
+/**
+ * Pure decision function behind the resume queue filter. Shared by the indexing
+ * worker and its automation test so the rule is asserted where it is defined
+ * rather than re-derived at the call site.
+ *
+ * @param StoredDeepHash    `deep_indexed_hash` from the existing row ('' if none).
+ * @param StoredAttempts    `deep_index_attempts` from the existing row.
+ * @param CurrentSavedHash  the asset's hash as the Asset Registry reports it now.
+ */
+MONOLITHINDEX_API EMonolithDeepIndexQueueDecision MonolithDecideDeepIndexQueueEntry(
+	const FString& StoredDeepHash,
+	int32 StoredAttempts,
+	const FString& CurrentSavedHash);
+
+/** Attempts at which an asset is treated as poisonous and dropped from the queue. */
+inline constexpr int32 MonolithMaxDeepIndexAttempts = 2;
+
 /**
  * RAII wrapper around FSQLiteDatabase for the Monolith project index.
  * Creates all tables on first open, provides typed insert/query helpers.
@@ -269,6 +319,55 @@ public:
 	// --- Meta ---
 	bool WriteMeta(const FString& Key, const FString& Value);
 	FString ReadMeta(const FString& Key) const;
+	bool DeleteMeta(const FString& Key);
+
+	// --- Full-index lifecycle (schema v3) ---
+
+	/**
+	 * True when the two v3 resume columns are known to exist. `full_index_state`
+	 * is a `meta` row and survives a failed COLUMN migration, so the resume path
+	 * must gate on this as well or it would resume onto a schema that cannot
+	 * store checkpoints.
+	 */
+	bool SupportsIndexResume() const;
+
+	/**
+	 * Mark a full index as started: writes `full_index_state = in_progress` and
+	 * clears `last_full_index`, in one transaction. Call AFTER `ResetDatabase()`
+	 * — that drops the `meta` table.
+	 */
+	bool BeginFullIndex();
+
+	/** The sole resume trigger: was a full index started and never completed? */
+	bool IsFullIndexInProgress() const;
+
+	/**
+	 * Mark a full index as finished: writes `last_full_index` and clears
+	 * `full_index_state` in ONE transaction, so a crash between the two cannot
+	 * leave a completed index looking interrupted.
+	 */
+	bool CompleteFullIndex(const FString& UtcNow, const FString& IndexerFleetSignature = FString());
+
+	/** Record that an asset finished deep indexing at the given content hash. */
+	bool SetDeepIndexedHash(int64 AssetId, const FString& Hash);
+
+	/**
+	 * Increment `deep_index_attempts` for a whole batch. MUST be called in its
+	 * own transaction, committed BEFORE the batch's work transaction opens — a
+	 * write inside an open transaction is not durable, and under
+	 * `journal_mode=DELETE` a process death mid-batch rolls the work transaction
+	 * back on next open, which would take the marker with it.
+	 */
+	bool BumpDeepIndexAttempts(const TArray<int64>& AssetIds);
+
+	/** Reset the attempt counter after a successful deep index. */
+	bool ClearDeepIndexAttempts(int64 AssetId);
+
+	/** Paths dropped from the deep queue by the poison-pill rule, oldest first. */
+	TArray<FString> GetSkippedAssetPaths() const;
+
+	/** Merge newly skipped paths into the persisted list (deduplicated). */
+	bool RecordSkippedAssetPaths(const TArray<FString>& Paths);
 
 	// --- Config CRUD ---
 	int64 InsertConfig(const FIndexedConfig& Config);
@@ -282,6 +381,7 @@ public:
 	// --- Supplemental Search Values ---
 	int64 InsertAssetSearchValue(const FIndexedSearchValue& Value);
 	bool DeleteAssetSearchValuesForAsset(int64 AssetId);
+	bool DeleteAssetSearchValuesForAssetBySourceKind(int64 AssetId, const FString& SearchSourceKind);
 	bool DeleteAssetSearchValuesBySourceKind(const FString& SearchSourceKind);
 
 	// --- FTS5 Search ---
@@ -289,7 +389,11 @@ public:
 	// (OR of all K-token subsets); 0 (default) keeps the pure AND-prefix behavior.
 	static FString EscapeFTS(const FString& Query, int32 MinShouldMatchPct = 0);
 	TArray<FSearchResult> FullTextSearch(const FString& Query, int32 Limit = 50);
-	TArray<FSearchResult> FullTextSearch(const FString& Query, int32 Limit, const FProjectSearchOptions& Options);
+	TArray<FSearchResult> FullTextSearch(
+		const FString& Query,
+		int32 Limit,
+		const FProjectSearchOptions& Options,
+		FString* OutError = nullptr);
 
 	// --- Stats ---
 	TSharedPtr<FJsonObject> GetStats();

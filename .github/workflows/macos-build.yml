@@ -71,12 +71,9 @@ name: macOS Build
 # most recent non-draft release, so a client polling between publish and
 # this job's upload would see a release whose asset set is incomplete.
 #
-# To re-enable release delivery, register the runner/project shell and keep the
-# build PRE-PUBLISH: dispatch it against an existing draft tag, upload the macOS
-# asset to that draft, extend the expected-asset/marker set in the release-body
-# gate, and publish only after the expanded gate passes. Never attach on
-# `release: published` or tag push; both happen too late to preserve atomic
-# release visibility.
+# To re-enable, register the runner and switch the trigger to
+# `on: release: { types: [published] }` -- NOT `push: tags` -- and add the
+# macOS asset to the expected-asset set in the release-body gate.
 #
 # Left workflow_dispatch-only so the build can still be exercised manually.
 on:
@@ -285,10 +282,12 @@ jobs:
             echo ""
             echo "**File:** $ZIP_NAME"
             echo ""
-            echo "**Monolith-macOS-SHA256:** $SHA"
+            # v2 is load-bearing: pre-v0.21.1 updaters can hard-assert when they
+            # recognize the old marker but reach the platform SHA fallback.
+            echo "Monolith-macOS-SHA256-v2: $SHA"
             echo ""
             echo "Paste this exact line into the GitHub Release notes body"
-            echo "if you want macOS auto-update integrity verification."
+            echo "to enable macOS auto-update integrity verification. Never emit the pre-v2 marker."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload artifact (workflow run)

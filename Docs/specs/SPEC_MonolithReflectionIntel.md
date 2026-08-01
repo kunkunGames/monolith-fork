@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.21.3 (Beta) — actions shipped across Phases 1–4a (decision + risk + a source-namespace module-dep audit + cppreflect + network + pipeline + audit actions on existing namespaces: material/niagara/blueprint/project), plus the `cppreflect_query("list_class_specifiers")` and `reflect_query("rebuild_reflection_index")` (new `reflect` namespace, WRITE/maintenance) follow-ups. Counts are approximate — query `monolith_discover()` for the live figure. The network-completeness workstream also makes `list_replicated_classes` capture bare `UPROPERTY(Replicated)` (now WORKS, verified E2E), switches `list_rpc_functions` to specifier-based detection, and widens the indexer scan scope from the game module alone to an `IPluginManager`-driven ladder — game module + project plugins by default, marketplace plugins gated, Epic engine built-ins excluded (§5.2). With project plugins in scope, `list_rpc_functions` now returns the project's actual RPCs (the project's project-plugin Server RPCs, verified E2E) — the prior "empty due to game-module-only scan scope" limitation is resolved.
+**Version:** 0.22.0 (Beta) — actions shipped across Phases 1–4a (decision + risk + a source-namespace module-dep audit + cppreflect + network + pipeline + audit actions on existing namespaces: material/niagara/blueprint/project), plus the `cppreflect_query("list_class_specifiers")` and `reflect_query("rebuild_reflection_index")` (new `reflect` namespace, WRITE/maintenance) follow-ups. Counts are approximate — query `monolith_discover()` for the live figure. The network-completeness workstream also makes `list_replicated_classes` capture bare `UPROPERTY(Replicated)` (now WORKS, verified E2E), switches `list_rpc_functions` to specifier-based detection, and widens the indexer scan scope from the game module alone to an `IPluginManager`-driven ladder — game module + project plugins by default, marketplace plugins gated, Epic engine built-ins excluded (§5.2). With project plugins in scope, `list_rpc_functions` now returns the project's actual RPCs (the project's project-plugin Server RPCs, verified E2E) — the prior "empty due to game-module-only scan scope" limitation is resolved.
 
 ---
 
@@ -17,7 +17,7 @@ Phases 1, 2, 3a, and 4a fold into the same v0.17.0 release. Phase 1 ships the **
 | Phase | Status | Surface | Substrate |
 |-------|--------|---------|-----------|
 | 1 — Decision Intelligence | **shipped v0.17.0** | `decision_query` (5 actions) | Markdown heuristic harvest |
-| 2 — Risk Intelligence | **shipped v0.17.0** | `risk_query` (5 actions) + `source_query("audit_module_dep_reality")` (1 audit action) | Git log subprocess + LOC sweep + regex over `#if WITH_*` / `bHas*` + Build.cs parsing against `EngineSource.db` symbol resolution |
+| 2 — Risk Intelligence | **shipped v0.17.0** (6 actions incl. [Unreleased] `get_mining_status`) | `risk_query` (6 actions) + `source_query("audit_module_dep_reality")` (1 audit action) | Git log subprocess + LOC sweep + regex over `#if WITH_*` / `bHas*` + Build.cs parsing against `EngineSource.db` symbol resolution. Repository roots resolved at runtime (§4.2) — [Unreleased] |
 | 3a — CppReflect Intelligence | **shipped v0.17.0** (6 actions incl. [Unreleased] `list_class_specifiers`) | `cppreflect_query` (6 actions) + cpp↔asset edges | UHT artefact regex sweep over `Intermediate/Build/.../UHT/*.gen.cpp` + `IAssetRegistry` asset-graph joiner — NO tree-sitter dependency |
 | 3b — Native Tag Tracking | `(WISHLIST)` | `cppreflect_query("list_native_tags")` (1 action) + 2 tag tables | tree-sitter-unreal-cpp on `.cpp` / `.h` for native `UE_DEFINE_GAMEPLAY_TAG_*` / `extern FGameplayTag` mining |
 | 4a — Network Intelligence + Audits + Pipelines | **shipped v0.17.0** | `network_query` (4 actions) + `pipeline_query` (2 actions) + `material_query("audit_orphan_materials")` + `niagara_query("audit_cross_asset_refs")` + `blueprint_query("audit_cdo_drift")` + `project_query("audit_orphan_assets")` + `reflect_replicated_properties` SQLite table | Second UHT-artefact sweep (independent of Phase 3a's reader) for per-property `MetaData` blocks carrying `ReplicatedUsing` tags; composed reads against Phases 1/2/3a tables + `IAssetRegistry` for the 4 cross-namespace audits; composer reads-only |
@@ -293,24 +293,62 @@ The mining is read-only against the working tree and the `.git/` directory — n
 
 ### 4.2 Git repo enumeration
 
-Phase 2 ships with a hardcoded list of nested git repositories (defined in `MonolithReflectionIntelModule.cpp:291-297`):
+Repositories are discovered at **runtime** by `FMonolithReflectionIntelModule::ResolveGitRepoRoots`. (Through v0.21.3 this was a hardcoded list of nested-plugin paths that never probed the project root — so on any project whose root *is* the git repository, which is the common case, the risk namespace mined zero repositories and returned empty forever. Issue #119, fixed in v0.22.0.)
 
-- The Monolith plugin repo itself (primary tracked repo)
-- The configured sibling-plugin repos beside it (each a separate repo)
+**Auto-resolution** (`GitRepoRoots` empty — the default):
 
-Each path is probed for `<path>/.git/`; missing `.git/` directories are skipped silently (`Verbose` log only — not an error). The hardcoded list is a known limitation; **Phase 3 follow-up** is to make the probe directory-walk-based so future sibling plugins are picked up without a code change.
+1. The **project root** itself, when it holds a `.git` entry.
+2. Every immediate **`Plugins/<Name>`** folder that holds one. One level, no recursion.
+3. When the project root has no `.git` of its own **and** `bProbeAncestorsForGitRoot` is set, the **nearest ancestor** directory that does (a project checked out inside a larger repository). Off by default: the enclosing repository can be far bigger than the project and `git log` cost scales with it.
 
-If the host project root uses a non-git VCS, it has no `.git/`; the risk indexer correctly skips it.
+A nested plugin repository is kept **even when an ancestor repository was also added**. Git treats a nested repository as untracked, so `git log` in the outer repository never reports the inner repository's files — the two file sets are disjoint and both are needed.
+
+`.git` is probed as a **directory OR a file**: submodule and `git worktree` checkouts write a `.git` file holding a `gitdir:` pointer, and `git -C <root> log` works against either form.
+
+**Explicit override.** A non-empty `UMonolithReflectionIntelSettings::GitRepoRoots` **replaces** the auto-resolved set entirely — the same override semantics `UHTArtefactRoot` uses, so a deliberately narrowed scope is never silently widened. Entries are project-relative unless absolute. The property is deliberately **not** pre-filled in the constructor: a baked-in default would write the authoring machine's layout into every downstream `DefaultMonolithSettings.ini`.
+
+Every root is returned absolute, forward-slashed, de-duplicated and free of a trailing separator — one canonical shape, because these strings are hashed into the config fingerprint (§4.2b) and two spellings of the same directory must not produce two fingerprints.
+
+**Rejected candidates are reported, not swallowed.** The resolver returns a `{path, reason}` list for every candidate it dropped (`directory does not exist`, `no .git entry — ...`). That list reaches the user through three surfaces — see §4.7's `get_mining_status`, the empty-result `diagnostics` block, and the indexer's own aggregate log line, which is emitted at **Warning** (not Verbose) when nothing was mined and at least one candidate was rejected. A plugin folder with no repository of its own is *not* recorded as a rejection: it is either part of the enclosing repository or simply not version-controlled, and one row per plugin would bury the real diagnostics.
+
+If the host project uses a non-git VCS it has no `.git` anywhere, the resolver returns an empty set, and the diagnostics say so explicitly.
+
+### 4.2b Stored path space and the config fingerprint
+
+**Path space.** `git log` reports paths relative to the repository it ran in, so a nested plugin repository emits `Source/…` while `FHotspotScorer::LoadComplexity` keys on **project-relative** paths (`Plugins/<Name>/Source/…`). Through v0.21.3 the two maps never met: every file landed as two separate `Signals` entries, one carrying only churn and one only complexity, and `Score = normalised_churn × normalised_complexity` evaluated to `0` for both.
+
+`FGitCoChangeIndexer::Run` now rebases each repository's output into the project-relative space **before** tallying, so churn keys, co-change pair keys and the noise filter all operate on the same shape the hotspot join uses:
+
+| Repository position | Rebase |
+|---|---|
+| IS the project root | none — paths are already project-relative |
+| UNDER the project | prepend the repository's project-relative offset (`Plugins/<Name>/`) |
+| ANCESTOR of the project | strip the project's offset within the repository; rows lacking it are outside the project subtree and are dropped |
+| unrelated absolute root | none — stored as the repository reports them, there being no project-relative form |
+
+This is a row-shape change, so `MonolithRIMeta::GetIndexerCodeVersion("risk")` went `1 → 2`: rows written by version 1 are unusable against the version-2 join and are rebuilt on first query after upgrade.
+
+**Config fingerprint.** Stale detection previously watched only the indexer *code* version, so editing a Risk setting changed nothing until the tables happened to be rebuilt for some other reason. A second row is now stamped in the existing `monolith_ri_meta` table under subsystem key **`risk.config`** — `subsystem` is a TEXT primary key, so this needs no DDL change and no migration. It hashes the **resolved absolute roots** (not the raw setting strings, whose spelling can vary without the resolved scope changing) plus `MaxCoChangeWindowCommits`, `MaxCommitFileCount` and `GitMiningNoiseFilter`, via chained `FCrc::StrCrc32<TCHAR>`.
+
+Two implementation constraints are load-bearing and are enforced by construction:
+
+- **One function, both sides.** `MonolithRIMeta::ComputeRiskConfigFingerprint` is called by the writer (`FGitCoChangeIndexer::Run`) and by the reader (`FRiskQueryAdapter::GetRawDB`). Two independent copies is exactly how the setting would silently no-op again.
+- **One cast, inside that function.** `FCrc::StrCrc32<TCHAR>` returns `uint32` while `monolith_ri_meta.code_version` binds through `int32`. The `static_cast<int32>` lives in the shared function only, so writer and reader cannot disagree about the stored width. If one side cast and the other did not, every fingerprint ≥ 2³¹ would mismatch forever — a full re-mine on *every* risk query.
+
+The fingerprint is deliberately **not** folded into the code-version integer: a combined value makes the stale-detection log line unreadable and makes a genuine code bump indistinguishable from a config edit. A missing `risk.config` row counts as a mismatch, so every already-stamped legacy database re-mines exactly once on upgrade.
+
+**Latch clearing.** `HasAttemptedRiskBootstrap()` is a per-module-instance flag set *before* the indexer runs, so after the first risk query of a session the stale check would not re-fire until an editor restart. `UMonolithReflectionIntelSettings::PostEditChangeProperty` calls `FMonolithReflectionIntelModule::ClearRiskBootstrapAttempted()` on any Risk-category property edit. That method clears `RiskLastFailureTime` as well as the latch — otherwise the 5-second retry throttle would swallow the first post-edit attempt and the edit would still look like a no-op.
 
 ### 4.3 Co-change pair detection algorithm
 
-A co-change pair `(A, B)` means files `A` and `B` appeared in the **same git commit** within a configurable commit window. The default window is the entire history of the repo at index time; `UMonolithReflectionIntelSettings::MaxCoChangeWindowCommits` (default `50`, range `[10, 500]`) caps the window so very long histories don't dominate.
+A co-change pair `(A, B)` means files `A` and `B` appeared in the **same git commit** within a configurable commit window. `UMonolithReflectionIntelSettings::MaxCoChangeWindowCommits` (default `200`, range `[10, 2000]`) is passed straight through as `git log --max-count=N` so very long histories don't dominate.
 
 For each commit observed:
 
 1. Parse the commit's changed-file list from `git log --name-only` output.
-2. Apply the `GitMiningNoiseFilter` blacklist (file-pattern globs — `Saved/`, `Intermediate/`, `Binaries/*.dll`, etc.).
-3. Apply `MaxCommitFileCount` cap (default `50`) — commits touching more files than the cap (typical for tree-wide refactors or initial imports) contribute zero pairs; they would otherwise dominate co-change scores. The cap suppresses the "monster commit" noise floor.
+2. Rebase the repo-relative paths into the project-relative key space (§4.2b).
+3. Apply the `GitMiningNoiseFilter` blacklist. Matching is **case-insensitive substring containment** against the project-relative path — not globs. The default set is four entries: `CHANGELOG.md`, `.uplugin`, `Docs/plans/`, `Docs/testing/`.
+4. Apply the `MaxCommitFileCount` cap (default `20`, range `[5, 200]`) — commits touching more files than the cap (typical for tree-wide refactors or initial imports) contribute zero pairs; they would otherwise dominate co-change scores. The cap suppresses the "monster commit" noise floor.
 4. Emit every unordered pair `(A, B)` with `A < B` lexicographically — symmetric storage avoided.
 5. Aggregate `(A, B)` → commit count across the window.
 
@@ -318,18 +356,20 @@ The pair scoring is **count-based, not normalised**. Two files appearing togethe
 
 ### 4.4 Hotspot score formula
 
-The hotspot score for a file is a deterministic blend of normalised churn and normalised complexity proxy:
+The hotspot score for a file is the deterministic **product** of normalised churn and normalised complexity proxy (`FHotspotScorer::WriteScores`):
 
 ```
-hotspot_score(file) = 0.6 * normalised_churn(file) + 0.4 * normalised_loc(file)
+hotspot_score(file) = normalised_churn(file) * normalised_complexity(file)
 
-normalised_churn(file) = file.commit_count / max(repo.commit_count_across_files)
-normalised_loc(file)   = file.loc / max(repo.loc_across_files)
+normalised_churn(file)      = file.commit_count / max(commit_count_across_files)
+normalised_complexity(file) = file.line_count   / max(line_count_across_files)
 ```
 
-Both normalisers are per-repo (a busy Monolith file isn't penalised against a quiet file in another repo). Score range `[0.0, 1.0]`. Score `> 0.7` is the documented "hotspot" threshold for `get_release_window_hotspots` filtering.
+A product, not a weighted sum: a file that is busy but trivial, or large but never touched, is not a hotspot, and multiplying says so. Score range `[0.0, 1.0]`.
 
-The weight split (0.6 churn / 0.4 LOC) is hardcoded in v0.17.0. Configurable weighting is a Phase 3 enhancement once the LOC proxy is replaced by a real complexity measure.
+Both normalisers are taken across the whole scored set, and the join between the two signals is what §4.2b's path rebase exists to make possible — before it, one of the two factors was always `0` and every score was `0`.
+
+The formula is fixed in code. Configurable weighting is a deferred enhancement, best revisited once the LOC proxy is replaced by a real complexity measure.
 
 ### 4.5 Conditional gate sweep
 
@@ -405,7 +445,19 @@ All four tables follow the wipe-and-rewrite semantics from Phase 1 — `Run()` t
 
 ### 4.7 Action surface
 
-Five actions register under `risk` from `FRiskQueryAdapter::RegisterActions`. All five carry `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true` on the dispatcher annotations. All five participate in v0.17.0 universal response shaping (`_fields` / `_omit` / `_compact_json`) for free.
+Six actions register under `risk` from `FRiskQueryAdapter::RegisterActions`. All six carry `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true` on the dispatcher annotations. All six participate in v0.17.0 universal response shaping (`_fields` / `_omit` / `_compact_json`) for free.
+
+**Empty-result `diagnostics` (v0.22.0).** The four git-substrate actions — `get_hotspot_score`, `get_cochange_pairs`, `get_file_churn`, `get_release_window_hotspots` — attach a `diagnostics` object when and only when they return **nothing**:
+
+```json
+"diagnostics": {
+  "repos_scanned": ["<ProjectDir>/Plugins/Monolith"],
+  "repos_skipped": [ { "path": "…", "reason": "no `.git` entry — …" } ],
+  "hint": "…"                       // only when repos_scanned is empty AND repos_skipped is not
+}
+```
+
+`list_conditional_gates` does **not** carry it: its substrate is the source sweep, not git, so an empty result says nothing about repository discovery and a repository hint there would be misleading advice.
 
 #### `risk_query("get_hotspot_score", params)`
 
@@ -479,6 +531,44 @@ List `#if WITH_*` macros, `bHas*` 3-location probe variables, and `MONOLITH_RELE
 | `cursor` | string | `Other` | no | `""` | Opaque cursor. |
 
 **Response:** `{ "gates": [ { "module_name": ..., "gate_name": ..., "gate_kind": ..., "source_path": ..., "source_line": ..., "probe_arity": ... } ], "total_estimate": 87, "next_cursor": "<opaque>" }`.
+
+#### `risk_query("get_mining_status")` — v0.22.0
+
+Read-only diagnostic surface. **Start here when a risk query returns empty.** No parameters.
+
+Like every other `risk` action it takes the shared DB handle first, which may run the lazy bootstrap, so the whole report describes one consistent state rather than a prediction. A missing database is not an error here: the settings and a live root resolution are still reported, which is exactly the case a caller reaches for this action in.
+
+**Response:**
+
+```json
+{
+  "repos_scanned": ["<ProjectDir>"],
+  "repos_skipped": [ { "path": "…", "reason": "directory does not exist" } ],
+  "hint": "…",                                 // same rule as the diagnostics block
+  "mining_enabled": true,                      // bEnableGitCoChangeMining
+  "settings": {
+    "git_repo_roots": [],                      // the raw override, empty = auto
+    "auto_resolved": true,
+    "probe_ancestors_for_git_root": false,
+    "max_cochange_window_commits": 200,
+    "max_commit_file_count": 20,
+    "noise_filter": ["CHANGELOG.md", ".uplugin", "Docs/plans/", "Docs/testing/"]
+  },
+  "mining_ran_this_session": true,
+  "last_status": "RunRiskIndexersOnce: git=… | hotspot=… | gates=…",
+  "table_rows": {                              // -1 when the table is unqueryable
+    "git_file_churn": 1204, "git_cochange_pairs": 8817,
+    "risk_hotspot_scores": 1204, "reflect_conditional_gates": 312
+  },
+  "stamps": {
+    "stored_code_version": 2, "current_code_version": 2,
+    "stored_config_fingerprint": -1830…, "current_config_fingerprint": -1830…,
+    "config_matches": true
+  }
+}
+```
+
+When the database is down, `table_rows` / `stamps` are replaced by a `database` string naming `source.trigger_reindex` as the bootstrap step. `repos_scanned` / `repos_skipped` reflect the last mining pass when one has run this session, and a fresh resolution otherwise.
 
 ### 4.8 Test coverage
 
@@ -1161,10 +1251,12 @@ No conditional-gate `WITH_*` macros — the module loads unconditionally and con
 | `bEnableDecisionMining` | `true` | Decision | Mine decision records from markdown corpora during indexing. When `false`, `RunDecisionIndexerOnce` skips with a status string. |
 | `DecisionMinConfidence` | `0.6` | Decision | Floor in `[0, 1]` applied at query time by `list_decisions`. Per-call `min_confidence` parameter overrides this. |
 | `DecisionMarkdownRoots` | `[]` | Decision | Project-relative directory paths to scan. Empty array uses defaults: `Docs/`, `Plugins/Monolith/Docs/`, `.claude/rules/`. |
-| `bEnableGitCoChangeMining` | `true` | Risk | Toggle git-log mining for the risk indexers. Setting `false` short-circuits all three Phase 2 indexers (`FGitChurnIndexer`, `FGitCoChangeIndexer`, `FConditionalGateIndexer`) at `Run()` entry. |
-| `MaxCoChangeWindowCommits` | `50` | Risk | Maximum commit history window per repo to walk for co-change pair detection. Clamped `[10, 500]`. Larger windows produce more pair density at the cost of indexer runtime. |
-| `MaxCommitFileCount` | `50` | Risk | Per-commit file-touch cap. Commits touching more than this many files contribute zero co-change pairs (suppresses tree-wide refactor / initial-import noise). Clamped `[5, 500]`. |
-| `GitMiningNoiseFilter` | `["Saved/*", "Intermediate/*", "Binaries/*", "*.uasset", "*.umap"]` | Risk | File-pattern blacklist applied to git-log output before pair / churn aggregation. Patterns are glob-style; an entry matches any file whose project-relative path matches the glob. |
+| `bEnableGitCoChangeMining` | `true` | Risk | Toggle git-log mining for the risk indexers. Setting `false` short-circuits all three Phase 2 indexers (`FGitCoChangeIndexer`, `FHotspotScorer`, `FConditionalGateIndexer`) at `RunRiskIndexersOnce` entry. |
+| `GitRepoRoots` | `[]` (auto-resolve) | Risk | Repositories to mine. Empty auto-resolves the project root plus each immediate `Plugins/<Name>` holding a `.git` entry (§4.2). A non-empty array **replaces** the auto set. Entries are project-relative unless absolute. Not pre-filled in the constructor — a default would bake the authoring machine's layout into every downstream `DefaultMonolithSettings.ini`. |
+| `bProbeAncestorsForGitRoot` | `false` | Risk | When the project root holds no `.git` of its own, mine the nearest ancestor directory that does (a project checked out inside a larger repository). Off by default because the enclosing repository can be far larger than the project. Ignored when `GitRepoRoots` is non-empty. |
+| `MaxCoChangeWindowCommits` | `200` | Risk | Maximum commit history window per repo to walk for co-change pair detection — passed through as `git log --max-count=N`. Clamped `[10, 2000]`. Larger windows produce more pair density at the cost of indexer runtime. |
+| `MaxCommitFileCount` | `20` | Risk | Per-commit file-touch cap. Commits touching more than this many files contribute zero co-change pairs (suppresses tree-wide refactor / initial-import noise). Clamped `[5, 200]`. |
+| `GitMiningNoiseFilter` | `["CHANGELOG.md", ".uplugin", "Docs/plans/", "Docs/testing/"]` | Risk | Fragments excluded from churn / pair aggregation. Matching is **case-insensitive substring containment** against the project-relative path — **not** glob matching. |
 | `bIndexProjectPluginReflection` | `true` | CppReflect | ([Unreleased]) Scan every enabled `LoadedFrom == Project` plugin's UHT artefacts (`Intermediate/Build/Win64/UnrealEditor`) in addition to the game module — your project plugins. Default `true`; this is what brings project-plugin replicated classes and RPCs into scope (the a project plugin Server RPCs). Set `false` to fall back to game-module-only scanning. |
 | `bIndexMarketplacePluginReflection` | `false` | CppReflect | ([Unreleased]) ALSO scan enabled engine-installed marketplace plugins (`LoadedFrom == Engine` whose base dir is under `/Plugins/Marketplace/`) — e.g. installed marketplace plugins. Default `false`. Setting `true` widens the sweep to marketplace surface (E2E: ~337 → ~927 artefacts, marketplace-plugin classes). Epic engine built-in plugins remain governed separately by `bIndexEnginePluginReflection`. |
 | `bIndexEnginePluginReflection` | `false` | CppReflect | Include Epic engine built-in plugin UHT artefacts in the Phase 3a sweep. Default `false` keeps the sweep scoped to the game module + project plugins (and marketplace plugins when enabled) — engine-side surface area floods low-signal hits. Setting `true` walks every UHT artefact directory under the engine, multiplying index time and DB size. |
@@ -1175,6 +1267,8 @@ No conditional-gate `WITH_*` macros — the module loads unconditionally and con
 `UMonolithReflectionIntelSettings::Get()` returns the cached CDO — cheap, allocation-free.
 
 `UDeveloperSettings::GetCategoryName()` returns `"Plugins"` so the panel groups with other Monolith settings.
+
+Editing **any** Risk-category property re-arms the risk lazy bootstrap through `PostEditChangeProperty` (§4.2b), so the change takes effect on the next `risk_query` rather than at the next editor restart.
 
 ---
 

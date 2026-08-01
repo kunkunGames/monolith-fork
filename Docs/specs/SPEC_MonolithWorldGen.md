@@ -40,7 +40,7 @@ Private: `MonolithCore`, `MonolithMesh` (for exported shared mesh-family helpers
 
 ## 5. Notes
 
-MonolithWorldGen.Build.cs gates GeometryScripting on the plugin being enabled for the target, not merely present on disk, and sets ``WITH_GEOMETRYSCRIPT`` accordingly. The gate is implemented locally in the Build.cs so UBT rule compilation does not depend on a shared helper class being present in the rules assembly. When both `WITH_GEOMETRYSCRIPT` and `bEnableProceduralTownGen` are true, the module creates and roots its own `UMonolithMeshHandlePool`, wires it into the town-generation action families, and cleans it up on pre-exit.
+MonolithWorldGen.Build.cs gates GeometryScripting on the plugin being enabled for the target, not merely present on disk, and sets ``WITH_GEOMETRYSCRIPT`` accordingly. The gate is implemented locally in the Build.cs so UBT rule compilation does not depend on a shared helper class being present in the rules assembly. When both `WITH_GEOMETRYSCRIPT` and `bEnableProceduralTownGen` are true, the module creates and roots its own `UMonolithMeshHandlePool`, wires it into the town-generation action families, and cleans it up on pre-exit. Tests that name GeometryScripting-only action classes, including the `create_foundation` parameter guard, use the same `WITH_GEOMETRYSCRIPT` compile gate so disabled-plugin targets remain a supported build configuration.
 
 ## 6. Per-action reference
 

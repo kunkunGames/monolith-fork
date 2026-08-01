@@ -3,6 +3,7 @@
 #include "MonolithEditorGifTiming.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithObjectTraversal.h"
 #include "MonolithParamSchema.h"
 #include "MonolithProjectionUtils.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -27,6 +28,7 @@
 #include "Serialization/ArchiveUObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+#include "Runtime/Launch/Resources/Version.h"
 
 // Item 8: fix_hints — borrow the shared source DB (LNK2019 owner-module +
 // C4996 deprecation resolution). MonolithEditor already PrivateDependsOn
@@ -7702,10 +7704,10 @@ namespace MonolithEditorPackages
 		}
 
 		TArray<UObject*> TopLevelObjects;
-		GetObjectsWithPackage(Package, TopLevelObjects, EGetObjectsFlags::None);
+		MonolithObjectTraversal::GetObjectsWithPackage(Package, TopLevelObjects, false);
 
 		TArray<UObject*> PackageObjects;
-		GetObjectsWithPackage(Package, PackageObjects, EGetObjectsFlags::IncludeNestedObjects);
+		MonolithObjectTraversal::GetObjectsWithPackage(Package, PackageObjects, true);
 
 		TSet<FString> SeenIssueKeys;
 		for (UObject* Referencer : PackageObjects)
@@ -10923,11 +10925,15 @@ FMonolithActionResult FMonolithEditorActions::HandleValidateAssets(const TShared
 	}
 
 	TArray<TSharedPtr<FJsonValue>> ValidatorMessages;
+	bool bValidatorMessagesSupported = false;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+	bValidatorMessagesSupported = true;
 	ValidatorMessages.Reserve(ValidationResults.ValidatorMessages.Num());
 	for (const TSharedRef<FTokenizedMessage>& Message : ValidationResults.ValidatorMessages)
 	{
 		ValidatorMessages.Add(MakeShared<FJsonValueString>(Message->ToText().ToString()));
 	}
+#endif
 
 	TSharedPtr<FJsonObject> ProjectSettings = MakeShared<FJsonObject>();
 	ProjectSettings->SetBoolField(TEXT("requested"), bValidateProjectSettings);
@@ -10954,6 +10960,7 @@ FMonolithActionResult FMonolithEditorActions::HandleValidateAssets(const TShared
 	Result->SetBoolField(TEXT("asset_limit_reached"), ValidationResults.bAssetLimitReached);
 	Result->SetArrayField(TEXT("details"), DetailRows);
 	Result->SetArrayField(TEXT("validator_messages"), ValidatorMessages);
+	Result->SetBoolField(TEXT("validator_messages_supported"), bValidatorMessagesSupported);
 	Result->SetObjectField(TEXT("project_settings"), ProjectSettings);
 	return FMonolithActionResult::Success(Result);
 }

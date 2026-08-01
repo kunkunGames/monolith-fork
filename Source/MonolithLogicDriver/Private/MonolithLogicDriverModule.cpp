@@ -1,4 +1,5 @@
 #include "MonolithLogicDriverModule.h"
+#include "MonolithCoreDelegates.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithSettings.h"
 #include "MonolithLogicDriverAssetActions.h"
@@ -43,7 +44,7 @@ void FMonolithLogicDriverModule::StartupModule()
 	FMonolithLogicDriverComponentActions::RegisterActions(Registry);
 	FMonolithLogicDriverTextGraphActions::RegisterActions(Registry);
 
-	PostEngineInitHandle = FCoreDelegates::GetOnPostEngineInit().AddLambda([this]()
+	PostEngineInitHandle = MonolithCoreDelegates::GetPostEngineInit().AddLambda([this]()
 	{
 		if (GEditor)
 		{
@@ -75,7 +76,7 @@ void FMonolithLogicDriverModule::ShutdownModule()
 {
 	if (PostEngineInitHandle.IsValid())
 	{
-		FCoreDelegates::GetOnPostEngineInit().Remove(PostEngineInitHandle);
+		MonolithCoreDelegates::GetPostEngineInit().Remove(PostEngineInitHandle);
 		PostEngineInitHandle.Reset();
 	}
 

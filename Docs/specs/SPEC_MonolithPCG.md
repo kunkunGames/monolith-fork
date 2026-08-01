@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.21.3
+**Version:** 0.22.0
 **Status:** Implemented
 
 ---
@@ -30,6 +30,8 @@
 | `Json`, `JsonUtilities` | Params and bounded response payloads. |
 
 `Monolith.uplugin` explicitly enables the engine `PCG` plugin. `PCGEditor` is intentionally not linked: graph asset mutation uses runtime PCG public APIs plus editor asset lifecycle APIs.
+
+Graph-owned UObject enumeration routes through `MonolithObjectTraversal`; the same direct/nested scope is used with UE 5.7's boolean signature and UE 5.8's `EGetObjectsFlags` signature.
 
 ## 3. Action surface
 

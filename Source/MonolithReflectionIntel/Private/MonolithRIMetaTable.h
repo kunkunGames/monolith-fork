@@ -58,4 +58,38 @@ namespace MonolithRIMeta
 	 * EnsureMetaTable is invoked internally — idempotent.
 	 */
 	bool WriteStoredVersion(FSQLiteDatabase& DB, const FString& Subsystem, int32 Version);
+
+	/**
+	 * Meta-table key holding the risk indexer's CONFIGURATION fingerprint,
+	 * stored as a SECOND row beside the `"risk"` code-version row. `subsystem`
+	 * is a TEXT primary key, so this needs no DDL change and no migration.
+	 *
+	 * Deliberately NOT folded into the code-version integer: a combined value
+	 * makes the stale-detection log line unreadable and makes a genuine code
+	 * bump indistinguishable from a config edit.
+	 */
+	const TCHAR* GetRiskConfigSubsystemKey();
+
+	/**
+	 * Fingerprint every input that changes what the risk indexer WOULD mine:
+	 * the RESOLVED absolute repository roots plus MaxCoChangeWindowCommits,
+	 * MaxCommitFileCount and GitMiningNoiseFilter (read from the settings CDO).
+	 * A mismatch against the stored `risk.config` row means the data on disk was
+	 * mined under a different configuration and must be rebuilt.
+	 *
+	 * ONE function for BOTH sides — the writer (FGitCoChangeIndexer::Run) and
+	 * the reader (FRiskQueryAdapter::GetRawDB) must never compute this
+	 * independently, or a settings edit silently no-ops again.
+	 *
+	 * TYPE WIDTH — load-bearing: FCrc::StrCrc32<TCHAR> returns uint32, and
+	 * monolith_ri_meta.code_version binds through int32. The cast happens HERE,
+	 * once, so writer and reader cannot disagree about it. If one side cast and
+	 * the other did not, every fingerprint >= 2^31 would mismatch forever and
+	 * re-mine on every single risk query.
+	 *
+	 * Pass the roots exactly as FMonolithReflectionIntelModule::ResolveGitRepoRoots
+	 * returned them — not raw setting strings, whose spelling can vary without
+	 * the resolved scope changing at all.
+	 */
+	int32 ComputeRiskConfigFingerprint(const TArray<FString>& ResolvedGitRepoRoots);
 }

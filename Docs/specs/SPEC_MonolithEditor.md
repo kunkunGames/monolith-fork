@@ -2,13 +2,15 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.21.3 (Beta)
+**Version:** 0.22.0 (Beta)
 
 ---
 
 ## MonolithEditor
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, ApplicationCore, InputCore, Json, JsonUtilities, MessageLog, DataValidation, EnhancedInput, LiveCoding (Win64 only); AutomationController and AutomationTest public interfaces are included and the engine-owned modules are loaded dynamically rather than linked as unavailable static import libraries
+
+**Engine compatibility:** Loaded-object traversal and post-engine-init registration use the MonolithCore compatibility boundaries. `validate_assets` always returns `validator_messages_supported`; it is true with UE 5.8's top-level messages and false on UE 5.7, rather than presenting an unsupported empty list as complete evidence.
 
 > **`EnhancedInput` dep (Gap 4, 2026-06-10):** added for `pie_inject_input_action` (`UEnhancedInputLocalPlayerSubsystem::InjectInputForAction`). It is a stock, always-enabled engine plugin module — release-build safe, so it carries no `WITH_*` gate (same rationale as the existing `AIModule` dep).
 
@@ -173,7 +175,7 @@ Plus `capture_scene_preview` (in Base section above) was **extended** in v0.16.0
 |--------|-------------|
 | `author_map_settings` | Apply WorldSettings + PlayerStart settings to ANY currently-open map (not locked to the nav-harness path). Params: `game_mode_override` (class path → `AWorldSettings::DefaultGameMode`, assigned after `WorldSettings->Modify()`), `player_starts[]` (array of transforms → spawn `APlayerStart`s, each `SetFolderPath`'d). Map mutation dirties the package by design; only dirties on an actual change, and never leaves the map half-authored on a mid-apply failure. |
 | `set_world_settings_property` | Generic reflected writer for one `AWorldSettings` property on the current or specified map. Params: optional `path`, required `property_name`, required JSON `value`, optional `save`, optional `dry_run`. It supports scalar values, object/soft-object refs, class/soft-class refs with `_C` normalization, and arrays of those leaf values; it first applies to a scratch buffer, compares exported before/after text, and only modifies/marks dirty when the value changes. Use this for Lyra's `ALyraWorldSettings::DefaultGameplayExperience` instead of adding GameMode-specific branches to `author_map_settings`. |
-| `validate_assets` | Generic DataValidation wrapper around `UEditorValidatorSubsystem::ValidateAssetsWithSettings`. Params include explicit `asset_paths`/`packages` or recursive `path`, `validation_usecase`, `load_assets`, `load_external_objects`, `capture_logs`, `warnings_as_errors`, `skip_excluded_directories`, `max_assets_to_validate`, and `silent`. `validate_project_settings=true` is reported as unsupported because UE 5.8 has no generic public `ValidateProjectSettings` API; project-specific wrappers should live in project adapters, not this common action. |
+| `validate_assets` | Generic DataValidation wrapper around `UEditorValidatorSubsystem::ValidateAssetsWithSettings`. Params include explicit `asset_paths`/`packages` or recursive `path`, `validation_usecase`, `load_assets`, `load_external_objects`, `capture_logs`, `warnings_as_errors`, `skip_excluded_directories`, `max_assets_to_validate`, and `silent`. The response includes `validator_messages_supported`: UE 5.8 exposes the top-level array; UE 5.7 does not, while per-asset messages remain available. `validate_project_settings=true` is reported as unsupported because UE has no generic public `ValidateProjectSettings` API; project-specific wrappers should live in project adapters, not this common action. |
 | `plan_content_validation_changeset` | Read-only changeset planner for DataValidation. Params include optional `changelist`, `paths`, `packages`, `include_opened`, `resolve_packages`, `include_non_packages`, `limit`, and validation option passthrough. It composes the same path semantics as `source_control.list_opened` / `source_control.map_depot_paths`, classifies package targets, deleted packages, source files, non-package files, and unmapped rows, then emits `validation_packages[]` plus exact `validation_params` for `validate_assets`. It does not checkout, save, or validate assets. |
 | `validate_changeset_assets` | Read-only wrapper that runs `plan_content_validation_changeset`, then delegates to `validate_assets` for the resolved packages. Code-only or non-asset changesets return `{ validation_skipped: true, skip_reason: "no_packages_resolved" }` instead of failing. |
 

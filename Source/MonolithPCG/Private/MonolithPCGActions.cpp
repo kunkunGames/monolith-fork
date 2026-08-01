@@ -3,6 +3,7 @@
 #include "MonolithPCGGraphEditScope.h"
 
 #include "MonolithAssetUtils.h"
+#include "MonolithObjectTraversal.h"
 #include "MonolithParamSchema.h"
 #include "MonolithJsonUtils.h"
 
@@ -1259,14 +1260,14 @@ namespace MonolithPCG
 		FReferenceRemapStats& Stats)
 	{
 		TArray<UObject*> Objects;
-		ForEachObjectWithPackage(Package, [&Objects](UObject* Object)
+		MonolithObjectTraversal::ForEachObjectWithPackage(Package, [&Objects](UObject* Object)
 		{
 			if (Object && !Object->HasAnyFlags(RF_Transient | RF_ClassDefaultObject))
 			{
 				Objects.Add(Object);
 			}
 			return true;
-		}, EGetObjectsFlags::IncludeNestedObjects);
+		}, true);
 
 		if (Objects.Num() > Options.MaxObjects)
 		{
