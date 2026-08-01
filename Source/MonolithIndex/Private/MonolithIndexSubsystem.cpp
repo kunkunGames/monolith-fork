@@ -223,7 +223,8 @@ void UMonolithIndexSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		return;
 	}
 
-	if (!UMonolithSettings::IsIndexingActivated())
+	const FMonolithActivation Activation = UMonolithSettings::GetActivation();
+	if (!Activation.bIndexingEnabled)
 	{
 		UE_LOG(LogMonolithIndex, Log,
 			TEXT("MonolithIndex: durable indexing activation is off; existing ProjectIndex.db remains available for reads"));
@@ -231,7 +232,7 @@ void UMonolithIndexSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	}
 
 	SetAutomaticIndexingEnabled(true);
-	StartPreferredIndex();
+	StartPreferredIndex(Activation.bIndexingUserSet);
 }
 
 void UMonolithIndexSubsystem::OnAssetRegistryFilesLoaded()
@@ -454,7 +455,7 @@ void UMonolithIndexSubsystem::RegisterDefaultIndexers()
 	UE_LOG(LogMonolithIndex, Log, TEXT("Registered %d indexers"), Indexers.Num());
 }
 
-bool UMonolithIndexSubsystem::StartPreferredIndex()
+bool UMonolithIndexSubsystem::StartPreferredIndex(bool bExplicitRequest)
 {
 	check(IsInGameThread());
 
@@ -1529,8 +1530,8 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 					// Load asset on game thread — the dispatcher guarantees the asset
 					// compiler is idle before this runs, so GetAsset() won't reenter
 					// the texture compiler's PostCompilation guard.
-					// Capture residency BEFORE GetAsset() may load it (issue #81).
-					const bool bWasLoaded = Entry.AssetData.IsAssetLoaded();
+					const FMonolithPackageResidency Residency =
+						FMonolithMemoryHelper::CapturePackageResidency(Entry.AssetData.PackageName);
 					UObject* LoadedAsset = Entry.AssetData.GetAsset();
 					if (LoadedAsset)
 					{
@@ -1560,7 +1561,7 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 						}
 
 						// Mark asset for unloading to help GC
-						FMonolithMemoryHelper::TryUnloadPackage(LoadedAsset, bWasLoaded);
+						FMonolithMemoryHelper::TryUnloadPackage(LoadedAsset, Residency);
 					}
 					else
 					{
@@ -2192,10 +2193,10 @@ void UMonolithIndexSubsystem::OnIndexingFinished(bool bSuccess)
 		}
 	}
 
-	if (bSuccess)
-	{
-		RegisterLiveCallbacks();
-	}
+	// Full indexing detaches live callbacks while the writer owns the database.
+	// Re-arm on every outcome; the helper itself remains activation-, state-,
+	// and database-aware, so a genuine stop still leaves callbacks detached.
+	RegisterLiveCallbacks();
 	OnComplete.Broadcast(bSuccess);
 	OnProgress.Clear();
 	FinishActiveAsyncJob(bSuccess);
@@ -2234,7 +2235,16 @@ bool UMonolithIndexSubsystem::IsIndexingWorkEnabled() const
 {
 	const UMonolithSettings* Settings = GetDefault<UMonolithSettings>();
 	return bAutomaticIndexingEnabled
-		&& (!Settings || Settings->bEnableIndex);
+		&& (!Settings || Settings->bEnableIndex)
+		&& UMonolithSettings::IsIndexingActivated();
+}
+
+bool UMonolithIndexSubsystem::CanAcceptIndexRequest() const
+{
+	return IsIndexingWorkEnabled()
+		&& !bIsIndexing
+		&& Database.IsValid()
+		&& Database->IsOpen();
 }
 
 bool UMonolithIndexSubsystem::CanDoIncrementalIndex() const
@@ -2256,9 +2266,9 @@ bool UMonolithIndexSubsystem::CanDoIncrementalIndex() const
 	return true;
 }
 
-void UMonolithIndexSubsystem::StartIncrementalIndex()
+bool UMonolithIndexSubsystem::StartIncrementalIndex()
 {
-	StartIncrementalIndexInternal(FString());
+	return StartIncrementalIndexInternal(FString());
 }
 
 bool UMonolithIndexSubsystem::StartIncrementalIndexInternal(const FString& JobId)

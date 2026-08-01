@@ -5,12 +5,40 @@
 
 DECLARE_LOG_CATEGORY_EXTERN(LogMonolithMemory, Log, All);
 
+struct FMonolithMemoryHelper;
+
+/**
+ * Snapshot of whether an asset package was resident before an indexer loaded
+ * an export from it. Capture this immediately before GetAsset/LoadPackage.
+ *
+ * Package residency is the ownership boundary: FAssetData::IsAssetLoaded only
+ * reports whether that particular export is loaded, while TryUnloadPackage
+ * mutates flags on the export's outer package.
+ */
+struct MONOLITHINDEX_API FMonolithPackageResidency
+{
+	bool WasAlreadyLoaded() const { return bWasAlreadyLoaded; }
+
+private:
+	explicit FMonolithPackageResidency(bool bInWasAlreadyLoaded)
+		: bWasAlreadyLoaded(bInWasAlreadyLoaded)
+	{
+	}
+
+	bool bWasAlreadyLoaded = false;
+
+	friend struct FMonolithMemoryHelper;
+};
+
 /**
  * Helper utilities for memory management during indexing.
  * Provides memory monitoring, garbage collection, and package unloading.
  */
 struct MONOLITHINDEX_API FMonolithMemoryHelper
 {
+	/** Capture package residency immediately before loading an asset export. */
+	static FMonolithPackageResidency CapturePackageResidency(const FName& PackageName);
+
 	/**
 	 * Get the current process memory usage in megabytes.
 	 * Uses physical memory (working set) for accurate pressure detection.
@@ -40,12 +68,12 @@ struct MONOLITHINDEX_API FMonolithMemoryHelper
 	 * Attempt to unload the package containing the given asset.
 	 * Marks the package for GC - actual unload happens on next GC cycle.
 	 * @param Asset The asset whose package should be unloaded
-	 * @param bWasAlreadyLoaded true if the asset/package was resident BEFORE this
-	 *        indexing pass loaded it. When true this is a no-op: the object is
-	 *        referenced elsewhere and stripping RF_Standalone would strand it (issue #81).
+	 * @param Residency package residency captured before the indexing load.
+	 *        Pre-resident packages are owned by another editor workflow and must
+	 *        retain RF_Standalone.
 	 * @return true if the package was successfully marked for unload
 	 */
-	static bool TryUnloadPackage(UObject* Asset, bool bWasAlreadyLoaded);
+	static bool TryUnloadPackage(UObject* Asset, const FMonolithPackageResidency& Residency);
 
 	/**
 	 * Yield to the editor to allow UI updates and prevent freezing.

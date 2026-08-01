@@ -14,6 +14,17 @@ namespace
 	constexpr double MinGCIntervalSeconds = 0.5;
 }
 
+FMonolithPackageResidency FMonolithMemoryHelper::CapturePackageResidency(const FName& PackageName)
+{
+	if (PackageName.IsNone())
+	{
+		return FMonolithPackageResidency(false);
+	}
+
+	return FMonolithPackageResidency(
+		FindPackage(nullptr, *PackageName.ToString()) != nullptr);
+}
+
 SIZE_T FMonolithMemoryHelper::GetCurrentMemoryUsageMB()
 {
 	FPlatformMemoryStats Stats = FPlatformMemory::GetStats();
@@ -65,21 +76,20 @@ void FMonolithMemoryHelper::ForceGarbageCollection(bool bFullPurge)
 	}
 }
 
-bool FMonolithMemoryHelper::TryUnloadPackage(UObject* Asset, bool bWasAlreadyLoaded)
+bool FMonolithMemoryHelper::TryUnloadPackage(
+	UObject* Asset,
+	const FMonolithPackageResidency& Residency)
 {
 	if (!Asset)
 	{
 		return false;
 	}
-
-	// Residency guard (issue #81): if the asset/package was already resident BEFORE
-	// this indexing pass loaded it, it is referenced elsewhere (e.g. an open editor
-	// tab, or a package pinned by the startup map). Clearing RF_Standalone on such an
-	// object does not unload it — it survives GC because of the external reference —
-	// but leaves it permanently stripped, so File->Save later trips the engine's
-	// data-loss guard (0x10000002). Only strip objects THIS pass brought in.
-	if (bWasAlreadyLoaded)
+	if (Residency.WasAlreadyLoaded())
 	{
+		// The indexer does not own this residency. Clearing RF_Standalone from an
+		// externally-referenced object usually cannot collect it, but permanently
+		// strands the live object without its save-safety flag (SavePackage guard
+		// 0x10000002). Only release objects loaded by this indexing operation.
 		return false;
 	}
 
