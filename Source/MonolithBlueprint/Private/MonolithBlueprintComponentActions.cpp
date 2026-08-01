@@ -1366,7 +1366,7 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleSetComponentProp
 				PropName.Equals(TEXT("SkeletalMesh"), ESearchCase::IgnoreCase) ||
 				PropName.Equals(TEXT("SkeletalMeshAsset"), ESearchCase::IgnoreCase))
 			{
-				if (USkinnedAsset* NewAsset = Cast<USkinnedAsset>(NewObject); NewAsset || bIsNone)
+				if (USkinnedAsset* NewAsset = Cast<USkinnedAsset>(NewObject); NewAsset || bObjectValueIsNone)
 				{
 					SMC->SetSkinnedAssetAndUpdate(NewAsset);
 					bWroteValue = true;

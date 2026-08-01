@@ -2,6 +2,7 @@
 #include "MonolithBlueprintComponentResolver.h"
 #include "MonolithBlueprintInternal.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithObjectTraversal.h"
 #include "MonolithParamSchema.h"
 #include "MonolithProjectionUtils.h"
 #include "Serialization/JsonWriter.h"
@@ -563,7 +564,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetVariables(const TShare
 				if (WidgetTreeObj)
 				{
 					TArray<UObject*> TreeChildren;
-					GetObjectsWithOuter(WidgetTreeObj, TreeChildren, EGetObjectsFlags::IncludeNestedObjects);
+					MonolithObjectTraversal::GetObjectsWithOuter(WidgetTreeObj, TreeChildren, true);
 					for (UObject* Child : TreeChildren)
 					{
 						if (!Child || !Child->IsA(WidgetBase))

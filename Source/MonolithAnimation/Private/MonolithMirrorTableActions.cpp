@@ -8,6 +8,7 @@
 #include "Animation/Skeleton.h"
 #include "PoseSearch/PoseSearchSchema.h"
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "Runtime/Launch/Resources/Version.h"
 #include "UObject/UnrealType.h"
 #include "Editor.h"
 
@@ -154,7 +155,11 @@ FMonolithActionResult FMonolithMirrorTableActions::HandleCreateMirrorDataTable(c
 
 	// Generate mirror rows from the find/replace rules against the skeleton's bone names.
 #if WITH_EDITOR
+	#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
 	MDT->UpdateFromFindReplaceExpressions(UMirrorDataTable::FFindReplaceOptions::AddMissingOnly());
+	#else
+	MDT->FindReplaceMirroredNames();
+	#endif
 #endif
 
 	FAssetRegistryModule::AssetCreated(MDT);

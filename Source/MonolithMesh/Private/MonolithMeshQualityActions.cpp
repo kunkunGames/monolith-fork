@@ -186,7 +186,11 @@ FMonolithActionResult FMonolithMeshQualityActions::GenerateProxyMesh(const TShar
 	MergeSettings.bMergeMeshSockets = true;
 	MergeSettings.bMergePhysicsData = true;
 	MergeSettings.bBakeVertexDataToMesh = false;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
 	MergeSettings.PivotType = EMeshMergePivotType::Automatic;
+#else
+	MergeSettings.bPivotPointAtZero = false;
+#endif
 
 	if (bMergeMaterials)
 	{

@@ -4,6 +4,7 @@
 #include "HAL/PlatformFileManager.h"
 #include "Serialization/JsonWriter.h"
 #include "Serialization/JsonSerializer.h"
+#include "Runtime/Launch/Resources/Version.h"
 
 DEFINE_LOG_CATEGORY(LogMonolithIndex);
 
@@ -1746,9 +1747,15 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(
 
 		const float SourceWeight = SourceWeightFor(MatchSource);
 		int32 RankPos = 0;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
 		int32 StepErrorCode = 0;
+#endif
 		ESQLitePreparedStatementStepResult StepResult = ESQLitePreparedStatementStepResult::Done;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
 		while ((StepResult = Stmt.Step(&StepErrorCode)) == ESQLitePreparedStatementStepResult::Row)
+#else
+		while ((StepResult = Stmt.Step()) == ESQLitePreparedStatementStepResult::Row)
+#endif
 		{
 			const float Contribution = SourceWeight / (RRFConstant + static_cast<float>(RankPos));
 			const int32 ThisRankPos = RankPos;
@@ -1796,10 +1803,12 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(
 		if (StepResult != ESQLitePreparedStatementStepResult::Done)
 		{
 			FString Detail = Database->GetLastError();
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
 			if (Detail.IsEmpty() && StepErrorCode != 0)
 			{
 				Detail = FSQLiteDatabase::GetErrorForCode(StepErrorCode);
 			}
+#endif
 			if (Detail.IsEmpty())
 			{
 				Detail = TEXT("SQLite did not complete the statement.");

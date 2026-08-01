@@ -29,9 +29,28 @@
 #include "UObject/UnrealType.h"
 #include "Editor.h"
 #include "Modules/ModuleManager.h"
+#include "Runtime/Launch/Resources/Version.h"
 
 namespace
 {
+	bool SetAnimationAssetAtCompat(
+		UPoseSearchDatabase* Database,
+		const FPoseSearchDatabaseAnimationAsset& Entry,
+		const int32 EntryIndex)
+	{
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+		Database->SetAnimationAssetAt(Entry, EntryIndex);
+		return true;
+#else
+		if (FPoseSearchDatabaseAnimationAsset* MutableEntry = Database->GetMutableDatabaseAnimationAsset(EntryIndex))
+		{
+			*MutableEntry = Entry;
+			return true;
+		}
+		return false;
+#endif
+	}
+
 	int32 ClampClothLimit(double LimitValue)
 	{
 		return FMath::Clamp(static_cast<int32>(LimitValue), 1, 500);
@@ -1096,7 +1115,12 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSequencePrope
 		}
 		Entry.SetSamplingRange(FFloatInterval(Start, End));
 	}
-	Database->SetAnimationAssetAt(Entry, SeqIndex);
+	if (!SetAnimationAssetAtCompat(Database, Entry, SeqIndex))
+	{
+		GEditor->EndTransaction();
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Failed to update PoseSearch database entry at index %d"), SeqIndex));
+	}
 #endif // WITH_EDITORONLY_DATA
 
 	GEditor->EndTransaction();
@@ -1716,7 +1740,12 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseEntryTags(con
 		}
 	}
 
-	Database->SetAnimationAssetAt(Entry, EntryIndex);
+	if (!SetAnimationAssetAtCompat(Database, Entry, EntryIndex))
+	{
+		GEditor->EndTransaction();
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Failed to update PoseSearch database entry at index %d"), EntryIndex));
+	}
 
 	GEditor->EndTransaction();
 	Database->MarkPackageDirty();

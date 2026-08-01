@@ -8,6 +8,7 @@
 // Modify and an open tab may need a reselect to refresh. Game-thread only.
 
 #include "MonolithBlueprintStringTableActions.h"
+#include "MonolithStringTableCompat.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithParamSchema.h"
 #include "Internationalization/StringTable.h"
@@ -204,7 +205,7 @@ FMonolithActionResult FMonolithBlueprintStringTableActions::HandleSetStringTable
 		(*EntryObjPtr)->TryGetStringField(TEXT("source_string"), SourceString);
 
 		// SetSourceString replaces any existing data for that key (upsert).
-		Table->SetSourceString(FTextKey(*Key), SourceString, FString());
+		MonolithStringTableCompat::SetSourceString(Table, FTextKey(*Key), SourceString);
 		++EntriesWritten;
 	}
 

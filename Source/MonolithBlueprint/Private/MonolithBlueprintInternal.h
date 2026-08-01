@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithObjectTraversal.h"
 #include "MonolithPinTypeGrammar.h"
 #include "MonolithPropertyAccessReader.h"
 #include "Misc/PackageName.h"
@@ -122,7 +123,7 @@ namespace MonolithBlueprintInternal
 
 		// Find the UWorld in the package, then get its PersistentLevel
 		UWorld* World = nullptr;
-		ForEachObjectWithPackage(LevelPackage, [&World](UObject* Obj)
+		MonolithObjectTraversal::ForEachObjectWithPackage(LevelPackage, [&World](UObject* Obj)
 		{
 			if (UWorld* W = Cast<UWorld>(Obj))
 			{
@@ -130,7 +131,7 @@ namespace MonolithBlueprintInternal
 				return false; // stop iteration
 			}
 			return true; // continue
-		});
+		}, true);
 
 		if (!World || !World->PersistentLevel) return nullptr;
 

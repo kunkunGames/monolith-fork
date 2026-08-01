@@ -3,6 +3,7 @@
 #include "MonolithAssetResultCompat.h"
 
 #include "MonolithParamSchema.h"
+#include "MonolithObjectTraversal.h"
 
 #include "AssetToolsModule.h"
 #include "AssetRegistry/ARFilter.h"
@@ -1251,7 +1252,7 @@ namespace
 		}
 
 		bool bContainsWorld = false;
-		ForEachObjectWithPackage(Package, [&bContainsWorld](UObject* Object)
+		MonolithObjectTraversal::ForEachObjectWithPackage(Package, [&bContainsWorld](UObject* Object)
 		{
 			if (Object && Object->IsA<UWorld>())
 			{
@@ -1259,11 +1260,7 @@ namespace
 				return false;
 			}
 			return true;
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
-		}, EGetObjectsFlags::IncludeNestedObjects);
-#else
-		}, /*bIncludeNestedObjects=*/true);
-#endif
+		}, true);
 		return bContainsWorld;
 	}
 
@@ -2309,18 +2306,14 @@ namespace
 
 		++Stats.CheckedPackageCount;
 		TArray<UObject*> Objects;
-		ForEachObjectWithPackage(Package, [&Objects](UObject* Object)
+		MonolithObjectTraversal::ForEachObjectWithPackage(Package, [&Objects](UObject* Object)
 		{
 			if (Object && !Object->HasAnyFlags(RF_Transient | RF_ClassDefaultObject))
 			{
 				Objects.Add(Object);
 			}
 			return true;
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
-		}, EGetObjectsFlags::IncludeNestedObjects);
-#else
-		}, /*bIncludeNestedObjects=*/true);
-#endif
+		}, true);
 
 		bool bPackageChanged = false;
 		for (UObject* Object : Objects)

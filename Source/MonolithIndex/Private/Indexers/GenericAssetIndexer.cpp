@@ -3,7 +3,11 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/Texture2D.h"
+#include "Materials/MaterialExpressionTextureBase.h"
+#include "Runtime/Launch/Resources/Version.h"
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
 #include "Materials/MaterialExpressionUtils.h"
+#endif
 #include "Sound/SoundWave.h"
 #include "Sound/SoundCue.h"
 #include "PhysicsEngine/PhysicsAsset.h"
@@ -80,7 +84,11 @@ bool FGenericAssetIndexer::IndexAsset(const FAssetData& AssetData, UObject* Load
 		Props->SetBoolField(TEXT("compression_no_alpha"), Tex->CompressionNoAlpha != 0);
 #endif
 		// Recommended sampler type for material use
-		EMaterialSamplerType SamplerType = MaterialExpressionUtils::GetSamplerTypeForTexture(Tex);
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+		const EMaterialSamplerType SamplerType = MaterialExpressionUtils::GetSamplerTypeForTexture(Tex);
+#else
+		const EMaterialSamplerType SamplerType = UMaterialExpressionTextureBase::GetSamplerTypeForTexture(Tex);
+#endif
 		UEnum* SamplerEnum = StaticEnum<EMaterialSamplerType>();
 		if (SamplerEnum)
 		{

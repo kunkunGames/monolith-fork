@@ -15,6 +15,7 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "MonolithPackagePathValidator.h"
+#include "MonolithObjectTraversal.h"
 #include "Misc/PackageName.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
@@ -55,17 +56,13 @@ namespace MonolithUI::TestUtils
         }
 
         TArray<UWidget*> Orphans;
-        ForEachObjectWithOuter(Tree, [&Orphans](UObject* Obj)
+		MonolithObjectTraversal::ForEachObjectWithOuter(Tree, [&Orphans](UObject* Obj)
         {
             if (UWidget* W = Cast<UWidget>(Obj))
             {
                 Orphans.Add(W);
             }
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
-        }, EGetObjectsFlags::None);
-#else
-        }, false);
-#endif
+		}, false);
 
         for (UWidget* W : Orphans)
         {

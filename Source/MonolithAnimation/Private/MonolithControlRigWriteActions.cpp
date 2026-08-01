@@ -11,7 +11,12 @@
 #include "RigVMModel/RigVMLink.h"
 #include "RigVMModel/RigVMController.h"
 #include "RigVMModel/RigVMClient.h"
+#include "Runtime/Launch/Resources/Version.h"
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
 #include "RigVMEditorAsset.h"
+#else
+#include "RigVMAsset.h"
+#endif
 #include "RigVMModel/Nodes/RigVMCollapseNode.h"
 #include "RigVMModel/Nodes/RigVMUnitNode.h"
 #include "Dom/JsonObject.h"

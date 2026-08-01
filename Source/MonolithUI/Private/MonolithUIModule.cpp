@@ -1,4 +1,5 @@
 #include "MonolithUIModule.h"
+#include "MonolithCoreDelegates.h"
 #include "MonolithUIActions.h"
 #include "MonolithUISlotActions.h"
 #include "MonolithUITemplateActions.h"
@@ -122,7 +123,7 @@ void FMonolithUIModule::StartupModule()
     // CommonUI on a fresh install) load AFTER stock UMG. Without this re-scan,
     // those classes are missing from the registry until something forces a
     // RescanWidgetTypes call.
-    GMonolithUIPostEngineInitHandle = FCoreDelegates::GetOnPostEngineInit().AddLambda([]()
+    GMonolithUIPostEngineInitHandle = MonolithCoreDelegates::GetPostEngineInit().AddLambda([]()
     {
         if (UMonolithUIRegistrySubsystem* Sub = UMonolithUIRegistrySubsystem::Get())
         {
@@ -146,7 +147,7 @@ void FMonolithUIModule::ShutdownModule()
 {
     if (GMonolithUIPostEngineInitHandle.IsValid())
     {
-        FCoreDelegates::GetOnPostEngineInit().Remove(GMonolithUIPostEngineInitHandle);
+        MonolithCoreDelegates::GetPostEngineInit().Remove(GMonolithUIPostEngineInitHandle);
         GMonolithUIPostEngineInitHandle.Reset();
     }
 

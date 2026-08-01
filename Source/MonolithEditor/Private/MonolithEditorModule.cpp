@@ -1,4 +1,5 @@
 #include "MonolithEditorModule.h"
+#include "MonolithCoreDelegates.h"
 #include "MonolithEditorActions.h"
 #include "MonolithEditorMapActions.h"
 #include "MonolithEditorSelectionActions.h"
@@ -127,7 +128,7 @@ public:
 		{
 			return;
 		}
-		PostEngineInitHandle = FCoreDelegates::GetOnPostEngineInit().AddRaw(
+		PostEngineInitHandle = MonolithCoreDelegates::GetPostEngineInit().AddRaw(
 			this, &FMonolithHeadlessLayoutSaveGuard::HandlePostEngineInit);
 		bRegistered = true;
 	}
@@ -140,7 +141,7 @@ public:
 		}
 		if (PostEngineInitHandle.IsValid())
 		{
-			FCoreDelegates::GetOnPostEngineInit().Remove(PostEngineInitHandle);
+			MonolithCoreDelegates::GetPostEngineInit().Remove(PostEngineInitHandle);
 			PostEngineInitHandle.Reset();
 		}
 		if (TickerHandle.IsValid())

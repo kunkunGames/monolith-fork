@@ -1,5 +1,6 @@
 #include "Actions/ProjectExportAssetTextAction.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithObjectTraversal.h"
 #include "MonolithParamSchema.h"
 #include "Exporters/Exporter.h"
 #include "UnrealExporter.h"
@@ -78,7 +79,7 @@ namespace
 	UObject* FindSubObjectByFilter(UObject* Asset, const FString& Filter, TArray<FString>& OutCandidates)
 	{
 		TArray<UObject*> Inners;
-		GetObjectsWithOuter(Asset, Inners, EGetObjectsFlags::IncludeNestedObjects);
+		MonolithObjectTraversal::GetObjectsWithOuter(Asset, Inners, true);
 
 		const FString FilterLower = Filter.ToLower();
 		UObject* Match = nullptr;

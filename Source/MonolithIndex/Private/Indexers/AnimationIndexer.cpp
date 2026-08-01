@@ -35,13 +35,31 @@ static bool SafeCallWithSEH(void(*Func)(void*), void* Context)
 /** Context struct for SEH-safe load+index calls */
 struct FAnimIndexCallContext
 {
+	enum EType { Sequence, Montage, BlendSp, Pose };
+
+	FAnimIndexCallContext(
+		FAnimationIndexer* InSelf,
+		FMonolithIndexDatabase& InDatabase,
+		const int64 InAssetId,
+		const FSoftObjectPath& InObjectPath,
+		const FName& InPackageName,
+		const EType InType)
+		: Self(InSelf)
+		, DB(&InDatabase)
+		, AssetId(InAssetId)
+		, ObjectPath(InObjectPath)
+		, Residency(FMonolithMemoryHelper::CapturePackageResidency(InPackageName))
+		, Type(InType)
+	{
+	}
+
 	FAnimationIndexer* Self;
 	FMonolithIndexDatabase* DB;
 	int64 AssetId;
 	FSoftObjectPath ObjectPath;  // Load happens inside SEH guard
-	bool bWasLoaded;             // Residency BEFORE this pass touched it (issue #81)
-	bool bSuccess;               // Set to true if load+index succeeded
-	enum EType { Sequence, Montage, BlendSp, Pose } Type;
+	FMonolithPackageResidency Residency; // Captured BEFORE this pass touches the package (issue #81)
+	bool bSuccess = false;       // Set to true if load+index succeeded
+	EType Type;
 };
 
 static void LoadAndIndexAnimAsset(void* Ctx)
@@ -76,7 +94,7 @@ static void LoadAndIndexAnimAsset(void* Ctx)
 	// This pass loads thousands of assets and, until now, never released one —
 	// the batch GC below had nothing to collect. Assets that were already
 	// resident before the pass are left alone (issue #81).
-	FMonolithMemoryHelper::TryUnloadPackage(Loaded, C->bWasLoaded);
+	FMonolithMemoryHelper::TryUnloadPackage(Loaded, C->Residency);
 }
 
 bool FAnimationIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedAsset, FMonolithIndexDatabase& DB, int64 AssetId)
@@ -131,15 +149,14 @@ bool FAnimationIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedA
 				int64 AId = DB.GetAssetId(AD.PackageName.ToString());
 				if (AId < 0) continue;
 
-				FAnimIndexCallContext Ctx;
-				Ctx.Self = this;
-				Ctx.DB = &DB;
-				Ctx.AssetId = AId;
-				Ctx.ObjectPath = AD.GetSoftObjectPath();
-				// Capture residency BEFORE the load inside the guard (issue #81).
-				Ctx.bWasLoaded = AD.IsAssetLoaded();
-				Ctx.bSuccess = false;
-				Ctx.Type = Type;
+				// Package residency, not export residency, is the unload-ownership boundary.
+				FAnimIndexCallContext Ctx(
+					this,
+					DB,
+					AId,
+					AD.GetSoftObjectPath(),
+					AD.PackageName,
+					Type);
 
 #if PLATFORM_WINDOWS
 				if (SafeCallWithSEH(&LoadAndIndexAnimAsset, &Ctx))

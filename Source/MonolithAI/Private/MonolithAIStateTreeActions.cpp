@@ -2,6 +2,7 @@
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithObjectTraversal.h"
 #include "MonolithPackagePathValidator.h"
 
 #if WITH_STATETREE
@@ -3684,7 +3685,7 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAutoArrangeST(const TSh
 
 		// Look for any UEdGraph owned by the StateTree
 		TArray<UObject*> SubObjects;
-		GetObjectsWithOuter(ST, SubObjects, EGetObjectsFlags::IncludeNestedObjects);
+		MonolithObjectTraversal::GetObjectsWithOuter(ST, SubObjects, true);
 		for (UObject* Sub : SubObjects)
 		{
 			EdGraph = Cast<UEdGraph>(Sub);
@@ -3693,7 +3694,7 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAutoArrangeST(const TSh
 
 		if (!EdGraph)
 		{
-			GetObjectsWithOuter(EditorData, SubObjects, EGetObjectsFlags::IncludeNestedObjects);
+			MonolithObjectTraversal::GetObjectsWithOuter(EditorData, SubObjects, true);
 			for (UObject* Sub : SubObjects)
 			{
 				EdGraph = Cast<UEdGraph>(Sub);

@@ -5,6 +5,7 @@
 
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithObjectTraversal.h"
 #include "MonolithParamSchema.h"
 #include "MonolithPCGPropertyBagUtils.h"
 #include "MonolithPCGResultUtils.h"
@@ -2007,10 +2008,10 @@ bool BuildPersistentObjectIndex(
 	OutObjectsByKey.Add(TEXT("$ROOT"), Root);
 
 	TArray<UObject*> NestedObjects;
-	GetObjectsWithOuter(
+	MonolithObjectTraversal::GetObjectsWithOuter(
 		const_cast<UPCGGraph*>(Root),
 		NestedObjects,
-		EGetObjectsFlags::IncludeNestedObjects);
+		true);
 	const int64 TotalObjectCount = static_cast<int64>(NestedObjects.Num()) + 1;
 	if (TotalObjectCount > MaxPersistentGraphObjects)
 	{
@@ -2447,7 +2448,7 @@ void PrepareGraphForUndo(UPCGGraph* Graph)
 	}
 	Graph->Modify();
 	TArray<UObject*> NestedObjects;
-	GetObjectsWithOuter(Graph, NestedObjects, EGetObjectsFlags::IncludeNestedObjects);
+	MonolithObjectTraversal::GetObjectsWithOuter(Graph, NestedObjects, true);
 	for (UObject* Object : NestedObjects)
 	{
 		if (Object && Object->HasAnyFlags(RF_Transactional))
@@ -2597,7 +2598,7 @@ void CollectReusableSeededDuplicationDestinations(
 	OutTargets.Add(Target);
 
 	TArray<UObject*> TargetObjects;
-	GetObjectsWithOuter(Target, TargetObjects, EGetObjectsFlags::IncludeNestedObjects);
+	MonolithObjectTraversal::GetObjectsWithOuter(Target, TargetObjects, true);
 	TMap<FString, UObject*> TargetsByRelativeLineage;
 	TargetsByRelativeLineage.Reserve(TargetObjects.Num());
 	for (UObject* const TargetObject : TargetObjects)
@@ -2610,7 +2611,7 @@ void CollectReusableSeededDuplicationDestinations(
 	}
 
 	TArray<UObject*> SourceObjects;
-	GetObjectsWithOuter(Source, SourceObjects, EGetObjectsFlags::IncludeNestedObjects);
+	MonolithObjectTraversal::GetObjectsWithOuter(Source, SourceObjects, true);
 	OutTargets.Reserve(FMath::Min(SourceObjects.Num(), TargetObjects.Num()) + 1);
 	for (const UObject* const SourceObject : SourceObjects)
 	{

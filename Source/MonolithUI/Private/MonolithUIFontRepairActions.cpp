@@ -14,6 +14,7 @@
 #include "Misc/PackageName.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithObjectTraversal.h"
 #include "MonolithPackagePathValidator.h"
 #include "MonolithParamSchema.h"
 #include "MonolithParamUtils.h"
@@ -836,7 +837,7 @@ namespace MonolithUI::FontRepair
         }
 
         bool bContainsWorld = false;
-        ForEachObjectWithPackage(Package, [&bContainsWorld](UObject* Object)
+		MonolithObjectTraversal::ForEachObjectWithPackage(Package, [&bContainsWorld](UObject* Object)
         {
             if (Object && Object->IsA<UWorld>())
             {
@@ -844,7 +845,7 @@ namespace MonolithUI::FontRepair
                 return false;
             }
             return true;
-        }, EGetObjectsFlags::IncludeNestedObjects);
+		}, true);
         return bContainsWorld;
     }
 
@@ -859,14 +860,14 @@ namespace MonolithUI::FontRepair
             return;
         }
 
-        ForEachObjectWithPackage(Package, [&Rules, &Options, &Stats, Package](UObject* Object)
+		MonolithObjectTraversal::ForEachObjectWithPackage(Package, [&Rules, &Options, &Stats, Package](UObject* Object)
         {
             if (ShouldScanSlateFontObject(Object, Package))
             {
                 RepairSlateFontReferencesInObject(Object, Rules, Options, Stats);
             }
             return true;
-        }, EGetObjectsFlags::IncludeNestedObjects);
+		}, true);
     }
 
     static bool SaveSlateFontRepairPackageIfRequested(UPackage* Package, bool bSave, FString& OutSavedFilename, FString& OutError)

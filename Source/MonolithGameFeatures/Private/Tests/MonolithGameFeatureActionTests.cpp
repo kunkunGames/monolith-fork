@@ -6,7 +6,6 @@
 #include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
-#include "GameFeatureData.h"
 #include "UObject/Package.h"
 #include "UObject/UnrealType.h"
 
@@ -15,6 +14,8 @@
 #endif
 
 #if WITH_MONOLITH_GAMEFEATURES
+
+#include "GameFeatureData.h"
 
 namespace
 {
