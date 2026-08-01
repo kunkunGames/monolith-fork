@@ -60,6 +60,15 @@
 
 namespace
 {
+	FSimpleMulticastDelegate& GetMonolithUIPostEngineInitDelegate()
+	{
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+		return FCoreDelegates::GetOnPostEngineInit();
+#else
+		return FCoreDelegates::OnPostEngineInit;
+#endif
+	}
+
     /**
      * Module-scoped delegate handle for the OnPostEngineInit re-scan. Owned at
      * file scope so the module's StartupModule/ShutdownModule symmetry can
@@ -151,7 +160,7 @@ void FMonolithUIModule::StartupModule()
     // CommonUI on a fresh install) load AFTER stock UMG. Without this re-scan,
     // those classes are missing from the registry until something forces a
     // RescanWidgetTypes call.
-    GMonolithUIPostEngineInitHandle = FCoreDelegates::OnPostEngineInit.AddLambda([]()
+    GMonolithUIPostEngineInitHandle = GetMonolithUIPostEngineInitDelegate().AddLambda([]()
     {
         if (UMonolithUIRegistrySubsystem* Sub = UMonolithUIRegistrySubsystem::Get())
         {
@@ -175,7 +184,7 @@ void FMonolithUIModule::ShutdownModule()
 {
     if (GMonolithUIPostEngineInitHandle.IsValid())
     {
-        FCoreDelegates::OnPostEngineInit.Remove(GMonolithUIPostEngineInitHandle);
+        GetMonolithUIPostEngineInitDelegate().Remove(GMonolithUIPostEngineInitHandle);
         GMonolithUIPostEngineInitHandle.Reset();
     }
 

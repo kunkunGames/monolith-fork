@@ -38,7 +38,9 @@ void FMonolithSettingsCustomization::CustomizeDetails(IDetailLayoutBuilder& Deta
 				{
 					if (auto* Sub = GEditor->GetEditorSubsystem<UMonolithIndexSubsystem>())
 					{
-						return !Sub->IsIndexing();
+						// Also covers a database that never opened — pressing the
+						// button in that state would report success and do nothing.
+						return Sub->CanAcceptIndexRequest();
 					}
 				}
 				return false;

@@ -54,6 +54,8 @@ void UMonolithSourceSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void UMonolithSourceSubsystem::Deinitialize()
 {
+	bIsShuttingDown = true;
+
 	// F17: Unbind the hot-reload hook BEFORE we tear down anything else, so a late-firing
 	// reload signal during shutdown can't re-enter into a half-destroyed subsystem.
 	if (ReloadCompleteHandle.IsValid())
@@ -62,9 +64,14 @@ void UMonolithSourceSubsystem::Deinitialize()
 		ReloadCompleteHandle.Reset();
 	}
 
-	// Stop any running indexer
+	// Stop any running indexer. Detach our completion callback FIRST: the
+	// indexer's destructor joins the worker, and the worker broadcasts
+	// OnComplete on its way out — a still-attached lambda would run against a
+	// subsystem that is already tearing down.
 	if (Indexer)
 	{
+		Indexer->OnComplete.Clear();
+		Indexer->OnProgress.Clear();
 		Indexer->RequestStop();
 		delete Indexer;
 		Indexer = nullptr;
@@ -125,20 +132,24 @@ void UMonolithSourceSubsystem::OnReloadComplete(EReloadCompleteReason Reason)
 	UE_LOG(LogMonolithSource, Log,
 		TEXT("[F17] Hot-reload detected — kicking incremental project reindex (auto)"));
 
-	LastReindexTimeSeconds = Now;
-	TriggerProjectReindex(); // Already async via Indexer->StartAsync(); returns immediately.
+	// Stamp the cooldown only if a run actually started. Stamping first would
+	// suppress the next 5s of auto-kicks on behalf of a reindex that never ran.
+	if (TriggerProjectReindex()) // Already async via Indexer->StartAsync(); returns immediately.
+	{
+		LastReindexTimeSeconds = Now;
+	}
 }
 
 // ============================================================
 // Full reindex: engine + shaders + project (clean build)
 // ============================================================
 
-void UMonolithSourceSubsystem::TriggerReindex()
+bool UMonolithSourceSubsystem::TriggerReindex()
 {
 	if (bIsIndexing)
 	{
 		UE_LOG(LogMonolithSource, Warning, TEXT("Indexing already in progress"));
-		return;
+		return false;
 	}
 
 	FString DbPath = GetDatabasePath();
@@ -168,30 +179,46 @@ void UMonolithSourceSubsystem::TriggerReindex()
 	Indexer->SetCleanBuild(true);
 	Indexer->SetIndexProjectSource(true);
 
-	Indexer->OnComplete.AddLambda([this, DbPath](int32 Files, int32 Symbols, int32 Errors)
+	// The indexer broadcasts from its worker thread and the game-thread hop that
+	// follows cannot be cancelled, so neither lambda may capture `this` — the
+	// subsystem can be gone by the time either runs.
+	const TWeakObjectPtr<UMonolithSourceSubsystem> WeakThis(this);
+	Indexer->OnComplete.AddLambda([WeakThis, DbPath](int32 Files, int32 Symbols, int32 Errors)
 	{
-		AsyncTask(ENamedThreads::GameThread, [this, DbPath, Files, Symbols, Errors]()
+		AsyncTask(ENamedThreads::GameThread, [WeakThis, DbPath, Files, Symbols, Errors]()
 		{
-			bIsIndexing = false;
+			UMonolithSourceSubsystem* Subsystem = WeakThis.Get();
+			if (!Subsystem || Subsystem->bIsShuttingDown)
+			{
+				return;
+			}
+			Subsystem->bIsIndexing = false;
 			UE_LOG(LogMonolithSource, Log, TEXT("C++ source indexing complete: %d files, %d symbols, %d errors"), Files, Symbols, Errors);
-			ReopenDatabase(DbPath);
+			Subsystem->ReopenDatabase(DbPath);
 		});
 	});
 
 	UE_LOG(LogMonolithSource, Log, TEXT("Starting full source indexing (engine + project) via C++ indexer"));
-	Indexer->StartAsync();
+	if (!Indexer->StartAsync())
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("Failed to start the source indexing thread — no reindex is running"));
+		bIsIndexing = false;
+		return false;
+	}
+
+	return true;
 }
 
 // ============================================================
 // Incremental project-only reindex
 // ============================================================
 
-void UMonolithSourceSubsystem::TriggerProjectReindex()
+bool UMonolithSourceSubsystem::TriggerProjectReindex()
 {
 	if (bIsIndexing)
 	{
 		UE_LOG(LogMonolithSource, Warning, TEXT("Indexing already in progress"));
-		return;
+		return false;
 	}
 
 	FString DbPath = GetDatabasePath();
@@ -200,7 +227,7 @@ void UMonolithSourceSubsystem::TriggerProjectReindex()
 	if (!PlatformFile.FileExists(*DbPath))
 	{
 		UE_LOG(LogMonolithSource, Error, TEXT("EngineSource.db not found at %s — run full TriggerReindex() first"), *DbPath);
-		return;
+		return false;
 	}
 
 	// Close DB during reindex
@@ -219,18 +246,32 @@ void UMonolithSourceSubsystem::TriggerProjectReindex()
 	Indexer->SetCleanBuild(false);   // Incremental — keep existing engine symbols
 	Indexer->SetIndexProjectSource(true);
 
-	Indexer->OnComplete.AddLambda([this, DbPath](int32 Files, int32 Symbols, int32 Errors)
+	// See TriggerReindex — weak capture, never `this`.
+	const TWeakObjectPtr<UMonolithSourceSubsystem> WeakThis(this);
+	Indexer->OnComplete.AddLambda([WeakThis, DbPath](int32 Files, int32 Symbols, int32 Errors)
 	{
-		AsyncTask(ENamedThreads::GameThread, [this, DbPath, Files, Symbols, Errors]()
+		AsyncTask(ENamedThreads::GameThread, [WeakThis, DbPath, Files, Symbols, Errors]()
 		{
-			bIsIndexing = false;
+			UMonolithSourceSubsystem* Subsystem = WeakThis.Get();
+			if (!Subsystem || Subsystem->bIsShuttingDown)
+			{
+				return;
+			}
+			Subsystem->bIsIndexing = false;
 			UE_LOG(LogMonolithSource, Log, TEXT("Project source indexing complete: %d files, %d symbols, %d errors"), Files, Symbols, Errors);
-			ReopenDatabase(DbPath);
+			Subsystem->ReopenDatabase(DbPath);
 		});
 	});
 
 	UE_LOG(LogMonolithSource, Log, TEXT("Starting project source indexing (incremental) via C++ indexer"));
-	Indexer->StartAsync();
+	if (!Indexer->StartAsync())
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("Failed to start the source indexing thread — no reindex is running"));
+		bIsIndexing = false;
+		return false;
+	}
+
+	return true;
 }
 
 // ============================================================

@@ -34,7 +34,7 @@ description: Use when inspecting or editing Unreal animation assets via Monolith
 | `get_state_info` | `asset_path`, `machine_name`, `state_name` | State details |
 | `get_transitions` | `asset_path`, `machine_name` | Transition rules |
 | `get_blend_nodes` | `asset_path` | Blend node trees |
-| `get_linked_layers` | `asset_path` | Linked anim layers |
+| `get_linked_layers` | `asset_path` | Linked anim layers. An ABP-native (self) layer shows the node title `"<Layer>\nAnim Layer (self)"` — there is no separate `layer_kind` field |
 | `get_graphs` | `asset_path` | All graphs in ABP |
 | `get_nodes` | `asset_path`, `graph_name`? | Nodes in graph(s) |
 | `get_abp_variables` | `asset_path` | Variables with types and defaults |
@@ -59,7 +59,8 @@ description: Use when inspecting or editing Unreal animation assets via Monolith
 | `set_sync_group` | `asset_path`, `node`, `name`, `role`?, `method`? | Set a player node's sync group |
 | `set_layered_blend_bones` | `asset_path`, `node`, `bones` | Set per-bone branch filters (bone + blend depth) on a Layered Blend Per Bone node |
 | `add_anim_control_rig_node` | `asset_path`, `control_rig_class` | Add a Control Rig anim-graph node. IO pins regenerate from the class |
-| `add_linked_anim_layer` | `asset_path`, `layer_name`, `interface_class`? | Add a Linked Anim Layer node |
+| `add_anim_layer_graph` | `asset_path`, `layer_name`, `input_poses`?, `compile`? | Create an ABP-native animation layer — a `UAnimationGraph` on the anim schema in the ABP's own function graphs (the My Blueprint → **+** → Animation Layer button). No `UAnimLayerInterface` asset needed, so ABP variants need not share a layer signature. Output Pose root node created automatically. `input_poses` takes pose NAMES only (`["InPose"]` or `[{"name":"InPose"}]`, max 16). Refuses duplicate graph names, `AnimGraph`, child ABPs, macro libraries, interface Blueprints |
+| `add_linked_anim_layer` | `asset_path`, `layer_name`, `interface_class`?, `instance_class`? | Add a Linked Anim Layer node. Resolves interface-declared layers first, then ABP-native layers as SELF layers (payload: `interface_class: "<self>"`, `guid_resolved: false`). `interface_class` disables the native fallback; `instance_class` is rejected for a self layer. **Order matters:** the layer must be compiled into the ABP's skeleton class first, or the node comes up with no pose pins — keep `add_anim_layer_graph`'s default `compile: true` |
 | `add_conduit` | `asset_path`, `machine_name`, `name` | Add a conduit node to a state machine. Its bound graph is a transition-logic graph, not an anim graph |
 | **Notifies** | | |
 | `set_notify_time` | `asset_path`, `notify`, `time` | Move notify |

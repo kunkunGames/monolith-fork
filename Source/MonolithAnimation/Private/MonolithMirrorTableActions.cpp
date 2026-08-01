@@ -102,8 +102,8 @@ FMonolithActionResult FMonolithMirrorTableActions::HandleCreateMirrorDataTable(c
 	UMirrorDataTable* MDT = NewObject<UMirrorDataTable>(Pkg, FName(*AssetName), RF_Public | RF_Standalone);
 	if (!MDT) return FMonolithActionResult::Error(TEXT("Failed to create UMirrorDataTable object"));
 
-	// FindReplaceMirroredNames() guards on RowStruct (MirrorDataTable.cpp:282) and adds zero rows
-	// when it is unset. The engine factory uses FMirrorTableRow as the result struct.
+	// The engine mirror-row refresh guards on RowStruct and adds zero rows when it is
+	// unset. The engine factory uses FMirrorTableRow as the result struct.
 	MDT->RowStruct = FMirrorTableRow::StaticStruct();
 
 	MDT->Skeleton = Skeleton;
@@ -145,7 +145,11 @@ FMonolithActionResult FMonolithMirrorTableActions::HandleCreateMirrorDataTable(c
 
 	// Generate mirror rows from the find/replace rules against the skeleton's bone names.
 #if WITH_EDITOR
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+	MDT->UpdateFromFindReplaceExpressions(UMirrorDataTable::FFindReplaceOptions::Sync());
+#else
 	MDT->FindReplaceMirroredNames();
+#endif
 #endif
 
 	FAssetRegistryModule::AssetCreated(MDT);

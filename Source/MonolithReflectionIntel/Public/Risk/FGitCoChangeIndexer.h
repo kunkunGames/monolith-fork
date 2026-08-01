@@ -20,11 +20,21 @@
 //   - FString::ParseIntoArrayLines — VERIFIED at
 //     `DiffAssetRegistriesCommandlet.cpp:1494`.
 //
-// Diversion note: the project's outer working tree is tracked by Diversion, not
-// git, and has no `.git` directory. Mining for the project-level tree returns
-// no commits and is silently skipped. Phase 2 mines NESTED git repos only
-// (Monolith plugin, Resonance sibling, etc.). Diversion `dv_log` mining is a
-// Phase 4 work item per plan §2 non-goals.
+// Repository scope: the roots come from
+// FMonolithReflectionIntelModule::ResolveGitRepoRoots, which probes the project
+// root and each immediate `Plugins/<Name>` folder for a `.git` entry (and an
+// operator can override the set outright via the GitRepoRoots setting). A root
+// without a `.git` entry — a working tree under a non-git VCS, or a plugin
+// folder that is simply part of the enclosing repository — has nothing for
+// `git log` to report and is skipped with a recorded reason. Mining any other
+// version-control system is not implemented.
+//
+// PATH SPACE (v0.22.0): `git log` reports paths relative to the repository it
+// ran in, so a nested plugin repository yields `Source/...` while every other
+// consumer in this module keys on PROJECT-relative paths
+// (`Plugins/<Name>/Source/...`). Run() rebases each repository's output into the
+// project-relative space before tallying, which is what lets FHotspotScorer join
+// churn against complexity at all. See ComputeChurnPathRebase.
 
 #pragma once
 
@@ -54,9 +64,13 @@ public:
 	 *
 	 * @param DB                  Open writable FSQLiteDatabase. Caller must have
 	 *                            already enforced `PRAGMA journal_mode=DELETE`.
-	 * @param GitRepoRoots        Absolute or project-relative paths to nested git
-	 *                            repos. Each is probed for `.git/`; missing ones
-	 *                            are silently skipped (Diversion working tree).
+	 * @param GitRepoRoots        Repository roots to mine, normally the output of
+	 *                            FMonolithReflectionIntelModule::ResolveGitRepoRoots
+	 *                            (absolute); project-relative paths are accepted
+	 *                            and rebased. Each is re-probed for a `.git`
+	 *                            entry and skipped (with a counted reason) if it
+	 *                            has none. An EMPTY array is the "nothing to
+	 *                            mine" case and is reported at Warning level.
 	 * @param MaxCommitWindow     Hard cap on commits scanned per repo (passes
 	 *                            `--max-count=N` to `git log`).
 	 * @param NoiseFilter         File-path substrings to exclude from co-change
@@ -92,6 +106,30 @@ private:
 	void ParseGitLog(
 		const FString& StdoutText,
 		TArray<FGitCommitFileTouches>& OutCommits);
+
+	/**
+	 * Work out how to rebase one repository's repo-relative `git log` paths into
+	 * the project-relative key space every other risk consumer uses.
+	 *
+	 * Four cases, all driven by where the repository sits relative to the project:
+	 *   - repository IS the project root   -> no change (both prefixes empty).
+	 *   - repository UNDER the project     -> prepend its project-relative offset
+	 *                                         (`Plugins/<Name>/`).
+	 *   - repository is an ANCESTOR        -> strip the project's offset within
+	 *                                         it; rows that do not start with
+	 *                                         that offset are outside the project
+	 *                                         subtree and get dropped.
+	 *   - unrelated absolute root          -> no change; the paths are stored as
+	 *                                         the repository reports them, since
+	 *                                         there is no project-relative form.
+	 *
+	 * Both roots must already be absolute and forward-slashed.
+	 */
+	static void ComputeChurnPathRebase(
+		const FString& AbsRepoRoot,
+		const FString& AbsProjectRoot,
+		FString& OutPrefixToAdd,
+		FString& OutPrefixToStrip);
 
 	/** Tally co-change pairs + per-file churn from a parsed commit list. */
 	void TallyCoChangePairs(

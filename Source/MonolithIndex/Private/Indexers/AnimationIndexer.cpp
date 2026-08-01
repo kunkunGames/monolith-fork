@@ -39,6 +39,7 @@ struct FAnimIndexCallContext
 	FMonolithIndexDatabase* DB;
 	int64 AssetId;
 	FSoftObjectPath ObjectPath;  // Load happens inside SEH guard
+	bool bWasLoaded;             // Residency BEFORE this pass touched it (issue #81)
 	bool bSuccess;               // Set to true if load+index succeeded
 	enum EType { Sequence, Montage, BlendSp, Pose } Type;
 };
@@ -71,6 +72,11 @@ static void LoadAndIndexAnimAsset(void* Ctx)
 		{ C->Self->IndexPoseAssetPublic(A, *C->DB, C->AssetId); C->bSuccess = true; }
 		break;
 	}
+
+	// This pass loads thousands of assets and, until now, never released one —
+	// the batch GC below had nothing to collect. Assets that were already
+	// resident before the pass are left alone (issue #81).
+	FMonolithMemoryHelper::TryUnloadPackage(Loaded, C->bWasLoaded);
 }
 
 bool FAnimationIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedAsset, FMonolithIndexDatabase& DB, int64 AssetId)
@@ -117,6 +123,14 @@ bool FAnimationIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedA
 
 			int32 BatchEnd = FMath::Min(i + BatchSize, Assets.Num());
 
+			// One transaction PER BATCH, owned here rather than by the caller. A
+			// single transaction spanning the whole pass meant an interruption
+			// discarded every animation asset indexed since it started; per-batch
+			// commits bound that loss to one batch. The dispatch model is
+			// unchanged — this still runs inside the caller's single game-thread
+			// hop, so there is no per-asset frame cost.
+			DB.BeginTransaction();
+
 			// Process batch
 			for (int32 j = i; j < BatchEnd; ++j)
 			{
@@ -130,6 +144,8 @@ bool FAnimationIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedA
 				Ctx.DB = &DB;
 				Ctx.AssetId = AId;
 				Ctx.ObjectPath = AD.GetSoftObjectPath();
+				// Capture residency BEFORE the load inside the guard (issue #81).
+				Ctx.bWasLoaded = AD.IsAssetLoaded();
 				Ctx.bSuccess = false;
 				Ctx.Type = Type;
 
@@ -140,6 +156,9 @@ bool FAnimationIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedA
 				}
 				else
 				{
+					// Individual assets are ALLOWED to fail here — that is what
+					// this guard exists for. The pass keeps going and still
+					// reports success.
 					UE_LOG(LogMonolithIndex, Warning, TEXT("AnimationIndexer: crashed loading/indexing '%s' - skipping"), *AD.GetSoftObjectPath().ToString());
 				}
 #else
@@ -148,9 +167,15 @@ bool FAnimationIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedA
 #endif
 			}
 
+			if (!DB.CommitTransaction())
+			{
+				UE_LOG(LogMonolithIndex, Error, TEXT("AnimationIndexer: failed to commit batch %d — that batch's rows are lost"), BatchNumber);
+			}
+
 			BatchNumber++;
 
-			// GC after each batch
+			// GC after each batch — now that the pass releases what it loads, this
+			// has something to collect.
 			FMonolithMemoryHelper::ForceGarbageCollection(false);
 			FMonolithMemoryHelper::YieldToEditor();
 

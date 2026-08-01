@@ -501,4 +501,156 @@ bool FMonolithDiscoverUnknownNamespaceTest::RunTest(const FString& /*Parameters*
 	return true;
 }
 
+// ---------------------------------------------------------------------------
+// Test 9: pagination overflow. offset=1 with limit=INT32_MAX used to form
+// SliceStart + Limit as int32 BEFORE clamping, which signed-overflows. On MSVC
+// it wrapped negative, so Clamp returned SliceStart -> an EMPTY actions array
+// and a NEGATIVE next_offset, from a well-formed call (TryGetNumberField
+// range-checks against TNumericLimits<int32>, so 2147483647 arrives verbatim).
+// A huge limit must behave exactly like "no cap": every remaining action, and
+// no next_offset. Asserting the negative value is the point -- a test that only
+// checked "succeeds" would have passed against the bug.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithDiscoverPaginationOverflowTest,
+	"Monolith.Discover.Terse.PaginationOverflow",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithDiscoverPaginationOverflowTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MonolithDiscoverTerseTestDetail;
+
+	const int32 Full = FullActionCount();
+	TestTrue(TEXT("namespace has multiple actions"), Full >= 2);
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("namespace"), TEXT("monolith"));
+	Params->SetNumberField(TEXT("offset"), 1);
+	Params->SetNumberField(TEXT("limit"), MAX_int32);
+
+	const FMonolithActionResult R = Discover(Params);
+	TestTrue(TEXT("INT32_MAX limit succeeds"), R.bSuccess);
+
+	const TArray<TSharedPtr<FJsonValue>>* Arr = GetActionsArray(R);
+	TestNotNull(TEXT("actions array present"), Arr);
+	if (Arr)
+	{
+		// Pre-fix this was 0 (the wrapped-negative clamp collapsed the slice).
+		TestEqual(TEXT("INT32_MAX limit returns all actions from offset 1"), Arr->Num(), Full - 1);
+	}
+	if (R.Result.IsValid())
+	{
+		// Pre-fix this field was present and negative.
+		TestFalse(TEXT("no next_offset when the slice reaches the end"), R.Result->HasField(TEXT("next_offset")));
+
+		int32 NextOffset = 0;
+		if (R.Result->TryGetNumberField(TEXT("next_offset"), NextOffset))
+		{
+			TestTrue(TEXT("next_offset is never negative"), NextOffset >= 0);
+		}
+	}
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Test 10: cross-namespace search. A filter with NO namespace used to be
+// silently ignored -- the caller got the namespace inventory back and no error.
+// It must now search every namespace, tag each row with its owning namespace,
+// report matched_namespaces pre-pagination, and cap at 50 when limit is absent
+// while still honouring an explicit limit=0 as ALL.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithDiscoverCrossNamespaceTest,
+	"Monolith.Discover.Terse.CrossNamespace",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithDiscoverCrossNamespaceTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MonolithDiscoverTerseTestDetail;
+
+	// "get_" appears in many actions across many namespaces.
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("filter"), TEXT("get_"));
+
+	const FMonolithActionResult R = Discover(Params);
+	TestTrue(TEXT("cross-namespace discover succeeds"), R.bSuccess);
+	if (!R.Result.IsValid())
+	{
+		return false;
+	}
+
+	// It must NOT have fallen through to the namespace inventory.
+	TestFalse(TEXT("did not return the namespace inventory"), R.Result->HasField(TEXT("namespaces")));
+
+	const TArray<TSharedPtr<FJsonValue>>* Arr = GetActionsArray(R);
+	TestNotNull(TEXT("actions array present"), Arr);
+
+	const TArray<TSharedPtr<FJsonValue>>* NsArr = nullptr;
+	TestTrue(TEXT("matched_namespaces present"), R.Result->TryGetArrayField(TEXT("matched_namespaces"), NsArr));
+	if (NsArr)
+	{
+		TestTrue(TEXT("matched more than one namespace"), NsArr->Num() >= 2);
+	}
+
+	int32 Total = 0;
+	R.Result->TryGetNumberField(TEXT("total"), Total);
+	TestTrue(TEXT("total is positive"), Total > 0);
+
+	if (Arr)
+	{
+		// Absent limit caps at 50; total is reported pre-pagination.
+		TestTrue(TEXT("absent limit caps rows at 50"), Arr->Num() <= 50);
+		if (Total > 50)
+		{
+			TestEqual(TEXT("capped at exactly 50 when more remain"), Arr->Num(), 50);
+			TestTrue(TEXT("next_offset present when capped"), R.Result->HasField(TEXT("next_offset")));
+		}
+
+		// Every row carries its owning namespace -- that is what makes a flat
+		// cross-namespace result actionable.
+		bool bAllTagged = true;
+		for (const TSharedPtr<FJsonValue>& V : *Arr)
+		{
+			const TSharedPtr<FJsonObject>* Obj = nullptr;
+			if (!V->TryGetObject(Obj) || !(*Obj)->HasField(TEXT("namespace")))
+			{
+				bAllTagged = false;
+				break;
+			}
+		}
+		TestTrue(TEXT("every cross-namespace row is namespace-tagged"), bAllTagged);
+	}
+
+	// Explicit limit=0 still means ALL, matching the per-namespace contract.
+	{
+		TSharedPtr<FJsonObject> AllParams = MakeShared<FJsonObject>();
+		AllParams->SetStringField(TEXT("filter"), TEXT("get_"));
+		AllParams->SetNumberField(TEXT("limit"), 0);
+
+		const FMonolithActionResult AllR = Discover(AllParams);
+		TestTrue(TEXT("limit:0 cross-namespace succeeds"), AllR.bSuccess);
+		const TArray<TSharedPtr<FJsonValue>>* AllArr = GetActionsArray(AllR);
+		TestNotNull(TEXT("actions array present"), AllArr);
+		if (AllArr)
+		{
+			TestEqual(TEXT("explicit limit:0 returns ALL matches"), AllArr->Num(), Total);
+		}
+	}
+
+	// A whitespace-only filter must NOT flip into cross-namespace mode.
+	{
+		TSharedPtr<FJsonObject> WsParams = MakeShared<FJsonObject>();
+		WsParams->SetStringField(TEXT("filter"), TEXT("   "));
+
+		const FMonolithActionResult WsR = Discover(WsParams);
+		TestTrue(TEXT("whitespace filter succeeds"), WsR.bSuccess);
+		if (WsR.Result.IsValid())
+		{
+			TestTrue(TEXT("whitespace filter returns the namespace inventory"),
+				WsR.Result->HasField(TEXT("namespaces")));
+		}
+	}
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

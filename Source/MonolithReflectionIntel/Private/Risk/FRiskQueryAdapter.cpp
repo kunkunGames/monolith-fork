@@ -8,6 +8,7 @@
 
 #include "Risk/FRiskQueryAdapter.h"
 #include "MonolithReflectionIntelModule.h"
+#include "MonolithReflectionIntelSettings.h"
 #include "MonolithRIMetaTable.h"
 #include "Shared/RICursorCodec.h"
 
@@ -35,6 +36,85 @@ namespace
 		Out.ReplaceInline(TEXT("\\"), TEXT("/"));
 		return Out;
 	}
+
+	/**
+	 * Repositories the last mining pass saw, or a fresh resolution when mining
+	 * has not run in this session yet. Returns the scanned set; OutSkipped
+	 * receives the rejected candidates with reasons.
+	 */
+	void RiskGatherRepoState(TArray<FString>& OutScanned, TArray<TPair<FString, FString>>& OutSkipped)
+	{
+		const FMonolithReflectionIntelModule* Module =
+			FModuleManager::GetModulePtr<FMonolithReflectionIntelModule>(
+				TEXT("MonolithReflectionIntel"));
+		if (Module && Module->HasRiskMiningRun())
+		{
+			OutScanned = Module->GetLastRiskScannedRoots();
+			OutSkipped = Module->GetLastRiskSkippedRoots();
+			return;
+		}
+		OutScanned = FMonolithReflectionIntelModule::ResolveGitRepoRoots(&OutSkipped);
+	}
+
+	/** Build the `{repos_scanned, repos_skipped, hint?}` object shared by both surfaces. */
+	TSharedPtr<FJsonObject> RiskBuildDiagnostics(
+		const TArray<FString>& Scanned,
+		const TArray<TPair<FString, FString>>& Skipped)
+	{
+		TSharedPtr<FJsonObject> Diag = MakeShared<FJsonObject>();
+
+		TArray<TSharedPtr<FJsonValue>> ScannedJson;
+		for (const FString& Root : Scanned)
+		{
+			ScannedJson.Add(MakeShared<FJsonValueString>(Root));
+		}
+		Diag->SetArrayField(TEXT("repos_scanned"), ScannedJson);
+
+		TArray<TSharedPtr<FJsonValue>> SkippedJson;
+		for (const TPair<FString, FString>& Entry : Skipped)
+		{
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("path"), Entry.Key);
+			Row->SetStringField(TEXT("reason"), Entry.Value);
+			SkippedJson.Add(MakeShared<FJsonValueObject>(Row));
+		}
+		Diag->SetArrayField(TEXT("repos_skipped"), SkippedJson);
+
+		// The hint is advice about a FIXABLE state — nothing was mined and at
+		// least one candidate was rejected. A project with data, or one with no
+		// git anywhere and nothing to report on, gets no lecture.
+		if (Scanned.Num() == 0 && Skipped.Num() > 0)
+		{
+			Diag->SetStringField(TEXT("hint"), FMonolithReflectionIntelModule::GetRiskNoReposHint());
+		}
+		return Diag;
+	}
+
+	/** Count rows in a table, tolerating its absence (returns -1 when unqueryable). */
+	int32 RiskCountRows(FSQLiteDatabase& DB, const TCHAR* TableName)
+	{
+		const FString Sql = FString::Printf(TEXT("SELECT COUNT(*) FROM %s;"), TableName);
+		FSQLitePreparedStatement Stmt;
+		if (!Stmt.Create(DB, *Sql))
+		{
+			return -1;
+		}
+		if (Stmt.Step() != ESQLitePreparedStatementStepResult::Row)
+		{
+			return -1;
+		}
+		int32 Count = 0;
+		Stmt.GetColumnValueByIndex(0, Count);
+		return Count;
+	}
+}
+
+void FRiskQueryAdapter::AttachEmptyResultDiagnostics(const TSharedPtr<FJsonObject>& Out)
+{
+	TArray<FString> Scanned;
+	TArray<TPair<FString, FString>> Skipped;
+	RiskGatherRepoState(Scanned, Skipped);
+	Out->SetObjectField(TEXT("diagnostics"), RiskBuildDiagnostics(Scanned, Skipped));
 }
 
 // ============================================================================
@@ -78,7 +158,8 @@ void FRiskQueryAdapter::RegisterActions(FMonolithToolRegistry& Registry)
 			.RequiredDiskPath(TEXT("file_path"),
 				TEXT("Project-relative source file path"))
 			.Optional(TEXT("repo_tag"), TEXT("string"),
-				TEXT("Optional repo tag filter (e.g. \"Monolith\", \"Resonance\")"))
+				TEXT("Optional repo tag filter — the mined repository's folder name "
+				     "(e.g. \"Monolith\" for a repo at Plugins/Monolith)"))
 			.Build());
 
 	// ---- get_release_window_hotspots ----
@@ -114,7 +195,18 @@ void FRiskQueryAdapter::RegisterActions(FMonolithToolRegistry& Registry)
 				TEXT("Opaque pagination cursor"))
 			.Build());
 
-	// Dispatcher annotation — all five handlers are pure SELECT against the
+	// ---- get_mining_status ----
+	// Diagnostic surface for "risk_query returns nothing" (issue #119). Answers
+	// which repositories were mined, which were rejected and why, what the
+	// mining pass reported, and how full the tables are.
+	Registry.RegisterAction(TEXT("risk"), TEXT("get_mining_status"),
+		TEXT("Report which git repositories the risk indexer mined, which candidates "
+		     "it skipped and why, the last mining status line, and the row counts of "
+		     "the risk tables. Read-only; start here when a risk_query returns empty."),
+		FMonolithActionHandler::CreateStatic(&FRiskQueryAdapter::HandleGetMiningStatus),
+		FParamSchemaBuilder().Build());
+
+	// Dispatcher annotation — all six handlers are pure SELECT against the
 	// risk tables. Same shape as Phase 1's decision dispatcher annotation.
 	FMonolithDispatcherAnnotations Anno;
 	Anno.bReadOnlyHint   = true;
@@ -170,6 +262,27 @@ FSQLiteDatabase* FRiskQueryAdapter::GetRawDB()
 					bHasStamp ? StoredVersion : -1, CurrentVersion);
 				bVersionMismatch = true;
 			}
+
+			// CONFIGURATION staleness (issue #119) — a separate `risk.config`
+			// row, deliberately not folded into the code version so the two
+			// causes stay distinguishable in the log. Computed by the same
+			// shared function the indexer stamps with; a missing row counts as
+			// a mismatch, so a legacy DB re-mines exactly once on upgrade.
+			if (!bVersionMismatch)
+			{
+				int32 StoredConfig = 0;
+				const bool bHasConfig = MonolithRIMeta::ReadStoredVersion(
+					*DB, MonolithRIMeta::GetRiskConfigSubsystemKey(), StoredConfig);
+				const int32 CurrentConfig = MonolithRIMeta::ComputeRiskConfigFingerprint(
+					FMonolithReflectionIntelModule::ResolveGitRepoRoots(nullptr));
+				if (!bHasConfig || StoredConfig != CurrentConfig)
+				{
+					UE_LOG(LogMonolithReflectionIntel, Log,
+						TEXT("risk: config fingerprint changed (stored=%d, current=%d) — forcing re-mine"),
+						bHasConfig ? StoredConfig : 0, CurrentConfig);
+					bVersionMismatch = true;
+				}
+			}
 		}
 
 		if (!bTableExists || bVersionMismatch)
@@ -218,6 +331,7 @@ FMonolithActionResult FRiskQueryAdapter::HandleGetHotspotScore(const TSharedPtr<
 	if (Stmt.Step() != ESQLitePreparedStatementStepResult::Row)
 	{
 		Out->SetField(TEXT("hotspot"), MakeShared<FJsonValueNull>());
+		AttachEmptyResultDiagnostics(Out);
 		return FMonolithActionResult::Success(Out);
 	}
 
@@ -321,6 +435,10 @@ FMonolithActionResult FRiskQueryAdapter::HandleGetCoChangePairs(const TSharedPtr
 	TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
 	Out->SetStringField(TEXT("file_path"), FilePath);
 	Out->SetArrayField(TEXT("partners"), Rows);
+	if (Rows.Num() == 0)
+	{
+		AttachEmptyResultDiagnostics(Out);
+	}
 
 	if (!bHasCursor)
 	{
@@ -399,6 +517,10 @@ FMonolithActionResult FRiskQueryAdapter::HandleGetFileChurn(const TSharedPtr<FJs
 	TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
 	Out->SetStringField(TEXT("file_path"), FilePath);
 	Out->SetArrayField(TEXT("churn_by_repo"), Rows);
+	if (Rows.Num() == 0)
+	{
+		AttachEmptyResultDiagnostics(Out);
+	}
 	return FMonolithActionResult::Success(Out);
 }
 
@@ -480,6 +602,10 @@ FMonolithActionResult FRiskQueryAdapter::HandleGetReleaseWindowHotspots(const TS
 	TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
 	Out->SetNumberField(TEXT("since_unix"), static_cast<double>(Since));
 	Out->SetArrayField(TEXT("hotspots"), Rows);
+	if (Rows.Num() == 0)
+	{
+		AttachEmptyResultDiagnostics(Out);
+	}
 
 	if (Rows.Num() == Limit)
 	{
@@ -578,6 +704,10 @@ FMonolithActionResult FRiskQueryAdapter::HandleListConditionalGates(const TShare
 	TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
 	Out->SetArrayField(TEXT("gates"), Rows);
 
+	// No diagnostics block here: conditional gates come from the source sweep,
+	// not from git, so an empty result says nothing about repository discovery
+	// and a repo hint would be misleading advice.
+
 	if (Rows.Num() == Limit)
 	{
 		FRICursorState OutCursor;
@@ -586,5 +716,92 @@ FMonolithActionResult FRiskQueryAdapter::HandleListConditionalGates(const TShare
 		OutCursor.CachedTotalEstimate = -1;
 		Out->SetStringField(TEXT("next_cursor"), EncodeRICursor(OutCursor));
 	}
+	return FMonolithActionResult::Success(Out);
+}
+
+FMonolithActionResult FRiskQueryAdapter::HandleGetMiningStatus(const TSharedPtr<FJsonObject>& /*Params*/)
+{
+	// Take the DB handle FIRST. Like every other risk action this may run the
+	// lazy bootstrap, and the whole report is then consistent: the repository
+	// lists describe the pass that just ran rather than a prediction of it. A
+	// null handle is not an error here — the settings and the live root
+	// resolution are still worth reporting when the database is unavailable,
+	// which is exactly when a caller reaches for this action.
+	FSQLiteDatabase* DB = GetRawDB();
+
+	TArray<FString> Scanned;
+	TArray<TPair<FString, FString>> Skipped;
+	RiskGatherRepoState(Scanned, Skipped);
+
+	TSharedPtr<FJsonObject> Out = RiskBuildDiagnostics(Scanned, Skipped);
+
+	const UMonolithReflectionIntelSettings* Settings = UMonolithReflectionIntelSettings::Get();
+	Out->SetBoolField(TEXT("mining_enabled"),
+		Settings ? Settings->bEnableGitCoChangeMining : false);
+
+	if (Settings)
+	{
+		TSharedPtr<FJsonObject> Cfg = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> Overrides;
+		for (const FString& Root : Settings->GitRepoRoots)
+		{
+			Overrides.Add(MakeShared<FJsonValueString>(Root));
+		}
+		Cfg->SetArrayField(TEXT("git_repo_roots"), Overrides);
+		Cfg->SetBoolField(TEXT("auto_resolved"), Settings->GitRepoRoots.Num() == 0);
+		Cfg->SetBoolField(TEXT("probe_ancestors_for_git_root"), Settings->bProbeAncestorsForGitRoot);
+		Cfg->SetNumberField(TEXT("max_cochange_window_commits"), Settings->MaxCoChangeWindowCommits);
+		Cfg->SetNumberField(TEXT("max_commit_file_count"), Settings->MaxCommitFileCount);
+		TArray<TSharedPtr<FJsonValue>> Noise;
+		for (const FString& Fragment : Settings->GitMiningNoiseFilter)
+		{
+			Noise.Add(MakeShared<FJsonValueString>(Fragment));
+		}
+		Cfg->SetArrayField(TEXT("noise_filter"), Noise);
+		Out->SetObjectField(TEXT("settings"), Cfg);
+	}
+
+	const FMonolithReflectionIntelModule* Module =
+		FModuleManager::GetModulePtr<FMonolithReflectionIntelModule>(
+			TEXT("MonolithReflectionIntel"));
+	Out->SetBoolField(TEXT("mining_ran_this_session"), Module && Module->HasRiskMiningRun());
+	if (Module && Module->HasRiskMiningRun())
+	{
+		Out->SetStringField(TEXT("last_status"), Module->GetLastRiskMiningStatus());
+	}
+
+	// Table state + stamps, from the handle taken at entry.
+	if (DB)
+	{
+		TSharedPtr<FJsonObject> Tables = MakeShared<FJsonObject>();
+		Tables->SetNumberField(TEXT("git_file_churn"), RiskCountRows(*DB, TEXT("git_file_churn")));
+		Tables->SetNumberField(TEXT("git_cochange_pairs"), RiskCountRows(*DB, TEXT("git_cochange_pairs")));
+		Tables->SetNumberField(TEXT("risk_hotspot_scores"), RiskCountRows(*DB, TEXT("risk_hotspot_scores")));
+		Tables->SetNumberField(TEXT("reflect_conditional_gates"), RiskCountRows(*DB, TEXT("reflect_conditional_gates")));
+		Out->SetObjectField(TEXT("table_rows"), Tables);
+
+		int32 StoredVersion = 0;
+		const bool bHasVersion = MonolithRIMeta::ReadStoredVersion(*DB, TEXT("risk"), StoredVersion);
+		int32 StoredConfig = 0;
+		const bool bHasConfig = MonolithRIMeta::ReadStoredVersion(
+			*DB, MonolithRIMeta::GetRiskConfigSubsystemKey(), StoredConfig);
+		const int32 CurrentConfig = MonolithRIMeta::ComputeRiskConfigFingerprint(
+			FMonolithReflectionIntelModule::ResolveGitRepoRoots(nullptr));
+
+		TSharedPtr<FJsonObject> Stamps = MakeShared<FJsonObject>();
+		Stamps->SetNumberField(TEXT("stored_code_version"), bHasVersion ? StoredVersion : 0);
+		Stamps->SetNumberField(TEXT("current_code_version"),
+			MonolithRIMeta::GetIndexerCodeVersion(TEXT("risk")));
+		Stamps->SetNumberField(TEXT("stored_config_fingerprint"), bHasConfig ? StoredConfig : 0);
+		Stamps->SetNumberField(TEXT("current_config_fingerprint"), CurrentConfig);
+		Stamps->SetBoolField(TEXT("config_matches"), bHasConfig && StoredConfig == CurrentConfig);
+		Out->SetObjectField(TEXT("stamps"), Stamps);
+	}
+	else
+	{
+		Out->SetStringField(TEXT("database"),
+			TEXT("EngineSource.db not available — run source.trigger_reindex to bootstrap it."));
+	}
+
 	return FMonolithActionResult::Success(Out);
 }

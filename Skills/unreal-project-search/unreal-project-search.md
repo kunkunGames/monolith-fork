@@ -29,11 +29,23 @@ All asset paths follow UE content browser format (no .uasset extension):
 
 | Action | Params | Purpose |
 |--------|--------|---------|
-| `search` | `query` (string) | Full-text search across all indexed assets, nodes, variables, parameters |
+| `search` | `query` (string), `limit`? (integer) | Full-text search across indexed asset metadata and graph-node metadata |
 | `find_references` | `asset_path` (string) | Find all assets that reference a given asset |
 | `find_by_type` | `asset_type` (string), `module`? (string) | List all assets of a specific type, optionally filtered by plugin/module |
 | `get_asset_details` | `asset_path` (string) | Detailed metadata for a specific asset |
 | `get_stats` | _(none)_ | Index statistics — asset counts by type, module_breakdown by plugin, index freshness |
+
+## What `search` Indexes
+
+`search` runs the query against two FTS5 tables and merges the hits:
+
+| Table | Indexed columns |
+|-------|-----------------|
+| assets | `asset_name`, `asset_class`, `description`, `package_path`, `module_name` |
+| graph nodes | `node_name`, `node_class`, `node_type` |
+
+Variables and parameters are **not** in the full-text index — they are indexed as
+structured rows, so reach them via `get_asset_details`, not `search`.
 
 ## FTS5 Search Syntax
 
@@ -46,7 +58,24 @@ The `search` action uses SQLite FTS5 under the hood. Key syntax:
 | `"BP_Enemy Health"` | Exact phrase |
 | `BP_Enemy OR BP_Ally` | Either term |
 | `BP_Enemy NOT Health` | Exclude term |
-| `BP_Enemy NEAR/3 Health` | Terms within 3 tokens |
+| `NEAR(BP_Enemy Health, 3)` | Terms within 3 tokens |
+| `asset_name:BP_Enemy` | Match only that column |
+| `{asset_name description}:Enemy` | Match either listed column |
+
+`NEAR/3` is **not** FTS5 syntax — only the `NEAR(a b, N)` form parses.
+
+A column filter must name columns from **one** table. `node_name:Branch` and
+`asset_name:BP_Enemy` each work; `asset_name:X OR node_name:Y` names columns
+from both tables, so no single table can answer it and it is rejected as an
+invalid query.
+
+## Errors and Limits
+
+- `limit` defaults to 50 and is clamped to 1-1000. `query` is capped at 4096 characters.
+- Malformed FTS5 syntax, or a column no table exposes, is reported as a caller
+  error (`-32602`). It no longer comes back as a successful empty result set.
+- A storage or schema failure is reported separately (`-32603`), so "your query
+  was wrong" and "the index is broken" are never confused.
 
 ## Common Workflows
 
@@ -85,9 +114,9 @@ project_query({ action: "get_stats", params: {} })
 project_query({ action: "find_by_type", params: { asset_type: "NiagaraSystem" } })
 ```
 
-### Find assets by variable or parameter name
+### Find assets whose graph contains a named node
 ```
-project_query({ action: "search", params: { query: "Health" } })
+project_query({ action: "search", params: { query: "node_name:Health*" } })
 ```
 
 ## Supported Asset Types
@@ -111,7 +140,7 @@ The index covers these types for `find_by_type`:
 ## Tips
 
 - The index is built on first launch and auto-updates — use `monolith_reindex()` to force rebuild
-- FTS5 search covers asset names, node names, variable names, parameter names, and comments
+- FTS5 search covers asset name/class/description/path/module and graph-node name/class/type — not variables, parameters or comments
 - Use `find_references` to understand dependency chains before deleting or renaming assets
 - Combine with domain-specific tools: search first, then inspect with `blueprint_query`, `material_query`, etc.
 - `get_stats` shows last index time — if stale, trigger `monolith_reindex()`

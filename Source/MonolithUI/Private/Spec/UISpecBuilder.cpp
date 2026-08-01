@@ -980,11 +980,15 @@ FUISpecBuilderResult FUISpecBuilder::Build(const FUISpecBuilderInputs& Inputs)
                 {
                     Orphans.Add(W);
                 }
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+            }, EGetObjectsFlags::None);
+#else
             }, /*bIncludeNestedObjects=*/false);
+#endif
             for (UWidget* W : Orphans)
             {
                 W->Rename(nullptr, GetTransientPackage(),
-                    REN_DoNotDirty | REN_DontCreateRedirectors | REN_ForceNoResetLoaders);
+                    REN_DoNotDirty | REN_DontCreateRedirectors | REN_AllowPackageLinkerMismatch);
             }
             WBP->WidgetTree->RootWidget = nullptr;
             WBP->WidgetVariableNameToGuidMap.Empty();

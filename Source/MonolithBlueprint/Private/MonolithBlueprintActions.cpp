@@ -1,4 +1,5 @@
 #include "MonolithBlueprintActions.h"
+#include "MonolithBlueprintComponentResolver.h"
 #include "MonolithBlueprintInternal.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
@@ -76,14 +77,22 @@ void FMonolithBlueprintActions::RegisterActions()
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("get_components"),
-		TEXT("Get component hierarchy for a Blueprint — names, classes, parent-child tree, attach sockets"),
+		TEXT("Get component hierarchy for a Blueprint — names, classes, parent-child tree, attach sockets. "
+			 "Also returns inherited_native_components (native subobjects read off THIS Blueprint's own CDO, so "
+			 "they carry this Blueprint's overrides) and inherited_components (components declared on a parent "
+			 "Blueprint's construction script, each flagged has_override)."),
 		FMonolithActionHandler::CreateStatic(&HandleGetComponents),
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("get_component_details"),
-		TEXT("Get full property dump for a specific component in a Blueprint. Resolves both Blueprint-added (SCS) components and inherited native components declared in the C++ parent class (is_inherited_native flags which). For skeletal-mesh components also surfaces skeletal_mesh, anim_class, and animation_mode defaults explicitly."),
+		TEXT("Get full property dump for a specific component in a Blueprint. Resolves Blueprint-added (SCS) components, "
+			 "inherited native components declared in the C++ parent class, and components inherited from a parent "
+			 "Blueprint; 'source' reports which (scs | cdo_native | ich_override | inherited_scs | parent_cdo_fallback) "
+			 "and 'note' carries any caveat. Friendly aliases resolve: Mesh/SkeletalMesh, StaticMesh, "
+			 "CharacterMovement/Movement, Capsule/CapsuleComponent, Root/RootComponent. For skeletal-mesh components "
+			 "also surfaces skeletal_mesh, anim_class, and animation_mode defaults explicitly."),
 		FMonolithActionHandler::CreateStatic(&HandleGetComponentDetails),
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
@@ -565,7 +574,11 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetVariables(const TShare
 				if (WidgetTreeObj)
 				{
 					TArray<UObject*> TreeChildren;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+					GetObjectsWithOuter(WidgetTreeObj, TreeChildren, EGetObjectsFlags::IncludeNestedObjects);
+#else
 					GetObjectsWithOuter(WidgetTreeObj, TreeChildren, /*bIncludeNestedObjects=*/true);
+#endif
 					for (UObject* Child : TreeChildren)
 					{
 						if (!Child || !Child->IsA(WidgetBase))
@@ -864,35 +877,67 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetComponents(const TShar
 		ComponentCount = AllNodes.Num();
 	}
 
-	// Also surface inherited native components from the parent class chain
-	TArray<TSharedPtr<FJsonValue>> NativeComponentsArr;
-	if (BP->ParentClass && BP->ParentClass->IsChildOf(AActor::StaticClass()))
-	{
-		AActor* CDO = Cast<AActor>(BP->ParentClass->GetDefaultObject(false));
-		if (CDO)
-		{
-			TArray<UActorComponent*> NativeComps;
-			CDO->GetComponents(NativeComps);
-			for (UActorComponent* Comp : NativeComps)
-			{
-				if (!Comp) continue;
-				TSharedPtr<FJsonObject> NObj = MakeShared<FJsonObject>();
-				NObj->SetStringField(TEXT("name"), Comp->GetName());
-				NObj->SetStringField(TEXT("variable_name"), Comp->GetName());
-				NObj->SetStringField(TEXT("class"), Comp->GetClass()->GetName());
-				NObj->SetBoolField(TEXT("is_scene_component"), Comp->IsA(USceneComponent::StaticClass()));
-				NObj->SetBoolField(TEXT("is_native"), true);
+	// Inherited NATIVE components come off this Blueprint's OWN class-default object, so their
+	// values are this Blueprint's, not the C++ parent's (issue #116 bug 1). When the Blueprint
+	// has no compiled generated class the resolver degrades to the native parent's CDO and says
+	// so — a populated list with a caveat beats an empty array on exactly the broken assets
+	// users ask about.
+	bool bParentCdoFallback = false;
+	AActor* CDO = MonolithBlueprintComponentResolver::ResolveComponentCdo(BP, bParentCdoFallback);
 
-				if (USceneComponent* SceneComp = Cast<USceneComponent>(Comp))
+	TArray<TSharedPtr<FJsonValue>> NativeComponentsArr;
+	if (CDO)
+	{
+		TArray<UActorComponent*> NativeComps;
+		CDO->GetComponents(NativeComps);
+		for (UActorComponent* Comp : NativeComps)
+		{
+			if (!Comp) continue;
+			TSharedPtr<FJsonObject> NObj = MakeShared<FJsonObject>();
+			NObj->SetStringField(TEXT("name"), Comp->GetName());
+			NObj->SetStringField(TEXT("variable_name"), Comp->GetName());
+			NObj->SetStringField(TEXT("class"), Comp->GetClass()->GetName());
+			NObj->SetBoolField(TEXT("is_scene_component"), Comp->IsA(USceneComponent::StaticClass()));
+			NObj->SetBoolField(TEXT("is_native"), true);
+
+			if (USceneComponent* SceneComp = Cast<USceneComponent>(Comp))
+			{
+				if (USceneComponent* AttachParent = SceneComp->GetAttachParent())
 				{
-					if (USceneComponent* AttachParent = SceneComp->GetAttachParent())
-					{
-						NObj->SetStringField(TEXT("parent"), AttachParent->GetName());
-					}
-					NObj->SetBoolField(TEXT("is_root"), SceneComp->GetAttachParent() == nullptr);
+					NObj->SetStringField(TEXT("parent"), AttachParent->GetName());
 				}
-				NativeComponentsArr.Add(MakeShared<FJsonValueObject>(NObj));
+				NObj->SetBoolField(TEXT("is_root"), SceneComp->GetAttachParent() == nullptr);
 			}
+			NativeComponentsArr.Add(MakeShared<FJsonValueObject>(NObj));
+		}
+	}
+
+	// Components declared on a PARENT Blueprint's construction script. They are not on any CDO
+	// (pitfall P6), so without this walk they were invisible to every read action.
+	TArray<TSharedPtr<FJsonValue>> InheritedComponentsArr;
+	{
+		TArray<USCS_Node*> InheritedNodes;
+		MonolithBlueprintComponentResolver::CollectInheritedScsNodes(BP, InheritedNodes);
+		for (USCS_Node* Node : InheritedNodes)
+		{
+			if (!Node) continue;
+			UActorComponent* Override = MonolithBlueprintComponentResolver::FindExistingIchOverride(BP, Node);
+
+			TSharedPtr<FJsonObject> IObj = MakeShared<FJsonObject>();
+			const FString VarName = Node->GetVariableName().ToString();
+			IObj->SetStringField(TEXT("name"), VarName);
+			IObj->SetStringField(TEXT("variable_name"), VarName);
+			IObj->SetStringField(TEXT("class"),
+				Node->ComponentClass ? Node->ComponentClass->GetName() : FString(TEXT("unknown")));
+			IObj->SetBoolField(TEXT("is_scene_component"),
+				Node->ComponentClass && Node->ComponentClass->IsChildOf(USceneComponent::StaticClass()));
+			IObj->SetStringField(TEXT("defining_class"),
+				Node->GetSCS() ? GetNameSafe(Node->GetSCS()->GetOwnerClass()) : FString(TEXT("unknown")));
+			IObj->SetBoolField(TEXT("has_override"), Override != nullptr);
+			IObj->SetStringField(TEXT("source"), MonolithBlueprintComponentResolver::SourceToString(
+				Override ? MonolithBlueprintComponentResolver::ESource::IchOverride
+				         : MonolithBlueprintComponentResolver::ESource::InheritedScs));
+			InheritedComponentsArr.Add(MakeShared<FJsonValueObject>(IObj));
 		}
 	}
 
@@ -901,6 +946,18 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetComponents(const TShar
 	if (NativeComponentsArr.Num() > 0)
 	{
 		Root->SetArrayField(TEXT("inherited_native_components"), NativeComponentsArr);
+		Root->SetStringField(TEXT("native_components_source"),
+			MonolithBlueprintComponentResolver::SourceToString(bParentCdoFallback
+				? MonolithBlueprintComponentResolver::ESource::ParentCdoFallback
+				: MonolithBlueprintComponentResolver::ESource::CdoNative));
+	}
+	if (InheritedComponentsArr.Num() > 0)
+	{
+		Root->SetArrayField(TEXT("inherited_components"), InheritedComponentsArr);
+	}
+	if (bParentCdoFallback)
+	{
+		Root->SetStringField(TEXT("note"), MonolithBlueprintComponentResolver::ParentCdoFallbackNote());
 	}
 
 	return FMonolithActionResult::Success(Root);
@@ -923,55 +980,40 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetComponentDetails(const
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: component_name"));
 	}
 
-	// Resolve the component template. BP-added components live on the
-	// SimpleConstructionScript as USCS_Node. Inherited native components
-	// (declared in a C++ parent class — e.g. CharacterMesh0 / Mesh / a custom
-	// SkeletalMeshComponent) do NOT appear in the SCS; they live as default
-	// subobjects on the parent-class CDO. We resolve those via the same
-	// parent-CDO GetComponents() walk used by get_components.
-	UActorComponent* Template = nullptr;
-	bool bIsInheritedNative = false;
+	// One resolver for the whole module — see MonolithBlueprintComponentResolver.h.
+	// This used to read BP->ParentClass's CDO, i.e. the NATIVE class template, so every
+	// inherited component reported Epic's constructor defaults as if they were this
+	// Blueprint's values (issue #116 bug 1). Read-only intent: bCreateIchOverride=false,
+	// so a read never creates an Inheritable Component Handler override.
+	const MonolithBlueprintComponentResolver::FResult Resolved =
+		MonolithBlueprintComponentResolver::Resolve(
+			BP, ComponentName, UActorComponent::StaticClass(), /*bCreateIchOverride=*/false);
 
-	USimpleConstructionScript* SCS = BP->SimpleConstructionScript;
-	if (SCS)
+	if (!Resolved.IsValid())
 	{
-		if (USCS_Node* Node = SCS->FindSCSNode(FName(*ComponentName)))
-		{
-			Template = Node->ComponentTemplate;
-		}
+		return FMonolithActionResult::Error(Resolved.Error.IsEmpty()
+			? FString::Printf(TEXT("Component not found: %s"), *ComponentName)
+			: Resolved.Error);
 	}
 
-	// Fallback: inherited native component off the parent-class CDO subobject.
-	if (!Template && BP->ParentClass && BP->ParentClass->IsChildOf(AActor::StaticClass()))
-	{
-		if (AActor* CDO = Cast<AActor>(BP->ParentClass->GetDefaultObject(false)))
-		{
-			TArray<UActorComponent*> NativeComps;
-			CDO->GetComponents(NativeComps);
-			for (UActorComponent* Comp : NativeComps)
-			{
-				if (!Comp) continue;
-				if (Comp->GetName().Equals(ComponentName, ESearchCase::IgnoreCase) ||
-				    Comp->GetFName() == FName(*ComponentName))
-				{
-					Template = Comp;
-					bIsInheritedNative = true;
-					break;
-				}
-			}
-		}
-	}
-
-	if (!Template)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Component not found: %s"), *ComponentName));
-	}
+	UActorComponent* Template = Resolved.Template;
 
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("component_name"), ComponentName);
 	Root->SetStringField(TEXT("class"), Template->GetClass()->GetName());
 	Root->SetBoolField(TEXT("is_scene_component"), Template->IsA(USceneComponent::StaticClass()));
-	Root->SetBoolField(TEXT("is_inherited_native"), bIsInheritedNative);
+	// Retained for back-compat; `source` is the full answer.
+	Root->SetBoolField(TEXT("is_inherited_native"),
+		Resolved.Source == MonolithBlueprintComponentResolver::ESource::CdoNative);
+	Root->SetStringField(TEXT("source"), MonolithBlueprintComponentResolver::SourceToString(Resolved.Source));
+	if (!Resolved.ResolvedName.IsNone())
+	{
+		Root->SetStringField(TEXT("resolved_component"), Resolved.ResolvedName.ToString());
+	}
+	if (!Resolved.Note.IsEmpty())
+	{
+		Root->SetStringField(TEXT("note"), Resolved.Note);
+	}
 
 	// For USceneComponent, include transform explicitly
 	if (USceneComponent* SceneTemplate = Cast<USceneComponent>(Template))

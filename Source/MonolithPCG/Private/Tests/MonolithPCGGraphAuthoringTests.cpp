@@ -2353,8 +2353,13 @@ bool FMonolithPCGGraphContentsReplacementLargeGraphBoundedComparisonTest::RunTes
 		TEXT("Large source contains the requested element count"),
 		SourceGraph->GetNodes().Num(), LargeNodeCount);
 	TArray<UObject*> LargeSourceInnerObjects;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+	GetObjectsWithOuter(
+		SourceGraph, LargeSourceInnerObjects, EGetObjectsFlags::IncludeNestedObjects);
+#else
 	GetObjectsWithOuter(
 		SourceGraph, LargeSourceInnerObjects, true);
+#endif
 	TestTrue(
 		*FString::Printf(
 			TEXT("Large source exposes at least one node and one settings inner per element (%d inners)"),

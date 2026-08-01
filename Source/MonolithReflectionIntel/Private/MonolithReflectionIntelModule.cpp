@@ -35,6 +35,7 @@
 #include "Maintenance/FReflectMaintenanceAdapter.h"
 #include "MonolithReflectionIntelSettings.h"
 
+#include "HAL/FileManager.h"
 #include "HAL/PlatformFileManager.h"
 #include "HAL/PlatformProcess.h"
 #include "HAL/PlatformTime.h"
@@ -95,6 +96,53 @@ namespace
 			GEditor->GetEditorSubsystem<UMonolithSourceSubsystem>();
 		return SourceSS ? SourceSS->GetDatabase() : nullptr;
 	}
+
+	/**
+	 * Absolute, forward-slashed, trailing-separator-free form of a directory
+	 * path. Used by ResolveGitRepoRoots so every root it returns — auto-resolved
+	 * or operator-supplied — is in ONE canonical shape. That matters beyond
+	 * tidiness: these strings are hashed into the risk config fingerprint, so
+	 * two spellings of the same directory must not produce two fingerprints.
+	 *
+	 * File-unique name (`RIGit` prefix) per the module's unity-build convention
+	 * — see Private/Shared/RIPathUtils.h for why anonymous-namespace helpers in
+	 * this module carry a per-file prefix.
+	 */
+	FString RIGitNormalizeRootPath(const FString& InPath)
+	{
+		FString Out = FPaths::ConvertRelativePathToFull(InPath);
+		Out.ReplaceInline(TEXT("\\"), TEXT("/"));
+
+		// CollapseRelativeDirectories handles "/./" but a caller writing "." as
+		// their whole root (the documented "my project root IS the repo" form)
+		// is worth handling explicitly rather than relying on it.
+		while (Out.EndsWith(TEXT("/."), ESearchCase::CaseSensitive))
+		{
+			Out.LeftChopInline(2, EAllowShrinking::No);
+		}
+		// Keep a drive root ("D:/") intact — chopping its slash yields "D:",
+		// which resolves against the process CWD rather than the drive root.
+		while (Out.Len() > 1
+			&& Out.EndsWith(TEXT("/"), ESearchCase::CaseSensitive)
+			&& !Out.EndsWith(TEXT(":/"), ESearchCase::CaseSensitive))
+		{
+			Out.LeftChopInline(1, EAllowShrinking::No);
+		}
+		return Out;
+	}
+
+	/**
+	 * True when `<Dir>/.git` exists as a directory OR a file. The FILE form is
+	 * not an edge case: submodules and `git worktree` checkouts both write a
+	 * `.git` file holding a `gitdir:` pointer, and `git -C <dir> log` works
+	 * against either.
+	 */
+	bool RIGitHasRepoEntry(const FString& Dir)
+	{
+		IPlatformFile& Pf = FPlatformFileManager::Get().GetPlatformFile();
+		const FString GitPath = Dir / TEXT(".git");
+		return Pf.DirectoryExists(*GitPath) || Pf.FileExists(*GitPath);
+	}
 }
 
 void FMonolithReflectionIntelModule::StartupModule()
@@ -106,6 +154,13 @@ void FMonolithReflectionIntelModule::StartupModule()
 	bRiskBootstrapAttempted = false;
 	bCppReflectBootstrapAttempted = false;
 	bNetworkBootstrapAttempted = false;
+
+	// Risk diagnostics describe the LAST mining pass; a fresh module load has
+	// not run one, so they must not report a previous load's roots.
+	bRiskMiningRun = false;
+	LastRiskScannedRoots.Reset();
+	LastRiskSkippedRoots.Reset();
+	LastRiskMiningStatus.Reset();
 
 	RegisterDecisionActions();
 	// Phase 2 (v0.17.0) — risk_query namespace + source_query audit action.
@@ -432,20 +487,12 @@ bool FMonolithReflectionIntelModule::RunRiskIndexersOnce(FString& OutStatus)
 		return false;
 	}
 
-	// Resolve git repo roots. Phase 2 mines NESTED git repos only — the
-	// project's outer working tree is tracked by Diversion, not git, and lacks
-	// a `.git` directory; FGitCoChangeIndexer silently skips it. Standard
-	// nested repos under Leviathan today: Monolith plugin, Resonance plugin.
-	// Future-siblings (`MonolithSteamBridge`, `MonolithISX`, etc.) live under
-	// `Plugins/` so we add them by default — the indexer skips any without
-	// `.git/`.
-	TArray<FString> GitRoots;
-	GitRoots.Add(TEXT("Plugins/Monolith"));
-	GitRoots.Add(TEXT("Plugins/Resonance"));
-	GitRoots.Add(TEXT("Plugins/MonolithSteamBridge"));
-	GitRoots.Add(TEXT("Plugins/MonolithISX"));
-	GitRoots.Add(TEXT("Plugins/MonolithSubstance"));
-	GitRoots.Add(TEXT("Plugins/MonolithClaudeDesignBridge"));
+	// Discover the repositories to mine at RUNTIME (see ResolveGitRepoRoots).
+	// This replaced a hardcoded list of nested-plugin paths that mined nothing
+	// on any tree but the one it was written against — the project root was
+	// never probed and no setting could add it (issue #119).
+	TArray<TPair<FString, FString>> SkippedRoots;
+	const TArray<FString> GitRoots = ResolveGitRepoRoots(&SkippedRoots);
 
 	const int32 MaxWindow = Settings->MaxCoChangeWindowCommits > 0
 		? Settings->MaxCoChangeWindowCommits : 200;
@@ -495,6 +542,17 @@ bool FMonolithReflectionIntelModule::RunRiskIndexersOnce(FString& OutStatus)
 		*GitStatus, *HotspotStatus, *GateStatus);
 	UE_LOG(LogMonolithReflectionIntel, Log, TEXT("%s"), *OutStatus);
 
+	// Record what this pass actually saw so risk_query("get_mining_status") and
+	// the empty-result diagnostics can answer "why is there no data" without
+	// re-running the resolver or making the caller read the log.
+	if (Self)
+	{
+		Self->bRiskMiningRun = true;
+		Self->LastRiskScannedRoots = GitRoots;
+		Self->LastRiskSkippedRoots = SkippedRoots;
+		Self->LastRiskMiningStatus = OutStatus;
+	}
+
 	const bool bAllOk = bGitOk && bHotspotOk && bGateOk;
 	if (Self)
 	{
@@ -512,6 +570,135 @@ bool FMonolithReflectionIntelModule::RunRiskIndexersOnce(FString& OutStatus)
 		}
 	}
 	return bAllOk;
+}
+
+FString FMonolithReflectionIntelModule::GetRiskNoReposHint()
+{
+	return TEXT("No git repository was found, so risk / co-change data is empty. "
+		"Auto-discovery probes the project root and each Plugins/<Name> folder for a `.git` entry. "
+		"Set GitRepoRoots (Editor Preferences > Plugins > Monolith Reflection Intel > Risk) to your "
+		"repository path, or enable bProbeAncestorsForGitRoot if the project sits inside a larger repository.");
+}
+
+TArray<FString> FMonolithReflectionIntelModule::ResolveGitRepoRoots(
+	TArray<TPair<FString, FString>>* OutSkipped)
+{
+	TArray<FString> Resolved;
+
+	auto RecordSkip = [OutSkipped](const FString& Path, const TCHAR* Reason)
+	{
+		if (OutSkipped)
+		{
+			OutSkipped->Emplace(Path, FString(Reason));
+		}
+	};
+
+	IPlatformFile& Pf = FPlatformFileManager::Get().GetPlatformFile();
+	const FString ProjectRoot = RIGitNormalizeRootPath(FPaths::ProjectDir());
+	const UMonolithReflectionIntelSettings* Settings = UMonolithReflectionIntelSettings::Get();
+
+	// ---- Explicit override REPLACES the auto-resolved set --------------------
+	// Same semantics as UHTArtefactRoot: an operator who names roots gets
+	// exactly those, so a deliberately narrowed scope is not silently widened.
+	if (Settings && Settings->GitRepoRoots.Num() > 0)
+	{
+		for (const FString& Raw : Settings->GitRepoRoots)
+		{
+			const FString Trimmed = Raw.TrimStartAndEnd();
+			if (Trimmed.IsEmpty())
+			{
+				continue;
+			}
+			const FString Root = FPaths::IsRelative(Trimmed)
+				? RIGitNormalizeRootPath(ProjectRoot / Trimmed)
+				: RIGitNormalizeRootPath(Trimmed);
+
+			if (!Pf.DirectoryExists(*Root))
+			{
+				RecordSkip(Root, TEXT("directory does not exist"));
+				continue;
+			}
+			if (!RIGitHasRepoEntry(Root))
+			{
+				RecordSkip(Root, TEXT("no `.git` entry — not a git repository root"));
+				continue;
+			}
+			Resolved.AddUnique(Root);
+		}
+		return Resolved;
+	}
+
+	// ---- Auto-resolve: the project root itself -------------------------------
+	if (RIGitHasRepoEntry(ProjectRoot))
+	{
+		Resolved.AddUnique(ProjectRoot);
+	}
+	else
+	{
+		bool bFoundAncestor = false;
+		if (Settings && Settings->bProbeAncestorsForGitRoot)
+		{
+			// Nearest ancestor that is a repository root. Depth-capped so a
+			// malformed path cannot spin here.
+			FString Candidate = RIGitNormalizeRootPath(FPaths::GetPath(ProjectRoot));
+			for (int32 Depth = 0; Depth < 64 && !Candidate.IsEmpty(); ++Depth)
+			{
+				if (RIGitHasRepoEntry(Candidate))
+				{
+					Resolved.AddUnique(Candidate);
+					bFoundAncestor = true;
+					break;
+				}
+				const FString Parent = RIGitNormalizeRootPath(FPaths::GetPath(Candidate));
+				if (Parent.IsEmpty() || Parent.Equals(Candidate, ESearchCase::IgnoreCase))
+				{
+					break;
+				}
+				Candidate = Parent;
+			}
+		}
+		if (!bFoundAncestor)
+		{
+			RecordSkip(ProjectRoot,
+				(Settings && Settings->bProbeAncestorsForGitRoot)
+					? TEXT("no `.git` entry here or in any ancestor directory")
+					: TEXT("no `.git` entry — set bProbeAncestorsForGitRoot to search parent directories, "
+						   "or list the repository in GitRepoRoots"));
+		}
+	}
+
+	// ---- Auto-resolve: immediate Plugins/<Name> repositories -----------------
+	// One level, no recursion. A nested repository is kept even when the project
+	// root above was also added: git treats a nested repository as untracked, so
+	// `git log` in the outer repo never reports the inner repo's files. The two
+	// file sets are disjoint and both are needed.
+	const FString PluginsDir = RIGitNormalizeRootPath(FPaths::ProjectPluginsDir());
+	if (Pf.DirectoryExists(*PluginsDir))
+	{
+		TArray<FString> PluginFolderNames;
+		IFileManager::Get().FindFiles(PluginFolderNames, *(PluginsDir / TEXT("*")),
+			/*Files=*/false, /*Directories=*/true);
+		PluginFolderNames.Sort();
+
+		for (const FString& FolderName : PluginFolderNames)
+		{
+			if (FolderName == TEXT(".") || FolderName == TEXT(".."))
+			{
+				continue;
+			}
+			const FString PluginRoot = PluginsDir / FolderName;
+			if (RIGitHasRepoEntry(PluginRoot))
+			{
+				Resolved.AddUnique(PluginRoot);
+			}
+			// A plugin folder with no repository of its own is NOT recorded as a
+			// skip: it is either part of the enclosing repository (already mined)
+			// or simply not version-controlled here. Recording it would bury the
+			// real diagnostics under one row per plugin.
+		}
+	}
+
+	return Resolved;
 }
 
 TArray<FString> FMonolithReflectionIntelModule::ResolveArtefactRoots(

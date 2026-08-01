@@ -6,6 +6,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "MonolithParamSchema.h"
+#include "MonolithPinTypeGrammar.h"
 #include "Registry/MonolithUIRegistrySubsystem.h"
 #include "Registry/UIPropertyAllowlist.h"
 #include "Registry/UITypeRegistry.h"
@@ -26,153 +27,6 @@
 
 namespace MonolithUIRegistryPhase2
 {
-    // ---- Phase 2 Item #8 helpers ---------------------------------------------
-    //
-    // ParsePinTypeFromString mirrors the canonical MCP-friendly token grammar
-    // already shipped in `Source/MonolithBlueprint/Private/MonolithBlueprintInternal.h:782`.
-    // Replicated locally rather than cross-module-included so MonolithUI keeps
-    // its dependency boundary clean (MonolithBlueprint is NOT listed in
-    // MonolithUI.Build.cs PrivateDependencyModuleNames). The grammar is the
-    // SAME tokens (bool/int/int64/float/double/string/name/text/byte/
-    // object:Class/class:Class/struct:Name/enum:Name/softobject:Class/
-    // softclass:Class/exec/wildcard, with container prefixes array:/set:/map:).
-    // Cross-reference: MonolithBlueprintInternal.h:782-915.
-
-    static FEdGraphPinType ParsePinTypeFromString(const FString& TypeStr)
-    {
-        FEdGraphPinType PinType;
-        PinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;  // safe default
-
-        FString BaseType = TypeStr;
-        EPinContainerType ContainerType = EPinContainerType::None;
-
-        if (TypeStr.StartsWith(TEXT("array:")))
-        {
-            ContainerType = EPinContainerType::Array;
-            BaseType = TypeStr.Mid(6);
-        }
-        else if (TypeStr.StartsWith(TEXT("set:")))
-        {
-            ContainerType = EPinContainerType::Set;
-            BaseType = TypeStr.Mid(4);
-        }
-        else if (TypeStr.StartsWith(TEXT("map:")))
-        {
-            ContainerType = EPinContainerType::Map;
-            int32 SecondColon;
-            if (BaseType.Mid(4).FindChar(TEXT(':'), SecondColon))
-            {
-                BaseType = TypeStr.Mid(4, SecondColon);
-                const FString ValueType = TypeStr.Mid(4 + SecondColon + 1);
-                PinType.PinValueType = FEdGraphTerminalType();
-                const FEdGraphPinType ValPinType = ParsePinTypeFromString(ValueType);
-                PinType.PinValueType.TerminalCategory = ValPinType.PinCategory;
-                PinType.PinValueType.TerminalSubCategory = ValPinType.PinSubCategory;
-                PinType.PinValueType.TerminalSubCategoryObject = ValPinType.PinSubCategoryObject;
-            }
-            else
-            {
-                BaseType = TypeStr.Mid(4);
-            }
-        }
-        PinType.ContainerType = ContainerType;
-
-        if (BaseType == TEXT("bool"))
-        {
-            PinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
-        }
-        else if (BaseType == TEXT("int"))
-        {
-            PinType.PinCategory = UEdGraphSchema_K2::PC_Int;
-        }
-        else if (BaseType == TEXT("int64"))
-        {
-            PinType.PinCategory = UEdGraphSchema_K2::PC_Int64;
-        }
-        else if (BaseType == TEXT("float"))
-        {
-            PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
-            PinType.PinSubCategory = TEXT("float");
-        }
-        else if (BaseType == TEXT("double"))
-        {
-            PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
-            PinType.PinSubCategory = TEXT("double");
-        }
-        else if (BaseType == TEXT("string"))
-        {
-            PinType.PinCategory = UEdGraphSchema_K2::PC_String;
-        }
-        else if (BaseType == TEXT("name"))
-        {
-            PinType.PinCategory = UEdGraphSchema_K2::PC_Name;
-        }
-        else if (BaseType == TEXT("text"))
-        {
-            PinType.PinCategory = UEdGraphSchema_K2::PC_Text;
-        }
-        else if (BaseType == TEXT("byte"))
-        {
-            PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
-        }
-        else if (BaseType.StartsWith(TEXT("object:")))
-        {
-            PinType.PinCategory = UEdGraphSchema_K2::PC_Object;
-            const FString ClassName = BaseType.Mid(7);
-            if (UClass* C = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst))
-                PinType.PinSubCategoryObject = C;
-        }
-        else if (BaseType.StartsWith(TEXT("class:")))
-        {
-            PinType.PinCategory = UEdGraphSchema_K2::PC_Class;
-            const FString ClassName = BaseType.Mid(6);
-            if (UClass* C = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst))
-                PinType.PinSubCategoryObject = C;
-        }
-        else if (BaseType.StartsWith(TEXT("struct:")))
-        {
-            PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
-            const FString StructName = BaseType.Mid(7);
-            if (UScriptStruct* S = FindFirstObject<UScriptStruct>(*StructName, EFindFirstObjectOptions::NativeFirst))
-                PinType.PinSubCategoryObject = S;
-        }
-        else if (BaseType.StartsWith(TEXT("enum:")))
-        {
-            // PC_Byte + sub-category-object-as-enum is the canonical Kismet pattern
-            // for TEnumAsByte<EFoo> style variables. UE 5.7 still uses PC_Byte for
-            // editor-visible enums; PC_Enum is reserved for C++-only enum class.
-            // FBlueprintEditorUtils::AddMemberVariable accepts either.
-            PinType.PinCategory = UEdGraphSchema_K2::PC_Enum;
-            const FString EnumName = BaseType.Mid(5);
-            if (UEnum* E = FindFirstObject<UEnum>(*EnumName, EFindFirstObjectOptions::NativeFirst))
-                PinType.PinSubCategoryObject = E;
-        }
-        else if (BaseType.StartsWith(TEXT("softobject:")))
-        {
-            PinType.PinCategory = UEdGraphSchema_K2::PC_SoftObject;
-            const FString ClassName = BaseType.Mid(11);
-            if (UClass* C = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst))
-                PinType.PinSubCategoryObject = C;
-        }
-        else if (BaseType.StartsWith(TEXT("softclass:")))
-        {
-            PinType.PinCategory = UEdGraphSchema_K2::PC_SoftClass;
-            const FString ClassName = BaseType.Mid(10);
-            if (UClass* C = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst))
-                PinType.PinSubCategoryObject = C;
-        }
-        else if (BaseType == TEXT("exec"))
-        {
-            PinType.PinCategory = UEdGraphSchema_K2::PC_Exec;
-        }
-        else if (BaseType == TEXT("wildcard"))
-        {
-            PinType.PinCategory = UEdGraphSchema_K2::PC_Wildcard;
-        }
-
-        return PinType;
-    }
-
     // ---- Phase 2 Item #8 — add_widget_variable -------------------------------
     //
     // Wraps FBlueprintEditorUtils::AddMemberVariable so a caller can stamp a
@@ -223,24 +77,20 @@ namespace MonolithUIRegistryPhase2
         UWidgetBlueprint* WBP = MonolithUI::LoadWidgetBlueprint(WbpPath, LoadErr);
         if (!WBP) return LoadErr;
 
-        const FEdGraphPinType PinType = ParsePinTypeFromString(VarType);
-
-        // Quick sanity check — if the caller passed an unknown enum:/struct:/
-        // object: token, ParsePinTypeFromString silently dropped the resolve
-        // and the PinSubCategoryObject is null. AddMemberVariable would still
-        // create the variable but with an invalid type — refuse loudly here.
-        const bool bWantsTypeObject =
-            PinType.PinCategory == UEdGraphSchema_K2::PC_Object   ||
-            PinType.PinCategory == UEdGraphSchema_K2::PC_Class    ||
-            PinType.PinCategory == UEdGraphSchema_K2::PC_Struct   ||
-            PinType.PinCategory == UEdGraphSchema_K2::PC_Enum     ||
-            PinType.PinCategory == UEdGraphSchema_K2::PC_SoftObject ||
-            PinType.PinCategory == UEdGraphSchema_K2::PC_SoftClass;
-        if (bWantsTypeObject && !PinType.PinSubCategoryObject.IsValid())
+        // TryParsePinType fails BY TOKEN — an enum:/struct:/object:/class:/
+        // softobject:/softclass: sub-object that does not resolve, an unknown base
+        // token, or a bad container value type is a hard error with a reason.
+        // It replaces the hand-rolled "does this pin category want a sub-object?"
+        // guard that used to live here: that guard listed PC_Enum, so the moment
+        // enum: correctly started producing PC_Byte (issue #115) it would have gone
+        // dead and an unresolvable enum:Whatever would have silently created a plain
+        // byte variable — the exact silent-wrong-type this fix exists to remove.
+        FEdGraphPinType PinType;
+        FString TypeError;
+        if (!MonolithPinTypeGrammar::TryParsePinType(VarType, PinType, TypeError))
         {
             return FMonolithActionResult::Error(
-                FString::Printf(TEXT("var_type '%s' references a class/struct/enum that could not be resolved via FindFirstObject. Use a fully-qualified name (e.g. 'object:UMG.TextBlock' or pass the engine class short name like 'TextBlock')."),
-                    *VarType),
+                FString::Printf(TEXT("var_type '%s' could not be parsed: %s"), *VarType, *TypeError),
                 -32602);
         }
 

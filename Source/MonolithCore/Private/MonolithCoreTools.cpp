@@ -230,11 +230,58 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 
 	FString FilterNamespace;
 	FString FilterCategory;
+	FString Filter;
+	int32 Offset = 0;
+	int32 Limit = 0;
+	bool bDetail = false;
+	// Absence, not value, selects the cross-namespace default cap below. Do NOT
+	// initialise Limit to 50: the per-namespace branch treats limit=0 as ALL, and
+	// pre-seeding it would silently truncate that shipped contract at 50.
+	bool bLimitSpecified = false;
 	if (Params.IsValid())
 	{
 		Params->TryGetStringField(TEXT("namespace"), FilterNamespace);
 		Params->TryGetStringField(TEXT("category"), FilterCategory);
+		Params->TryGetStringField(TEXT("filter"), Filter);
+		Params->TryGetNumberField(TEXT("offset"), Offset);
+		bLimitSpecified = Params->TryGetNumberField(TEXT("limit"), Limit);
+		Params->TryGetBoolField(TEXT("detail"), bDetail);          // canonical
+		if (!bDetail)
+		{
+			Params->TryGetBoolField(TEXT("verbose"), bDetail);     // accepted alias
+		}
 	}
+	// Trimmed so a whitespace-only filter cannot flip discover into cross-namespace
+	// mode. This also makes the per-namespace predicate match on the trimmed string.
+	Filter.TrimStartAndEndInline();
+
+	// Shared by both filtered paths so they cannot drift.
+	auto MatchesFilter = [&Filter](const FMonolithActionInfo& Info)
+	{
+		return Info.Action.Contains(Filter, ESearchCase::IgnoreCase)
+			|| Info.Description.Contains(Filter, ESearchCase::IgnoreCase);
+	};
+	auto MakeActionValue = [&bDetail](const FMonolithActionInfo& Info, bool bIncludeNamespace)
+	{
+		TSharedPtr<FJsonObject> ActionObj = MakeShared<FJsonObject>();
+		if (bIncludeNamespace)
+		{
+			ActionObj->SetStringField(TEXT("namespace"), Info.Namespace);
+		}
+		ActionObj->SetStringField(TEXT("action"), Info.Action);
+		// Terse mode emits a one-line description; detail mode keeps the full text.
+		ActionObj->SetStringField(TEXT("description"),
+			bDetail ? Info.Description : MonolithTerseOneLineDescription(Info.Description));
+		if (!Info.Category.IsEmpty())
+		{
+			ActionObj->SetStringField(TEXT("category"), Info.Category);
+		}
+		if (bDetail && Info.ParamSchema.IsValid())
+		{
+			ActionObj->SetObjectField(TEXT("params"), Info.ParamSchema);
+		}
+		return MakeShared<FJsonValueObject>(ActionObj);
+	};
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
@@ -307,42 +354,33 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 			});
 		}
 
-		// Terse-by-default: param schemas are omitted unless detail (canonical) or
-		// verbose (alias) is set. Schemas are fetched lazily via describe_query
-		// action_schema, or inlined for the whole namespace with detail=true.
-		bool bDetail = false;
-		Params->TryGetBoolField(TEXT("detail"), bDetail);          // canonical
-		if (!bDetail)
-		{
-			Params->TryGetBoolField(TEXT("verbose"), bDetail);     // accepted alias
-		}
+		// Terse-by-default (detail/verbose) and the substring filter are parsed above,
+		// because the no-namespace branch needs them too. Schemas are fetched lazily
+		// via describe_query action_schema, or inlined for the namespace with detail=true.
 
 		// Optional substring filter on action name OR description (case-insensitive).
 		// Applied AFTER the category filter, BEFORE pagination.
-		FString Filter;
-		if (Params->TryGetStringField(TEXT("filter"), Filter) && !Filter.IsEmpty())
+		if (!Filter.IsEmpty())
 		{
-			Actions = Actions.FilterByPredicate([&Filter](const FMonolithActionInfo& Info)
-			{
-				return Info.Action.Contains(Filter, ESearchCase::IgnoreCase)
-					|| Info.Description.Contains(Filter, ESearchCase::IgnoreCase);
-			});
+			Actions = Actions.FilterByPredicate(MatchesFilter);
 		}
 
 		// Pagination is OPT-IN. limit=0 (default) returns ALL post-filter actions so
 		// discoverability never regresses; any limit>0 slices [offset, offset+limit).
 		const int32 TotalCount = Actions.Num();
-		int32 Offset = 0;
-		int32 Limit = 0;
-		Params->TryGetNumberField(TEXT("offset"), Offset);
-		Params->TryGetNumberField(TEXT("limit"), Limit);
 
 		int32 SliceStart = 0;
 		int32 SliceEnd = TotalCount;
 		if (Limit > 0)
 		{
 			SliceStart = FMath::Clamp(Offset, 0, TotalCount);
-			SliceEnd = FMath::Clamp(SliceStart + Limit, SliceStart, TotalCount);
+			// SliceStart + Limit must NOT be formed before clamping: it is int32 + int32
+			// and overflows for a well-formed call such as offset=1, limit=2147483647
+			// (TryGetNumberField range-checks against TNumericLimits<int32>, so that
+			// value arrives verbatim). On MSVC it wrapped negative, so Clamp returned
+			// SliceStart, yielding an empty actions array AND a negative next_offset.
+			// Min() first keeps every intermediate within [0, TotalCount - SliceStart].
+			SliceEnd = SliceStart + FMath::Min(Limit, TotalCount - SliceStart);
 		}
 
 		Result->SetStringField(TEXT("namespace"), FilterNamespace);
@@ -353,21 +391,7 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 		TArray<TSharedPtr<FJsonValue>> ActionArray;
 		for (int32 Index = SliceStart; Index < SliceEnd; ++Index)
 		{
-			const FMonolithActionInfo& ActionInfo = Actions[Index];
-			TSharedPtr<FJsonObject> ActionObj = MakeShared<FJsonObject>();
-			ActionObj->SetStringField(TEXT("action"), ActionInfo.Action);
-			// Terse mode emits a one-line description; detail mode keeps the full text.
-			ActionObj->SetStringField(TEXT("description"),
-				bDetail ? ActionInfo.Description : MonolithTerseOneLineDescription(ActionInfo.Description));
-			if (!ActionInfo.Category.IsEmpty())
-			{
-				ActionObj->SetStringField(TEXT("category"), ActionInfo.Category);
-			}
-			if (bDetail && ActionInfo.ParamSchema.IsValid())
-			{
-				ActionObj->SetObjectField(TEXT("params"), ActionInfo.ParamSchema);
-			}
-			ActionArray.Add(MakeShared<FJsonValueObject>(ActionObj));
+			ActionArray.Add(MakeActionValue(Actions[Index], /*bIncludeNamespace=*/false));
 		}
 		Result->SetArrayField(TEXT("actions"), ActionArray);
 
@@ -376,7 +400,10 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 		Result->SetNumberField(TEXT("total"), TotalCount);
 		if (Limit > 0 && SliceEnd < TotalCount)
 		{
-			Result->SetNumberField(TEXT("next_offset"), SliceStart + Limit);
+			// SliceEnd, not SliceStart + Limit: value-identical whenever this branch is
+			// taken (SliceEnd < TotalCount implies Limit < TotalCount - SliceStart, so
+			// the Min above chose Limit), and structurally free of the same overflow.
+			Result->SetNumberField(TEXT("next_offset"), SliceEnd);
 		}
 
 		// Terse-only hint: tells the agent where to get the param schema it dropped.
@@ -385,6 +412,74 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 			Result->SetStringField(TEXT("schema_hint"),
 				FString::Printf(TEXT("Param schemas omitted. Call describe_query(action_schema, target_namespace=\"%s\", target_action=\"<name>\") for one action's full schema, or pass detail=true to inline all."),
 					*FilterNamespace));
+		}
+	}
+	else if (!Filter.IsEmpty())
+	{
+		// Cross-namespace search. A filter with no namespace used to be silently
+		// ignored — the caller got the full namespace inventory back and no error —
+		// so finding a capability by partial name meant iterating every namespace.
+		// Registry order throughout (GetNamespaces() -> GetActions(ns)); GetAllActions()
+		// is not namespace-grouped and would produce a non-deterministic row order.
+		TArray<FMonolithActionInfo> Matches;
+		TArray<TSharedPtr<FJsonValue>> MatchedNamespaces;
+		for (const FString& Ns : Namespaces)
+		{
+			bool bNamespaceMatched = false;
+			for (const FMonolithActionInfo& Info : Registry.GetActions(Ns))
+			{
+				if (MatchesFilter(Info))
+				{
+					Matches.Add(Info);
+					bNamespaceMatched = true;
+				}
+			}
+			if (bNamespaceMatched)
+			{
+				MatchedNamespaces.Add(MakeShared<FJsonValueString>(Ns));
+			}
+		}
+
+		const int32 TotalCount = Matches.Num();
+
+		// This path is a new response mode with no back-compat obligation, and unlike
+		// the per-namespace path it is not naturally bounded (~150 actions worst case
+		// there, ~1,400+ here). An uncapped discover(filter="set") would emit a row per
+		// match across the whole registry, from the tool whose terse redesign existed
+		// to CUT payload. So: absent limit caps at 50; an explicit limit=0 still means
+		// ALL. next_offset is emitted as normal, so nothing is hidden.
+		const int32 EffectiveLimit = bLimitSpecified ? Limit : 50;
+
+		int32 SliceStart = 0;
+		int32 SliceEnd = TotalCount;
+		if (EffectiveLimit > 0)
+		{
+			SliceStart = FMath::Clamp(Offset, 0, TotalCount);
+			SliceEnd = SliceStart + FMath::Min(EffectiveLimit, TotalCount - SliceStart);
+		}
+
+		Result->SetStringField(TEXT("filter"), Filter);
+		// Pre-pagination and never truncated: "which namespace owns this capability"
+		// stays answerable even when the action rows are capped.
+		Result->SetArrayField(TEXT("matched_namespaces"), MatchedNamespaces);
+
+		TArray<TSharedPtr<FJsonValue>> ActionArray;
+		for (int32 Index = SliceStart; Index < SliceEnd; ++Index)
+		{
+			ActionArray.Add(MakeActionValue(Matches[Index], /*bIncludeNamespace=*/true));
+		}
+		Result->SetArrayField(TEXT("actions"), ActionArray);
+
+		Result->SetNumberField(TEXT("total"), TotalCount);
+		if (EffectiveLimit > 0 && SliceEnd < TotalCount)
+		{
+			Result->SetNumberField(TEXT("next_offset"), SliceEnd);
+		}
+
+		if (!bDetail)
+		{
+			Result->SetStringField(TEXT("schema_hint"),
+				TEXT("Param schemas omitted. Call describe_query(action_schema, target_namespace=\"<ns>\", target_action=\"<name>\") for one action's full schema, or pass detail=true to inline all."));
 		}
 	}
 	else
@@ -596,22 +691,63 @@ FMonolithActionResult FMonolithCoreTools::HandleReindex(const TSharedPtr<FJsonOb
 			// Fallback if CanDoIncrementalIndex not found (old MonolithIndex version)
 			FuncName = TEXT("StartFullIndex");
 		}
+
+		// A non-force reindex must never destroy a recoverable interrupted index.
+		// CanDoIncrementalIndex requires last_full_index, which is absent precisely
+		// while a run is interrupted, so the branch above lands on StartFullIndex --
+		// and that always resets. Since this action is how an agent typically kicks
+		// the index after a crash, that would silently discard exactly the committed
+		// batches the resume path exists to preserve. Prefer ResumeFullIndex when the
+		// build exposes it; it starts a fresh run by itself when nothing is
+		// recoverable, so this is safe even with no interrupted index on disk.
+		if (FuncName == TEXT("StartFullIndex")
+			&& IndexSubsystemClass->FindFunctionByName(TEXT("ResumeFullIndex")))
+		{
+			FuncName = TEXT("ResumeFullIndex");
+		}
 	}
 
+	const TCHAR* KindLabel = (FuncName == TEXT("StartIncrementalIndex"))
+		? TEXT("Incremental index")
+		: (FuncName == TEXT("ResumeFullIndex") ? TEXT("Full index (resuming if interrupted)") : TEXT("Full re-index"));
+
 	UFunction* Func = IndexSubsystemClass->FindFunctionByName(*FuncName);
-	if (Func)
-	{
-		IndexSubsystem->ProcessEvent(Func, nullptr);
-		Result->SetStringField(TEXT("status"), TEXT("reindex_started"));
-		Result->SetStringField(TEXT("message"),
-			FString::Printf(TEXT("%s triggered successfully."),
-				FuncName == TEXT("StartFullIndex") ? TEXT("Full re-index") : TEXT("Incremental index")));
-	}
-	else
+	if (!Func)
 	{
 		Result->SetStringField(TEXT("status"), TEXT("function_not_found"));
 		Result->SetStringField(TEXT("message"),
 			FString::Printf(TEXT("Function %s not found."), *FuncName));
+		return FMonolithActionResult::Success(Result);
+	}
+
+	// MonolithCore reaches MonolithIndex only through reflection, so the return
+	// property is checked rather than assumed. If a future MonolithIndex drops
+	// the bool return, reading a raw byte would report "not started" for work
+	// that did start — worse than the unconditional success this replaces.
+	// Fall back to the old behaviour in that case.
+	if (!CastField<FBoolProperty>(Func->GetReturnProperty()))
+	{
+		IndexSubsystem->ProcessEvent(Func, nullptr);
+		Result->SetStringField(TEXT("status"), TEXT("reindex_started"));
+		Result->SetStringField(TEXT("message"),
+			FString::Printf(TEXT("%s triggered (this MonolithIndex build does not report a start result)."), KindLabel));
+		return FMonolithActionResult::Success(Result);
+	}
+
+	struct { bool ReturnValue = false; } Parms;
+	IndexSubsystem->ProcessEvent(Func, &Parms);
+
+	if (Parms.ReturnValue)
+	{
+		Result->SetStringField(TEXT("status"), TEXT("reindex_started"));
+		Result->SetStringField(TEXT("message"),
+			FString::Printf(TEXT("%s triggered successfully."), KindLabel));
+	}
+	else
+	{
+		Result->SetStringField(TEXT("status"), TEXT("reindex_not_started"));
+		Result->SetStringField(TEXT("message"),
+			FString::Printf(TEXT("%s did not start — indexing is already running, or the index database is not open. Check monolith_status and the Monolith log."), KindLabel));
 	}
 
 	return FMonolithActionResult::Success(Result);

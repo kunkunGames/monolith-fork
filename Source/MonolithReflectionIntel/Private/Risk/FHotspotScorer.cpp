@@ -11,10 +11,12 @@
 //         file_type TEXT, line_count INTEGER, last_modified REAL)
 //
 // `path` is stored as the absolute filesystem path of the C++ source file
-// (e.g. `D:/.../Plugins/Monolith/Source/...`). `git_file_churn.file_path` is
-// project-relative forward-slashed (from `git log` raw output). We resolve
-// both into a common project-relative shape via ToProjectRelative() so the
-// join key matches.
+// (e.g. `<ProjectDir>/Plugins/<Name>/Source/...`), which this file relativises
+// against the project root. `git_file_churn.file_path` is ALSO project-relative
+// forward-slashed — `git log` emits repo-relative paths and FGitCoChangeIndexer
+// rebases them into the project-relative space before writing (see its header's
+// PATH SPACE note). Both sides therefore key on the same shape, which is what
+// makes this join produce a non-zero score at all.
 
 #include "Risk/FHotspotScorer.h"
 #include "Risk/RiskSchema.h"

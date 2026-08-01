@@ -46,6 +46,45 @@ static void die(const std::string& msg) {
     std::exit(1);
 }
 
+// Parse a signed base-10 integer, saturating before machine-width overflow so a
+// huge --limit clamps like Python's arbitrary-width int() rather than throwing
+// out_of_range (which opt_int silently swallows into the default).
+static bool try_parse_clamped_decimal(const std::string& raw, int minimum, int maximum, int& out_value) {
+    if (minimum > maximum) return false;
+
+    size_t begin = 0;
+    size_t end = raw.size();
+    while (begin < end && std::isspace(static_cast<unsigned char>(raw[begin]))) ++begin;
+    while (end > begin && std::isspace(static_cast<unsigned char>(raw[end - 1]))) --end;
+    if (begin == end) return false;
+
+    bool negative = false;
+    if (raw[begin] == '+' || raw[begin] == '-') {
+        negative = raw[begin] == '-';
+        ++begin;
+    }
+    if (begin == end) return false;
+
+    int value = 0;
+    bool saturated = false;
+    for (size_t index = begin; index < end; ++index) {
+        const unsigned char ch = static_cast<unsigned char>(raw[index]);
+        if (!std::isdigit(ch)) return false;
+        if (!saturated) {
+            const int digit = ch - static_cast<unsigned char>('0');
+            if (value > maximum / 10 || (value == maximum / 10 && digit > maximum % 10)) {
+                value = maximum;
+                saturated = true;
+            } else {
+                value = value * 10 + digit;
+            }
+        }
+    }
+
+    out_value = negative ? minimum : std::clamp(value, minimum, maximum);
+    return true;
+}
+
 // ============================================================
 // Fuzzy match — ports MonolithFuzzyMatchDetail::ScoreFuzzyMatches
 // (Source/MonolithCore/Private/MonolithFuzzyMatch.cpp). The live version uses
@@ -321,6 +360,127 @@ static Rows query(Database& db, const std::string& sql, const std::vector<std::s
     sqlite3_finalize(stmt);
     return rows;
 }
+
+// Like query(), but reports failure instead of logging to stderr and returning
+// an empty row set. `query()` cannot tell a caller's bad query from a storage
+// failure -- both look like zero results -- which is the bug this fixes for
+// project search. Mirrors FMonolithIndexDatabase::FullTextSearch's step check.
+static bool query_checked(Database& db,
+                          const std::string& sql,
+                          const std::vector<Bind>& params,
+                          Rows& out_rows,
+                          std::string& out_error) {
+    out_rows.clear();
+    out_error.clear();
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(db.db, sql.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        out_error = sqlite3_errmsg(db.db);
+        if (stmt) sqlite3_finalize(stmt);
+        return false;
+    }
+
+    for (int i = 0; i < (int)params.size(); ++i) {
+        if (params[i].kind == Bind::Kind::Int)
+            rc = sqlite3_bind_int64(stmt, i + 1, params[i].i);
+        else
+            rc = sqlite3_bind_text(stmt, i + 1, params[i].text.c_str(), -1, SQLITE_TRANSIENT);
+        if (rc != SQLITE_OK) {
+            out_error = sqlite3_errmsg(db.db);
+            sqlite3_finalize(stmt);
+            return false;
+        }
+    }
+
+    int ncols = sqlite3_column_count(stmt);
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        Row row;
+        for (int c = 0; c < ncols; ++c) {
+            const char* name = sqlite3_column_name(stmt, c);
+            std::string key = name ? name : "";
+            // Capture native double for REAL columns BEFORE column_text, which
+            // mutates the column's type via SQLite's type-coercion rules.
+            if (sqlite3_column_type(stmt, c) == SQLITE_FLOAT)
+                row.doubles[key] = sqlite3_column_double(stmt, c);
+            const char* val = (const char*)sqlite3_column_text(stmt, c);
+            row.cols[key] = val ? val : "";
+        }
+        out_rows.push_back(std::move(row));
+    }
+
+    if (rc != SQLITE_DONE) {
+        out_error = sqlite3_errmsg(db.db);
+        sqlite3_finalize(stmt);
+        out_rows.clear();
+        return false;
+    }
+
+    sqlite3_finalize(stmt);
+    return true;
+}
+
+// Diagnostics emitted by the FTS5 MATCH expression parser rather than by
+// storage/schema access. Mirrors MonolithProjectSearchDetail::IsFts5QuerySyntaxError.
+static bool is_fts5_syntax_error(const std::string& message) {
+    std::string lowered = message;
+    std::transform(lowered.begin(), lowered.end(), lowered.begin(),
+                   [](unsigned char c) { return (char)std::tolower(c); });
+    static const char* patterns[] = {
+        "fts5: syntax error",
+        "unterminated string",
+        "malformed match",
+        "unknown special query",
+        "expected integer, got",
+    };
+    for (const char* pattern : patterns)
+        if (lowered.find(pattern) != std::string::npos) return true;
+    return false;
+}
+
+// The two project FTS tables expose different columns, so on its own this means
+// "not answerable here", not "bad query". Only a rejection by BOTH tables makes
+// it a caller error.
+static bool is_fts5_unknown_column_error(const std::string& message) {
+    std::string lowered = message;
+    std::transform(lowered.begin(), lowered.end(), lowered.begin(),
+                   [](unsigned char c) { return (char)std::tolower(c); });
+    return lowered.find("no such column") != std::string::npos;
+}
+
+// Mirrors the CREATE VIRTUAL TABLE column lists (fts_assets / fts_nodes).
+static const char* const FTS_ASSET_COLUMNS =
+    "asset_name, asset_class, description, package_path, module_name";
+static const char* const FTS_NODE_COLUMNS = "node_name, node_class, node_type";
+
+// Name the offending column and list the valid ones. Mirrors
+// MonolithProjectSearchDetail::DescribeUnknownColumn.
+static std::string describe_unknown_column(const std::string& message) {
+    std::string lowered = message;
+    std::transform(lowered.begin(), lowered.end(), lowered.begin(),
+                   [](unsigned char c) { return (char)std::tolower(c); });
+
+    static const std::string marker = "no such column:";
+    std::string subject = message;
+    const size_t index = lowered.find(marker);
+    if (index != std::string::npos) {
+        std::string column_name = message.substr(index + marker.size());
+        size_t begin = 0;
+        size_t end = column_name.size();
+        while (begin < end && std::isspace(static_cast<unsigned char>(column_name[begin]))) ++begin;
+        while (end > begin && std::isspace(static_cast<unsigned char>(column_name[end - 1]))) --end;
+        column_name = column_name.substr(begin, end - begin);
+        if (!column_name.empty())
+            subject = "no such column '" + column_name + "'";
+    }
+
+    return subject + ". Valid columns are " + FTS_ASSET_COLUMNS + " (assets) or "
+           + FTS_NODE_COLUMNS + " (nodes); one filter cannot span both tables.";
+}
+
+// Upper bound on a project search query, mirroring
+// MonolithProjectSearchActionDetail::MaxQueryLength.
+static const size_t PROJECT_SEARCH_MAX_QUERY_LENGTH = 4096;
 
 // ============================================================
 // CLI argument parser
@@ -1789,20 +1949,63 @@ public:
 
     // --- search ---
     void search(const Args& args) {
+        auto emit_failure = [](const std::string& message) {
+            json out = {{"success", false}, {"error", message}};
+            std::cout << out.dump(2) << std::endl;
+        };
+
         if (args.positional.empty()) die("search requires a query argument");
-        std::string q = args.positional[0];
-        int limit = args.opt_int("limit", 50);
+
+        const std::string& raw_query = args.positional[0];
+        size_t query_begin = 0;
+        size_t query_end = raw_query.size();
+        while (query_begin < query_end && std::isspace(static_cast<unsigned char>(raw_query[query_begin])))
+            ++query_begin;
+        while (query_end > query_begin && std::isspace(static_cast<unsigned char>(raw_query[query_end - 1])))
+            --query_end;
+        if (query_begin == query_end) {
+            emit_failure("'query' must not be empty");
+            return;
+        }
+        const std::string q = raw_query.substr(query_begin, query_end - query_begin);
+        if (q.size() > PROJECT_SEARCH_MAX_QUERY_LENGTH) {
+            emit_failure("'query' must be " + std::to_string(PROJECT_SEARCH_MAX_QUERY_LENGTH)
+                         + " characters or fewer (got " + std::to_string(q.size()) + ")");
+            return;
+        }
+
+        int limit = 50;
+        auto limit_it = args.options.find("limit");
+        if (limit_it != args.options.end()
+            && !try_parse_clamped_decimal(limit_it->second, 1, 1000, limit)) {
+            emit_failure("'limit' must be an integer");
+            return;
+        }
 
         json results = json::array();
+        // Per-table verdicts: a table that reports an unknown column is simply not
+        // the one that can answer this query. Only both refusing is a caller error.
+        int not_applicable = 0;
+        std::string first_not_applicable;
 
-        // Search assets FTS
-        {
-            auto rows = query(db,
-                "SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
-                "snippet(fts_assets, 2, '>>>', '<<<', '...', 32) as ctx, rank "
-                "FROM fts_assets f JOIN assets a ON a.id = f.rowid "
-                "WHERE fts_assets MATCH ? ORDER BY rank LIMIT " + std::to_string(limit),
-                {q});
+        // Returns false once a failure has been emitted.
+        auto run_search = [&](const std::string& sql, const char* table_name) -> bool {
+            Rows rows;
+            std::string error;
+            if (!query_checked(db, sql, {Bind(q), Bind::Integer(limit)}, rows, error)) {
+                if (is_fts5_unknown_column_error(error)) {
+                    ++not_applicable;
+                    if (first_not_applicable.empty()) first_not_applicable = error;
+                    return true;
+                }
+                if (is_fts5_syntax_error(error))
+                    emit_failure("Invalid FTS5 query: " + error);
+                else
+                    emit_failure(std::string("Project search failed: ") + table_name
+                                 + " FTS query failed: " + error);
+                return false;
+            }
+
             for (auto& r : rows) {
                 results.push_back({
                     {"asset_path", r.get("package_path")},
@@ -1813,27 +2016,32 @@ public:
                     {"rank", r.get_double("rank")},
                 });
             }
-        }
+            return true;
+        };
+
+        // Search assets FTS
+        if (!run_search(
+                "SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
+                "snippet(fts_assets, 2, '>>>', '<<<', '...', 32) as ctx, rank "
+                "FROM fts_assets f JOIN assets a ON a.id = f.rowid "
+                "WHERE fts_assets MATCH ? ORDER BY rank LIMIT ?",
+                "assets"))
+            return;
 
         // Search nodes FTS
-        {
-            auto rows = query(db,
+        if (!run_search(
                 "SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
                 "snippet(fts_nodes, 0, '>>>', '<<<', '...', 32) as ctx, f.rank "
                 "FROM fts_nodes f JOIN nodes n ON n.id = f.rowid "
                 "JOIN assets a ON a.id = n.asset_id "
-                "WHERE fts_nodes MATCH ? ORDER BY f.rank LIMIT " + std::to_string(limit),
-                {q});
-            for (auto& r : rows) {
-                results.push_back({
-                    {"asset_path", r.get("package_path")},
-                    {"asset_name", r.get("asset_name")},
-                    {"asset_class", r.get("asset_class")},
-                    {"module_name", r.get("module_name")},
-                    {"match_context", r.get("ctx")},
-                    {"rank", r.get_double("rank")},
-                });
-            }
+                "WHERE fts_nodes MATCH ? ORDER BY f.rank LIMIT ?",
+                "nodes"))
+            return;
+
+        if (not_applicable == 2) {
+            // No FTS table exposes the requested column.
+            emit_failure("Invalid FTS5 query: " + describe_unknown_column(first_not_applicable));
+            return;
         }
 
         // Sort by rank, truncate

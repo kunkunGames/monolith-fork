@@ -60,11 +60,15 @@ namespace MonolithUI::TestUtils
             {
                 Orphans.Add(W);
             }
-        }, /*bIncludeNestedObjects=*/ false);
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+        }, EGetObjectsFlags::None);
+#else
+        }, /*bIncludeNestedObjects=*/false);
+#endif
 
         for (UWidget* W : Orphans)
         {
-            W->Rename(nullptr, GetTransientPackage(), REN_DoNotDirty | REN_DontCreateRedirectors | REN_ForceNoResetLoaders);
+            W->Rename(nullptr, GetTransientPackage(), REN_DoNotDirty | REN_DontCreateRedirectors | REN_AllowPackageLinkerMismatch);
         }
 
         Tree->RootWidget = nullptr;

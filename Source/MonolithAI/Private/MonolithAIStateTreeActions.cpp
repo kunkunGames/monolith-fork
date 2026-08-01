@@ -3450,7 +3450,11 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAutoArrangeST(const TSh
 
 		// Look for any UEdGraph owned by the StateTree
 		TArray<UObject*> SubObjects;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+		GetObjectsWithOuter(ST, SubObjects, EGetObjectsFlags::IncludeNestedObjects);
+#else
 		GetObjectsWithOuter(ST, SubObjects, /*bIncludeNestedObjects=*/true);
+#endif
 		for (UObject* Sub : SubObjects)
 		{
 			EdGraph = Cast<UEdGraph>(Sub);
@@ -3459,7 +3463,11 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAutoArrangeST(const TSh
 
 		if (!EdGraph)
 		{
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+			GetObjectsWithOuter(EditorData, SubObjects, EGetObjectsFlags::IncludeNestedObjects);
+#else
 			GetObjectsWithOuter(EditorData, SubObjects, /*bIncludeNestedObjects=*/true);
+#endif
 			for (UObject* Sub : SubObjects)
 			{
 				EdGraph = Cast<UEdGraph>(Sub);

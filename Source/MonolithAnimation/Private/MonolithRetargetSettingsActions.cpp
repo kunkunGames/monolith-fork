@@ -751,7 +751,7 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleSetRetargetChainSe
 
 		if (bIKChainFound)
 		{
-			IKOp->SetSettings(IKBaseSettings);
+			IKOp->GetSettings()->CopySettingsAtRuntime(IKBaseSettings);
 			bAnyApplied = true;
 		}
 	}
@@ -832,7 +832,7 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleSetRetargetRootSet
 		if (TryReadVector(*OffsetObjPtr, Offset)) { Settings->TranslationOffsetGlobal = Offset; }
 	}
 
-	PelvisOp->SetSettings(PelvisBaseSettings);
+	PelvisOp->GetSettings()->CopySettingsAtRuntime(PelvisBaseSettings);
 
 	// Optional pelvis bone reassignment (separate setters on the controller).
 	FString SourcePelvis, TargetPelvis;

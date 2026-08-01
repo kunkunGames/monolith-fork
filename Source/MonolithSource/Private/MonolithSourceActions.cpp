@@ -1556,7 +1556,11 @@ FMonolithActionResult FMonolithSourceActions::HandleTriggerReindex(const TShared
 		return FMonolithActionResult::Error(TEXT("Indexing already in progress."));
 	}
 
-	Subsystem->TriggerReindex();
+	if (!Subsystem->TriggerReindex())
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Full source reindex did not start. The indexing thread could not be created, or a run was already in flight. Check the editor log for the reason."));
+	}
 
 	auto ResultObj = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> ContentArr;
@@ -1590,7 +1594,11 @@ FMonolithActionResult FMonolithSourceActions::HandleTriggerProjectReindex(const 
 		return FMonolithActionResult::Error(TEXT("Indexing already in progress."));
 	}
 
-	Subsystem->TriggerProjectReindex();
+	if (!Subsystem->TriggerProjectReindex())
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Project source reindex did not start. EngineSource.db may be missing (run source.trigger_reindex first), or the indexing thread could not be created. Check the editor log for the reason."));
+	}
 
 	auto ResultObj = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> ContentArr;

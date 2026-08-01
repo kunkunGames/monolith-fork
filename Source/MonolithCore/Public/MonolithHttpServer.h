@@ -24,7 +24,12 @@ public:
 	/** Start the HTTP server on the configured port */
 	bool Start(int32 Port);
 
-	/** Stop the server and unbind all routes */
+	/**
+	 * Unbind all routes and mark the server stopped. The underlying HTTP
+	 * listener is shared with the rest of the editor and is left running, so
+	 * the port stays held until the process exits — a TCP probe is not a
+	 * liveness check for Monolith; use monolith_status.
+	 */
 	void Stop();
 
 	/** Stop then Start — useful after a silent bind failure */
@@ -61,6 +66,14 @@ private:
 
 	/** Register all HTTP routes on the current HttpRouter. */
 	void BindRoutes();
+
+	/**
+	 * Unbind every route we own and mark the server stopped, leaving the
+	 * HttpRouter and the module's listeners untouched. Listeners are shared
+	 * process-wide, so tearing them down takes Web Remote Control, PerfCounters
+	 * and every other plugin's routes with us.
+	 */
+	void DeactivateRoutes();
 
 	/** Probe 127.0.0.1:Port via a TCP connect to verify the listener is actually bound. */
 	static bool ProbePort(int32 Port);

@@ -816,9 +816,17 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSequencePrope
 	if (SeqIndex < 0 || SeqIndex >= NumAssets)
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid sequence_index %d (database has %d entries)"), SeqIndex, NumAssets));
 
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+	const FPoseSearchDatabaseAnimationAsset* ExistingEntry = Database->GetDatabaseAnimationAsset(SeqIndex);
+	if (!ExistingEntry)
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to get entry at index %d"), SeqIndex));
+	FPoseSearchDatabaseAnimationAsset EntryCopy = *ExistingEntry;
+	FPoseSearchDatabaseAnimationAsset* Entry = &EntryCopy;
+#else
 	FPoseSearchDatabaseAnimationAsset* Entry = Database->GetMutableDatabaseAnimationAsset(SeqIndex);
 	if (!Entry)
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to get mutable entry at index %d"), SeqIndex));
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to get entry at index %d"), SeqIndex));
+#endif
 
 	GEditor->BeginTransaction(FText::FromString(TEXT("Set PoseSearch Database Sequence Properties")));
 	Database->Modify();
@@ -863,6 +871,9 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSequencePrope
 	}
 #endif // WITH_EDITORONLY_DATA
 
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+	Database->SetAnimationAssetAt(EntryCopy, SeqIndex);
+#endif
 	GEditor->EndTransaction();
 	Database->MarkPackageDirty();
 
@@ -1325,9 +1336,17 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseEntryTags(con
 	if (EntryIndex < 0 || EntryIndex >= NumAssets)
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid entry_index %d (database has %d entries)"), EntryIndex, NumAssets));
 
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+	const FPoseSearchDatabaseAnimationAsset* ExistingEntry = Database->GetDatabaseAnimationAsset(EntryIndex);
+	if (!ExistingEntry)
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to get entry at index %d"), EntryIndex));
+	FPoseSearchDatabaseAnimationAsset EntryCopy = *ExistingEntry;
+	FPoseSearchDatabaseAnimationAsset* Entry = &EntryCopy;
+#else
 	FPoseSearchDatabaseAnimationAsset* Entry = Database->GetMutableDatabaseAnimationAsset(EntryIndex);
 	if (!Entry)
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to get mutable entry at index %d"), EntryIndex));
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to get entry at index %d"), EntryIndex));
+#endif
 
 #if WITH_EDITORONLY_DATA
 	GEditor->BeginTransaction(FText::FromString(TEXT("Set PoseSearch Database Entry Tags")));
@@ -1359,6 +1378,9 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseEntryTags(con
 		}
 	}
 
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+	Database->SetAnimationAssetAt(EntryCopy, EntryIndex);
+#endif
 	GEditor->EndTransaction();
 	Database->MarkPackageDirty();
 

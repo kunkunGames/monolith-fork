@@ -70,7 +70,14 @@ bool FMonolithSourceIndexer::StartAsync()
 {
 	if (bIsRunning) return false;
 	Thread = FRunnableThread::Create(this, TEXT("MonolithSourceIndexer"), 0, TPri_BelowNormal);
-	return Thread != nullptr;
+	if (!Thread)
+	{
+		// Run() will never execute, so nothing else would ever broadcast. Without
+		// this the caller's bIsIndexing stays set forever.
+		CompleteRun(TEXT("Failed to create the indexing thread"));
+		return false;
+	}
+	return true;
 }
 
 bool FMonolithSourceIndexer::RunSynchronous()
@@ -118,8 +125,7 @@ uint32 FMonolithSourceIndexer::Run()
 	FMonolithSourceDatabase DB;
 	if (!DB.OpenForWriting(DbPath))
 	{
-		UE_LOG(LogMonolithSource, Error, TEXT("Indexer: Failed to open DB for writing: %s"), *DbPath);
-		bIsRunning = false;
+		CompleteRun(*FString::Printf(TEXT("Failed to open DB for writing: %s"), *DbPath));
 		return 1;
 	}
 
@@ -178,16 +184,32 @@ uint32 FMonolithSourceIndexer::Run()
 	}
 
 	DB.Close();
+
+	CompleteRun(nullptr);
+
+	return 0;
+}
+
+void FMonolithSourceIndexer::CompleteRun(const TCHAR* FailureReason)
+{
+	if (FailureReason)
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("Indexer: %s"), FailureReason);
+		TotalErrors++;
+	}
+
 	bIsRunning = false;
 
 	const int32 Files = TotalFilesProcessed.Load();
 	const int32 Symbols = TotalSymbolsExtracted.Load();
 	const int32 Errors = TotalErrors.Load();
 
-	UE_LOG(LogMonolithSource, Log, TEXT("Indexer complete: %d files, %d symbols, %d errors"), Files, Symbols, Errors);
-	OnComplete.Broadcast(Files, Symbols, Errors);
+	if (!FailureReason)
+	{
+		UE_LOG(LogMonolithSource, Log, TEXT("Indexer complete: %d files, %d symbols, %d errors"), Files, Symbols, Errors);
+	}
 
-	return 0;
+	OnComplete.Broadcast(Files, Symbols, Errors);
 }
 
 // ============================================================

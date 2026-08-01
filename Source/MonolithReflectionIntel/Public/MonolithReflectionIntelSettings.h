@@ -57,6 +57,31 @@ public:
 	UPROPERTY(EditAnywhere, config, Category="Risk")
 	bool bEnableGitCoChangeMining = true;
 
+	/**
+	 * Git repositories the risk indexer mines. Each entry is resolved RELATIVE
+	 * to the project root (FPaths::ProjectDir()) when not absolute.
+	 *
+	 * Empty (the default) = AUTO-RESOLVE: the project root itself when it holds
+	 * a `.git` entry, plus every immediate `Plugins/<X>` that holds one — one
+	 * level, no recursion. A non-empty array REPLACES the auto-resolved set
+	 * entirely (same override semantics as UHTArtefactRoot).
+	 *
+	 * Deliberately NOT pre-filled in the constructor: a baked-in default would
+	 * write this machine's layout into every downstream DefaultMonolithSettings.ini.
+	 */
+	UPROPERTY(EditAnywhere, config, Category="Risk")
+	TArray<FString> GitRepoRoots;
+
+	/**
+	 * When the project root itself holds no `.git`, walk ANCESTOR directories
+	 * and mine the first one that does (a project checked out inside a larger
+	 * repository). Off by default: the enclosing repository can be far bigger
+	 * than the project and `git log` cost scales with it. Ignored when
+	 * GitRepoRoots is non-empty.
+	 */
+	UPROPERTY(EditAnywhere, config, Category="Risk")
+	bool bProbeAncestorsForGitRoot = false;
+
 	/** Co-change window size in commits — passed to `git log --max-count=N`. */
 	UPROPERTY(EditAnywhere, config, Category="Risk", meta=(ClampMin="10", ClampMax="2000"))
 	int32 MaxCoChangeWindowCommits = 200;
@@ -160,4 +185,15 @@ public:
 	// ----------------------------------------------------------------
 
 	virtual FName GetCategoryName() const override { return TEXT("Plugins"); }
+
+#if WITH_EDITOR
+	/**
+	 * Clear the risk lazy-bootstrap latch whenever a Risk-category setting is
+	 * edited. The latch is per-module-instance and is set BEFORE the first
+	 * mining pass of a session, so without this an edit would not take effect
+	 * until the editor was restarted — the config would silently no-op, which
+	 * is the same failure class the setting exists to fix.
+	 */
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
 };

@@ -73,6 +73,16 @@ private:
 	int32 IndexShaderFile(const FString& FilePath, int64 ModuleId, FMonolithSourceDatabase& DB);
 	void Finalize(FMonolithSourceDatabase& DB);
 
+	/**
+	 * Single exit point for a run: clears the running flag and broadcasts
+	 * OnComplete. Pass a reason to record a failed run (logged as an error and
+	 * counted), or nullptr for a normal completion. Every exit must go through
+	 * here — an exit that skips the broadcast leaves the owning subsystem's
+	 * bIsIndexing latched, and it then refuses every later request until the
+	 * editor restarts.
+	 */
+	void CompleteRun(const TCHAR* FailureReason);
+
 	// Symbol tracking (accumulated during indexing)
 	void UpdateSymbolMap(const FString& Name, int64 SymId, int32 LineStart, int32 LineEnd);
 	void UpdateClassMap(const FString& Name, int64 SymId, int32 LineStart, int32 LineEnd);

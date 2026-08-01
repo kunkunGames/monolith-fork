@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithPinTypeGrammar.h"
 #include "MonolithPropertyAccessReader.h"
 #include "Engine/Blueprint.h"
 #include "Engine/LevelScriptBlueprint.h"
@@ -186,84 +187,17 @@ namespace MonolithBlueprintInternal
 		return TEXT("unknown");
 	}
 
+	// The pin-type grammar (both directions) lives in one place —
+	// MonolithCore/Public/MonolithPinTypeGrammar.h. These two thin forwarders keep
+	// the ~20 existing MonolithBlueprintInternal:: call sites working unchanged.
 	inline FString PinTypeToString(const FEdGraphPinType& PinType)
 	{
-		if (PinType.PinCategory == UEdGraphSchema_K2::PC_Exec)
-			return TEXT("exec");
-		if (PinType.PinCategory == UEdGraphSchema_K2::PC_Boolean)
-			return TEXT("bool");
-		if (PinType.PinCategory == UEdGraphSchema_K2::PC_Int)
-			return TEXT("int");
-		if (PinType.PinCategory == UEdGraphSchema_K2::PC_Int64)
-			return TEXT("int64");
-		if (PinType.PinCategory == UEdGraphSchema_K2::PC_Real)
-			return PinType.PinSubCategory == TEXT("double") ? TEXT("double") : TEXT("float");
-		if (PinType.PinCategory == UEdGraphSchema_K2::PC_String)
-			return TEXT("string");
-		if (PinType.PinCategory == UEdGraphSchema_K2::PC_Name)
-			return TEXT("name");
-		if (PinType.PinCategory == UEdGraphSchema_K2::PC_Text)
-			return TEXT("text");
-		if (PinType.PinCategory == UEdGraphSchema_K2::PC_Byte)
-		{
-			// Enum-typed pins ARE byte-category pins with the UEnum as the
-			// subcategory object (schema convention) — report them as enums so
-			// round-tripping through add_variable's "enum:<Name>" form works.
-			if (Cast<UEnum>(PinType.PinSubCategoryObject.Get()))
-			{
-				return TEXT("enum:") + PinType.PinSubCategoryObject->GetName();
-			}
-			return TEXT("byte");
-		}
-
-		if (PinType.PinCategory == UEdGraphSchema_K2::PC_Object ||
-			PinType.PinCategory == UEdGraphSchema_K2::PC_Class ||
-			PinType.PinCategory == UEdGraphSchema_K2::PC_SoftObject ||
-			PinType.PinCategory == UEdGraphSchema_K2::PC_SoftClass ||
-			PinType.PinCategory == UEdGraphSchema_K2::PC_Interface)
-		{
-			FString TypeName = PinType.PinCategory.ToString();
-			if (PinType.PinSubCategoryObject.IsValid())
-			{
-				TypeName += TEXT(":") + PinType.PinSubCategoryObject->GetName();
-			}
-			return TypeName;
-		}
-		if (PinType.PinCategory == UEdGraphSchema_K2::PC_Struct)
-		{
-			if (PinType.PinSubCategoryObject.IsValid())
-			{
-				return TEXT("struct:") + PinType.PinSubCategoryObject->GetName();
-			}
-			return TEXT("struct");
-		}
-		if (PinType.PinCategory == UEdGraphSchema_K2::PC_Enum)
-		{
-			if (PinType.PinSubCategoryObject.IsValid())
-			{
-				return TEXT("enum:") + PinType.PinSubCategoryObject->GetName();
-			}
-			return TEXT("enum");
-		}
-		if (PinType.PinCategory == UEdGraphSchema_K2::PC_Wildcard)
-			return TEXT("wildcard");
-		if (PinType.PinCategory == UEdGraphSchema_K2::PC_Delegate)
-			return TEXT("delegate");
-		if (PinType.PinCategory == UEdGraphSchema_K2::PC_MCDelegate)
-			return TEXT("multicast_delegate");
-
-		return PinType.PinCategory.ToString();
+		return MonolithPinTypeGrammar::PinTypeToString(PinType);
 	}
 
 	inline FString ContainerPrefix(const FEdGraphPinType& PinType)
 	{
-		switch (PinType.ContainerType)
-		{
-		case EPinContainerType::Array: return TEXT("array:");
-		case EPinContainerType::Set: return TEXT("set:");
-		case EPinContainerType::Map: return TEXT("map:");
-		default: return TEXT("");
-		}
+		return MonolithPinTypeGrammar::ContainerPrefix(PinType);
 	}
 
 	inline TSharedPtr<FJsonObject> SerializePin(const UEdGraphPin* Pin)
@@ -883,169 +817,4 @@ namespace MonolithBlueprintInternal
 
 	/** Returns true if a UK2Node_CustomEvent with the given name already exists in any graph of the Blueprint */
 	bool HasCustomEventNamed(UBlueprint* BP, FName EventName);
-
-	// Parse MCP-friendly type string to FEdGraphPinType
-	inline FEdGraphPinType ParsePinTypeFromString(const FString& TypeStr)
-	{
-		FEdGraphPinType PinType;
-		PinType.PinCategory = UEdGraphSchema_K2::PC_Boolean; // default fallback
-
-		FString BaseType = TypeStr;
-		EPinContainerType ContainerType = EPinContainerType::None;
-
-		// Check for container prefix
-		if (TypeStr.StartsWith(TEXT("array:")))
-		{
-			ContainerType = EPinContainerType::Array;
-			BaseType = TypeStr.Mid(6);
-		}
-		else if (TypeStr.StartsWith(TEXT("set:")))
-		{
-			ContainerType = EPinContainerType::Set;
-			BaseType = TypeStr.Mid(4);
-		}
-		else if (TypeStr.StartsWith(TEXT("map:")))
-		{
-			ContainerType = EPinContainerType::Map;
-			// map:KeyType:ValueType. The key type may itself be a compound
-			// colon-bearing token (enum:Name, struct:Name, object:Name, class:Name,
-			// softobject:Name, softclass:Name), so a naive split on the first colon
-			// after "map:" is WRONG — it slices "enum:ESlateVisibility" into key
-			// "enum" (unrecognized -> PC_Boolean default -> "key type of Boolean
-			// cannot be hashed") and mangles the value. Detect a known key prefix and
-			// consume "<prefix>:<name>" as the whole key; otherwise the key is a
-			// simple token ending at the first colon. The remainder is the value.
-			const FString AfterMap = TypeStr.Mid(4);
-			static const TCHAR* const KeyTypePrefixes[] = {
-				TEXT("softobject:"), TEXT("softclass:"), TEXT("object:"),
-				TEXT("class:"), TEXT("struct:"), TEXT("enum:")
-			};
-			int32 KeyPrefixLen = 0;
-			for (const TCHAR* Prefix : KeyTypePrefixes)
-			{
-				if (AfterMap.StartsWith(Prefix)) { KeyPrefixLen = FCString::Strlen(Prefix); break; }
-			}
-			int32 SepColon = INDEX_NONE;
-			if (AfterMap.RightChop(KeyPrefixLen).FindChar(TEXT(':'), SepColon))
-			{
-				SepColon += KeyPrefixLen; // colon index within AfterMap that splits key/value
-				BaseType = AfterMap.Left(SepColon);
-				const FString ValueType = AfterMap.Mid(SepColon + 1);
-				PinType.PinValueType = FEdGraphTerminalType();
-				// Parse value type recursively for the terminal type
-				const FEdGraphPinType ValPinType = ParsePinTypeFromString(ValueType);
-				PinType.PinValueType.TerminalCategory = ValPinType.PinCategory;
-				PinType.PinValueType.TerminalSubCategory = ValPinType.PinSubCategory;
-				PinType.PinValueType.TerminalSubCategoryObject = ValPinType.PinSubCategoryObject;
-			}
-			else
-			{
-				BaseType = AfterMap;
-			}
-		}
-
-		PinType.ContainerType = ContainerType;
-
-		if (BaseType == TEXT("bool"))
-		{
-			PinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
-		}
-		else if (BaseType == TEXT("int"))
-		{
-			PinType.PinCategory = UEdGraphSchema_K2::PC_Int;
-		}
-		else if (BaseType == TEXT("int64"))
-		{
-			PinType.PinCategory = UEdGraphSchema_K2::PC_Int64;
-		}
-		else if (BaseType == TEXT("float"))
-		{
-			PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
-			PinType.PinSubCategory = TEXT("float");
-		}
-		else if (BaseType == TEXT("double"))
-		{
-			PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
-			PinType.PinSubCategory = TEXT("double");
-		}
-		else if (BaseType == TEXT("string"))
-		{
-			PinType.PinCategory = UEdGraphSchema_K2::PC_String;
-		}
-		else if (BaseType == TEXT("name"))
-		{
-			PinType.PinCategory = UEdGraphSchema_K2::PC_Name;
-		}
-		else if (BaseType == TEXT("text"))
-		{
-			PinType.PinCategory = UEdGraphSchema_K2::PC_Text;
-		}
-		else if (BaseType == TEXT("byte"))
-		{
-			PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
-		}
-		else if (BaseType.StartsWith(TEXT("object:")))
-		{
-			PinType.PinCategory = UEdGraphSchema_K2::PC_Object;
-			FString ClassName = BaseType.Mid(7);
-			UClass* FoundClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
-			if (FoundClass) PinType.PinSubCategoryObject = FoundClass;
-		}
-		else if (BaseType.StartsWith(TEXT("class:")))
-		{
-			PinType.PinCategory = UEdGraphSchema_K2::PC_Class;
-			FString ClassName = BaseType.Mid(6);
-			UClass* FoundClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
-			if (FoundClass) PinType.PinSubCategoryObject = FoundClass;
-		}
-		else if (BaseType.StartsWith(TEXT("struct:")))
-		{
-			PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
-			FString StructName = BaseType.Mid(7);
-			UScriptStruct* FoundStruct = FindFirstObject<UScriptStruct>(*StructName, EFindFirstObjectOptions::NativeFirst);
-			if (FoundStruct) PinType.PinSubCategoryObject = FoundStruct;
-		}
-		else if (BaseType.StartsWith(TEXT("enum:")))
-		{
-			// Enum data pins are PC_Byte + the UEnum as PinSubCategoryObject — the
-			// schema's own convention (UEdGraphSchema_K2 rewrites PC_Enum to PC_Byte
-			// when it builds pin types, and every enum check tests
-			// PC_Byte && Cast<UEnum>(SubCategoryObject)). A PC_Enum-categorized
-			// variable compiles to a non-enum property, so Get/Set nodes on it
-			// materialized plain INT pins that refuse real enum connections.
-			FString EnumName = BaseType.Mid(5);
-			UEnum* FoundEnum = FindFirstObject<UEnum>(*EnumName, EFindFirstObjectOptions::NativeFirst);
-			if (!FoundEnum && EnumName.Contains(TEXT("/")))
-			{
-				// Unloaded UserDefinedEnum asset referenced by object path.
-				FoundEnum = LoadObject<UEnum>(nullptr, *EnumName);
-			}
-			PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
-			if (FoundEnum) PinType.PinSubCategoryObject = FoundEnum;
-		}
-		else if (BaseType.StartsWith(TEXT("softobject:")))
-		{
-			PinType.PinCategory = UEdGraphSchema_K2::PC_SoftObject;
-			FString ClassName = BaseType.Mid(11);
-			UClass* FoundClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
-			if (FoundClass) PinType.PinSubCategoryObject = FoundClass;
-		}
-		else if (BaseType.StartsWith(TEXT("softclass:")))
-		{
-			PinType.PinCategory = UEdGraphSchema_K2::PC_SoftClass;
-			FString ClassName = BaseType.Mid(10);
-			UClass* FoundClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
-			if (FoundClass) PinType.PinSubCategoryObject = FoundClass;
-		}
-		else if (BaseType == TEXT("exec"))
-		{
-			PinType.PinCategory = UEdGraphSchema_K2::PC_Exec;
-		}
-		else if (BaseType == TEXT("wildcard"))
-		{
-			PinType.PinCategory = UEdGraphSchema_K2::PC_Wildcard;
-		}
-
-		return PinType;
-	}
 }

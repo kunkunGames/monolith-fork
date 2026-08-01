@@ -656,6 +656,24 @@ finally {
 }
 Write-Host "    Offline CLI built (fresh exe staged in Binaries/)" -ForegroundColor Green
 
+# Hard-gate: the staged exe must not be stale relative to its source. This guard
+# was documented in SPEC_CORE.md / API_REFERENCE.md but invoked by nothing, so a
+# stale exe could ship with every other gate green. Note its scope: it hashes
+# Tools/MonolithQuery/monolith_query.cpp ONLY, so it does NOT cover a build
+# failure originating in ThirdParty/sqlite3.c, a ThirdParty header, or the
+# toolchain -- build.bat's exit code is the sole cover for that class.
+# Exit codes: 0 fresh / 1 stale / 4 preflight-fail; -ne 0 covers all of them.
+# Placement is load-bearing: the exe has just been staged into Binaries/, the
+# content copy that ships it has not run yet, and no zip exists -- so a throw
+# here aborts with no artifact written.
+Write-Host "    Running offline exe freshness guard (check_offline_exe_fresh.py)..." -ForegroundColor DarkGray
+$FreshScript = Join-Path $PluginDir "Scripts\check_offline_exe_fresh.py"
+& python $FreshScript
+if ($LASTEXITCODE -ne 0) {
+    throw "Offline exe is STALE relative to its source (exit $LASTEXITCODE). Refusing to ship."
+}
+Write-Host "    Offline exe freshness verified" -ForegroundColor Green
+
 # Hard-gate: the freshly built exe must deep-equal its Python sibling across all
 # RI actions. A non-zero exit means the two offline tools drifted -- abort.
 Write-Host "    Running offline parity guard (verify_offline_parity.py)..." -ForegroundColor DarkGray

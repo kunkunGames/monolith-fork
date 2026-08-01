@@ -1,6 +1,7 @@
 #include "MonolithBlueprintStructActions.h"
 #include "MonolithBlueprintInternal.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithPinTypeGrammar.h"
 #include "MonolithParamSchema.h"
 #include "MonolithPackagePathValidator.h"
 #include "MonolithAssetUtils.h"
@@ -183,7 +184,7 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedSt
 		}
 
 		// Parse the type string to FEdGraphPinType
-		FEdGraphPinType PinType = MonolithBlueprintInternal::ParsePinTypeFromString(TypeStr);
+		FEdGraphPinType PinType = MonolithPinTypeGrammar::ParsePinTypeFromString(TypeStr);
 
 		// The first field replaces the default member created by CreateUserDefinedStruct.
 		// Subsequent fields need AddVariable.

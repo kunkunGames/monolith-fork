@@ -2006,8 +2006,13 @@ bool BuildPersistentObjectIndex(
 	OutObjectsByKey.Add(TEXT("$ROOT"), Root);
 
 	TArray<UObject*> NestedObjects;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+	GetObjectsWithOuter(
+		const_cast<UPCGGraph*>(Root), NestedObjects, EGetObjectsFlags::IncludeNestedObjects);
+#else
 	GetObjectsWithOuter(
 		const_cast<UPCGGraph*>(Root), NestedObjects, true);
+#endif
 	const int64 TotalObjectCount = static_cast<int64>(NestedObjects.Num()) + 1;
 	if (TotalObjectCount > MaxPersistentGraphObjects)
 	{
@@ -2444,7 +2449,11 @@ void PrepareGraphForUndo(UPCGGraph* Graph)
 	}
 	Graph->Modify();
 	TArray<UObject*> NestedObjects;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+	GetObjectsWithOuter(Graph, NestedObjects, EGetObjectsFlags::IncludeNestedObjects);
+#else
 	GetObjectsWithOuter(Graph, NestedObjects, true);
+#endif
 	for (UObject* Object : NestedObjects)
 	{
 		if (Object && Object->HasAnyFlags(RF_Transactional))
@@ -2594,7 +2603,11 @@ void CollectReusableSeededDuplicationDestinations(
 	OutTargets.Add(Target);
 
 	TArray<UObject*> TargetObjects;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+	GetObjectsWithOuter(Target, TargetObjects, EGetObjectsFlags::IncludeNestedObjects);
+#else
 	GetObjectsWithOuter(Target, TargetObjects, true);
+#endif
 	TMap<FString, UObject*> TargetsByRelativeLineage;
 	TargetsByRelativeLineage.Reserve(TargetObjects.Num());
 	for (UObject* const TargetObject : TargetObjects)
@@ -2607,7 +2620,11 @@ void CollectReusableSeededDuplicationDestinations(
 	}
 
 	TArray<UObject*> SourceObjects;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+	GetObjectsWithOuter(Source, SourceObjects, EGetObjectsFlags::IncludeNestedObjects);
+#else
 	GetObjectsWithOuter(Source, SourceObjects, true);
+#endif
 	OutTargets.Reserve(FMath::Min(SourceObjects.Num(), TargetObjects.Num()) + 1);
 	for (const UObject* const SourceObject : SourceObjects)
 	{

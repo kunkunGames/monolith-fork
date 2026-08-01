@@ -1145,12 +1145,15 @@ FMonolithActionResult FMonolithAssetLifecycleActions::ImportTextureFromFile(cons
 			ErrorData->SetBoolField(TEXT("destination_pre_existed"), false);
 			ErrorData->SetBoolField(TEXT("created_asset_removed"), bRemoved);
 			ErrorData->SetBoolField(TEXT("partial_mutation"), !bRemoved);
+			const FString SaveFailureMessage = bRemoved
+				? FString::Printf(
+					TEXT("Failed to save imported texture asset '%s'; the newly created asset was removed."),
+					*FinalAssetPath)
+				: FString::Printf(
+					TEXT("Failed to save imported texture asset '%s', and the newly created asset could not be removed."),
+					*FinalAssetPath);
 			return FMonolithActionResult::Error(
-				FString::Printf(
-					bRemoved
-						? TEXT("Failed to save imported texture asset '%s'; the newly created asset was removed.")
-						: TEXT("Failed to save imported texture asset '%s', and the newly created asset could not be removed."),
-					*FinalAssetPath),
+				SaveFailureMessage,
 				-32603)
 				.WithErrorData(ErrorData);
 		}

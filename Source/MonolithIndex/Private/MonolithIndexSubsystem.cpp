@@ -101,15 +101,19 @@ namespace
 	static TUniquePtr<FIncrementalReachabilityGCOverride> GIncrementalGCOverride;
 }
 
-// Manual trigger for a full project index. Primary use: when bDeferFirstTimeIndex
+// Manual trigger for a project index. Primary use: when bDeferFirstTimeIndex
 // is set, the DB starts empty and the user kicks the index with this command.
 // File-static FAutoConsoleCommand (self-unregistering at module unload) keeps the
 // fix .cpp-only — no header member required. Resolves the live editor subsystem at
 // invoke time so it stays valid across editor lifecycle.
+//
+// Bare `Monolith.StartIndex` RESUMES an interrupted index; `Monolith.StartIndex
+// force` wipes and starts over. Force is also the documented recovery for assets
+// the poison-pill rule dropped from deep indexing — it clears their counters.
 static FAutoConsoleCommand GMonolithStartIndexCommand(
 	TEXT("Monolith.StartIndex"),
-	TEXT("Starts a full Monolith project index. Use after bDeferFirstTimeIndex skipped the automatic first-time index."),
-	FConsoleCommandDelegate::CreateLambda([]()
+	TEXT("Starts a Monolith project index, resuming an interrupted one if present. Pass 'force' to wipe and start over."),
+	FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
 	{
 		if (!GEditor)
 		{
@@ -124,8 +128,24 @@ static FAutoConsoleCommand GMonolithStartIndexCommand(
 			return;
 		}
 
-		UE_LOG(LogMonolithIndex, Log, TEXT("Monolith.StartIndex: manual full index requested"));
-		Subsystem->StartFullIndex();
+		bool bForce = false;
+		for (const FString& Arg : Args)
+		{
+			if (Arg.Equals(TEXT("force"), ESearchCase::IgnoreCase))
+			{
+				bForce = true;
+				break;
+			}
+		}
+
+		UE_LOG(LogMonolithIndex, Log, TEXT("Monolith.StartIndex: manual %s requested"),
+			bForce ? TEXT("full index (forced wipe)") : TEXT("index (resume if interrupted)"));
+
+		const bool bStarted = bForce ? Subsystem->StartFullIndex() : Subsystem->ResumeFullIndex();
+		if (!bStarted)
+		{
+			UE_LOG(LogMonolithIndex, Warning, TEXT("Monolith.StartIndex: index did not start — see the preceding message"));
+		}
 	}));
 
 void UMonolithIndexSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -163,26 +183,41 @@ void UMonolithIndexSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	if (ShouldAutoIndex())
 	{
+		const bool bResumable = Database->SupportsIndexResume() && Database->IsFullIndexInProgress();
+
 		// First-time index can be deferred for very large projects — leaves the DB
 		// empty until 'Monolith.StartIndex' is run manually (escape hatch for the
 		// GC worker-context crash class on huge / high-core-count environments).
+		//
+		// This is honoured on the RESUME path too. The flag exists for exactly the
+		// crash class an interrupted index is evidence of, so overriding it here
+		// would strip the user's escape hatch at the moment they need it, leaving
+		// them to delete ProjectIndex.db by hand. The checkpoints are durable, so
+		// waiting costs nothing.
 		if (GetDefault<UMonolithSettings>()->bDeferFirstTimeIndex)
 		{
-			UE_LOG(LogMonolithIndex, Log, TEXT("MonolithIndex: first-time index deferred via bDeferFirstTimeIndex; run Monolith.StartIndex to begin"));
+			// The message is selected into a %s argument rather than being the format
+			// string itself: UE 5.7's UE_LOG format-string sanitizer requires a
+			// compile-time constant literal, so a ternary there is a static_assert.
+			UE_LOG(LogMonolithIndex, Log, TEXT("%s"), bResumable
+				? TEXT("MonolithIndex: an interrupted index is pending but deferred via bDeferFirstTimeIndex; run Monolith.StartIndex to resume it")
+				: TEXT("MonolithIndex: first-time index deferred via bDeferFirstTimeIndex; run Monolith.StartIndex to begin"));
 			return;
 		}
 
-		UE_LOG(LogMonolithIndex, Log, TEXT("First launch — deferring full index until AR ready"));
+		UE_LOG(LogMonolithIndex, Log, TEXT("%s"), bResumable
+			? TEXT("Interrupted full index detected — deferring resume until AR ready")
+			: TEXT("First launch — deferring full index until AR ready"));
 		if (AR.IsLoadingAssets())
 			AR.OnFilesLoaded().AddUObject(this, &UMonolithIndexSubsystem::OnAssetRegistryFilesLoaded);
 		else
-			StartFullIndex();
+			ResumeFullIndex();
 	}
 	else if (CanDoIncrementalIndex())
 	{
 		UE_LOG(LogMonolithIndex, Log, TEXT("Existing index found — deferring incremental catch-up until AR ready"));
 		if (AR.IsLoadingAssets())
-			AR.OnFilesLoaded().AddUObject(this, &UMonolithIndexSubsystem::StartIncrementalIndex);
+			AR.OnFilesLoaded().AddUObject(this, &UMonolithIndexSubsystem::OnAssetRegistryFilesLoadedIncremental);
 		else
 			StartIncrementalIndex();
 	}
@@ -205,12 +240,19 @@ void UMonolithIndexSubsystem::OnAssetRegistryFilesLoaded()
 	if (ShouldAutoIndex())
 	{
 		UE_LOG(LogMonolithIndex, Log, TEXT("Asset Registry fully loaded -- starting full project index"));
-		StartFullIndex();
+		ResumeFullIndex();
 	}
 	else
 	{
 		UE_LOG(LogMonolithIndex, Log, TEXT("Asset Registry loaded but auto-index no longer needed (already indexed)"));
 	}
+}
+
+void UMonolithIndexSubsystem::OnAssetRegistryFilesLoadedIncremental()
+{
+	// OnFilesLoaded is a void multicast; StartIncrementalIndex reports a result,
+	// so it needs an adapter rather than binding directly.
+	StartIncrementalIndex();
 }
 
 void UMonolithIndexSubsystem::Deinitialize()
@@ -316,13 +358,41 @@ void UMonolithIndexSubsystem::RegisterDefaultIndexers()
 	UE_LOG(LogMonolithIndex, Log, TEXT("Registered %d indexers"), Indexers.Num());
 }
 
-void UMonolithIndexSubsystem::StartFullIndex()
+bool UMonolithIndexSubsystem::CanAcceptIndexRequest() const
+{
+	return !bIsIndexing && Database.IsValid() && Database->IsOpen();
+}
+
+bool UMonolithIndexSubsystem::StartFullIndex()
+{
+	return StartFullIndexInternal(/*bForceReset=*/true);
+}
+
+bool UMonolithIndexSubsystem::ResumeFullIndex()
+{
+	return StartFullIndexInternal(/*bForceReset=*/false);
+}
+
+bool UMonolithIndexSubsystem::StartFullIndexInternal(bool bForceReset)
 {
 	if (bIsIndexing)
 	{
 		UE_LOG(LogMonolithIndex, Warning, TEXT("Indexing already in progress"));
-		return;
+		return false;
 	}
+
+	if (!Database.IsValid() || !Database->IsOpen())
+	{
+		UE_LOG(LogMonolithIndex, Warning, TEXT("Index database is not open — cannot start a full index"));
+		return false;
+	}
+
+	// Resume only when the schema can actually store checkpoints. `full_index_state`
+	// is a `meta` row, so it survives a failed COLUMN migration — gating on the
+	// marker alone would resume onto a v2 schema with nowhere to record progress.
+	const bool bResume = !bForceReset
+		&& Database->SupportsIndexResume()
+		&& Database->IsFullIndexInProgress();
 
 	bIsIndexing = true;
 
@@ -332,8 +402,31 @@ void UMonolithIndexSubsystem::StartFullIndex()
 	// defensively in Deinitialize() (editor shutdown mid-index). Game thread.
 	GIncrementalGCOverride = MakeUnique<FIncrementalReachabilityGCOverride>();
 
-	// Reset the database for a full re-index
-	Database->ResetDatabase();
+	if (bResume)
+	{
+		UE_LOG(LogMonolithIndex, Log,
+			TEXT("Resuming an interrupted full index — already-indexed assets keep their data and are not re-deep-indexed"));
+	}
+	else
+	{
+		// Reset the database for a full re-index. The return value used to be
+		// ignored: a failed reset left the old rows in place and the run then
+		// fought UNIQUE constraints on every insert.
+		if (!Database->ResetDatabase())
+		{
+			UE_LOG(LogMonolithIndex, Error, TEXT("Failed to reset the index database — aborting the full index"));
+			OnIndexingFinished(false);
+			return false;
+		}
+
+		// AFTER the reset: ResetDatabase() drops the `meta` table, which is where
+		// the in-progress marker lives.
+		if (!Database->BeginFullIndex())
+		{
+			UE_LOG(LogMonolithIndex, Warning,
+				TEXT("Could not record the full-index start marker — this run will not be resumable if it is interrupted"));
+		}
+	}
 
 	// Gather marketplace plugin paths for indexing
 	IndexedPlugins = GatherMarketplacePluginPaths();
@@ -349,6 +442,7 @@ void UMonolithIndexSubsystem::StartFullIndex()
 	// Launch background thread
 	IndexingTaskPtr = MakeUnique<FIndexingTask>(this);
 	IndexingTaskPtr->PluginsToIndex = IndexedPlugins;
+	IndexingTaskPtr->bIsResume = bResume;
 	IndexingThread.Reset(FRunnableThread::Create(
 		IndexingTaskPtr.Get(),
 		TEXT("MonolithIndexing"),
@@ -356,7 +450,19 @@ void UMonolithIndexSubsystem::StartFullIndex()
 		TPri_BelowNormal
 	));
 
+	if (!IndexingThread)
+	{
+		// Run() will never execute, so nothing would ever route through
+		// OnIndexingFinished and bIsIndexing would stay latched for the rest of
+		// the session. Unwind here instead.
+		UE_LOG(LogMonolithIndex, Error, TEXT("Failed to create the indexing thread — no index is running"));
+		IndexingTaskPtr.Reset();
+		OnIndexingFinished(false);
+		return false;
+	}
+
 	UE_LOG(LogMonolithIndex, Log, TEXT("Background indexing started"));
+	return true;
 }
 
 float UMonolithIndexSubsystem::GetProgress() const
@@ -453,6 +559,13 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 	const UMonolithSettings* GlobalSettings = GetDefault<UMonolithSettings>();
 	const bool bLogMemory = GlobalSettings ? GlobalSettings->bLogMemoryStats : true;
 
+	// Every fire-and-forget AsyncTask below captures this instead of `this`.
+	// Deinitialize() does Stop() -> WaitForCompletion() -> IndexingTaskPtr.Reset():
+	// joining the worker does NOT drain the game thread's task queue, so an
+	// already-queued lambda can run after this FIndexingTask has been destroyed.
+	// Anything it needs must be copied into the capture list beforehand.
+	const TWeakObjectPtr<UMonolithIndexSubsystem> WeakOwner(Owner);
+
 	if (bLogMemory)
 	{
 		FMonolithMemoryHelper::LogMemoryStats(TEXT("Full index starting"));
@@ -517,14 +630,35 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 	FMonolithIndexDatabase* DB = Owner->Database.Get();
 	if (!DB || !DB->IsOpen())
 	{
-		AsyncTask(ENamedThreads::GameThread, [this]()
+		AsyncTask(ENamedThreads::GameThread, [WeakOwner]()
 		{
-			Owner->OnIndexingFinished(false);
+			if (UMonolithIndexSubsystem* Subsystem = WeakOwner.Get())
+			{
+				Subsystem->OnIndexingFinished(false);
+			}
 		});
 		return 1;
 	}
 
-	DB->BeginTransaction();
+	// Structural failures — transaction/DB errors — are the ONLY thing besides
+	// cancellation that may block the completion marker. Per-asset failures are
+	// diagnostics: `Errors`/`DeepErrors` fire routinely on real projects (a class
+	// from a disabled plugin, a redirector stub, an animation asset that crashes
+	// on load — the SEH guard exists because those are expected), and gating on
+	// them would mean one bad asset re-runs the whole index on every launch, which
+	// is the #117 symptom reached from the other direction.
+	TAtomic<bool> bTransactionFailure{false};
+	auto RequireTransaction = [&bTransactionFailure](bool bOk, const TCHAR* What) -> bool
+	{
+		if (!bOk)
+		{
+			bTransactionFailure = true;
+			UE_LOG(LogMonolithIndex, Error, TEXT("Index transaction failure (%s) — this run will not be marked complete"), What);
+		}
+		return bOk;
+	};
+
+	RequireTransaction(DB->BeginTransaction(), TEXT("metadata pass begin"));
 
 	int32 BatchSize = 100;
 	int32 Indexed = 0;
@@ -536,8 +670,13 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 		FAssetData AssetData;
 		int64 AssetId;
 		TSharedPtr<IMonolithIndexer> Indexer;
+		FString SavedHash;
 	};
 	TArray<FDeepIndexEntry> DeepIndexQueue;
+
+	// Resume bookkeeping.
+	int32 AlreadyDeepIndexed = 0;
+	TArray<FString> PoisonedPaths;
 
 	TMap<FString, int32> ClassDistribution;
 	TMap<FString, int32> QueuedClassDistribution;
@@ -608,7 +747,34 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 			}
 		}
 
-		int64 AssetId = DB->InsertAsset(IndexedAsset);
+		// UPSERT rather than a blind INSERT. On a resume the row already exists,
+		// and the old insert would hit the package_path UNIQUE constraint, count an
+		// error and `continue` — which also dropped the asset from the deep queue.
+		int64 AssetId = -1;
+		FString StoredDeepHash;
+		int32 StoredAttempts = 0;
+		bool bHadRow = false;
+
+		if (TOptional<FIndexedAsset> Existing = DB->GetAssetByPath(IndexedAsset.PackagePath))
+		{
+			bHadRow = true;
+			AssetId = Existing->Id;
+			StoredDeepHash = Existing->DeepIndexedHash;
+			StoredAttempts = Existing->DeepIndexAttempts;
+
+			if (!DB->UpdateAssetMetadata(IndexedAsset))
+			{
+				// Count it, but keep going: the row and its id are valid, so the
+				// asset can still be deep-indexed. Dropping it here would lose data
+				// the resume exists to preserve.
+				Errors++;
+			}
+		}
+		else
+		{
+			AssetId = DB->InsertAsset(IndexedAsset);
+		}
+
 		if (AssetId < 0)
 		{
 			Errors++;
@@ -619,8 +785,47 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 		TSharedPtr<IMonolithIndexer>* FoundIndexer = Owner->ClassToIndexer.Find(IndexedAsset.AssetClass);
 		if (FoundIndexer && FoundIndexer->IsValid())
 		{
-			DeepIndexQueue.Add({ AssetData, AssetId, *FoundIndexer });
-			QueuedClassDistribution.FindOrAdd(IndexedAsset.AssetClass)++;
+			// On a fresh run the table was just wiped, so every asset lands on
+			// Queue and this filter is inert.
+			const EMonolithDeepIndexQueueDecision Decision =
+				MonolithDecideDeepIndexQueueEntry(StoredDeepHash, StoredAttempts, IndexedAsset.SavedHash);
+
+			switch (Decision)
+			{
+			case EMonolithDeepIndexQueueDecision::SkipAlreadyIndexed:
+				AlreadyDeepIndexed++;
+				break;
+
+			case EMonolithDeepIndexQueueDecision::SkipPoisonAsset:
+				// Two runs started this asset and neither finished. Re-queueing it
+				// is a crash-every-launch loop, so drop it and stamp the current
+				// hash so it leaves the queue for good.
+				//
+				// The attempt counter is deliberately NOT cleared. Clearing it
+				// would make the skip depend entirely on the hash stamp, and an
+				// asset whose Asset Registry hash is empty would stamp '' , fail
+				// the hash comparison on the next run, re-enter the queue, and
+				// resume crashing. Leaving the counter at its limit keeps the
+				// asset out on both gates. `force` is the documented recovery and
+				// resets everything.
+				DB->SetDeepIndexedHash(AssetId, IndexedAsset.SavedHash);
+				PoisonedPaths.Add(IndexedAsset.PackagePath);
+				break;
+
+			case EMonolithDeepIndexQueueDecision::Queue:
+			default:
+				// Genuine re-index (the asset changed since it was last deep
+				// indexed): clear the child rows the previous pass produced. On a
+				// first pass there is nothing to delete, so this stays off the
+				// fresh-index path.
+				if (bHadRow && !StoredDeepHash.IsEmpty())
+				{
+					DB->DeleteChildDataForAsset(AssetId);
+				}
+				DeepIndexQueue.Add({ AssetData, AssetId, *FoundIndexer, IndexedAsset.SavedHash });
+				QueuedClassDistribution.FindOrAdd(IndexedAsset.AssetClass)++;
+				break;
+			}
 		}
 
 		Indexed++;
@@ -628,8 +833,9 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 		// Commit in batches
 		if (Indexed % BatchSize == 0)
 		{
-			DB->CommitTransaction();
-			DB->BeginTransaction();
+			// A silently failed commit used to lose 100 assets with no signal.
+			RequireTransaction(DB->CommitTransaction(), TEXT("metadata batch commit"));
+			RequireTransaction(DB->BeginTransaction(), TEXT("metadata batch begin"));
 
 			UE_LOG(LogMonolithIndex, Log, TEXT("Indexed %d / %d assets (%d errors)"),
 				Indexed, TotalAssets.Load(), Errors);
@@ -640,9 +846,16 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 					FString::Printf(TEXT("Indexing %d / %d assets..."), CurrentIndex.Load(), TotalAssets.Load())));
 			}
 
-			AsyncTask(ENamedThreads::GameThread, [this]()
+			// Snapshot the counters here, on the worker. Loading them inside the
+			// lambda would read them through a task object that may already be gone.
+			const int32 ProgressCurrent = CurrentIndex.Load();
+			const int32 ProgressTotal = TotalAssets.Load();
+			AsyncTask(ENamedThreads::GameThread, [WeakOwner, ProgressCurrent, ProgressTotal]()
 			{
-				Owner->OnProgress.Broadcast(CurrentIndex.Load(), TotalAssets.Load());
+				if (UMonolithIndexSubsystem* Subsystem = WeakOwner.Get())
+				{
+					Subsystem->OnProgress.Broadcast(ProgressCurrent, ProgressTotal);
+				}
 			});
 		}
 	}
@@ -664,9 +877,34 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 		UE_LOG(LogMonolithIndex, Log, TEXT("  Queued %s: %d"), *Pair.Key, Pair.Value);
 	}
 
-	DB->CommitTransaction();
+	RequireTransaction(DB->CommitTransaction(), TEXT("metadata pass commit"));
 
 	UE_LOG(LogMonolithIndex, Log, TEXT("Metadata pass complete: %d assets indexed, %d errors"), Indexed, Errors);
+
+	if (bIsResume)
+	{
+		UE_LOG(LogMonolithIndex, Log,
+			TEXT("Resume: %d assets were already deep-indexed at their current content hash and were not re-queued"),
+			AlreadyDeepIndexed);
+	}
+
+	// One poison asset takes its whole batch out of deep indexing (the attempt
+	// marker is batch-granular). That is a data-completeness loss the user cannot
+	// otherwise discover, so it is reported at ERROR — a Warning is invisible in a
+	// busy index log — and persisted so it outlives the session and the log.
+	if (PoisonedPaths.Num() > 0)
+	{
+		for (const FString& Path : PoisonedPaths)
+		{
+			UE_LOG(LogMonolithIndex, Error,
+				TEXT("Deep indexing skipped '%s': %d interrupted attempts. Its graph/variable data will be missing. Run 'Monolith.StartIndex force' (or monolith_reindex force=true) to clear the counters and retry."),
+				*Path, MonolithMaxDeepIndexAttempts);
+		}
+		DB->RecordSkippedAssetPaths(PoisonedPaths);
+		UE_LOG(LogMonolithIndex, Error,
+			TEXT("%d asset(s) were dropped from deep indexing after repeated interrupted attempts — see project get_stats 'skipped_assets'"),
+			PoisonedPaths.Num());
+	}
 
 	// ============================================================
 	// Deep indexing pass — load assets on game thread in time-budgeted batches
@@ -752,10 +990,42 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 
 			// Capture the slice for this batch
 			TArray<FDeepIndexEntry> BatchSlice;
+			TArray<int64> BatchAssetIds;
 			BatchSlice.Reserve(BatchEnd - BatchStart);
+			BatchAssetIds.Reserve(BatchEnd - BatchStart);
 			for (int32 j = BatchStart; j < BatchEnd; ++j)
 			{
 				BatchSlice.Add(DeepIndexQueue[j]);
+				BatchAssetIds.Add(DeepIndexQueue[j].AssetId);
+			}
+
+			// ------------------------------------------------------------------
+			// Poison-pill attempt marker — its OWN transaction, committed BEFORE
+			// the batch work transaction opens.
+			//
+			// This ordering is the entire mechanism. A write inside an open
+			// transaction is not durable: under `journal_mode=DELETE` a process
+			// death inside the work transaction below makes SQLite roll that whole
+			// transaction back on next open, which would take the marker with it.
+			// The counter would read 0 on resume, the same batch would re-queue,
+			// and the asset that killed the editor would kill it again — forever.
+			// The frame-budget commit inside the work lambda does not rescue it
+			// either: it only fires after at least one asset has been processed, so
+			// it never covers the FIRST asset of a batch, which is exactly where a
+			// resumed queue puts the poison one.
+			//
+			// Cost is one extra commit per BATCH (~6k on a 50k-asset project), not
+			// per asset — per-asset transactions stay off the table.
+			// ------------------------------------------------------------------
+			if (RequireTransaction(DB->BeginTransaction(), TEXT("deep attempt-marker begin")))
+			{
+				if (!DB->BumpDeepIndexAttempts(BatchAssetIds))
+				{
+					UE_LOG(LogMonolithIndex, Warning,
+						TEXT("Could not record deep-index attempts for batch %d — a crash in this batch would not be counted"),
+						BatchNumber);
+				}
+				RequireTransaction(DB->CommitTransaction(), TEXT("deep attempt-marker commit"));
 			}
 
 			FEvent* BatchEvent = FPlatformProcess::GetSynchEventFromPool(true);
@@ -768,9 +1038,14 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 			// (calling FinishAllCompilation inside the lambda) was the exact trigger —
 			// see GitHub issue #19, regression from commit 168c087.
 			FMonolithCompilerSafeDispatch::RunOnGameThreadWhenCompilerIdle(
-				[DB, BatchSlice = MoveTemp(BatchSlice), &DeepIndexed, &DeepErrors, FrameBudgetSeconds]()
+				[DB, BatchSlice = MoveTemp(BatchSlice), &DeepIndexed, &DeepErrors, &bTransactionFailure, FrameBudgetSeconds]()
 			{
-				DB->BeginTransaction();
+				if (!DB->BeginTransaction())
+				{
+					bTransactionFailure = true;
+					UE_LOG(LogMonolithIndex, Error, TEXT("Index transaction failure (deep batch begin) — this run will not be marked complete"));
+					return;
+				}
 				double BatchStartTime = FPlatformTime::Seconds();
 
 				for (const FDeepIndexEntry& Entry : BatchSlice)
@@ -786,6 +1061,13 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 						if (Entry.Indexer->IndexAsset(Entry.AssetData, LoadedAsset, *DB, Entry.AssetId))
 						{
 							DeepIndexed++;
+
+							// Checkpoint INSIDE the transaction that carries this
+							// asset's child rows, so the two are atomic: a rollback
+							// loses both, never a checkpoint pointing at data that
+							// is not there.
+							DB->SetDeepIndexedHash(Entry.AssetId, Entry.SavedHash);
+							DB->ClearDeepIndexAttempts(Entry.AssetId);
 						}
 						else
 						{
@@ -817,7 +1099,11 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 					}
 				}
 
-				DB->CommitTransaction();
+				if (!DB->CommitTransaction())
+				{
+					bTransactionFailure = true;
+					UE_LOG(LogMonolithIndex, Error, TEXT("Index transaction failure (deep batch commit) — this run will not be marked complete"));
+				}
 			},
 			BatchEvent);
 
@@ -850,9 +1136,16 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 					FString::Printf(TEXT("Deep indexing %d / %d assets..."), BatchEnd, TotalDeep)));
 			}
 
-			AsyncTask(ENamedThreads::GameThread, [this]()
+			// Snapshot the counters here, on the worker. Loading them inside the
+			// lambda would read them through a task object that may already be gone.
+			const int32 ProgressCurrent = CurrentIndex.Load();
+			const int32 ProgressTotal = TotalAssets.Load();
+			AsyncTask(ENamedThreads::GameThread, [WeakOwner, ProgressCurrent, ProgressTotal]()
 			{
-				Owner->OnProgress.Broadcast(CurrentIndex.Load(), TotalAssets.Load());
+				if (UMonolithIndexSubsystem* Subsystem = WeakOwner.Get())
+				{
+					Subsystem->OnProgress.Broadcast(ProgressCurrent, ProgressTotal);
+				}
 			});
 
 			// Log progress and memory periodically
@@ -933,6 +1226,29 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 		FPlatformProcess::ReturnSynchEventToPool(GCEvent);
 	};
 
+	// Every post-pass sentinel has the same shape: one transaction wrapping one
+	// indexer call. A transaction failure here means the pass could not run at
+	// all, which is structural — it feeds the completion gate. The indexer's own
+	// per-asset failures do not.
+	auto RunSentinelInTransaction = [&bTransactionFailure](FMonolithIndexDatabase* InDB, const TSharedPtr<IMonolithIndexer>& InIndexer)
+	{
+		if (!InDB->BeginTransaction())
+		{
+			bTransactionFailure = true;
+			UE_LOG(LogMonolithIndex, Error, TEXT("Index transaction failure (post-pass begin) — this run will not be marked complete"));
+			return;
+		}
+
+		FAssetData DummyData;
+		InIndexer->IndexAsset(DummyData, nullptr, *InDB, 0);
+
+		if (!InDB->CommitTransaction())
+		{
+			bTransactionFailure = true;
+			UE_LOG(LogMonolithIndex, Error, TEXT("Index transaction failure (post-pass commit) — this run will not be marked complete"));
+		}
+	};
+
 	// Helper to check for cancellation
 	auto CheckCancellation = [this]() -> bool
 	{
@@ -963,12 +1279,9 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 			}
 			FEvent* DepEvent = FPlatformProcess::GetSynchEventFromPool(true);
 			FMonolithCompilerSafeDispatch::RunOnGameThreadWhenCompilerIdle(
-				[DB, DepIndexerCopy]()
+				[DB, DepIndexerCopy, &RunSentinelInTransaction]()
 			{
-				DB->BeginTransaction();
-				FAssetData DummyData;
-				DepIndexerCopy->IndexAsset(DummyData, nullptr, *DB, 0);
-				DB->CommitTransaction();
+				RunSentinelInTransaction(DB, DepIndexerCopy);
 			},
 			DepEvent);
 			DepEvent->Wait();
@@ -994,12 +1307,9 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 			}
 			FEvent* LevelEvent = FPlatformProcess::GetSynchEventFromPool(true);
 			FMonolithCompilerSafeDispatch::RunOnGameThreadWhenCompilerIdle(
-				[DB, LevelIndexerCopy]()
+				[DB, LevelIndexerCopy, &RunSentinelInTransaction]()
 			{
-				DB->BeginTransaction();
-				FAssetData DummyData;
-				LevelIndexerCopy->IndexAsset(DummyData, nullptr, *DB, 0);
-				DB->CommitTransaction();
+				RunSentinelInTransaction(DB, LevelIndexerCopy);
 			},
 			LevelEvent);
 			LevelEvent->Wait();
@@ -1021,12 +1331,9 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 			TSharedPtr<IMonolithIndexer> DTIndexerCopy = *DTIndexer;
 			FEvent* DTEvent = FPlatformProcess::GetSynchEventFromPool(true);
 			FMonolithCompilerSafeDispatch::RunOnGameThreadWhenCompilerIdle(
-				[DB, DTIndexerCopy]()
+				[DB, DTIndexerCopy, &RunSentinelInTransaction]()
 			{
-				DB->BeginTransaction();
-				FAssetData DummyData;
-				DTIndexerCopy->IndexAsset(DummyData, nullptr, *DB, 0);
-				DB->CommitTransaction();
+				RunSentinelInTransaction(DB, DTIndexerCopy);
 			},
 			DTEvent);
 			DTEvent->Wait();
@@ -1045,10 +1352,7 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 		{
 			double SentinelStart = FPlatformTime::Seconds();
 			UE_LOG(LogMonolithIndex, Log, TEXT("Running config indexer..."));
-			DB->BeginTransaction();
-			FAssetData DummyCfgData;
-			(*CfgIndexer)->IndexAsset(DummyCfgData, nullptr, *DB, 0);
-			DB->CommitTransaction();
+			RunSentinelInTransaction(DB, *CfgIndexer);
 			UE_LOG(LogMonolithIndex, Log, TEXT("Config indexer completed in %.2fs"), FPlatformTime::Seconds() - SentinelStart);
 		}
 	}
@@ -1062,10 +1366,7 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 		{
 			double SentinelStart = FPlatformTime::Seconds();
 			UE_LOG(LogMonolithIndex, Log, TEXT("Running C++ symbol indexer..."));
-			DB->BeginTransaction();
-			FAssetData DummyCppData;
-			(*CppIndexer)->IndexAsset(DummyCppData, nullptr, *DB, 0);
-			DB->CommitTransaction();
+			RunSentinelInTransaction(DB, *CppIndexer);
 			UE_LOG(LogMonolithIndex, Log, TEXT("C++ symbol indexer completed in %.2fs"), FPlatformTime::Seconds() - SentinelStart);
 		}
 	}
@@ -1081,13 +1382,16 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 			UE_LOG(LogMonolithIndex, Log, TEXT("Running animation indexer..."));
 			TSharedPtr<IMonolithIndexer> AnimIndexerCopy = *AnimIndexer;
 			FEvent* AnimEvent = FPlatformProcess::GetSynchEventFromPool(true);
+			// No transaction here: FAnimationIndexer owns its own, one per batch.
+			// The animation pass walks thousands of assets, and a single
+			// transaction spanning all of them meant a crash discarded the whole
+			// pass. It keeps the single dispatch and its batch structure — per-asset
+			// dispatch would cost a game-thread frame per animation asset.
 			FMonolithCompilerSafeDispatch::RunOnGameThreadWhenCompilerIdle(
 				[DB, AnimIndexerCopy]()
 			{
-				DB->BeginTransaction();
 				FAssetData DummyData;
 				AnimIndexerCopy->IndexAsset(DummyData, nullptr, *DB, 0);
-				DB->CommitTransaction();
 			},
 			AnimEvent);
 			AnimEvent->Wait();
@@ -1109,12 +1413,9 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 			TSharedPtr<IMonolithIndexer> TagIndexerCopy = *TagIndexer;
 			FEvent* TagEvent = FPlatformProcess::GetSynchEventFromPool(true);
 			FMonolithCompilerSafeDispatch::RunOnGameThreadWhenCompilerIdle(
-				[DB, TagIndexerCopy]()
+				[DB, TagIndexerCopy, &RunSentinelInTransaction]()
 			{
-				DB->BeginTransaction();
-				FAssetData DummyData;
-				TagIndexerCopy->IndexAsset(DummyData, nullptr, *DB, 0);
-				DB->CommitTransaction();
+				RunSentinelInTransaction(DB, TagIndexerCopy);
 			},
 			TagEvent);
 			TagEvent->Wait();
@@ -1136,12 +1437,9 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 			TSharedPtr<IMonolithIndexer> NiagaraIndexerCopy = *NiagaraIndexerPtr;
 			FEvent* NiagaraEvent = FPlatformProcess::GetSynchEventFromPool(true);
 			FMonolithCompilerSafeDispatch::RunOnGameThreadWhenCompilerIdle(
-				[DB, NiagaraIndexerCopy]()
+				[DB, NiagaraIndexerCopy, &RunSentinelInTransaction]()
 			{
-				DB->BeginTransaction();
-				FAssetData DummyData;
-				NiagaraIndexerCopy->IndexAsset(DummyData, nullptr, *DB, 0);
-				DB->CommitTransaction();
+				RunSentinelInTransaction(DB, NiagaraIndexerCopy);
 			},
 			NiagaraEvent);
 			NiagaraEvent->Wait();
@@ -1167,12 +1465,9 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 			}
 			FEvent* MeshCatEvent = FPlatformProcess::GetSynchEventFromPool(true);
 			FMonolithCompilerSafeDispatch::RunOnGameThreadWhenCompilerIdle(
-				[DB, MeshCatIndexerCopy]()
+				[DB, MeshCatIndexerCopy, &RunSentinelInTransaction]()
 			{
-				DB->BeginTransaction();
-				FAssetData DummyData;
-				MeshCatIndexerCopy->IndexAsset(DummyData, nullptr, *DB, 0);
-				DB->CommitTransaction();
+				RunSentinelInTransaction(DB, MeshCatIndexerCopy);
 			},
 			MeshCatEvent);
 			MeshCatEvent->Wait();
@@ -1184,19 +1479,34 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 
 	UE_LOG(LogMonolithIndex, Log, TEXT("Post-pass indexers complete"));
 
-	// Write index timestamp to meta (only if not cancelled and asset count looks valid)
-	if (!bShouldStop)
+	// Mark the run complete. The gate is STRUCTURAL only — cancellation and
+	// transaction/DB failures. Per-asset errors are deliberately not gates: they
+	// fire on any real project (a class from a disabled plugin, a redirector stub,
+	// an animation asset that crashes on load) and a fail-closed gate would mean
+	// one bad asset re-runs a full wipe-and-rebuild on every launch, forever.
+	//
+	// The old `Indexed < 500` guard is gone with it: it made every project with
+	// fewer than 500 assets re-index from scratch on every single launch.
+	const bool bStructurallyComplete = !bShouldStop.Load() && !bTransactionFailure.Load();
+	if (bStructurallyComplete)
 	{
-		constexpr int32 MinAssetCountThreshold = 500;
-		if (Indexed < MinAssetCountThreshold)
+		// Writes last_full_index and clears the in-progress marker in one
+		// transaction — the only place either happens.
+		if (DB->CompleteFullIndex(FDateTime::UtcNow().ToString()))
 		{
-			UE_LOG(LogMonolithIndex, Warning, TEXT("Index only found %d assets — Asset Registry may not have been fully loaded. Skipping last_full_index write so next launch will re-index."), Indexed);
+			UE_LOG(LogMonolithIndex, Log, TEXT("Full index complete (%d assets indexed, %d errors)"), Indexed, Errors);
 		}
 		else
 		{
-			DB->WriteMeta(TEXT("last_full_index"), FDateTime::UtcNow().ToString());
-			UE_LOG(LogMonolithIndex, Log, TEXT("Wrote last_full_index timestamp (%d assets indexed)"), Indexed);
+			UE_LOG(LogMonolithIndex, Error,
+				TEXT("Index finished but the completion marker could not be written — the next launch will resume this index"));
 		}
+	}
+	else
+	{
+		UE_LOG(LogMonolithIndex, Warning,
+			TEXT("Index did not complete (%s) — progress is checkpointed and the next launch will resume it"),
+			bShouldStop.Load() ? TEXT("cancelled") : TEXT("transaction failure"));
 	}
 
 	if (bLogMemory)
@@ -1204,9 +1514,12 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 		FMonolithMemoryHelper::LogMemoryStats(TEXT("Full index complete"));
 	}
 
-	AsyncTask(ENamedThreads::GameThread, [this]()
+	AsyncTask(ENamedThreads::GameThread, [WeakOwner, bStructurallyComplete]()
 	{
-		Owner->OnIndexingFinished(!bShouldStop);
+		if (UMonolithIndexSubsystem* Subsystem = WeakOwner.Get())
+		{
+			Subsystem->OnIndexingFinished(bStructurallyComplete);
+		}
 	});
 
 	return 0;
@@ -1238,6 +1551,12 @@ void UMonolithIndexSubsystem::OnIndexingFinished(bool bSuccess)
 			bSuccess);
 		TaskNotification.Reset();
 	}
+
+	// Re-arm live tracking on EVERY outcome, not just success. A failed or
+	// cancelled run used to leave the callbacks detached, so the subsystem
+	// reported itself active while silently dropping every subsequent asset
+	// change until a successful reindex or an editor restart.
+	RegisterLiveCallbacks();
 
 	OnComplete.Broadcast(bSuccess);
 	OnProgress.Clear();
@@ -1284,10 +1603,19 @@ bool UMonolithIndexSubsystem::CanDoIncrementalIndex() const
 	return true;
 }
 
-void UMonolithIndexSubsystem::StartIncrementalIndex()
+bool UMonolithIndexSubsystem::StartIncrementalIndex()
 {
 	check(IsInGameThread());
-	if (bIsIndexing) return;
+	if (bIsIndexing)
+	{
+		UE_LOG(LogMonolithIndex, Warning, TEXT("Indexing already in progress"));
+		return false;
+	}
+	if (!Database.IsValid() || !Database->IsOpen())
+	{
+		UE_LOG(LogMonolithIndex, Warning, TEXT("Index database is not open — cannot start an incremental index"));
+		return false;
+	}
 	bIsIndexing = true;
 	UnregisterLiveCallbacks();
 
@@ -1422,7 +1750,7 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 		UE_LOG(LogMonolithIndex, Log, TEXT("No changes detected. Incremental index complete."));
 		bIsIndexing = false;
 		RegisterLiveCallbacks();
-		return;
+		return true;
 	}
 
 	// PHASE 6: Apply deltas
@@ -1538,6 +1866,7 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 	UE_LOG(LogMonolithIndex, Log, TEXT("Incremental index complete."));
 	bIsIndexing = false;
 	RegisterLiveCallbacks();
+	return true;
 }
 
 // ============================================================
@@ -1595,6 +1924,26 @@ void UMonolithIndexSubsystem::RunScopedSentinels(const TSet<FString>& ChangedPat
 
 void UMonolithIndexSubsystem::RegisterLiveCallbacks()
 {
+	// An index run owns the database exclusively; arming the callbacks now would
+	// queue changes the run is about to overwrite anyway.
+	if (bIsIndexing)
+	{
+		return;
+	}
+
+	if (!Database.IsValid() || !Database->IsOpen())
+	{
+		return;
+	}
+
+	// Already armed. Re-registering would bind a second copy of every delegate
+	// and overwrite the handles, leaving the first copies permanently attached.
+	if (OnAssetsAddedHandle.IsValid() || OnAssetsRemovedHandle.IsValid()
+		|| OnAssetRenamedHandle.IsValid() || OnAssetsUpdatedOnDiskHandle.IsValid())
+	{
+		return;
+	}
+
 	IAssetRegistry& AR = IAssetRegistry::GetChecked();
 
 	OnAssetsAddedHandle = AR.OnAssetsAdded().AddUObject(this, &UMonolithIndexSubsystem::OnAssetsAddedCallback);
@@ -1622,6 +1971,14 @@ void UMonolithIndexSubsystem::UnregisterLiveCallbacks()
 		AR->OnAssetRenamed().Remove(OnAssetRenamedHandle);
 		AR->OnAssetsUpdatedOnDisk().Remove(OnAssetsUpdatedOnDiskHandle);
 	}
+
+	// Reset unconditionally, including when the Asset Registry has already gone
+	// away. A retained handle reads as "still armed" to RegisterLiveCallbacks and
+	// would block every future re-arm.
+	OnAssetsAddedHandle.Reset();
+	OnAssetsRemovedHandle.Reset();
+	OnAssetRenamedHandle.Reset();
+	OnAssetsUpdatedOnDiskHandle.Reset();
 
 	if (GEditor)
 	{

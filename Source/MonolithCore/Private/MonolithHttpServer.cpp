@@ -30,10 +30,9 @@ bool FMonolithHttpServer::Start(int32 Port)
 	}
 
 	// On a fresh editor launch, the OS keeps the port in TIME_WAIT for up to
-	// 2*MSL (~30s on macOS/Linux) after the previous editor shut down. UE's
-	// HttpServerModule also caches a broken listener internally and won't
-	// rebind until StopAllListeners() is called. Budget ~40s total so a
-	// rapid close+reopen cycle doesn't drop the MCP server on the floor.
+	// 2*MSL (~30s on macOS/Linux) after the previous editor shut down. Budget
+	// ~40s total so a rapid close+reopen cycle doesn't drop the MCP server on
+	// the floor.
 	constexpr int32 MaxAttempts = 20;
 	constexpr float BackoffSeconds = 2.0f;
 
@@ -45,20 +44,13 @@ bool FMonolithHttpServer::Start(int32 Port)
 				Attempt, MaxAttempts, Port, BackoffSeconds);
 			FPlatformProcess::Sleep(BackoffSeconds);
 
-			// Drop our router handle + routes so GetHttpRouter can evict failed listener.
-			if (HttpRouter.IsValid())
-			{
-				for (const FHttpRouteHandle& Handle : RouteHandles)
-				{
-					HttpRouter->UnbindRoute(Handle);
-				}
-			}
-			RouteHandles.Empty();
-			HttpRouter.Reset();
-
-			// Full module reset — the HttpServerModule caches a failed listener
-			// and refuses to re-bind the same port until we explicitly stop it.
-			FHttpServerModule::Get().StopAllListeners();
+			// Drop our routes only. We deliberately do NOT call
+			// StopAllListeners() — it is process-wide and would stop every
+			// other subsystem's listener too. Leaving the module's
+			// bHttpListenersEnabled flag true is what lets the GetHttpRouter
+			// call below evict a failed listener and build a fresh one; with
+			// listeners disabled it would hand back the dead one instead.
+			DeactivateRoutes();
 		}
 
 		HttpRouter = FHttpServerModule::Get().GetHttpRouter(Port, true);
@@ -89,15 +81,7 @@ bool FMonolithHttpServer::Start(int32 Port)
 	UE_LOG(LogMonolith, Error, TEXT("Failed to bind Monolith MCP server on port %d after %d attempts (~%ds total)"),
 		Port, MaxAttempts, static_cast<int32>(MaxAttempts * BackoffSeconds));
 	// Clean up
-	if (HttpRouter.IsValid())
-	{
-		for (const FHttpRouteHandle& Handle : RouteHandles)
-		{
-			HttpRouter->UnbindRoute(Handle);
-		}
-	}
-	RouteHandles.Empty();
-	HttpRouter.Reset();
+	DeactivateRoutes();
 	return false;
 }
 
@@ -108,20 +92,30 @@ void FMonolithHttpServer::Stop()
 		return;
 	}
 
+	DeactivateRoutes();
+
+	UE_LOG(LogMonolith, Log, TEXT("Monolith MCP server stopped"));
+}
+
+void FMonolithHttpServer::DeactivateRoutes()
+{
 	if (HttpRouter.IsValid())
 	{
 		for (const FHttpRouteHandle& Handle : RouteHandles)
 		{
 			HttpRouter->UnbindRoute(Handle);
 		}
-		RouteHandles.Empty();
 	}
+	RouteHandles.Empty();
 
-	FHttpServerModule::Get().StopAllListeners();
-	HttpRouter.Reset();
-
+	// The HttpRouter and the module's listeners are intentionally left alone.
+	// FHttpServerModule::StopAllListeners() is process-wide: it would silently
+	// kill Web Remote Control, PerfCounters, ExternalRpcRegistry and every
+	// other plugin's HTTP routes along with ours. Unbinding our own handles is
+	// enough to take Monolith off the wire; the listener keeps holding the
+	// port until the editor exits.
 	bIsRunning = false;
-	UE_LOG(LogMonolith, Log, TEXT("Monolith MCP server stopped"));
+	BoundPort = 0;
 }
 
 void FMonolithHttpServer::BindRoutes()
@@ -173,8 +167,26 @@ bool FMonolithHttpServer::ProbePort(int32 Port)
 	FSocket* Socket = SocketSubsystem->CreateSocket(NAME_Stream, TEXT("MonolithProbe"), false);
 	if (!Socket) return false;
 
-	Socket->SetNonBlocking(false);
-	const bool bConnected = Socket->Connect(*Addr);
+	bool bConnected = false;
+
+	if (Socket->SetNonBlocking(true))
+	{
+		// Connect() on a non-blocking socket reports success for both
+		// SE_EWOULDBLOCK and SE_EINPROGRESS, so its return value says nothing
+		// about whether anything is listening. Wait for writability, then ask
+		// the socket for its actual state — that is the verdict. Without this,
+		// a probe of a closed port would "succeed" and we would log that we
+		// are listening having bound nothing.
+		Socket->Connect(*Addr);
+		Socket->Wait(ESocketWaitConditions::WaitForWrite, FTimespan::FromMilliseconds(100));
+		bConnected = Socket->GetConnectionState() == SCS_Connected;
+	}
+	else
+	{
+		// Platform refused the mode change — fall back to a blocking connect.
+		bConnected = Socket->Connect(*Addr);
+	}
+
 	Socket->Close();
 	SocketSubsystem->DestroySocket(Socket);
 	return bConnected;
@@ -182,22 +194,15 @@ bool FMonolithHttpServer::ProbePort(int32 Port)
 
 bool FMonolithHttpServer::Restart(int32 Port)
 {
-	// Unbind our routes
-	if (HttpRouter.IsValid())
-	{
-		for (const FHttpRouteHandle& Handle : RouteHandles)
-		{
-			HttpRouter->UnbindRoute(Handle);
-		}
-	}
-	RouteHandles.Empty();
+	DeactivateRoutes();
+
+	// Drop our router handle so Start() re-fetches one. The module's listeners
+	// stay enabled, which is what lets GetHttpRouter evict a wedged listener
+	// and rebuild it — StopAllListeners() would disable them and make the
+	// module hand back the dead listener instead (besides stopping every other
+	// plugin's routes).
 	HttpRouter.Reset();
 
-	// Full stop — safe here because we own the listener
-	FHttpServerModule::Get().StopAllListeners();
-
-	bIsRunning = false;
-	BoundPort = 0;
 	return Start(Port);
 }
 

@@ -1265,7 +1265,11 @@ namespace MonolithPCG
 				Objects.Add(Object);
 			}
 			return true;
-		}, true);
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+		}, EGetObjectsFlags::IncludeNestedObjects);
+#else
+		}, /*bIncludeNestedObjects=*/true);
+#endif
 
 		if (Objects.Num() > Options.MaxObjects)
 		{

@@ -58,6 +58,10 @@
 #include "AnimationStateMachineGraph.h"
 #include "AnimationGraphSchema.h"
 #include "AnimStateNode.h"
+// UAnimStateNodeBase — the virtual GetStateName()/GetBoundGraph() pair the strict scope
+// resolver matches on (covers conduits/aliases too, not just UAnimStateNode). Included
+// explicitly rather than transitively via AnimStateNode.h for the -DisableUnity pass.
+#include "AnimStateNodeBase.h"
 #include "EdGraphSchema_K2_Actions.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
@@ -80,6 +84,16 @@
 #include "AnimGraphNode_BlendStack.h"
 // FGraphNodeCreator — pristine node spawn for BoundGraph-owning nodes
 #include "EdGraph/EdGraph.h"
+// ABP-native anim layer authoring (add_anim_layer_graph) — the input-pose editor node, and
+// UEdGraphSchema_K2::GN_AnimGraph for the reserved-name / default-AnimGraph checks. Include both
+// explicitly rather than relying on a transitive path: the release build's -DisableUnity pass
+// gives each .cpp its own translation unit and would surface a missing include as a hard error.
+#include "AnimGraphNode_LinkedInputPose.h"
+#include "EdGraphSchema_K2.h"
+// UE_BLUEPRINT_INVALID_NAME_CHARACTERS — the engine's own invalid-character set for Blueprint member
+// names. Validating layer_name against it keeps the rule identical to FKismetNameValidator's, rather
+// than inventing a second one.
+#include "Kismet2/Kismet2NameValidators.h"
 
 // ---------------------------------------------------------------------------
 // Registration
@@ -154,15 +168,17 @@ void FMonolithAbpWriteActions::RegisterActions(FMonolithToolRegistry& Registry)
 	// CDO is regenerated from the graph nodes — this action edits the authoritative
 	// source so the change persists.
 	Registry.RegisterAction(TEXT("animation"), TEXT("set_anim_graph_node_property"),
-		TEXT("Mutate a property on an existing anim graph node's internal FAnimNode struct (e.g. ModifyBone.BoneToModify.BoneName, ModifyBone.RotationMode, TwoBoneIK.EffectorLocationSpace). Persists across compile — writes to the source UAnimGraphNode, not the CDO."),
+		TEXT("Mutate a property on an existing anim graph node's internal FAnimNode struct (e.g. ModifyBone.BoneToModify.BoneName, ModifyBone.RotationMode, TwoBoneIK.EffectorLocationSpace). Persists across compile — writes to the source UAnimGraphNode, not the CDO. ")
+		TEXT("SCOPE IS AUTHORITATIVE: if graph_name/state_name is supplied and does not resolve to exactly one graph, this ERRORS — it never falls back to the all-graphs search (node ids repeat across graphs, so a fallback silently writes to an unrelated layer). Omit both to keep the all-graphs search. ")
+		TEXT("Responds with resolved_graph_path (root-to-leaf, e.g. 'Standing Stance/Standing States/Stop/Stop States/Plant Left Foot') alongside old_value/new_value, so a caller can assert WHERE the write landed."),
 		FMonolithActionHandler::CreateStatic(&HandleSetAnimGraphNodeProperty),
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
-			.Required(TEXT("node_id"), TEXT("string"), TEXT("Node UObject name (e.g. 'AnimGraphNode_ModifyBone_7') — same id surfaced by get_graph_summary / add_anim_graph_node response"))
+			.Required(TEXT("node_id"), TEXT("string"), TEXT("Node UObject name (e.g. 'AnimGraphNode_ModifyBone_7') — same id surfaced by get_graph_summary / add_anim_graph_node response. NOT unique across graphs; scope it."))
 			.Required(TEXT("property_path"), TEXT("string"), TEXT("Dotted property path inside the node's inner FAnimNode struct (e.g. 'BoneToModify.BoneName', 'RotationMode', 'EffectorLocationSpace', 'Alpha'). Do NOT prefix with 'Node.'."))
 			.Required(TEXT("value"), TEXT("string"), TEXT("Value as text — same format as ImportText in the Details panel. Enums: bare name (e.g. 'BMM_Additive', 'BCS_ComponentSpace'). FName: bare name. Struct: '(Field=Value,...)'."))
-			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Graph name to scope the search (default: searches all graphs)"))
-			.Optional(TEXT("state_name"), TEXT("string"), TEXT("State name to narrow the search to a specific state's inner graph"))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Graph name to scope the search — matched against EVERY graph including nested state machines. With state_name it narrows (owning state machine graph OR the state's inner graph). Supplied-but-unresolved, or matching more than one graph, is an ERROR. Default: searches all graphs."))
+			.Optional(TEXT("state_name"), TEXT("string"), TEXT("State name to scope the search to that state's inner graph, at ANY nesting depth (e.g. 'Plant Left Foot' under Standing States/Stop/Stop States). Supplied-but-unresolved, or matching more than one state, is an ERROR — pair it with graph_name to disambiguate sibling states."))
 			.Build());
 
 	// --- configure_pose_history_node (Sprint 4.2) ---
@@ -405,16 +421,27 @@ void FMonolithAbpWriteActions::RegisterActions(FMonolithToolRegistry& Registry)
 
 	// --- add_linked_anim_layer (AnimGraph authoring, Group 3) ---
 	Registry.RegisterAction(TEXT("animation"), TEXT("add_linked_anim_layer"),
-		TEXT("Place a Linked Anim Layer node (UAnimGraphNode_LinkedAnimLayer) that runs a named animation layer declared on an implemented anim-layer interface. Spawns the node, reflection-writes the inner Layer name / Interface class / InstanceClass, and resolves the editor-node InterfaceGuid from the implemented interface graph whose name matches layer_name (mirrors the engine's GetGuidForLayer lookup), then ReconstructNode() regenerates the layer's IO pins. The ABP must implement at least one UAnimLayerInterface declaring the layer."),
+		TEXT("Place a Linked Anim Layer node (UAnimGraphNode_LinkedAnimLayer) that runs a named animation layer of this Animation Blueprint. Spawns the node, reflection-writes the inner Layer name / Interface class / InstanceClass, and resolves the editor-node InterfaceGuid from the implemented interface graph whose name matches layer_name (mirrors the engine's GetGuidForLayer lookup), then ReconstructNode() regenerates the layer's IO pins. The layer may be declared either on an implemented UAnimLayerInterface or as an ABP-native layer graph in the ABP's own FunctionGraphs (see add_anim_layer_graph) — a native match resolves to a SELF layer, mirroring the engine's own treatment of interface-lookup failure as the self signal."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAbpWriteActions::HandleAddLinkedAnimLayer),
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
-			.Required(TEXT("layer_name"), TEXT("string"), TEXT("Layer/function name as declared on the implemented anim-layer interface graph"))
-			.Optional(TEXT("interface_class"), TEXT("string"), TEXT("UAnimLayerInterface class declaring the layer (path or name) — required only when the ABP implements multiple anim-layer interfaces; otherwise resolved automatically from layer_name"))
-			.Optional(TEXT("instance_class"), TEXT("string"), TEXT("External UAnimInstance class to run this layer (path or name); omit for a self/Default layer (only valid for non-self interface layers)"))
+			.Required(TEXT("layer_name"), TEXT("string"), TEXT("Layer/function name as declared on the implemented anim-layer interface graph, or the name of an ABP-native anim layer graph"))
+			.Optional(TEXT("interface_class"), TEXT("string"), TEXT("UAnimLayerInterface class declaring the layer (path or name) — required only when the ABP implements multiple anim-layer interfaces; otherwise resolved automatically from layer_name. Supplying it also disables the ABP-native (self) layer fallback, so an explicit interface request never resolves to a self layer."))
+			.Optional(TEXT("instance_class"), TEXT("string"), TEXT("External UAnimInstance class to run this layer (path or name); omit for a self/Default layer (only valid for non-self interface layers). Rejected for ABP-native (self) layers — self layers cannot have override implementations."))
 			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Target graph name (default: AnimGraph)"), TEXT("AnimGraph"))
 			.Optional(TEXT("position_x"), TEXT("number"), TEXT("Node X position (default: 200)"), TEXT("200"))
 			.Optional(TEXT("position_y"), TEXT("number"), TEXT("Node Y position (default: 0)"), TEXT("0"))
+			.Build());
+
+	// --- add_anim_layer_graph (ABP-native anim layer authoring) ---
+	Registry.RegisterAction(TEXT("animation"), TEXT("add_anim_layer_graph"),
+		TEXT("Create an ABP-NATIVE animation layer graph: a UAnimationGraph in the Animation Blueprint's own FunctionGraphs, which is exactly what the editor's My Blueprint -> + -> Animation Layer button produces. No UAnimLayerInterface asset is needed — the layer belongs to this ABP, so ABP variants do not have to share a layer signature. The graph is created with the animation graph schema (so the anim compiler emits a real FAnimBlueprintFunction for it, unlike blueprint add_function, which produces an inert K2 graph), and its Output Pose root node is created automatically. Optional input_poses adds Input Pose nodes; pose NAMES only — non-pose parameter pins are not supported yet. Populate the layer with the existing anim-graph authoring actions, then place a node for it with add_linked_anim_layer, which auto-detects native layers. Refuses: a duplicate graph name (it never renames or replaces an existing graph), the reserved name 'AnimGraph', a child Animation Blueprint (layers belong to the root ABP), macro libraries, and interface Blueprints."),
+		FMonolithActionHandler::CreateStatic(&FMonolithAbpWriteActions::HandleAddAnimLayerGraph),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path — must be a ROOT ABP, not a child ABP"))
+			.Required(TEXT("layer_name"), TEXT("string"), TEXT("Layer graph name. Must not collide with any existing graph on the ABP (function, ubergraph, macro, delegate signature, or implemented-interface graph) and must not be 'AnimGraph'"))
+			.Optional(TEXT("input_poses"), TEXT("array"), TEXT("Input pose names to add, e.g. [\"InPose\"] or [{\"name\": \"InPose\"}] — both forms accepted. Pose names only; non-pose parameter pins are not supported yet. Capped at 16. Names must be unique within the layer."))
+			.Optional(TEXT("compile"), TEXT("bool"), TEXT("Compile the ABP after creating the graph (default: true). Pass false to defer the compile while an intentionally-empty layer graph is being populated — a layer whose Output Pose is unconnected can draw compiler warnings."), TEXT("true"))
 			.Build());
 }
 
@@ -868,6 +895,142 @@ UEdGraphNode* FindNodeByName(UAnimBlueprint* ABP, const FString& NodeName, UEdGr
 	return nullptr;
 }
 
+/**
+ * Build a '/'-separated path of graph names from the ABP root down to Graph, by walking
+ * the outer chain (a state's inner graph is outered to its UAnimStateNode, which is
+ * outered to the state machine graph, and so on). Reported so a caller can assert WHERE
+ * a write landed, not just what it replaced.
+ *
+ *   "Standing Stance/Standing States/Stop/Stop States/Plant Left Foot"
+ */
+FString BuildGraphPath(UEdGraph* Graph)
+{
+	TArray<FString> Segments;
+	for (UObject* Cursor = Graph; Cursor; Cursor = Cursor->GetOuter())
+	{
+		if (UEdGraph* AsGraph = Cast<UEdGraph>(Cursor))
+		{
+			Segments.Add(AsGraph->GetName());
+		}
+	}
+
+	FString Path;
+	for (int32 i = Segments.Num() - 1; i >= 0; --i)
+	{
+		if (!Path.IsEmpty()) Path += TEXT("/");
+		Path += Segments[i];
+	}
+	return Path;
+}
+
+/**
+ * STRICT scope resolution for set_anim_graph_node_property.
+ *
+ * Returns false (with OutError) whenever a SUPPLIED scope cannot be resolved to exactly
+ * one graph. Callers must NOT degrade to the global node search on failure: node ids are
+ * not unique across graphs, so a global fallback writes to an unrelated layer while the
+ * asset still compiles and still validates. See
+ * Docs/bugs/2026-07-31-set-anim-graph-node-property-silent-global-fallback.md.
+ *
+ * Differences from ResolveTargetGraph, all deliberate:
+ *  - Enumerates with UBlueprint::GetAllGraphs, which recurses UEdGraph::SubGraphs
+ *    (Blueprint.cpp:1984 -> EdGraph.cpp:323). NESTED state machines therefore resolve
+ *    ("Standing States/Stop/Stop States/Plant Left Foot"); ResolveTargetGraph only walks
+ *    FunctionGraphs plus one level of state machine. This is the same enumeration
+ *    set_anim_node_pin_binding's node resolver already relies on, which is why that action
+ *    can reach these graphs today and this one could not.
+ *  - Collects EVERY candidate and errors on ambiguity instead of returning the first hit
+ *    (sibling states such as Plant Left/Right Foot hold identical node ids).
+ *  - Treats graph_name as a narrowing filter when state_name is also supplied, matching
+ *    either the owning state machine graph or the state's own inner graph.
+ */
+bool ResolveScopeGraphStrict(UAnimBlueprint* ABP, const FString& GraphName, const FString& StateName,
+                             UEdGraph*& OutGraph, FString& OutError)
+{
+	OutGraph = nullptr;
+
+	TArray<UEdGraph*> AllGraphs;
+	ABP->GetAllGraphs(AllGraphs);
+
+	TArray<UEdGraph*> Candidates;
+
+	if (!StateName.IsEmpty())
+	{
+		for (UEdGraph* Graph : AllGraphs)
+		{
+			if (!Graph) continue;
+			for (UEdGraphNode* Node : Graph->Nodes)
+			{
+				UAnimStateNodeBase* StateNode = Cast<UAnimStateNodeBase>(Node);
+				if (!StateNode || StateNode->GetStateName() != StateName) continue;
+
+				UEdGraph* Inner = StateNode->GetBoundGraph();
+				if (!Inner) continue;
+
+				// graph_name, when supplied alongside state_name, narrows the match: it may
+				// name either the owning state machine graph or the state's inner graph.
+				if (!GraphName.IsEmpty()
+					&& Graph->GetName() != GraphName
+					&& Inner->GetName() != GraphName)
+				{
+					continue;
+				}
+				Candidates.AddUnique(Inner);
+			}
+		}
+
+		if (Candidates.Num() == 0)
+		{
+			OutError = GraphName.IsEmpty()
+				? FString::Printf(
+					TEXT("Scope not found: state_name='%s' does not resolve to any state's inner graph in this Animation Blueprint. ")
+					TEXT("Refusing to fall back to a global node search — node ids are not unique across graphs, so a fallback can write to an unrelated layer."),
+					*StateName)
+				: FString::Printf(
+					TEXT("Scope not found: state_name='%s' with graph_name='%s' does not resolve to any state's inner graph in this Animation Blueprint. ")
+					TEXT("Refusing to fall back to a global node search — node ids are not unique across graphs, so a fallback can write to an unrelated layer."),
+					*StateName, *GraphName);
+			return false;
+		}
+	}
+	else
+	{
+		for (UEdGraph* Graph : AllGraphs)
+		{
+			if (Graph && Graph->GetName() == GraphName)
+			{
+				Candidates.AddUnique(Graph);
+			}
+		}
+
+		if (Candidates.Num() == 0)
+		{
+			OutError = FString::Printf(
+				TEXT("Scope not found: graph_name='%s' does not match any graph in this Animation Blueprint (nested state machine graphs included). ")
+				TEXT("Refusing to fall back to a global node search — node ids are not unique across graphs, so a fallback can write to an unrelated layer."),
+				*GraphName);
+			return false;
+		}
+	}
+
+	if (Candidates.Num() > 1)
+	{
+		FString PathList;
+		for (UEdGraph* Candidate : Candidates)
+		{
+			if (!PathList.IsEmpty()) PathList += TEXT(", ");
+			PathList += BuildGraphPath(Candidate);
+		}
+		OutError = FString::Printf(
+			TEXT("Ambiguous scope: %d graphs match (%s). Refusing to pick one — narrow it by supplying BOTH graph_name (the owning state machine) and state_name."),
+			Candidates.Num(), *PathList);
+		return false;
+	}
+
+	OutGraph = Candidates[0];
+	return true;
+}
+
 /** Build a JSON array describing a node's pins. */
 TArray<TSharedPtr<FJsonValue>> BuildPinList(UEdGraphNode* Node)
 {
@@ -1049,6 +1212,27 @@ UAnimGraphNode_Base* SpawnAndWirePoseInput(
 
 	GEditor->EndTransaction();
 	return SpawnedAnim;
+}
+
+/**
+ * True if any graph in the array carries this exact FName.
+ * Templated over the array type so it binds to both UBlueprint's TArray<TObjectPtr<UEdGraph>>
+ * graph arrays and the TArray<UEdGraph*> inside FBPInterfaceDescription.
+ * Deliberately verbose name: this lives in an anonymous namespace, and the release build's
+ * full-unity pass concatenates every .cpp in the module into one blob, where a generically-named
+ * file-local helper would collide with a same-named helper in a sibling .cpp (issue #68 class).
+ */
+template <typename GraphArrayType>
+bool AbpGraphArrayContainsName(const GraphArrayType& Graphs, const FName Name)
+{
+	for (const UEdGraph* Graph : Graphs)
+	{
+		if (Graph && Graph->GetFName() == Name)
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 } // anonymous namespace
@@ -1816,18 +2000,31 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleSetAnimGraphNodeProperty(c
 	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
 	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 
-	// Optional graph scope — same resolution as connect_anim_graph_pins.
+	// Optional graph scope. A SUPPLIED scope is AUTHORITATIVE: if it does not resolve to
+	// exactly one graph this errors out. It used to silently fall through to the global
+	// node search, which wrote to a same-id node in an unrelated layer — invisible,
+	// because the asset still compiles and still validates. Omitting the scope entirely
+	// keeps the documented global search.
+	const bool bScopeSupplied = !StateName.IsEmpty() || !GraphName.IsEmpty();
 	UEdGraph* ScopeGraph = nullptr;
-	if (!StateName.IsEmpty() || (!GraphName.IsEmpty() && !GraphName.Equals(TEXT("AnimGraph"), ESearchCase::IgnoreCase)))
+	if (bScopeSupplied)
 	{
-		FString GraphError;
-		ScopeGraph = ResolveTargetGraph(ABP, GraphName, StateName, GraphError);
+		FString ScopeError;
+		if (!ResolveScopeGraphStrict(ABP, GraphName, StateName, ScopeGraph, ScopeError))
+		{
+			return FMonolithActionResult::Error(ScopeError);
+		}
 	}
 
 	UEdGraphNode* FoundNode = FindNodeByName(ABP, NodeId, ScopeGraph);
 	if (!FoundNode)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Node '%s' not found"), *NodeId));
+		return FMonolithActionResult::Error(bScopeSupplied
+			? FString::Printf(
+				TEXT("Node '%s' not found in scope '%s'. The scope resolved, so no global search was attempted — ")
+				TEXT("a fallback could write to a same-id node in an unrelated graph."),
+				*NodeId, *BuildGraphPath(ScopeGraph))
+			: FString::Printf(TEXT("Node '%s' not found"), *NodeId));
 	}
 
 	UAnimGraphNode_Base* AnimNode = Cast<UAnimGraphNode_Base>(FoundNode);
@@ -1901,6 +2098,9 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleSetAnimGraphNodeProperty(c
 	Root->SetStringField(TEXT("property_path"), PropertyPath);
 	Root->SetStringField(TEXT("old_value"), OldValueText);
 	Root->SetStringField(TEXT("new_value"), NewValueText);
+	// WHERE the write landed, root-to-leaf. Reported for every write (scoped or global) so
+	// a caller can assert the target rather than inferring it from old_value alone.
+	Root->SetStringField(TEXT("resolved_graph_path"), BuildGraphPath(AnimNode->GetGraph()));
 	return FMonolithActionResult::Success(Root);
 }
 
@@ -4141,10 +4341,20 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddAnimControlRigNode(cons
 //   - editor InterfaceGuid (FGuid, UPROPERTY)        AnimGraphNode_LinkedAnimLayer.h:30
 // The Interface + InterfaceGuid are resolved from the ABP's implemented anim-layer
 // interface graph whose name matches layer_name — exactly the engine's own
-// GetInterfaceForLayer / GetGuidForLayer lookup (AnimGraphNode_LinkedAnimLayer.cpp:813,863):
-// walk UBlueprint::ImplementedInterfaces, match InterfaceGraph->GetFName() == layer_name,
-// read InterfaceDesc.Interface (the UAnimLayerInterface subclass) and InterfaceGraph->InterfaceGuid.
-// ReconstructNode() then regenerates the layer's IO pins from the resolved interface.
+// GetInterfaceForLayer / GetGuidForLayer lookup: walk UBlueprint::ImplementedInterfaces,
+// match InterfaceGraph->GetFName() == layer_name, read InterfaceDesc.Interface (the
+// UAnimLayerInterface subclass) and InterfaceGraph->InterfaceGuid.
+// A layer that no implemented interface declares is then looked for among the ABP's OWN anim
+// graphs (what add_anim_layer_graph produces) and bound as a SELF layer: null Interface, invalid
+// InterfaceGuid, null InstanceClass, self FunctionReference. That mirrors the engine, which stores
+// no "is self" flag and instead derives self from interface-lookup FAILURE — see the resolution
+// comment below.
+// ReconstructNode() then regenerates the layer's IO pins: UAnimGraphNode_LinkedAnimGraphBase::
+// CreateOutputPins resolves FunctionReference against GetTargetSkeletonClass() (the interface class
+// for an interface layer; for a self layer UAnimGraphNode_LinkedAnimLayer::GetTargetSkeletonClass
+// falls back to the ABP's own SkeletonGeneratedClass) and adds one pose pin per pose parameter of
+// the resolved layer function. So the layer's own graph must already be compiled into the skeleton
+// class when the node is placed, or the node comes up with no pose pins.
 // ---------------------------------------------------------------------------
 
 FMonolithActionResult FMonolithAbpWriteActions::HandleAddLinkedAnimLayer(const TSharedPtr<FJsonObject>& Params)
@@ -4169,7 +4379,8 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddLinkedAnimLayer(const T
 
 	// Resolve the interface + GUID from the ABP's implemented anim-layer interface graphs, exactly as
 	// the engine's GetInterfaceForLayer/GetGuidForLayer do: match the interface graph whose name is the
-	// layer name. This also validates that the ABP actually implements a layer with this name.
+	// layer name. Together with the ABP-native pass below, this also validates that the ABP really
+	// declares a layer with this name before anything is spawned.
 	const FName LayerFName(*LayerName);
 	UClass* ResolvedInterfaceClass = nullptr;     // UAnimLayerInterface subclass that declares the layer
 	FGuid   ResolvedGuid;
@@ -4211,17 +4422,64 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddLinkedAnimLayer(const T
 		if (bFoundLayer) break;
 	}
 
+	// ABP-NATIVE (self) layer fallback. A layer created by add_anim_layer_graph lives in
+	// UBlueprint::FunctionGraphs as an anim graph, not on an implemented interface. The engine keeps no
+	// "this is a self layer" flag — it derives self from interface-lookup FAILURE:
+	// UAnimGraphNode_LinkedAnimLayer::SetupFromLayerId sets the member reference first, then
+	// GetInterfaceForLayer / GetGuidForLayer both walk ImplementedInterfaces only, so both fall through
+	// for a native layer and the node forces InstanceClass = nullptr ("Self layers cannot have override
+	// implementations"). Mirror that: on a match here, leave ResolvedInterfaceClass and ResolvedGuid at
+	// their defaults so the self branch below takes over.
+	//
+	// The interface pass above runs first, so an interface declaration always wins over a same-named
+	// native graph — the engine's own lookup order. add_anim_layer_graph refuses to create a native layer
+	// colliding with an implemented interface graph, so that ambiguity can only arise when the interface
+	// was implemented after the native layer already existed.
+	//
+	// Skipped entirely when interface_class was supplied: an explicit interface request must never
+	// silently resolve to a self layer.
+	TArray<FString> AvailableNativeLayers;
+	if (!bFoundLayer && !RequestedInterface)
+	{
+		for (const UEdGraph* FunctionGraph : ABP->FunctionGraphs)
+		{
+			// Filter on the SCHEMA, not the graph class: FAnimBlueprintCompilerContext::
+			// CreateAnimGraphStubFunctions gates on Schema->IsChildOf(UAnimationGraphSchema) when it
+			// decides which FunctionGraphs entry becomes an FAnimBlueprintFunction, and only those
+			// functions are linkable as layers. Same predicate add_anim_layer_graph's pose-name scan uses.
+			if (!FunctionGraph || !FunctionGraph->Schema ||
+			    !FunctionGraph->Schema->IsChildOf(UAnimationGraphSchema::StaticClass()))
+			{
+				continue;
+			}
+			// The default anim graph compiles to a function as well, but it is the ABP's entry point, not
+			// a layer — the engine's own Layer dropdown (GetLayerNames) skips GN_AnimGraph too.
+			if (FunctionGraph->GetFName() == UEdGraphSchema_K2::GN_AnimGraph)
+			{
+				continue;
+			}
+			AvailableNativeLayers.AddUnique(FunctionGraph->GetFName().ToString());
+			if (FunctionGraph->GetFName() == LayerFName)
+			{
+				bFoundLayer = true; // ResolvedInterfaceClass stays null => self layer
+				break;
+			}
+		}
+	}
+
 	if (!bFoundLayer)
 	{
-		if (AvailableLayers.Num() == 0)
+		if (AvailableLayers.Num() == 0 && AvailableNativeLayers.Num() == 0)
 		{
 			return FMonolithActionResult::Error(FString::Printf(
-				TEXT("AnimBlueprint '%s' implements no anim-layer interface — nothing to link. Add a UAnimLayerInterface and declare the layer first."),
+				TEXT("AnimBlueprint '%s' declares no anim layers — nothing to link. Create an ABP-native layer with add_anim_layer_graph, or add a UAnimLayerInterface and declare the layer there."),
 				*AssetPath));
 		}
 		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("Layer '%s' not found among the implemented anim-layer interface graphs. Available layers: [%s]"),
-			*LayerName, *FString::Join(AvailableLayers, TEXT(", "))));
+			TEXT("Layer '%s' not found. Interface layers: [%s]. ABP-native layers: [%s]"),
+			*LayerName,
+			*FString::Join(AvailableLayers, TEXT(", ")),
+			*FString::Join(AvailableNativeLayers, TEXT(", "))));
 	}
 
 	// Optional external instance class (only meaningful for non-self interface layers).
@@ -4231,6 +4489,16 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddLinkedAnimLayer(const T
 		FString InstErr;
 		InstanceClass = ResolveSingleClassOfType(InstanceClassSpec, UAnimInstance::StaticClass(), TEXT("instance_class"), InstErr);
 		if (!InstanceClass) return FMonolithActionResult::Error(InstErr);
+	}
+
+	// A self layer cannot carry an override implementation — SetupFromLayerId force-clears
+	// Node.InstanceClass whenever the interface lookup came back null. Refuse here, while the ABP is
+	// still untouched, rather than write a value the engine discards.
+	if (InstanceClass && !ResolvedInterfaceClass)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("instance_class is not valid for the ABP-native (self) layer '%s' — self layers cannot have override implementations. Omit instance_class, or declare the layer on a UAnimLayerInterface if an external implementation is needed."),
+			*LayerName));
 	}
 
 	FString GraphError;
@@ -4291,14 +4559,19 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddLinkedAnimLayer(const T
 		}
 	}
 
-	// Keep the editor node's FunctionReference (FMemberReference) in sync with Node.Layer, exactly as
-	// the engine's UAnimGraphNode_LinkedAnimLayer::SetLayerName does (AnimGraphNode_LinkedAnimLayer.cpp:841-855):
-	// an external-interface layer references the layer function on the interface class (with its function
-	// GUID); a self layer is a self member. Without this, GetLayerName()'s
-	// ensure(FunctionReference.GetMemberName() == Node.Layer) (cpp:859) can fire on display and
-	// jump-to-definition won't resolve. FunctionReference is protected on the base node, so build it
-	// locally and copy it through the reflected UPROPERTY. ResolvedInterfaceClass maps to SetLayerName's
-	// GetTargetClass() (non-null = external interface, null = self).
+	// Keep the editor node's FunctionReference (FMemberReference) in sync with Node.Layer, exactly as the
+	// engine's UAnimGraphNode_LinkedAnimLayer::SetLayerName does: an external-interface layer references
+	// the layer function on the interface class (with its function GUID); a self layer is a self member.
+	// ResolvedInterfaceClass is the right discriminator because SetLayerName branches on GetTargetClass(),
+	// and FAnimNode_LinkedAnimLayer::GetTargetClass() returns *Interface — non-null = external interface,
+	// null = self. Both names come from the same LayerFName written into Node.Layer above, which is what
+	// keeps GetLayerName()'s ensure(FunctionReference.GetMemberName() == Node.Layer) satisfied; the member
+	// GUID is deliberately left invalid on the self path (SetupFromLayerId leaves it invalid too), so
+	// CreateOutputPins resolves the member by NAME and never re-resolves Node.Layer out from under us.
+	// This reference is also load-bearing, not cosmetic: CreateOutputPins runs
+	// FunctionReference.ResolveMember<UFunction>(GetTargetSkeletonClass()) and builds the layer's pose
+	// input pins from that function's pose parameters. FunctionReference is protected on the base node, so
+	// build it locally and copy it through the reflected UPROPERTY.
 	{
 		FMemberReference LayerFunctionRef;
 		if (ResolvedInterfaceClass)
@@ -4325,7 +4598,10 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddLinkedAnimLayer(const T
 		}
 	}
 
-	// Reflection-set the editor-node InterfaceGuid UPROPERTY (FGuid has a text form via ExportText).
+	// Reflection-set the editor-node InterfaceGuid UPROPERTY. On the self path ResolvedGuid is still the
+	// default-constructed (invalid) FGuid, which is exactly what GetGuidForLayer returns for a layer no
+	// implemented interface declares — and it has to stay invalid: ValidateAnimNodeDuringCompilation only
+	// raises its "linked layers cannot be nested" error for a node whose InterfaceGuid is valid.
 	if (FStructProperty* GuidProp = CastField<FStructProperty>(LayerNode->GetClass()->FindPropertyByName(TEXT("InterfaceGuid"))))
 	{
 		void* GuidAddr = GuidProp->ContainerPtrToValuePtr<void>(LayerNode);
@@ -4337,8 +4613,10 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddLinkedAnimLayer(const T
 		return FMonolithActionResult::Error(TEXT("Could not locate the InterfaceGuid UPROPERTY on the Linked Anim Layer node"));
 	}
 
-	// ReconstructNode() regenerates the layer's IO pins from the resolved interface
-	// (UAnimGraphNode_LinkedAnimLayer::ReconstructNode override -> CreateCustomPins).
+	// ReconstructNode() regenerates the layer's IO pins. UAnimGraphNode_LinkedAnimGraphBase::
+	// CreateOutputPins resolves the FunctionReference written above against GetTargetSkeletonClass() and
+	// makes one pose pin per pose parameter of the layer function; CreateCustomPins then adds the
+	// non-pose input properties. Both read the fields set above, so this call comes last.
 	LayerNode->ReconstructNode();
 	GEditor->EndTransaction();
 
@@ -4355,6 +4633,339 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddLinkedAnimLayer(const T
 	Root->SetBoolField(TEXT("guid_resolved"), ResolvedGuid.IsValid());
 	if (InstanceClass) Root->SetStringField(TEXT("instance_class"), InstanceClass->GetPathName());
 	Root->SetArrayField(TEXT("pins"), BuildPinList(LayerNode));
+	Root->SetBoolField(TEXT("saved"), false);
+	return FMonolithActionResult::Success(Root);
+}
+
+// ---------------------------------------------------------------------------
+// Action: add_anim_layer_graph
+//
+// Creates an ABP-NATIVE animation layer: a UAnimationGraph in UBlueprint::FunctionGraphs.
+// The editor's own path (FBlueprintEditor::NewDocument_OnClicked, case CGT_NewAnimationLayer) is
+// just two calls:
+//   FBlueprintEditorUtils::CreateNewGraph(BP, Name, UAnimationGraph::StaticClass(),
+//                                         UAnimationGraphSchema::StaticClass())
+//   FBlueprintEditorUtils::AddDomainSpecificGraph(BP, NewGraph)
+// Everything else around it there is asset-editor UX (IsEditingSingleBlueprint check,
+// OpenDocument, RenameNewlyAddedAction) and is skippable — the ABP factory in UnrealEd runs the
+// same pair headless to create the default AnimGraph, which is our precedent for doing it with no
+// asset editor open.
+//
+// Facts from the engine that shaped this implementation (symbol names only — 5.7 and 5.8 line
+// numbers drift):
+//  - CreateNewGraph sets NewGraph->Schema = SchemaClass. That single assignment is what makes the
+//    graph an ANIM graph rather than a K2 graph, and it is why neither run_python nor
+//    BlueprintEditorLibrary::add_function_graph can do this job: UEdGraph exposes no properties to
+//    script and add_function_graph hardcodes UEdGraphSchema_K2.
+//  - CreateNewGraph does NOT fail on a name collision — it renames the INCUMBENT graph out of the
+//    way. Duplicate rejection therefore needs an explicit pre-scan (same shape as
+//    blueprint add_function's collision scan).
+//  - The graph's outer is the ParentScope we pass, i.e. the UAnimBlueprint. Never reparent it:
+//    UAnimGraphNode_LinkedInputPose::PostPlacedNewNode does
+//    CastChecked<UAnimBlueprint>(GetGraph()->GetOuter()) and would hard-assert.
+//  - AddDomainSpecificGraph does four things: Schema->CreateDefaultNodesForGraph (which is how the
+//    Output Pose UAnimGraphNode_Root arrives for free), a live check() that the Blueprint is not a
+//    macro library, FunctionGraphs.Add, and MarkBlueprintAsStructurallyModified. So: validate the
+//    macro-library case BEFORE calling it, and do NOT call MarkBlueprintAsStructurallyModified
+//    ourselves afterwards.
+//  - The root node is mandatory, not cosmetic: FAnimBlueprintCompilerContext errors with
+//    "Could not find a root node for the graph @@" if a UAnimationGraph has none.
+// ---------------------------------------------------------------------------
+
+FMonolithActionResult FMonolithAbpWriteActions::HandleAddAnimLayerGraph(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor) return FMonolithActionResult::Error(TEXT("Editor is not available"));
+
+	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString LayerName; Params->TryGetStringField(TEXT("layer_name"), LayerName);
+	LayerName.TrimStartAndEndInline();
+	if (LayerName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: layer_name"));
+
+	// UE_BLUEPRINT_INVALID_NAME_CHARACTERS is the set FKismetNameValidator applies to Blueprint member
+	// names. CreateNewGraph validates nothing itself — it hands the name straight to NewObject — so an
+	// invalid character would yield a graph whose object path cannot be addressed.
+	FText NameError;
+	if (!FName::IsValidXName(LayerName, UE_BLUEPRINT_INVALID_NAME_CHARACTERS, &NameError))
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("layer_name '%s' is not a valid Blueprint graph name: %s"), *LayerName, *NameError.ToString()));
+	}
+
+	bool bCompile = true;
+	if (Params->HasField(TEXT("compile")))
+	{
+		bCompile = Params->GetBoolField(TEXT("compile"));
+	}
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	// --- Validation. Mirrors the editor's own visibility guard for CGT_NewAnimationLayer
+	//     (FBlueprintEditor::NewDocument_IsVisibleForType) plus the ABP factory's gates. Two of these
+	//     guard live check()s downstream, so skipping them means a crash, not a bad result.
+	if (UAnimBlueprint::FindRootAnimBlueprint(ABP) != nullptr)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("'%s' is a CHILD Animation Blueprint — anim layers can only be declared on the root ABP. Add the layer to the root ABP, then override it here."),
+			*AssetPath));
+	}
+	if (ABP->BlueprintType == BPTYPE_MacroLibrary)
+	{
+		// AddDomainSpecificGraph carries a live check() on exactly this — refuse before we get there.
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("'%s' is a macro library Blueprint — it cannot own an anim layer graph."), *AssetPath));
+	}
+	if (ABP->BlueprintType == BPTYPE_Interface)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("'%s' is an interface Blueprint. Declare the layer as an interface graph instead, then link it with add_linked_anim_layer."),
+			*AssetPath));
+	}
+
+	const FName LayerFName(*LayerName);
+	if (LayerFName == UEdGraphSchema_K2::GN_AnimGraph)
+	{
+		return FMonolithActionResult::Error(TEXT("'AnimGraph' is the reserved name of the ABP's default anim graph — choose a different layer_name"));
+	}
+
+	// --- Duplicate pre-check. CreateNewGraph renames the INCUMBENT graph out of the way on a
+	//     collision instead of failing, which would silently break the user's existing logic. Scan
+	//     every graph array in the Blueprint's name scope and refuse up front. This action never
+	//     renames, replaces, or duplicates an existing graph.
+	if (AbpGraphArrayContainsName(ABP->FunctionGraphs, LayerFName) ||
+	    AbpGraphArrayContainsName(ABP->UbergraphPages, LayerFName) ||
+	    AbpGraphArrayContainsName(ABP->MacroGraphs, LayerFName) ||
+	    AbpGraphArrayContainsName(ABP->DelegateSignatureGraphs, LayerFName))
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("A graph named '%s' already exists on '%s' — pick a different layer_name."),
+			*LayerName, *AssetPath));
+	}
+	for (const FBPInterfaceDescription& InterfaceDesc : ABP->ImplementedInterfaces)
+	{
+		if (AbpGraphArrayContainsName(InterfaceDesc.Graphs, LayerFName))
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Layer '%s' is already declared on implemented interface '%s' — place a node for it with add_linked_anim_layer instead of creating a native layer of the same name."),
+				*LayerName, InterfaceDesc.Interface ? *InterfaceDesc.Interface->GetName() : TEXT("<unknown>")));
+		}
+	}
+
+	// --- Parse and validate input_poses BEFORE creating anything. Every refusal below this point
+	//     would leave the freshly-created layer graph committed in FunctionGraphs (the transaction is
+	//     ended, not cancelled), so a bad pose list has to be caught while the ABP is still untouched.
+	//     Two entry forms are accepted per the registered schema: a bare name string, or an object
+	//     with a "name" field — the object form is the extension point for the non-pose parameter
+	//     pins this action does not support yet.
+	TArray<FString> RequestedPoseNames;
+	const TArray<TSharedPtr<FJsonValue>>* PoseArray = nullptr;
+	const bool bHasPoseArray = Params->TryGetArrayField(TEXT("input_poses"), PoseArray) && PoseArray;
+	if (!bHasPoseArray && Params->HasField(TEXT("input_poses")))
+	{
+		// Refuse rather than ignore. A present-but-non-array value silently yielding zero poses reads as
+		// "input_poses did nothing", which is the hardest kind of parameter bug for a caller to diagnose.
+		return FMonolithActionResult::Error(
+			TEXT("input_poses must be an array, e.g. [\"InPose\"] or [{\"name\": \"InPose\"}]"));
+	}
+	if (bHasPoseArray)
+	{
+		// The engine imposes no limit; 16 keeps the generated layer function's parameter list sane and
+		// bounds the work done inside one transaction.
+		if (PoseArray->Num() > 16)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("input_poses is capped at 16 (got %d)"), PoseArray->Num()));
+		}
+
+		// Collect the pose names already in use anywhere on this ABP. Pose-name scope is the whole
+		// Blueprint, not one graph: the engine's own input-pose name validator
+		// (SLinkedInputPoseNodeLabelWidget::IsNameValid) walks every UAnimationGraph in FunctionGraphs
+		// and rejects a case-insensitive match, and PostPlacedNewNode's uniquifier scans the same set.
+		// A name this action accepted but that panel would refuse is a name the user cannot later edit
+		// back to, so apply the engine's rule rather than a narrower per-layer one.
+		TArray<FString> UsedPoseNames;
+		for (const UEdGraph* FunctionGraph : ABP->FunctionGraphs)
+		{
+			if (!FunctionGraph || !FunctionGraph->Schema ||
+			    !FunctionGraph->Schema->IsChildOf(UAnimationGraphSchema::StaticClass()))
+			{
+				continue;
+			}
+			TArray<UAnimGraphNode_LinkedInputPose*> ExistingPoseNodes;
+			FunctionGraph->GetNodesOfClass(ExistingPoseNodes);
+			for (const UAnimGraphNode_LinkedInputPose* ExistingPoseNode : ExistingPoseNodes)
+			{
+				if (ExistingPoseNode)
+				{
+					UsedPoseNames.Add(ExistingPoseNode->Node.Name.ToString());
+				}
+			}
+		}
+
+		for (const TSharedPtr<FJsonValue>& Entry : *PoseArray)
+		{
+			FString PoseName;
+			if (Entry.IsValid() && Entry->Type == EJson::String)
+			{
+				PoseName = Entry->AsString();
+			}
+			else if (Entry.IsValid() && Entry->Type == EJson::Object)
+			{
+				const TSharedPtr<FJsonObject> Obj = Entry->AsObject();
+				if (Obj.IsValid())
+				{
+					Obj->TryGetStringField(TEXT("name"), PoseName);
+				}
+			}
+			PoseName.TrimStartAndEndInline();
+
+			if (PoseName.IsEmpty())
+			{
+				return FMonolithActionResult::Error(
+					TEXT("input_poses entries must each be a non-empty pose-name string, or an object with a non-empty \"name\" field"));
+			}
+			// 'None' parses to NAME_None, which GetNodeTitle renders as an unnamed pose and which the
+			// engine's own name validator rejects outright.
+			if (PoseName.Equals(TEXT("None"), ESearchCase::IgnoreCase))
+			{
+				return FMonolithActionResult::Error(TEXT("'None' is not a usable input pose name"));
+			}
+
+			const bool bDuplicateInRequest = RequestedPoseNames.ContainsByPredicate(
+				[&PoseName](const FString& Existing) { return Existing.Equals(PoseName, ESearchCase::IgnoreCase); });
+			if (bDuplicateInRequest)
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("Duplicate input pose name '%s' in input_poses — pose names must be unique."), *PoseName));
+			}
+			const bool bDuplicateOnAbp = UsedPoseNames.ContainsByPredicate(
+				[&PoseName](const FString& Existing) { return Existing.Equals(PoseName, ESearchCase::IgnoreCase); });
+			if (bDuplicateOnAbp)
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("Input pose name '%s' is already used by another anim graph on '%s' — pose names must be unique across the Animation Blueprint."),
+					*PoseName, *AssetPath));
+			}
+
+			RequestedPoseNames.Add(PoseName);
+		}
+	}
+
+	// --- Create. The two-call pair from CGT_NewAnimationLayer.
+	GEditor->BeginTransaction(FText::FromString(TEXT("Add Anim Layer Graph")));
+	ABP->Modify();
+
+	UEdGraph* LayerGraph = FBlueprintEditorUtils::CreateNewGraph(
+		ABP, LayerFName, UAnimationGraph::StaticClass(), UAnimationGraphSchema::StaticClass());
+	if (!LayerGraph)
+	{
+		GEditor->EndTransaction();
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create anim layer graph: %s"), *LayerName));
+	}
+
+	// Registers the graph in FunctionGraphs, runs the schema's CreateDefaultNodesForGraph (which
+	// spawns the Output Pose UAnimGraphNode_Root), and calls MarkBlueprintAsStructurallyModified.
+	FBlueprintEditorUtils::AddDomainSpecificGraph(ABP, LayerGraph);
+
+	// --- Input poses. A native layer gets none for free: only the interface-backed route's
+	//     UAnimationGraphSchema::CreateFunctionGraphTerminators spawns them. The editor's equivalent UX
+	//     is FAnimGraphDetails::OnAddNewInputPoseClicked, which spawns the node then reconstructs the
+	//     Blueprint's self linked-layer nodes. Names were fully validated above; this only creates.
+	TArray<FString> CreatedPoseNames;
+	for (const FString& PoseName : RequestedPoseNames)
+	{
+		UAnimGraphNode_LinkedInputPose* PoseNode = nullptr;
+		{
+			// FGraphNodeCreator, not a schema-action spawn: UAnimGraphNode_LinkedInputPose::
+			// IsCompatibleWithGraph returns true only for the graph literally named AnimGraph, so every
+			// filtered action-menu / palette route refuses this node inside a layer graph. Positions are
+			// plain int32 NodePosX/NodePosY writes rather than
+			// UAnimationGraphSchema::GetPositionForNewLinkedInputPoseNode, whose export decoration could
+			// not be verified on UE 5.7 and whose FVector2D return would need a cross-engine
+			// FVector2f/FDeprecateVector2DParameter audit for no benefit here — auto_layout can tidy the
+			// placement afterwards.
+			FGraphNodeCreator<UAnimGraphNode_LinkedInputPose> Creator(*LayerGraph);
+			PoseNode = Creator.CreateNode(/*bSelectNewNode=*/false);
+			if (!PoseNode)
+			{
+				GEditor->EndTransaction();
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("FGraphNodeCreator failed to create the input pose node for '%s'"), *PoseName));
+			}
+			PoseNode->NodePosX = -400;
+			PoseNode->NodePosY = CreatedPoseNames.Num() * 150;
+			Creator.Finalize();
+		}
+
+		// The requested name is written AFTER Finalize(), never before it. Finalize() runs
+		// PostPlacedNewNode, which overwrites Node.Name with a uniquified default whenever the node is
+		// editable — and it is editable here, because IsEditable() -> CanUserDeleteNode() ->
+		// bAllowDeletion || GetFName() == GN_AnimGraph, and a graph from CreateNewGraph keeps UEdGraph's
+		// default bAllowDeletion == true (the ABP factory clears that only on the default AnimGraph).
+		// Node is a public UPROPERTY on the editor node and Name a public member of the inner struct, so
+		// this is a plain data-member write: no import symbol, no reflection detour needed despite
+		// UAnimGraphNode_LinkedInputPose being MinimalAPI.
+		//
+		// PostPlacedNewNode also queues an FTSTicker that fires a frame after this handler returns and
+		// check()s the resolved asset editor's name. That check sits inside a
+		// FindEditorForAsset(..., false) guard, so it is inert with no ABP editor open and resolves to
+		// the AnimationBlueprintEditor when one is; the lambda holds a weak pointer and calls
+		// GetAnimBlueprint(), a CastChecked on the node's outer chain. Two invariants keep it harmless
+		// and must not be broken: this action only ever ENDS its transaction (a cancel could leave a
+		// rolled-back node still reachable by the ticker with a broken outer chain), and the layer
+		// graph's outer stays the ABP.
+		PoseNode->Modify();
+		PoseNode->Node.Name = FName(*PoseName);
+		CreatedPoseNames.Add(PoseName);
+	}
+
+	if (CreatedPoseNames.Num() > 0)
+	{
+		// Any already-placed self Linked Anim Layer node must re-allocate its pins now that this layer
+		// has input poses, or it keeps a stale pin set. This repeats the body of the engine's
+		// UAnimGraphNode_LinkedInputPose::ReconstructLayerNodes instead of calling it: that helper is
+		// private on both UE 5.7 and UE 5.8 (friended only to FAnimGraphDetails, UAnimationGraph and
+		// UAnimBlueprintExtension_LinkedInputPose), and UAnimationGraph's same-named member is private
+		// too. External-interface layers are skipped exactly as the engine skips them — the compilation
+		// machinery rebuilds those.
+		TArray<UAnimGraphNode_LinkedAnimLayer*> LinkedLayerNodes;
+		FBlueprintEditorUtils::GetAllNodesOfClass<UAnimGraphNode_LinkedAnimLayer>(ABP, LinkedLayerNodes);
+		for (UAnimGraphNode_LinkedAnimLayer* LinkedLayerNode : LinkedLayerNodes)
+		{
+			if (LinkedLayerNode && LinkedLayerNode->Node.Interface.Get() == nullptr)
+			{
+				LinkedLayerNode->ReconstructNode();
+			}
+		}
+	}
+
+	// No MarkBlueprintAsStructurallyModified call here — AddDomainSpecificGraph already did it, and the
+	// engine's own add-input-pose path does not re-mark either.
+	GEditor->EndTransaction();
+
+	if (bCompile)
+	{
+		FKismetEditorUtilities::CompileBlueprint(ABP);
+	}
+	ABP->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("graph_name"), LayerGraph->GetName());
+	// graph_class / schema_class are the machine-checkable proof that this is a UAnimationGraph on
+	// the anim schema and NOT a K2 graph. No other Monolith action reports either field —
+	// blueprint list_graphs classifies purely by which array a graph sits in and emits no class or
+	// schema — so a caller has no other way to tell the two apart programmatically.
+	Root->SetStringField(TEXT("graph_class"), LayerGraph->GetClass()->GetPathName());
+	Root->SetStringField(TEXT("schema_class"), LayerGraph->Schema ? LayerGraph->Schema->GetPathName() : FString(TEXT("<none>")));
+	Root->SetNumberField(TEXT("node_count"), LayerGraph->Nodes.Num());
+	TArray<TSharedPtr<FJsonValue>> PoseJson;
+	for (const FString& PoseName : CreatedPoseNames)
+	{
+		PoseJson.Add(MakeShared<FJsonValueString>(PoseName));
+	}
+	Root->SetArrayField(TEXT("input_poses"), PoseJson);
+	Root->SetBoolField(TEXT("compiled"), bCompile);
 	Root->SetBoolField(TEXT("saved"), false);
 	return FMonolithActionResult::Success(Root);
 }

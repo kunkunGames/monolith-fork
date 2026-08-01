@@ -7,6 +7,9 @@
 #include "Materials/MaterialExpression.h"
 #include "Materials/MaterialExpressionParameter.h"
 #include "Materials/MaterialExpressionTextureBase.h"
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+#include "Materials/MaterialExpressionUtils.h"
+#endif
 #include "Materials/MaterialExpressionTextureSample.h"
 #include "Materials/MaterialExpressionTextureSampleParameter.h"
 #include "Materials/MaterialExpressionCustom.h"
@@ -9344,7 +9347,11 @@ static void PopulateTextureMetadata(UTexture* Tex, const TSharedPtr<FJsonObject>
 #endif
 
 	// Recommended sampler type for material usage
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+	EMaterialSamplerType SamplerType = MaterialExpressionUtils::GetSamplerTypeForTexture(Tex);
+#else
 	EMaterialSamplerType SamplerType = UMaterialExpressionTextureBase::GetSamplerTypeForTexture(Tex);
+#endif
 	UEnum* SamplerEnum = StaticEnum<EMaterialSamplerType>();
 	if (SamplerEnum)
 	{

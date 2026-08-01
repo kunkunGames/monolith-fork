@@ -11,6 +11,18 @@
 
 DEFINE_LOG_CATEGORY(LogMonolithLevelSequence);
 
+namespace
+{
+	FSimpleMulticastDelegate& GetMonolithLevelSequencePostEngineInitDelegate()
+	{
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+		return FCoreDelegates::GetOnPostEngineInit();
+#else
+		return FCoreDelegates::OnPostEngineInit;
+#endif
+	}
+}
+
 void FMonolithLevelSequenceModule::StartupModule()
 {
 	const UMonolithSettings* Settings = GetDefault<UMonolithSettings>();
@@ -25,7 +37,7 @@ void FMonolithLevelSequenceModule::StartupModule()
 
 	if (Settings->bIndexLevelSequences)
 	{
-		PostEngineInitHandle = FCoreDelegates::OnPostEngineInit.AddLambda([this]()
+		PostEngineInitHandle = GetMonolithLevelSequencePostEngineInitDelegate().AddLambda([this]()
 		{
 			if (GEditor)
 			{
@@ -43,7 +55,7 @@ void FMonolithLevelSequenceModule::ShutdownModule()
 {
 	if (PostEngineInitHandle.IsValid())
 	{
-		FCoreDelegates::OnPostEngineInit.Remove(PostEngineInitHandle);
+		GetMonolithLevelSequencePostEngineInitDelegate().Remove(PostEngineInitHandle);
 		PostEngineInitHandle.Reset();
 	}
 
