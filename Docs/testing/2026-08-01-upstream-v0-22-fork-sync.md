@@ -7,7 +7,7 @@
 **Integration commit:** `fb0e9776d8cb77a1eb19369fbc18f85255dd869b`
 **Scope:** High-ROI upstream integration, merge-conflict resolution, cross-engine compatibility hardening, focused automation, and release-gate verification
 **Engines:** Unreal Engine 5.7 and 5.8, resolved from isolated hosts' `EngineAssociation`
-**Status:** PASS before publication
+**Status:** PASS; implementation published and record finalized
 
 ---
 
@@ -148,7 +148,7 @@ Additional final hygiene gates:
 | Primary `Plugins\Monolith` checkout | Preserved at `c745cc4e...` on `jules/codex/monolith-source/retire-graph-db` |
 | User source modification | Preserved byte-for-byte: `Source\MonolithIndex\MonolithIndex.Build.cs`, SHA-256 `3B62C78BA4670DDE814C6C5B98FE86A87D5F1DF70383DAA3A6422FC3F2C86393` |
 | Existing Perforce work | Preserved in CL1325; no task file was reopened or moved |
-| Externally owned Speed editor | Preserved alive; no process was killed and no running-editor override was used |
+| Externally owned Speed editors | No process was killed and no running-editor override was used. Visible PID 60548 remained alive through validation and was absent at the post-publication audit; the separately owned headless MCP editor remained outside this task's scope |
 | Task delivery ownership | Git-only isolated worktrees under `Saved`; no task file is opened in Perforce |
 | Visual/PC1080 verification | N/A: source/release integration changes have no gameplay, UI presentation, level, material, VFX, or editor-tool visual acceptance surface |
 | Discord screenshot upload | N/A for the same non-visual scope; `UploadScreenshotTestsToDiscord.bat` was not invoked |
@@ -157,4 +157,4 @@ Additional final hygiene gates:
 
 ## 9. Conclusion
 
-The high-ROI release integration is suitable for a normal fast-forward publication to `kunkunGames/monolith-fork:master` once the remote target head is rechecked against `ff4c4aec...`. The combined source preserves fork functionality, includes all upstream `v0.22.0` work, compiles strictly on both supported engines, passes the focused 23-test matrix on each engine, and adds no static blocker relative to the target base.
+The high-ROI release integration was published to `kunkunGames/monolith-fork:master` by normal fast-forward after the remote target head was rechecked against `ff4c4aec...`. The combined source preserves fork functionality, includes all upstream `v0.22.0` work, compiles strictly on both supported engines, passes the focused 23-test matrix on each engine, and adds no static blocker relative to the target base.
