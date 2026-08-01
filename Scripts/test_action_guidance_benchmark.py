@@ -8,7 +8,6 @@ the recovery categories used by SPEC_MonolithPractitionerWorkflowROI P0.3.4.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import pathlib
 import re
@@ -60,32 +59,14 @@ def action_id(task: Dict[str, Any]) -> str:
     return f"{task.get('namespace', '')}.{task.get('action', '')}"
 
 
-def load_bundled_catalog_namespaces() -> List[Dict[str, Any]]:
-    catalog_dir = agb.resolve_plugin_path(pathlib.Path("Binaries"))
-    pointer_path = catalog_dir / "monolith_query.current.json"
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    catalog_file = str(pointer.get("catalog_file", "")).strip()
-    if not catalog_file:
-        raise RuntimeError(f"bundled catalog pointer has no catalog_file: {pointer_path}")
-    catalog_source_hash = str(pointer.get("catalog_source_hash", "")).strip().lower()
-    expected_catalog_file = f"monolith_catalog-{catalog_source_hash}.json"
-    if not catalog_source_hash or catalog_file != expected_catalog_file:
-        raise RuntimeError(
-            f"bundled catalog filename/source hash mismatch: file={catalog_file!r} "
-            f"source_hash={catalog_source_hash!r}"
-        )
-    catalog_path = catalog_dir / catalog_file
-    catalog_bytes = catalog_path.read_bytes()
-    expected_sha256 = str(pointer.get("catalog_sha256", "")).strip().lower()
-    actual_sha256 = hashlib.sha256(catalog_bytes).hexdigest()
-    if expected_sha256 != actual_sha256:
-        raise RuntimeError(
-            f"bundled catalog sha256 mismatch: expected={expected_sha256} actual={actual_sha256}"
-        )
-    catalog = json.loads(catalog_bytes.decode("utf-8"))
+def load_source_catalog_namespaces() -> List[Dict[str, Any]]:
+    catalog_path = agb.resolve_plugin_path(
+        pathlib.Path("Tools/MonolithQuery/Generated/monolith_catalog_snapshot.json")
+    )
+    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
     actions = catalog.get("actions")
     if not isinstance(actions, list) or not actions:
-        raise RuntimeError(f"bundled catalog has no actions: {catalog_path}")
+        raise RuntimeError(f"generated source catalog has no actions: {catalog_path}")
 
     by_namespace: Dict[str, set[str]] = {}
     full_names: set[str] = set()
@@ -100,7 +81,7 @@ def load_bundled_catalog_namespaces() -> List[Dict[str, Any]]:
     declared_action_count = catalog.get("action_count")
     if declared_action_count != len(full_names) or len(actions) != len(full_names):
         raise RuntimeError(
-            f"bundled catalog action count mismatch: declared={declared_action_count!r} "
+            f"generated source catalog action count mismatch: declared={declared_action_count!r} "
             f"rows={len(actions)} unique={len(full_names)}"
         )
     return [
@@ -109,15 +90,15 @@ def load_bundled_catalog_namespaces() -> List[Dict[str, Any]]:
     ]
 
 
-def test_static_action_contracts_against_bundled_catalog() -> None:
+def test_static_action_contracts_against_source_catalog() -> None:
     detail = ""
     try:
-        agb.validate_static_unreal_practical_action_contracts(load_bundled_catalog_namespaces())
+        agb.validate_static_unreal_practical_action_contracts(load_source_catalog_namespaces())
         valid = True
     except Exception as exc:  # noqa: BLE001 - report contract drift through the check harness
         valid = False
         detail = f"{type(exc).__name__}: {exc}"
-    check("static action ids exist in bundled catalog", valid, detail)
+    check("static action ids exist in generated source catalog", valid, detail)
 
 
 def test_static_tasks_are_materialized(tasks: List[Dict[str, Any]]) -> None:
@@ -556,7 +537,7 @@ def main() -> int:
     tasks = agb.load_jsonl(agb.DEFAULT_TASKS)
     manifest = load_manifest()
 
-    test_static_action_contracts_against_bundled_catalog()
+    test_static_action_contracts_against_source_catalog()
     test_static_action_contract_validator_rejects_schema_drift()
     test_action_contract_validator_rejects_unexpected_probe_action()
     test_action_contract_validator_rejects_missing_action()

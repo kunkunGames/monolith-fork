@@ -35,6 +35,12 @@ jobs:
       - name: Ruff critical lint
         run: ruff check Scripts/ MCP/ Analyzer/ --select E9,F63,F7,F82
 
+      - name: Generate offline catalog snapshot
+        run: >-
+          python Tools/MonolithQuery/generate_monolith_catalog_snapshot.py
+          --root .
+          --out Tools/MonolithQuery/Generated/monolith_catalog_snapshot.json
+
       - name: Monolith static checker
         run: python Scripts/ci_static_checks.py --config .github/monolith-static-ci.json --github check
 
