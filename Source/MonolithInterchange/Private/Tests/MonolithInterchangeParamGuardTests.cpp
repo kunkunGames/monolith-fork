@@ -549,6 +549,65 @@ bool FMonolithParamGuardInterchangeImportMalformedParamsTest::RunTest(const FStr
 	}
 
 	{
+		const FString ExportPath =
+			FPaths::ConvertRelativePathToFull(
+				FPaths::ProjectSavedDir() /
+				TEXT("Automation/MonolithInterchange") /
+				(FGuid::NewGuid().ToString(EGuidFormats::Digits) + TEXT(".png")));
+		TestTrue(
+			TEXT("transactional export replacement fixture was created"),
+			FFileHelper::SaveStringToFile(TEXT("original destination sentinel"), *ExportPath));
+
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(
+			TEXT("asset_path"),
+			TEXT("/Engine/EngineResources/DefaultTexture.DefaultTexture"));
+		Params->SetStringField(TEXT("file_path"), ExportPath);
+		Params->SetBoolField(TEXT("replace_existing"), true);
+		Params->SetBoolField(TEXT("confirm"), true);
+
+		const FMonolithActionResult Result =
+			Registry.ExecuteAction(TEXT("interchange"), TEXT("export_asset"), Params);
+		TestTrue(
+			TEXT("transactional export returns structured data"),
+			Result.bSuccess && Result.Result.IsValid());
+		if (Result.Result.IsValid())
+		{
+			TestEqual(
+				TEXT("transactional export reports success"),
+				Result.Result->GetStringField(TEXT("status")),
+				FString(TEXT("exported")));
+			TestTrue(
+				TEXT("transactional export commits the staged file"),
+				Result.Result->GetBoolField(TEXT("commit_succeeded")));
+			TestTrue(
+				TEXT("transactional export reports a complete rollback capability"),
+				Result.Result->GetBoolField(TEXT("rollback_complete")));
+			TestFalse(
+				TEXT("successful transactional export is not a partial mutation"),
+				Result.Result->GetBoolField(TEXT("partial_mutation")));
+			TestTrue(
+				TEXT("transactional export removes its staging directory"),
+				Result.Result->GetBoolField(TEXT("staging_cleanup_complete")));
+			TestEqual(
+				TEXT("default texture export resolves one output file"),
+				static_cast<int32>(Result.Result->GetNumberField(TEXT("output_file_count"))),
+				1);
+		}
+
+		TArray<uint8> ExportedBytes;
+		TestTrue(
+			TEXT("transactional export destination exists"),
+			FFileHelper::LoadFileToArray(ExportedBytes, *ExportPath));
+		TestTrue(
+			TEXT("transactional export replaced the short original sentinel with PNG bytes"),
+			ExportedBytes.Num() > FCString::Strlen(TEXT("original destination sentinel")));
+		TestTrue(
+			TEXT("transactional export fixture was removed"),
+			IFileManager::Get().Delete(*ExportPath, false, true, true));
+	}
+
+	{
 		const FString RollbackId = FGuid::NewGuid().ToString(EGuidFormats::Digits);
 		const FString NewPackagePath =
 			FString::Printf(TEXT("/Game/Tests/Monolith/Interchange/Rollback_%s/NewAsset"), *RollbackId);
