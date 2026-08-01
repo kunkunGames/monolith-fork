@@ -123,6 +123,14 @@ all release gates used the current source:
 The freshly generated catalog and executable are ignored verification outputs;
 they are not part of the source integration commit.
 
+The primary checkout's pre-existing ignored `Binaries\monolith_query.current.json`
+was deliberately not overwritten. It still declares plugin `0.21.3` while its
+selected executable reports `0.22.0`, so `monolith status` fails closed on that
+identity mismatch. The exact v0.22 bundle above remains in the isolated local
+integration worktree and passes `--version`, manifest SHA-256 checks, and
+`monolith status`. Updating the primary ignored bundle is a separate binary-owner
+operation, not part of this source merge or CL 1411.
+
 ## 6. Static-CI Differential Boundary
 
 The first full static comparison reported ten blockers in both the integrated
