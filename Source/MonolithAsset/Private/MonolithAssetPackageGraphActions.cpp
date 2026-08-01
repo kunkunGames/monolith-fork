@@ -1969,7 +1969,7 @@ namespace
 				NewObjectPath,
 				false,
 				Status)));
-			Stats.bHasBlockingErrors = Options.bRequireTargets;
+			Stats.bHasBlockingErrors |= Options.bRequireTargets;
 			return false;
 		}
 
@@ -2457,7 +2457,7 @@ void FMonolithAssetPackageGraphActions::RegisterActions(FMonolithToolRegistry& R
 			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Report reference rewrites without mutating assets"), TEXT("false"))
 			.Optional(TEXT("confirm"), TEXT("bool"), TEXT("Required for mutation when dry_run is false"), TEXT("false"))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save changed packages"), TEXT("true"))
-			.Optional(TEXT("strict"), TEXT("bool"), TEXT("Treat load/fixup blockers as errors"), TEXT("true"))
+			.Optional(TEXT("strict"), TEXT("bool"), TEXT("Preflight every candidate and reject load/fixup blockers or max_packages truncation before mutation"), TEXT("true"))
 			.StrictComplexTypes()
 			.Build(),
 		TEXT("PackageGraph"));
@@ -3461,39 +3461,81 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::FixupCopiedReferences(c
 	}
 	PackagePaths.Sort();
 
-	FReferenceFixupStats Stats;
-	if (PackagePaths.Num() > Options.MaxPackages)
+	const bool bTruncated = PackagePaths.Num() > Options.MaxPackages;
+	if (bTruncated)
 	{
 		PackagePaths.SetNum(Options.MaxPackages);
-		Stats.bTruncated = true;
 	}
 
-	for (const FString& PackagePath : PackagePaths)
+	auto VisitPackages = [&PackagePaths, &DestinationRoots, &Remaps](
+		const FReferenceFixupOptions& VisitOptions,
+		FReferenceFixupStats& VisitStats)
 	{
-		if (!IsUnderAnyRoot(PackagePath, DestinationRoots))
+		for (const FString& PackagePath : PackagePaths)
 		{
-			AddWarning(Stats, PackagePath, TEXT("Package is outside destination_roots and was skipped"));
-			if (Options.Mutation.bStrict)
+			if (!IsUnderAnyRoot(PackagePath, DestinationRoots))
 			{
-				Stats.bHasBlockingErrors = true;
+				AddWarning(VisitStats, PackagePath, TEXT("Package is outside destination_roots and was skipped"));
+				if (VisitOptions.Mutation.bStrict)
+				{
+					VisitStats.bHasBlockingErrors = true;
+				}
+				continue;
 			}
-			continue;
+			FixupPackageReferences(PackagePath, Remaps, VisitOptions, VisitStats);
 		}
-		FixupPackageReferences(PackagePath, Remaps, Options, Stats);
-	}
+	};
 
-	if (Stats.bHasBlockingErrors && !Options.Mutation.bDryRun && Options.Mutation.bStrict)
+	auto MakeFixupError = [&PackagePaths](const FReferenceFixupStats& ErrorStats, const TCHAR* Status)
 	{
 		TSharedPtr<FJsonObject> ErrorResult = MakeShared<FJsonObject>();
 		ErrorResult->SetStringField(TEXT("namespace"), TEXT("asset"));
 		ErrorResult->SetStringField(TEXT("action"), TEXT("fixup_copied_references"));
-		ErrorResult->SetArrayField(TEXT("references"), Stats.References);
-		ErrorResult->SetArrayField(TEXT("warnings"), Stats.Warnings);
-		ErrorResult->SetNumberField(TEXT("candidate_count"), Stats.CandidateCount);
-		ErrorResult->SetNumberField(TEXT("warning_count"), Stats.Warnings.Num());
-		ErrorResult->SetStringField(TEXT("status"), TEXT("preflight_failed"));
+		ErrorResult->SetArrayField(TEXT("checked_packages"), StringsToJson(PackagePaths));
+		ErrorResult->SetArrayField(TEXT("references"), ErrorStats.References);
+		ErrorResult->SetArrayField(TEXT("warnings"), ErrorStats.Warnings);
+		ErrorResult->SetNumberField(TEXT("checked_package_count"), ErrorStats.CheckedPackageCount);
+		ErrorResult->SetNumberField(TEXT("checked_object_count"), ErrorStats.CheckedObjectCount);
+		ErrorResult->SetNumberField(TEXT("candidate_count"), ErrorStats.CandidateCount);
+		ErrorResult->SetNumberField(TEXT("applied_count"), ErrorStats.AppliedCount);
+		ErrorResult->SetNumberField(TEXT("warning_count"), ErrorStats.Warnings.Num());
+		ErrorResult->SetNumberField(TEXT("changed_package_count"), ErrorStats.ChangedPackages.Num());
+		ErrorResult->SetBoolField(TEXT("truncated"), ErrorStats.bTruncated);
+		ErrorResult->SetStringField(TEXT("status"), Status);
+		return ErrorResult;
+	};
+
+	if (!Options.Mutation.bDryRun && Options.Mutation.bStrict)
+	{
+		FReferenceFixupOptions PreflightOptions = Options;
+		PreflightOptions.Mutation.bDryRun = true;
+		PreflightOptions.Mutation.bSave = false;
+
+		FReferenceFixupStats PreflightStats;
+		PreflightStats.bTruncated = bTruncated;
+		PreflightStats.bHasBlockingErrors = bTruncated;
+		if (!bTruncated)
+		{
+			VisitPackages(PreflightOptions, PreflightStats);
+		}
+
+		if (PreflightStats.bHasBlockingErrors)
+		{
+			return FMonolithActionResult::Error(
+				TEXT("fixup_copied_references strict preflight found blocking reference issues"),
+				ErrInvalidParams)
+				.WithErrorData(MakeFixupError(PreflightStats, TEXT("preflight_failed")));
+		}
+	}
+
+	FReferenceFixupStats Stats;
+	Stats.bTruncated = bTruncated;
+	VisitPackages(Options, Stats);
+
+	if (Stats.bHasBlockingErrors && !Options.Mutation.bDryRun && Options.Mutation.bStrict)
+	{
 		return FMonolithActionResult::Error(TEXT("fixup_copied_references found blocking reference issues"), ErrInvalidParams)
-			.WithErrorData(ErrorResult);
+			.WithErrorData(MakeFixupError(Stats, TEXT("apply_failed")));
 	}
 
 	TArray<TSharedPtr<FJsonValue>> SavedRows;

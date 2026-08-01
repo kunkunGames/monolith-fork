@@ -742,7 +742,7 @@ Generic asset lifecycle and package-graph workflows. **20 actions.** The namespa
 | `plan_package_graph_copy` | read | Traverse AssetRegistry dependencies and emit an exact source-to-destination copy/remap plan. |
 | `copy_package_graph_with_remap` | write | Duplicate a planned package graph without overwriting; requires dry-run or explicit confirmation. |
 | `copy_package_graph_with_strategy` | write | Plan and orchestrate supported duplicate/advanced/header-patched/opt-in raw-copy strategies; unsupported manual rows remain explicit blockers. |
-| `fixup_copied_references` | write | Rewrite reflected hard/soft references inside copied destination packages; requires dry-run or explicit confirmation. |
+| `fixup_copied_references` | write | Rewrite reflected hard/soft references inside copied destination packages; requires dry-run or explicit confirmation, and confirmed strict runs preflight every candidate before applying any rewrite. |
 | `validate_dependency_closure` | read | Verify copied destination packages no longer depend on disallowed external or legacy source roots. |
 
 All `asset` actions require native JSON arrays/objects rather than JSON-encoded strings. Boolean parameters, including nested and compatibility top-level texture settings, must be JSON booleans; strings such as `"true"`/`"false"` return `-32602` instead of being coerced by UE 5.7. Import handlers also reject unknown enum values, malformed integers, and duplicate setting sources with `-32602`; they do not silently choose a default for invalid input. File texture import succeeds only when the exact requested package is produced. Font import uses exact output names by default and performs source/output preflight before creating packages.
