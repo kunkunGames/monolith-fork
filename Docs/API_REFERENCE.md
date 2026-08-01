@@ -152,7 +152,7 @@ The native consumers share one compact `UMonolithSettings` API:
 
 A missing user key inherits its matching project default; malformed or unreadable user state fails closed to `false`. Writes refuse to overwrite an unreadable existing file because doing so could discard the sibling activation key. An explicit Stop therefore survives editor restarts and is local to that checkout/user, while project teams can change the initial policy without manufacturing user state. Older readable `Saved/Monolith/Activation.ini` choices migrate once into the generated config; an unreadable legacy file is retained for an operator to repair. Durable editor hosts reconcile externally edited server activation after the bounded cache revalidation interval. `UMonolithSettings::bMcpServerEnabled`, `bEnableSource`, and `bEnableIndex` remain hard project-policy gates and cannot be overridden by a Start command.
 
-Index deactivation never blocks existing `ProjectIndex.db` or `EngineSource.db` reads. Reindex entry points return whether the writer actually accepted the request, and callers report a rejected start instead of optimistic success. Inherited default-on activation can run a project-source catch-up against a healthy existing DB but does not silently bootstrap a missing engine-wide DB; `Monolith.StartIndexing` is the explicit bootstrap request. An existing DB that cannot be opened is preserved rather than converted into an automatic clean rebuild. An active source reindex still owns the source DB until it completes because that writer intentionally closes and atomically reopens the database. The compatibility command `Monolith.StartIndex` does not enable indexing; it can request a full asset index only after `Monolith.StartIndexing`.
+Index deactivation never blocks existing `ProjectIndex.db` or `EngineSource.db` reads. Reindex entry points return whether the writer actually accepted the request, and callers report a rejected start instead of optimistic success. Inherited default-on activation can run a project-source catch-up against a healthy existing DB but does not silently bootstrap a missing engine-wide DB; `Monolith.StartIndexing` is the explicit bootstrap request. An existing DB that cannot be opened is preserved rather than converted into an automatic clean rebuild. An active source reindex still owns the source DB until it completes because that writer intentionally closes and atomically reopens the database. The compatibility command `Monolith.StartIndex` does not enable indexing; after `Monolith.StartIndexing`, bare invocation resumes a recoverable schema-v3 full index or starts a fresh one, while `Monolith.StartIndex force` deliberately wipes and rebuilds.
 
 ---
 
@@ -246,13 +246,21 @@ Check for or install Monolith updates from GitHub Releases. Auto-updater hits `h
 
 ### `monolith.reindex`
 
-Re-index the Monolith project database. Incremental by default (delta only). Pass `force=true` for a full wipe + rebuild. The durable indexing state must already be enabled with `Monolith.StartIndexing`; this MCP action never changes operator activation.
+Re-index the Monolith project database. Non-force mode resumes a recoverable interrupted full index first, otherwise uses incremental delta for a compatible completed DB and a fresh full index for a new/incompatible DB. Pass `force=true` for a deliberate full wipe + rebuild. The durable indexing state must already be enabled with `Monolith.StartIndexing`; this MCP action never changes operator activation.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `force` | bool | optional | Full wipe + rebuild instead of incremental delta. Default: `false` |
 
 **Returns:** `status:"indexing_disabled"` plus guidance when durable activation is off. With `UMonolithSettings::bEnableAsyncJobs=true` (default) and activation on, `status:"started"`, `legacy_status:"reindex_started"`, `job_id`, `poll_action:"monolith.get_job"`, `cancel_action:"monolith.cancel_job"`, `supports_progress:true`, and `cancellable:true`. Polling that job reaches an honest terminal state from the index subsystem: `completed` on successful full/incremental/no-change indexing, `failed` when the indexer cannot start or reports failure, and `cancelled` when cooperative job cancellation is observed. If async jobs are disabled, the legacy response remains `status:"reindex_started"` plus a message. If the async start is rejected before indexing begins, the action response uses `status:"reindex_not_started"` and the returned `job_id` contains the failure details.
+
+`MonolithCore` selects these reflected `UMonolithIndexSubsystem` entry points; each returns `bool` so a rejected request cannot be reported as started:
+
+| C++ API | Contract |
+|---------|----------|
+| `StartFullIndex()` / `StartFullIndexWithAsyncJob(JobId)` | Always reset schema/data and start a deliberate full rebuild |
+| `ResumeFullIndex()` / `ResumeFullIndexWithAsyncJob(JobId)` | Resume only when the global marker and physical schema-v3 checkpoint columns agree; otherwise reset and start a fresh full index |
+| `StartIncrementalIndex()` / `StartIncrementalIndexWithAsyncJob(JobId)` | Apply the compatible completed-DB delta path without resetting |
 
 ---
 
@@ -1492,7 +1500,7 @@ Find all assets that reference or are referenced by the given asset.
 
 ### `project.get_stats`
 
-Project index stats — total counts by table and asset class breakdown. *No parameters.*
+Project index stats — total counts by table, asset class breakdown, and full-index recovery diagnostics. `skipped_assets` and up to 50 `skipped_asset_paths` identify assets removed from automatic deep indexing after repeated interrupted attempts; an explicit force rebuild clears their counters and persisted path list. *No parameters.*
 
 ### `project.get_asset_details`
 

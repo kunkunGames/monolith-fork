@@ -482,4 +482,95 @@ bool FMonolithIndexRecoveryPoisonPillTest::RunTest(const FString& /*Parameters*/
 	return true;
 }
 
+// ---------------------------------------------------------------------------
+// Test 5: schema_version alone cannot authorize resume.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithIndexRecoveryPhysicalSchemaGateTest,
+	"Monolith.Index.Recovery.PhysicalSchemaGate",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithIndexRecoveryPhysicalSchemaGateTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MonolithIndexRecoveryTestDetail;
+
+	FFixture Fixture;
+	if (!TestTrue(TEXT("fixture database opens"), Fixture.Open()))
+	{
+		Fixture.Destroy();
+		return false;
+	}
+	ON_SCOPE_EXIT { Fixture.Destroy(); };
+
+	TestTrue(TEXT("healthy schema supports resume"), Fixture.Database.SupportsIndexResume());
+	FSQLiteDatabase* Raw = Fixture.Database.GetRawDatabase();
+	if (!TestNotNull(TEXT("raw database is available"), Raw))
+	{
+		return false;
+	}
+	TestTrue(TEXT("resume column can be removed for the corruption fixture"),
+		Raw->Execute(TEXT("ALTER TABLE assets DROP COLUMN deep_index_attempts;")));
+	TestEqual(TEXT("metadata still claims schema v3"),
+		Fixture.Database.ReadMeta(TEXT("schema_version")), FString(TEXT("3")));
+	TestFalse(TEXT("physical column loss disables resume despite the metadata stamp"),
+		Fixture.Database.SupportsIndexResume());
+
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Test 6: a post-pass sentinel's rows and completion checkpoint are atomic.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithIndexRecoverySentinelCheckpointAtomicityTest,
+	"Monolith.Index.Recovery.SentinelCheckpointAtomicity",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithIndexRecoverySentinelCheckpointAtomicityTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MonolithIndexRecoveryTestDetail;
+	static const TCHAR* CheckpointKey = TEXT("full_index_sentinel.RecoveryFixture");
+
+	FFixture Fixture;
+	if (!TestTrue(TEXT("fixture database opens"), Fixture.Open()))
+	{
+		Fixture.Destroy();
+		return false;
+	}
+	ON_SCOPE_EXIT { Fixture.Destroy(); };
+
+	const int64 AssetId = Fixture.InsertAsset(AssetPath, ContentHash);
+	if (!TestTrue(TEXT("fixture asset inserts"), AssetId > 0))
+	{
+		return false;
+	}
+
+	auto InsertSentinelRowAndCheckpoint = [&]()
+	{
+		FIndexedNode Node;
+		Node.AssetId = AssetId;
+		Node.NodeName = TEXT("SentinelRecoveryNode");
+		Node.NodeClass = TEXT("RecoverySentinel");
+		Node.NodeType = TEXT("RecoverySentinel");
+		return Fixture.Database.InsertNode(Node) > 0
+			&& Fixture.Database.WriteMeta(CheckpointKey, TEXT("complete"));
+	};
+
+	TestTrue(TEXT("interrupted sentinel transaction begins"), Fixture.Database.BeginTransaction());
+	TestTrue(TEXT("interrupted sentinel writes rows and checkpoint"), InsertSentinelRowAndCheckpoint());
+	TestTrue(TEXT("interrupted sentinel rolls back"), Fixture.Database.RollbackTransaction());
+	TestEqual(TEXT("rolled-back sentinel leaves no rows"), CountRows(Fixture.Database, TEXT("nodes")), (int64)0);
+	TestTrue(TEXT("rolled-back sentinel leaves no completion checkpoint"),
+		Fixture.Database.ReadMeta(CheckpointKey).IsEmpty());
+
+	TestTrue(TEXT("completed sentinel transaction begins"), Fixture.Database.BeginTransaction());
+	TestTrue(TEXT("completed sentinel writes rows and checkpoint"), InsertSentinelRowAndCheckpoint());
+	TestTrue(TEXT("completed sentinel commits"), Fixture.Database.CommitTransaction());
+	TestEqual(TEXT("completed sentinel keeps its rows"), CountRows(Fixture.Database, TEXT("nodes")), (int64)1);
+	TestEqual(TEXT("completed sentinel keeps its checkpoint"),
+		Fixture.Database.ReadMeta(CheckpointKey), FString(TEXT("complete")));
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

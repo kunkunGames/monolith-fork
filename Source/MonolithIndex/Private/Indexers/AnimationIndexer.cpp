@@ -123,14 +123,6 @@ bool FAnimationIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedA
 
 			int32 BatchEnd = FMath::Min(i + BatchSize, Assets.Num());
 
-			// One transaction PER BATCH, owned here rather than by the caller. A
-			// single transaction spanning the whole pass meant an interruption
-			// discarded every animation asset indexed since it started; per-batch
-			// commits bound that loss to one batch. The dispatch model is
-			// unchanged — this still runs inside the caller's single game-thread
-			// hop, so there is no per-asset frame cost.
-			DB.BeginTransaction();
-
 			// Process batch
 			for (int32 j = i; j < BatchEnd; ++j)
 			{
@@ -165,11 +157,6 @@ bool FAnimationIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedA
 				LoadAndIndexAnimAsset(&Ctx);
 				if (Ctx.bSuccess) Count++;
 #endif
-			}
-
-			if (!DB.CommitTransaction())
-			{
-				UE_LOG(LogMonolithIndex, Error, TEXT("AnimationIndexer: failed to commit batch %d — that batch's rows are lost"), BatchNumber);
 			}
 
 			BatchNumber++;

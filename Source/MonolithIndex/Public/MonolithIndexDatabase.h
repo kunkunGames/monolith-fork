@@ -381,6 +381,7 @@ public:
 	// --- Supplemental Search Values ---
 	int64 InsertAssetSearchValue(const FIndexedSearchValue& Value);
 	bool DeleteAssetSearchValuesForAsset(int64 AssetId);
+	bool DeleteAssetSearchValuesForAssetBySourceKind(int64 AssetId, const FString& SearchSourceKind);
 	bool DeleteAssetSearchValuesBySourceKind(const FString& SearchSourceKind);
 
 	// --- FTS5 Search ---

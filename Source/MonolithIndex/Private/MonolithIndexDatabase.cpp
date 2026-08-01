@@ -1079,6 +1079,27 @@ bool FMonolithIndexDatabase::DeleteAssetSearchValuesForAsset(int64 AssetId)
 	return Stmt.Execute();
 }
 
+bool FMonolithIndexDatabase::DeleteAssetSearchValuesForAssetBySourceKind(
+	int64 AssetId,
+	const FString& SearchSourceKind)
+{
+	if (!IsOpen() || AssetId <= 0 || SearchSourceKind.IsEmpty()) return false;
+
+	FSQLitePreparedStatement Stmt;
+	if (!Stmt.Create(
+		*Database,
+		TEXT("DELETE FROM asset_search_values WHERE asset_id = ? AND source_kind = ?;")))
+	{
+		return false;
+	}
+	if (!Stmt.SetBindingValueByIndex(1, AssetId)
+		|| !Stmt.SetBindingValueByIndex(2, SearchSourceKind))
+	{
+		return false;
+	}
+	return Stmt.Execute();
+}
+
 bool FMonolithIndexDatabase::DeleteAssetSearchValuesBySourceKind(const FString& SearchSourceKind)
 {
 	if (!IsOpen()) return false;
@@ -1171,7 +1192,33 @@ EMonolithDeepIndexQueueDecision MonolithDecideDeepIndexQueueEntry(
 bool FMonolithIndexDatabase::SupportsIndexResume() const
 {
 	if (!Database || !Database->IsValid()) return false;
-	return FCString::Atoi(*ReadMeta(TEXT("schema_version"))) >= 3;
+	if (FCString::Atoi(*ReadMeta(TEXT("schema_version"))) < 3)
+	{
+		return false;
+	}
+
+	// A meta row alone is not proof that the additive migration completed. A
+	// manually copied/corrupt DB can carry schema_version=3 without one of the
+	// columns; resuming it would make every checkpoint write fail after work had
+	// already started. Verify the physical shape before choosing the resume path.
+	bool bHasDeepHash = false;
+	bool bHasAttempts = false;
+	FSQLitePreparedStatement Stmt;
+	if (!Stmt.Create(*Database, TEXT("PRAGMA table_info(assets);")))
+	{
+		return false;
+	}
+	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	{
+		FString ColumnName;
+		if (!Stmt.GetColumnValueByIndex(1, ColumnName))
+		{
+			return false;
+		}
+		bHasDeepHash |= ColumnName == TEXT("deep_indexed_hash");
+		bHasAttempts |= ColumnName == TEXT("deep_index_attempts");
+	}
+	return bHasDeepHash && bHasAttempts;
 }
 
 bool FMonolithIndexDatabase::BeginFullIndex()
