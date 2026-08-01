@@ -13,6 +13,8 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 > **0.15.0:** the namespace counts in the Table of Contents and the per-namespace body sections below are a curated in-tree reference. The 2026-07-17 live Go snapshot is 2127 actions / 52 namespaces with sibling/private plugins loaded. For the exhaustive live param schema of any action, call `monolith_discover({ "namespace": "<namespace>", "action": "<action>", "mode": "schema" })` or `describe_query("action_schema", ...)`.
 >
 > **Failure envelope (2026-07-04, `UMonolithSettings::bCompactErrorEnvelope=true` default):** error results carry exactly one machine-readable copy of `related_actions`/`hints`/`error_data`. With `bEnableStructuredToolResults=true` that copy lives in `structuredContent` and `content[0].text` is a one-line `"<message>; see structuredContent."` pointer; without structured results the copy stays in the top-level fields and `content[0].text` keeps the full error text. `error_data` fields are no longer flattened into the result's top level — read `error_data.<field>` instead of `<field>`. Set `bCompactErrorEnvelope=false` to reproduce the legacy duplicated/flattened shape.
+>
+> **Native JSON-key compatibility:** C++ extensions should enumerate JSON-object field names through `FMonolithJsonUtils::FieldKeyToString`, `GetFieldNames`, or `GetFields`. `FieldKeyToString(const FString&)` is available on every supported engine; the `UE::FSharedString` overload is exposed only on UE 5.8+, matching the engine's `FJsonObject` key type without naming a 5.8-only alias in a UE 5.7 translation unit.
 
 ---
 

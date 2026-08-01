@@ -61,7 +61,11 @@ namespace MonolithUI::TestUtils
             {
                 Orphans.Add(W);
             }
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
         }, EGetObjectsFlags::None);
+#else
+        }, false);
+#endif
 
         for (UWidget* W : Orphans)
         {

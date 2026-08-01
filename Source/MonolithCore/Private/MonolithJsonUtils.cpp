@@ -97,10 +97,12 @@ TSharedRef<FJsonValueArray> FMonolithJsonUtils::StringArrayToJson(const TArray<F
 //  is the only Monolith JSON adapter that knows that engine detail.
 // =============================================================================
 
-FString FMonolithJsonUtils::FieldKeyToString(const FJsonObject::FStringType& Key)
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+FString FMonolithJsonUtils::FieldKeyToString(const UE::FSharedString& Key)
 {
 	return FString(*Key);
 }
+#endif
 
 void FMonolithJsonUtils::GetFieldNames(const TSharedPtr<FJsonObject>& Obj, TArray<FString>& OutNames)
 {

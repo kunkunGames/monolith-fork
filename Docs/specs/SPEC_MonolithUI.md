@@ -83,6 +83,7 @@ Count history before 2026-06-30 is retained for provenance, but the live registr
 | `FUIAnimationMovieSceneBuilder` | Editor backend that turns `FUISpecAnimation` into `UWidgetAnimation` MovieScene tracks (Phase I — runtime counterparts may live in an external provider module) |
 | `FMonolithUIStyleService` | CommonUI style asset dedup + canonical-library lookup (Phase G — `WITH_COMMONUI` only) |
 | `UMonolithUISettings` (UDeveloperSettings) | Project Settings → Plugins → Monolith UI: `GeneratedStylesPath`, `CanonicalLibraryPath`, `StyleCacheCap`, `MaxNestingDepth`, `PathCacheCap` |
+| `MonolithUI::TestUtils::CleanupWidgetTree` (tests only) | Removes direct WidgetTree children before reusable WBP fixtures are rebuilt. UE 5.7 passes `bIncludeNestedObjects=false`; UE 5.8+ passes `EGetObjectsFlags::None`, preserving identical direct-child scope without deprecated or unavailable API use. |
 
 ---
 

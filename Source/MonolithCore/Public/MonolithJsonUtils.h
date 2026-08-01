@@ -82,7 +82,9 @@ public:
 	// ============================================================================
 
 	/** Convert a single FJsonObject key (UE::FSharedString in 5.8) to FString. */
-	static FString FieldKeyToString(const FJsonObject::FStringType& Key);
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+	static FString FieldKeyToString(const UE::FSharedString& Key);
+#endif
 
 	/**
 	 * Overload for callers that pass a plain FString key (e.g. iterating a TMap<FString, ...>

@@ -4,6 +4,8 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
+#if WITH_GEOMETRYSCRIPT
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithWorldGenCreateFoundationParamTest, "Monolith.ParamGuard.WorldGen.CreateFoundationRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithWorldGenCreateFoundationParamTest::RunTest(const FString& Parameters)
@@ -111,3 +113,5 @@ bool FMonolithWorldGenCreateFoundationParamTest::RunTest(const FString& Paramete
 
 	return true;
 }
+
+#endif // WITH_GEOMETRYSCRIPT
