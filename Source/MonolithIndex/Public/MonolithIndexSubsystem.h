@@ -48,17 +48,45 @@ public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 
-	/** Trigger a full re-index (wipes DB, re-scans everything) */
+	/**
+	 * Trigger a full re-index (wipes DB, re-scans everything).
+	 * This is the explicit "start over" entry point — it always resets, even when
+	 * an interrupted index could have been resumed.
+	 * @return true if a run actually started. False means nothing is happening —
+	 *         see CanAcceptIndexRequest, or the worker thread failed to spawn.
+	 */
 	UFUNCTION()
 	bool StartFullIndex();
 
-	/** Trigger an incremental catch-up index (delta engine) */
+	/**
+	 * Continue an interrupted full index if one is recoverable, otherwise start a
+	 * fresh one. This is what the automatic startup path and `Monolith.StartIndex`
+	 * use: a crash mid-index must not cost the batches already committed.
+	 *
+	 * UFUNCTION because MonolithCore reaches MonolithIndex only through reflection,
+	 * and `monolith_reindex` without `force` must be able to land here. Without it
+	 * that call falls through to StartFullIndex -- which always resets -- and an
+	 * agent kicking the index after a crash silently destroys the very progress
+	 * this recovery path exists to preserve.
+	 * @return true if a run actually started.
+	 */
+	UFUNCTION()
+	bool ResumeFullIndex();
+
+	/**
+	 * Trigger an incremental catch-up index (delta engine).
+	 * @return true if the delta pass ran. False means it was refused.
+	 */
 	UFUNCTION()
 	bool StartIncrementalIndex();
 
 	/** Trigger a full re-index and drive an existing async job row to a terminal state. */
 	UFUNCTION()
 	bool StartFullIndexWithAsyncJob(const FString& JobId);
+
+	/** Resume an interrupted full index and drive an existing async job row to a terminal state. */
+	UFUNCTION()
+	bool ResumeFullIndexWithAsyncJob(const FString& JobId);
 
 	/** Trigger an incremental catch-up index and drive an existing async job row to a terminal state. */
 	UFUNCTION()
@@ -140,14 +168,24 @@ private:
 		TArray<FIndexedPluginInfo> PluginsToIndex;
 		FString AsyncJobId;
 
+		/** True when this run continues an interrupted index rather than starting one. */
+		bool bIsResume = false;
+
 	private:
 		UMonolithIndexSubsystem* Owner;
 	};
 
+	/**
+	 * Shared body of StartFullIndex/ResumeFullIndex.
+	 * @param bForceReset true wipes the database first; false resumes an
+	 *        interrupted run when the schema and the in-progress marker allow it,
+	 *        and falls back to a wipe when they do not.
+	 */
+	bool StartFullIndexInternal(const FString& JobId, bool bForceReset);
+
 	void OnIndexingFinished(bool bSuccess);
 	void OnAssetRegistryFilesLoaded();
 	void RegisterDefaultIndexers();
-	bool StartFullIndexInternal(const FString& JobId);
 	bool StartIncrementalIndexInternal(const FString& JobId);
 	void BeginActiveAsyncJob(const FString& JobId, const FString& IndexMode, const FString& Message);
 	bool IsActiveAsyncJobCancellationRequested() const;

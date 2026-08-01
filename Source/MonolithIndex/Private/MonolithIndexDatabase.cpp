@@ -23,7 +23,9 @@ CREATE TABLE IF NOT EXISTS assets (
     file_size_bytes INTEGER DEFAULT 0,
     last_modified TEXT DEFAULT '',
     saved_hash TEXT DEFAULT '',
-    indexed_at TEXT DEFAULT (datetime('now'))
+    indexed_at TEXT DEFAULT (datetime('now')),
+    deep_indexed_hash TEXT DEFAULT '',
+    deep_index_attempts INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_assets_class ON assets(asset_class);
 CREATE INDEX IF NOT EXISTS idx_assets_name ON assets(asset_name);
@@ -434,6 +436,60 @@ bool FMonolithIndexDatabase::Open(const FString& InDbPath)
 		}
 	}
 
+	// Schema migration: -> v3 (full-index resume). Additive only: two columns on
+	// `assets`, both also in the CREATE TABLE literal so fresh DBs skip the ALTER.
+	// Runs UNCONDITIONALLY after the v1->v2 block: a fresh DB passes through that
+	// block first (which stamps "2"), so only an unconditional `< 3` gate here
+	// gets it to "3".
+	//
+	// A failed migration must NOT close the database. Leaving the version at 2
+	// keeps `project_query` answering for the whole session; the resume path
+	// gates on SupportsIndexResume() and degrades to a full reset instead.
+	{
+		if (FCString::Atoi(*ReadMeta(TEXT("schema_version"))) < 3)
+		{
+			bool bHasDeepHash = false;
+			bool bHasAttempts = false;
+			FSQLitePreparedStatement PragmaStmt;
+			if (PragmaStmt.Create(*Database, TEXT("PRAGMA table_info(assets);"), ESQLitePreparedStatementFlags::Persistent))
+			{
+				while (PragmaStmt.Step() == ESQLitePreparedStatementStepResult::Row)
+				{
+					FString ColName;
+					PragmaStmt.GetColumnValueByIndex(1, ColName);
+					if (ColName == TEXT("deep_indexed_hash"))
+					{
+						bHasDeepHash = true;
+					}
+					else if (ColName == TEXT("deep_index_attempts"))
+					{
+						bHasAttempts = true;
+					}
+				}
+			}
+
+			bool bMigrated = true;
+			if (!bHasDeepHash)
+			{
+				bMigrated &= ExecuteSQL(TEXT("ALTER TABLE assets ADD COLUMN deep_indexed_hash TEXT DEFAULT '';"));
+			}
+			if (!bHasAttempts)
+			{
+				bMigrated &= ExecuteSQL(TEXT("ALTER TABLE assets ADD COLUMN deep_index_attempts INTEGER DEFAULT 0;"));
+			}
+
+			if (bMigrated)
+			{
+				WriteMeta(TEXT("schema_version"), TEXT("3"));
+			}
+			else
+			{
+				UE_LOG(LogMonolithIndex, Error,
+					TEXT("Index schema migration to v3 failed — index resume is unavailable this session, the index itself is unaffected"));
+			}
+		}
+	}
+
 	// Ensure hash index exists (safe for both fresh and migrated DBs)
 	ExecuteSQL(TEXT("CREATE INDEX IF NOT EXISTS idx_assets_hash ON assets(saved_hash);"));
 	WriteMeta(TEXT("asset_search_values_schema_version"), TEXT("1"));
@@ -513,7 +569,12 @@ bool FMonolithIndexDatabase::ResetDatabase()
 		return false;
 	}
 
-	return WriteMeta(TEXT("schema_version"), TEXT("2"))
+	// `meta` was just dropped, so the version stamp went with it. Recreated tables
+	// carry the current shape, so restate it here — otherwise the DB reports "no
+	// schema version" until the next Open(), and every version-gated path
+	// (incremental indexing, resume) silently degrades for the rest of the session.
+	ExecuteSQL(TEXT("CREATE INDEX IF NOT EXISTS idx_assets_hash ON assets(saved_hash);"));
+	return WriteMeta(TEXT("schema_version"), TEXT("3"))
 		&& WriteMeta(TEXT("asset_search_values_schema_version"), TEXT("1"))
 		&& WriteMeta(TEXT("asset_search_values_extractor_version"), TEXT("2"));
 }
@@ -564,8 +625,10 @@ TOptional<FIndexedAsset> FMonolithIndexDatabase::GetAssetByPath(const FString& P
 {
 	if (!IsOpen()) return {};
 
+	// The two v3 columns ride along on the SELECT the full-index queue filter
+	// already makes, so resume costs zero extra statements per asset.
 	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("SELECT id, package_path, asset_name, asset_class, module_name, description, file_size_bytes, last_modified, saved_hash, indexed_at FROM assets WHERE package_path = ?;"));
+	Stmt.Create(*Database, TEXT("SELECT id, package_path, asset_name, asset_class, module_name, description, file_size_bytes, last_modified, saved_hash, indexed_at, deep_indexed_hash, deep_index_attempts FROM assets WHERE package_path = ?;"));
 	Stmt.SetBindingValueByIndex(1, PackagePath);
 
 	if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
@@ -581,6 +644,8 @@ TOptional<FIndexedAsset> FMonolithIndexDatabase::GetAssetByPath(const FString& P
 		Stmt.GetColumnValueByIndex(7, Asset.LastModified);
 		Stmt.GetColumnValueByIndex(8, Asset.SavedHash);
 		Stmt.GetColumnValueByIndex(9, Asset.IndexedAt);
+		Stmt.GetColumnValueByIndex(10, Asset.DeepIndexedHash);
+		Stmt.GetColumnValueByIndex(11, Asset.DeepIndexAttempts);
 		return Asset;
 	}
 	return {};
@@ -1054,6 +1119,175 @@ FString FMonolithIndexDatabase::ReadMeta(const FString& Key) const
 		return Value;
 	}
 	return FString();
+}
+
+bool FMonolithIndexDatabase::DeleteMeta(const FString& Key)
+{
+	if (!IsOpen()) return false;
+
+	FSQLitePreparedStatement Stmt;
+	Stmt.Create(*Database, TEXT("DELETE FROM meta WHERE key = ?;"));
+	Stmt.SetBindingValueByIndex(1, Key);
+	return Stmt.Execute();
+}
+
+// ============================================================
+// Full-index lifecycle (schema v3)
+// ============================================================
+
+// Named (not anonymous) namespace, and prefixed: file-local duplicates of a
+// common name are what collide once the release build forces full unity.
+namespace MonolithIndexMetaKeys
+{
+	static const TCHAR* const FullIndexState = TEXT("full_index_state");
+	static const TCHAR* const FullIndexInProgress = TEXT("in_progress");
+	static const TCHAR* const LastFullIndex = TEXT("last_full_index");
+	static const TCHAR* const SkippedAssets = TEXT("full_index_skipped_assets");
+}
+
+EMonolithDeepIndexQueueDecision MonolithDecideDeepIndexQueueEntry(
+	const FString& StoredDeepHash,
+	int32 StoredAttempts,
+	const FString& CurrentSavedHash)
+{
+	// Hash equality is the ONLY "already done" gate. A build that predates schema
+	// v3 updates `saved_hash` without maintaining `deep_indexed_hash`, so after a
+	// downgrade-then-upgrade the checkpoint can be stale; comparing it against the
+	// hash the Asset Registry reports right now re-queues those assets naturally.
+	// An empty hash on either side never counts as a match.
+	if (!StoredDeepHash.IsEmpty() && !CurrentSavedHash.IsEmpty() && StoredDeepHash == CurrentSavedHash)
+	{
+		return EMonolithDeepIndexQueueDecision::SkipAlreadyIndexed;
+	}
+
+	if (StoredAttempts >= MonolithMaxDeepIndexAttempts)
+	{
+		return EMonolithDeepIndexQueueDecision::SkipPoisonAsset;
+	}
+
+	return EMonolithDeepIndexQueueDecision::Queue;
+}
+
+bool FMonolithIndexDatabase::SupportsIndexResume() const
+{
+	if (!Database || !Database->IsValid()) return false;
+	return FCString::Atoi(*ReadMeta(TEXT("schema_version"))) >= 3;
+}
+
+bool FMonolithIndexDatabase::BeginFullIndex()
+{
+	if (!IsOpen()) return false;
+
+	// One transaction: a death between the two writes would otherwise leave both
+	// markers set, which reads as "indexed AND interrupted" on the next launch.
+	if (!BeginTransaction()) return false;
+
+	if (!WriteMeta(MonolithIndexMetaKeys::FullIndexState, MonolithIndexMetaKeys::FullIndexInProgress) || !DeleteMeta(MonolithIndexMetaKeys::LastFullIndex))
+	{
+		RollbackTransaction();
+		return false;
+	}
+
+	return CommitTransaction();
+}
+
+bool FMonolithIndexDatabase::IsFullIndexInProgress() const
+{
+	return ReadMeta(MonolithIndexMetaKeys::FullIndexState) == MonolithIndexMetaKeys::FullIndexInProgress;
+}
+
+bool FMonolithIndexDatabase::CompleteFullIndex(
+	const FString& UtcNow,
+	const FString& IndexerFleetSignature)
+{
+	if (!IsOpen()) return false;
+
+	if (!BeginTransaction()) return false;
+
+	const bool bCompletionWritten =
+		WriteMeta(MonolithIndexMetaKeys::LastFullIndex, UtcNow)
+		&& (IndexerFleetSignature.IsEmpty()
+			|| WriteMeta(TEXT("indexer_fleet_signature"), IndexerFleetSignature))
+		&& DeleteMeta(MonolithIndexMetaKeys::FullIndexState);
+	if (!bCompletionWritten)
+	{
+		RollbackTransaction();
+		return false;
+	}
+
+	return CommitTransaction();
+}
+
+bool FMonolithIndexDatabase::SetDeepIndexedHash(int64 AssetId, const FString& Hash)
+{
+	if (!IsOpen()) return false;
+
+	FSQLitePreparedStatement Stmt;
+	Stmt.Create(*Database, TEXT("UPDATE assets SET deep_indexed_hash = ? WHERE id = ?;"));
+	Stmt.SetBindingValueByIndex(1, Hash);
+	Stmt.SetBindingValueByIndex(2, AssetId);
+	return Stmt.Execute();
+}
+
+bool FMonolithIndexDatabase::BumpDeepIndexAttempts(const TArray<int64>& AssetIds)
+{
+	if (!IsOpen()) return false;
+	if (AssetIds.Num() == 0) return true;
+
+	FSQLitePreparedStatement Stmt;
+	if (!Stmt.Create(*Database, TEXT("UPDATE assets SET deep_index_attempts = deep_index_attempts + 1 WHERE id = ?;"),
+		ESQLitePreparedStatementFlags::Persistent))
+	{
+		return false;
+	}
+
+	// Execute() resets the statement itself, so rebinding index 1 each time is
+	// all that is needed to reuse it across the batch.
+	bool bSuccess = true;
+	for (const int64 AssetId : AssetIds)
+	{
+		Stmt.SetBindingValueByIndex(1, AssetId);
+		bSuccess &= Stmt.Execute();
+	}
+	return bSuccess;
+}
+
+bool FMonolithIndexDatabase::ClearDeepIndexAttempts(int64 AssetId)
+{
+	if (!IsOpen()) return false;
+
+	FSQLitePreparedStatement Stmt;
+	Stmt.Create(*Database, TEXT("UPDATE assets SET deep_index_attempts = 0 WHERE id = ?;"));
+	Stmt.SetBindingValueByIndex(1, AssetId);
+	return Stmt.Execute();
+}
+
+TArray<FString> FMonolithIndexDatabase::GetSkippedAssetPaths() const
+{
+	TArray<FString> Paths;
+	const FString Raw = ReadMeta(MonolithIndexMetaKeys::SkippedAssets);
+	if (!Raw.IsEmpty())
+	{
+		Raw.ParseIntoArray(Paths, TEXT("\n"), /*InCullEmpty=*/true);
+	}
+	return Paths;
+}
+
+bool FMonolithIndexDatabase::RecordSkippedAssetPaths(const TArray<FString>& Paths)
+{
+	if (!IsOpen()) return false;
+	if (Paths.Num() == 0) return true;
+
+	// Accumulate rather than replace: once an asset is skipped its hash is written
+	// so it leaves the queue, and a later run would otherwise silently drop it
+	// from the record while the data is still missing.
+	TArray<FString> Merged = GetSkippedAssetPaths();
+	for (const FString& Path : Paths)
+	{
+		Merged.AddUnique(Path);
+	}
+
+	return WriteMeta(MonolithIndexMetaKeys::SkippedAssets, FString::Join(Merged, TEXT("\n")));
 }
 
 // ============================================================
@@ -1694,6 +1928,22 @@ TSharedPtr<FJsonObject> FMonolithIndexDatabase::GetStats()
 		ModuleBreakdown->SetNumberField(ModName, Count);
 	}
 	Stats->SetObjectField(TEXT("module_breakdown"), ModuleBreakdown);
+
+	// Assets the poison-pill rule dropped from deep indexing. Surfaced here so an
+	// agent can see the data-completeness gap without reading the editor log —
+	// `monolith_reindex(force=true)` (or `Monolith.StartIndex force`) clears it.
+	const TArray<FString> SkippedPaths = GetSkippedAssetPaths();
+	Stats->SetNumberField(TEXT("skipped_assets"), SkippedPaths.Num());
+	if (SkippedPaths.Num() > 0)
+	{
+		constexpr int32 MaxReportedSkips = 50;
+		TArray<TSharedPtr<FJsonValue>> SkipValues;
+		for (int32 i = 0; i < FMath::Min(SkippedPaths.Num(), MaxReportedSkips); ++i)
+		{
+			SkipValues.Add(MakeShared<FJsonValueString>(SkippedPaths[i]));
+		}
+		Stats->SetArrayField(TEXT("skipped_asset_paths"), SkipValues);
+	}
 
 	return Stats;
 }
