@@ -3755,7 +3755,7 @@ Both invoke the same SQLite indexes the live MCP uses.
 
 **Reflection Intelligence offline parity.** All four RI namespaces are now fully servable offline — `cppreflect` (6 actions), `network` (4), `decision` (5), `risk` (5) — and emit JSON **byte-identical to the live MCP server** (same field names, types, ordering, row data, `%.17g` float formatting, and base64 cursor tokens). Earlier builds covered only 4 of the 20 with divergent shapes; the phantom `risk.list_hotspots` action has been removed. Two intentional, documented differences from the live payload remain (not bugs): the offline CLI adds a top-level `success` flag (its in-band status channel — the live MCP carries success/error out-of-band, so live has no `success` key; the nested DATA payload is byte-identical), and wall-clock fields (`cutoff_unix` / `since_unix` and the `risk.get_release_window_hotspots` cursor whose filter-hash includes them) differ by the run-time gap across process invocations on both live and offline.
 
-`Scripts/verify_offline_parity.py` byte-diffs exe vs py across the 20 RI actions as a ship-blocking gate in `make_release.ps1`; `Scripts/check_offline_exe_fresh.py` flags a stale exe by comparing its `--version` `source_hash` against a fresh hash of `monolith_query.cpp`.
+`Scripts/verify_offline_parity.py` byte-diffs exe vs py across the 20 RI actions as a ship-blocking gate in `make_release.ps1`; the immutable Query bundle manifest binds the full generated source identity and exact executable/catalog hashes. `Scripts/verify_release_body.ps1 -SelfTest` separately exercises the permanent pre-v2 SHA-marker rejection contract without network or release access; it is compatible with Windows PowerShell 5.1.
 
 ---
 

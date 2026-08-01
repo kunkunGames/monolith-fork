@@ -336,6 +336,7 @@ python Scripts/monolith_offline.py <namespace> <action> [args...]
 |--------|------|
 | `Scripts/verify_offline_parity.py` | HARD-GATE parity guard — byte-diffs exe vs py across all 20 RI actions; exits non-zero on any diff. `make_release.ps1` runs it as a ship gate. |
 | `Tools/MonolithQuery/build.bat` | Injects the generation id produced by `Scripts/source_generation_hash.py`: build-contract bytes plus the complete ordered text-input set with CRLF/lone-CR normalized to LF. Only generation identity is canonicalized; executable/catalog/manifest SHA-256 verification always covers exact raw bytes. |
+| `Scripts/verify_release_body.ps1 -SelfTest` | Network-free Windows PowerShell 5.1 regression gate for unanchored pre-v2 SHA-marker rejection; validates legacy markers embedded in bullets, tables, prose, and newline-separated forms while accepting v2 markers. |
 
 `make_release.ps1` now builds the exe fresh (vcvars + `build.bat`) before the Binaries copy, then runs the parity guard — a stale or drifted exe can never ship. The 20-action RI parity is the scope verified this sprint; the source/project namespaces share the same engine but were not re-audited for byte-parity in this pass.
 
