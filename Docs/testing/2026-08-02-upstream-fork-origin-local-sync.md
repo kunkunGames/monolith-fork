@@ -168,8 +168,8 @@ their pre-merge SHA-256 values; all 15 hashes matched exactly, including mixed
 CRLF/LF files. Existing Perforce ownership in CL 1325, CL 1407, and CL 1408 was
 not moved.
 
-The integration delta was reconciled narrowly into task CL 1411: 22 adds, 123
-edits, and 4 deletes. Two overlapping working-tree paths were deliberately
+The integration delta was reconciled narrowly into task CL 1411: 23 adds, 130
+edits, and 4 deletes (157 paths total). Two overlapping working-tree paths were deliberately
 excluded from the task reconcile: `Docs\specs\SPEC_MonolithUI.md` remains owned
 by CL 1407, while the pre-existing unowned modification in
 `Source\MonolithIndex\MonolithIndex.Build.cs` remains byte-identical and is not
