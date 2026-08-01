@@ -301,6 +301,28 @@ Full read/write access to Blueprint graphs, variables, components, functions, no
 - `add_property_access_node` (reflective `K2Node_PropertyAccess` for thread-safe property reads), `set_function_thread_safe` (mark a Blueprint function `BlueprintThreadSafe`). `scaffold_locomotion_anim_values` now emits a fully-wired thread-safe body via Property Access and can target a named function graph.
 - `get_component_details` falls back to inherited native components (reports `is_inherited_native`, `skeletal_mesh`, `anim_class`, `animation_mode`); `get_blueprint_info` adds `native_component_count`; `get_inherited_component_override` reads the effective component template value + source; `seed_data_asset` gained `read_back_values`; `get_cdo_properties` routes through the shared reflection reader as the canonical verify-after-write path.
 
+**New in v0.22.0 (unified component resolver — issue #116, PR #102 part 1):**
+- **Component reads now report this Blueprint's values, not the C++ parent's.** `get_component_details` and
+  `get_components` read the Blueprint's OWN class-default object; they previously read `ParentClass`'s CDO, so
+  every inherited component reported Epic's native constructor defaults (a capsule overridden to 96 read back 88).
+- **New response fields.** `get_component_details` returns `source`, `resolved_component`, and `note`
+  (`is_inherited_native` is retained and equals `source == "cdo_native"`). `get_components` returns
+  `inherited_components[]` (components declared on a parent Blueprint's construction script, with
+  `defining_class` / `has_override` / `source`) and `native_components_source`. `set_component_property` returns
+  `source`, `resolved_component`, and `persisted`. `get_inherited_component_override`'s `source` values changed
+  from `cdo_native` / `ich` / `scs` to the five-value set below.
+- **`source` values:** `scs`, `cdo_native`, `ich_override`, `inherited_scs`, `parent_cdo_fallback`.
+  `parent_cdo_fallback` means the Blueprint has no compiled generated class and the values shown are native
+  defaults — the accompanying `note` says so.
+- **`set_component_property` can now write components inherited from a parent Blueprint**, via an Inheritable
+  Component Handler override on the child. `persisted: false` means the value equalled the inherited default and
+  the override record was pruned on compile.
+- **Aliases** resolve on all four actions and carry their own target class: `Mesh`/`SkeletalMesh`, `StaticMesh`,
+  `CharacterMovement`/`Movement`, `Capsule`/`CapsuleComponent`, `Root`/`RootComponent`. An alias matching more
+  than one component of its class is reported as an ambiguity with candidate names rather than silently
+  resolving to the first.
+- **`get_inherited_component_override` accepts `asset_path` as an alias for `bp_path`.**
+
 > For full param schemas, call `describe_query("action_schema", target_namespace="blueprint", target_action="<name>")` (or `monolith_discover("blueprint", detail=true)`). Plain `monolith_discover("blueprint")` is terse — action names + one-line descriptions only. The action surface is too broad to enumerate here without bloat — high-traffic actions are documented below; the rest are listed and discoverable.
 
 **Action categories:**

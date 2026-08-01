@@ -1,6 +1,7 @@
 #include "MonolithBlueprintGraphActions.h"
 #include "MonolithBlueprintInternal.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithPinTypeGrammar.h"
 #include "MonolithParamSchema.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "BlueprintEditorLibrary.h"
@@ -110,7 +111,7 @@ namespace
 				return false;
 			}
 			SeenNames.Add(Parsed.Name);
-			if (!MonolithBlueprintInternal::TryParsePinTypeFromString(
+			if (!MonolithPinTypeGrammar::TryParsePinType(
 				TypeString, Parsed.Type, OutError))
 			{
 				OutError = FString::Printf(

@@ -1,4 +1,5 @@
 #include "MonolithBlueprintComponentActions.h"
+#include "MonolithBlueprintComponentResolver.h"
 #include "MonolithBlueprintInternal.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
@@ -61,11 +62,15 @@ void FMonolithBlueprintComponentActions::RegisterActions(FMonolithToolRegistry& 
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("set_component_property"),
-		TEXT("Set a property on a component template in a Blueprint via text import."),
+		TEXT("Set a property on a component template in a Blueprint via text import. Writes to Blueprint-added (SCS) "
+			 "components, inherited native components, and components inherited from a parent Blueprint — the last "
+			 "get an Inheritable Component Handler override on THIS Blueprint so the parent is not modified. "
+			 "Returns 'source' (scs | cdo_native | ich_override) and 'persisted', which is false when the value "
+			 "equalled the inherited default and the override record was pruned on compile."),
 		FMonolithActionHandler::CreateStatic(&HandleSetComponentProperty),
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
-			.Required(TEXT("component_name"), TEXT("string"), TEXT("Component variable name"))
+			.Required(TEXT("component_name"), TEXT("string"), TEXT("Component variable name or alias (Mesh, StaticMesh, CharacterMovement, Capsule, Root)"))
 			.Required(TEXT("property_name"), TEXT("string"), TEXT("Property name on the component"))
 			.Required(TEXT("value"), TEXT("string"), TEXT("Value as text (same format as copy/paste in Details panel)"))
 			.Build());
@@ -91,6 +96,25 @@ static USCS_Node* FindSCSNodeByName(USimpleConstructionScript* SCS, const FName&
 
 	// FindSCSNode searches all nodes (AllNodes)
 	return SCS->FindSCSNode(VarName);
+}
+
+/** Find a component property by exact name, then case-insensitively. */
+static FProperty* MonolithFindComponentProperty(UClass* ComponentClass, const FString& PropName)
+{
+	if (!ComponentClass) return nullptr;
+
+	if (FProperty* Exact = ComponentClass->FindPropertyByName(FName(*PropName)))
+	{
+		return Exact;
+	}
+	for (TFieldIterator<FProperty> It(ComponentClass); It; ++It)
+	{
+		if (It->GetName().Equals(PropName, ESearchCase::IgnoreCase))
+		{
+			return *It;
+		}
+	}
+	return nullptr;
 }
 
 /** Find the parent SCS_Node of a given node, or nullptr if it is a root node. */
@@ -1208,67 +1232,102 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleSetComponentProp
 	if (CompName.IsEmpty()) return FMonolithActionResult::Error(TEXT("component_name is required"));
 	if (PropName.IsEmpty()) return FMonolithActionResult::Error(TEXT("property_name is required"));
 
-	// 1) BP-added components live on the SimpleConstructionScript as USCS_Node.
-	UActorComponent* Template = nullptr;
-	bool bNativeCdoSubobject = false;
-	if (BP->SimpleConstructionScript)
+	// Validate the complete request on a read-only resolution before asking the resolver for
+	// write intent. Creating an inherited-SCS override mutates the Blueprint, so a bad property
+	// name or malformed value must fail before that point.
+	const MonolithBlueprintComponentResolver::FResult PreviewResolved =
+		MonolithBlueprintComponentResolver::Resolve(
+			BP, CompName, UActorComponent::StaticClass(), /*bCreateIchOverride=*/false);
+
+	if (!PreviewResolved.IsValid())
 	{
-		if (USCS_Node* Node = FindSCSNodeByName(BP->SimpleConstructionScript, FName(*CompName)))
-		{
-			Template = Node->ComponentTemplate;
-		}
+		return FMonolithActionResult::Error(PreviewResolved.Error.IsEmpty()
+			? FString::Printf(TEXT("Component not found: %s"), *CompName)
+			: PreviewResolved.Error);
 	}
 
-	// 2) Fallback: native inherited components (declared in the C++ parent class)
-	// don't appear in the SCS — they live as default subobjects on the CDO.
-	// Writing to the CDO subobject persists in the saved BP.
-	if (!Template && BP->GeneratedClass)
+	FProperty* PreviewProp = MonolithFindComponentProperty(PreviewResolved.Template->GetClass(), PropName);
+	if (!PreviewProp)
 	{
-		if (UObject* CDO = BP->GeneratedClass->GetDefaultObject(/*bCreateIfNeeded=*/false))
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Property '%s' not found on %s"), *PropName, *PreviewResolved.Template->GetClass()->GetName()));
+	}
+
+	FObjectProperty* PreviewObjectProp = CastField<FObjectProperty>(PreviewProp);
+	UObject* PrevalidatedObject = nullptr;
+	UActorComponent* ValidationTemplate = nullptr;
+	void* PrevalidatedScalarValue = nullptr;
+	bool bObjectValueIsNone = false;
+	if (PreviewObjectProp)
+	{
+		FString Path = Value;
+		Path.TrimStartAndEndInline();
+		int32 QuoteStart = INDEX_NONE;
+		if (Path.FindChar(TEXT('\''), QuoteStart))
 		{
-			if (AActor* CDOActor = Cast<AActor>(CDO))
+			int32 QuoteEnd = INDEX_NONE;
+			if (Path.FindLastChar(TEXT('\''), QuoteEnd) && QuoteEnd > QuoteStart)
 			{
-				TArray<UActorComponent*> Comps;
-				CDOActor->GetComponents(Comps);
-				for (UActorComponent* Comp : Comps)
-				{
-					if (!Comp) continue;
-					if (Comp->GetName().Equals(CompName, ESearchCase::IgnoreCase) ||
-					    Comp->GetFName() == FName(*CompName))
-					{
-						Template = Comp;
-						bNativeCdoSubobject = true;
-						break;
-					}
-				}
+				Path = Path.Mid(QuoteStart + 1, QuoteEnd - QuoteStart - 1);
+			}
+		}
+		bObjectValueIsNone = Path.Equals(TEXT("None"), ESearchCase::IgnoreCase) || Path.IsEmpty();
+		if (!bObjectValueIsNone)
+		{
+			PrevalidatedObject = FMonolithAssetUtils::LoadAssetByPath(UObject::StaticClass(), Path);
+			if (!PrevalidatedObject)
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("Failed to load object '%s' for property '%s' (expected %s or subclass)"),
+					*Path, *PropName, *PreviewObjectProp->PropertyClass->GetName()));
+			}
+			if (!PrevalidatedObject->IsA(PreviewObjectProp->PropertyClass))
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("Object '%s' is a %s, not compatible with property '%s' (expects %s)"),
+					*Path, *PrevalidatedObject->GetClass()->GetName(), *PropName,
+					*PreviewObjectProp->PropertyClass->GetName()));
 			}
 		}
 	}
-
-	if (!Template)
+	else
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Component not found: %s"), *CompName));
-	}
-
-	FProperty* Prop = Template->GetClass()->FindPropertyByName(FName(*PropName));
-	if (!Prop)
-	{
-		// Try case-insensitive search
-		for (TFieldIterator<FProperty> It(Template->GetClass()); It; ++It)
+		ValidationTemplate = DuplicateObject<UActorComponent>(
+			PreviewResolved.Template, GetTransientPackage());
+		FProperty* ValidationProp = ValidationTemplate
+			? MonolithFindComponentProperty(ValidationTemplate->GetClass(), PropName)
+			: nullptr;
+		void* ValidationValuePtr = ValidationProp
+			? ValidationProp->ContainerPtrToValuePtr<void>(ValidationTemplate)
+			: nullptr;
+		if (!ValidationProp || !ValidationValuePtr
+			|| !ValidationProp->ImportText_Direct(*Value, ValidationValuePtr, ValidationTemplate, PPF_None))
 		{
-			if (It->GetName().Equals(PropName, ESearchCase::IgnoreCase))
-			{
-				Prop = *It;
-				break;
-			}
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Failed to set property '%s' to value '%s' — check format"), *PropName, *Value));
 		}
+		PrevalidatedScalarValue = ValidationValuePtr;
 	}
+
+	// Write intent is requested only after all caller-controlled input has passed validation.
+	// An inherited parent-Blueprint component now gets this Blueprint's own ICH override.
+	const MonolithBlueprintComponentResolver::FResult Resolved =
+		MonolithBlueprintComponentResolver::Resolve(
+			BP, CompName, UActorComponent::StaticClass(), /*bCreateIchOverride=*/true);
+	if (!Resolved.IsValid())
+	{
+		return FMonolithActionResult::Error(Resolved.Error.IsEmpty()
+			? FString::Printf(TEXT("Component not found: %s"), *CompName)
+			: Resolved.Error);
+	}
+
+	UActorComponent* Template = Resolved.Template;
+	FProperty* Prop = MonolithFindComponentProperty(Template->GetClass(), PropName);
 	if (!Prop)
 	{
 		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("Property '%s' not found on %s"), *PropName, *Template->GetClass()->GetName()));
+			TEXT("Property '%s' disappeared while resolving the writable component template"), *PropName));
 	}
-
 	void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Template);
 
 	// Read old value for reporting
@@ -1285,39 +1344,7 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleSetComponentProp
 	FObjectProperty* ObjProp = CastField<FObjectProperty>(Prop);
 	if (ObjProp)
 	{
-		// Accept both "/Game/.../Asset.Asset" and "Class'/Game/.../Asset.Asset'" forms.
-		FString Path = Value;
-		Path.TrimStartAndEndInline();
-		int32 QuoteStart = INDEX_NONE;
-		if (Path.FindChar(TEXT('\''), QuoteStart))
-		{
-			int32 QuoteEnd = INDEX_NONE;
-			if (Path.FindLastChar(TEXT('\''), QuoteEnd) && QuoteEnd > QuoteStart)
-			{
-				Path = Path.Mid(QuoteStart + 1, QuoteEnd - QuoteStart - 1);
-			}
-		}
-		const bool bIsNone = Path.Equals(TEXT("None"), ESearchCase::IgnoreCase) || Path.IsEmpty();
-		UObject* NewObject = nullptr;
-		if (!bIsNone)
-		{
-			// Load without class constraint — ObjProp->PropertyClass may be an
-			// abstract base (e.g. USkinnedAsset) and asset loader can't pick a
-			// concrete subclass from that. Validate compatibility after loading.
-			NewObject = FMonolithAssetUtils::LoadAssetByPath(UObject::StaticClass(), Path);
-			if (!NewObject)
-			{
-				return FMonolithActionResult::Error(FString::Printf(
-					TEXT("Failed to load object '%s' for property '%s' (expected %s or subclass)"),
-					*Path, *PropName, *ObjProp->PropertyClass->GetName()));
-			}
-			if (!NewObject->IsA(ObjProp->PropertyClass))
-			{
-				return FMonolithActionResult::Error(FString::Printf(
-					TEXT("Object '%s' is a %s, not compatible with property '%s' (expects %s)"),
-					*Path, *NewObject->GetClass()->GetName(), *PropName, *ObjProp->PropertyClass->GetName()));
-			}
-		}
+		UObject* NewObject = bObjectValueIsNone ? nullptr : PrevalidatedObject;
 
 		// Route the write through the canonical setter when one exists. The
 		// engine contract: a UPROPERTY with `Setter=` metadata or a deprecated/
@@ -1374,12 +1401,7 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleSetComponentProp
 	}
 	else
 	{
-		const TCHAR* ImportResult = Prop->ImportText_Direct(*Value, ValuePtr, Template, PPF_None);
-		if (!ImportResult)
-		{
-			return FMonolithActionResult::Error(FString::Printf(
-				TEXT("Failed to set property '%s' to value '%s' — check format"), *PropName, *Value));
-		}
+		Prop->CopyCompleteValue(ValuePtr, PrevalidatedScalarValue);
 	}
 
 	// Fire property-change notifications so setter-driven side effects run
@@ -1391,16 +1413,60 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleSetComponentProp
 		Template->PostEditChangeProperty(ChangeEvent);
 	}
 
-	// PERSISTENCE: a write to an INHERITED NATIVE component lands on the CDO default
-	// subobject (no SCS node, so no Inheritable Component Handler override exists).
-	// MarkBlueprintAsModified alone does NOT re-serialise that CDO override — it silently
-	// reverts on the next reload/recompile. The override only persists if the Blueprint is
-	// structurally modified AND recompiled. SCS-template writes keep the lighter handshake.
-	if (bNativeCdoSubobject)
+	// What UE actually stored, read before any compile can move the object.
+	FString PostImportValue;
+	Prop->ExportText_Direct(PostImportValue, ValuePtr, ValuePtr, Template, PPF_None);
+	const FString ResolvedPropName = Prop->GetName();
+
+	// PERSISTENCE. A write to an INHERITED NATIVE component lands on the CDO default subobject,
+	// and a write to an Inheritable Component Handler override lands on an ICH record; neither is
+	// re-serialised by MarkBlueprintAsModified alone — both silently revert on the next
+	// reload/recompile. They persist only if the Blueprint is structurally modified AND
+	// recompiled. SCS-template writes keep the lighter handshake.
+	using EComponentSource = MonolithBlueprintComponentResolver::ESource;
+	const bool bNeedsStructuralRecompile =
+		Resolved.Source == EComponentSource::CdoNative || Resolved.Source == EComponentSource::IchOverride;
+
+	bool bPersisted = true;
+	FString PersistNote;
+
+	if (bNeedsStructuralRecompile)
 	{
 		BP->Modify();
 		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
 		FKismetEditorUtilities::CompileBlueprint(BP);
+
+		// P1/P2. CompileBlueprint runs ValidateTemplates, which PRUNES any ICH record identical
+		// to its archetype and renames the pruned template into the transient package — so
+		// `Template` and `ValuePtr` may now dangle, and a value equal to the parent's is a silent
+		// no-op. Re-resolve read-only and report the truth rather than echoing a stale pointer.
+		const MonolithBlueprintComponentResolver::FResult After =
+			MonolithBlueprintComponentResolver::Resolve(
+				BP, CompName, UActorComponent::StaticClass(), /*bCreateIchOverride=*/false);
+
+		if (After.IsValid())
+		{
+			if (FProperty* AfterProp = MonolithFindComponentProperty(After.Template->GetClass(), PropName))
+			{
+				const void* AfterPtr = AfterProp->ContainerPtrToValuePtr<void>(After.Template);
+				FString AfterValue;
+				AfterProp->ExportText_Direct(AfterValue, AfterPtr, AfterPtr, After.Template, PPF_None);
+				bPersisted = AfterValue.Equals(PostImportValue);
+				PostImportValue = AfterValue;
+			}
+			if (Resolved.Source == EComponentSource::IchOverride &&
+				After.Source != EComponentSource::IchOverride)
+			{
+				bPersisted = false;
+				PersistNote = TEXT("The value matches the inherited default, so the override record was pruned "
+									"on compile and the component still reports the parent's value.");
+			}
+		}
+		else
+		{
+			bPersisted = false;
+			PersistNote = After.Error;
+		}
 	}
 	else
 	{
@@ -1408,15 +1474,21 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleSetComponentProp
 	}
 	BP->MarkPackageDirty();
 
-	// Re-export to reflect whatever UE actually stored — caller can diff old vs new.
-	FString PostImportValue;
-	Prop->ExportText_Direct(PostImportValue, ValuePtr, ValuePtr, Template, PPF_None);
-
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("component"), CompName);
-	Root->SetStringField(TEXT("property"), Prop->GetName());
+	if (!Resolved.ResolvedName.IsNone())
+	{
+		Root->SetStringField(TEXT("resolved_component"), Resolved.ResolvedName.ToString());
+	}
+	Root->SetStringField(TEXT("source"), MonolithBlueprintComponentResolver::SourceToString(Resolved.Source));
+	Root->SetStringField(TEXT("property"), ResolvedPropName);
 	Root->SetStringField(TEXT("old_value"), OldValue);
 	Root->SetStringField(TEXT("new_value"), PostImportValue);
+	Root->SetBoolField(TEXT("persisted"), bPersisted);
+	if (!PersistNote.IsEmpty())
+	{
+		Root->SetStringField(TEXT("note"), PersistNote);
+	}
 	Root->SetStringField(TEXT("asset_path"), AssetPath);
 
 	return FMonolithActionResult::Success(Root);

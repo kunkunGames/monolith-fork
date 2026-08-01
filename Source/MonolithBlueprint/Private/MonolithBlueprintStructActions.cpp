@@ -2,6 +2,7 @@
 #include "MonolithBlueprintInternal.h"
 #include "MonolithPackagePathValidator.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithPinTypeGrammar.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithBulkFillTypes.h"
@@ -225,7 +226,7 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedSt
 		SeenFieldNames.Add(FieldName);
 
 		FString TypeError;
-		if (!MonolithBlueprintInternal::TryParsePinTypeFromString(
+		if (!MonolithPinTypeGrammar::TryParsePinType(
 			ParsedField.TypeString, ParsedField.PinType, TypeError))
 		{
 			return FMonolithActionResult::Error(
