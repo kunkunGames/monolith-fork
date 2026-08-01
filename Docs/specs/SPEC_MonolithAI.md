@@ -2,13 +2,15 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.21.3 (Beta)
+**Version:** 0.22.0 (Beta)
 
 ---
 
 ## MonolithAI
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, MonolithAsset, MonolithBlueprint, MonolithIndex, UnrealEd, AIModule, GameplayTasks, NavigationSystem, Json, JsonUtilities
+
+**Engine compatibility:** StateTree object enumeration and post-engine-init registration route through the MonolithCore traversal/delegate boundaries, preserving identical direct/nested scope on UE 5.7 and UE 5.8.
 **Namespace:** `ai` | **Tool:** `ai_query(action, params)` | **Actions:** ~223 (Phase J F8: +`add_perception_to_actor`, +`get_bt_graph`; test/profiling harness Wave 1: +`rebuild_navigation`, +`validate_nav_points`). Counts approximate — query `monolith_discover("ai")` for the live figure.
 **Conditional:** State Trees (`#if WITH_STATETREE`) and Smart Objects (`#if WITH_SMARTOBJECTS`) are required dependencies. Mass Entity (`#if WITH_MASSENTITY`) and Zone Graph (`#if WITH_ZONEGRAPH`) are optional extensions. When required deps are absent, the module compiles to an empty stub (0 actions registered).
 **Settings toggle:** `bEnableAI` (default: True)

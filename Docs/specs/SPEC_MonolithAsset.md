@@ -15,6 +15,8 @@
 
 This module keeps asset-level actions out of `MonolithUI`, `MonolithMesh`, and `MonolithMaterial` so those modules can focus on their native domains.
 
+Package-graph traversal uses `MonolithObjectTraversal`, preserving the requested direct/nested object scope through UE 5.7's boolean API and UE 5.8's flag API.
+
 ## 2. Namespace Ownership
 
 `FMonolithAssetModule` registers all 20 `asset` actions directly with `FMonolithToolRegistry` and unregisters the `asset` namespace during shutdown. The module is gated by `UMonolithSettings::bEnableAsset`.

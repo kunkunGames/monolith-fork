@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.21.3 (Beta)
+**Version:** 0.22.0 (Beta)
 **Owner module:** MonolithGameFeatures
 **Namespace:** `gamefeatures`
 **Status:** Implemented expanded instanced-action authoring slice
@@ -23,6 +23,8 @@ descriptors or activation requests. The namespace also exposes guarded authoring
 actions for already-existing ActionSet and GameFeatureData assets: it creates or
 updates instanced feature actions, edits bounded known property arrays, and saves
 the owning package only when requested.
+
+Automation includes `GameFeatureData.h` only inside the same `WITH_MONOLITH_GAMEFEATURES` guard as the feature tests, so a host without the optional engine plugin still compiles the status-only module surface.
 
 Reference implementation review: UE 5.8
 `Engine/Plugins/Experimental/Toolsets/GameFeaturesToolset` identifies a Game

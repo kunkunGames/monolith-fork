@@ -2,13 +2,15 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.21.3 (Beta)
+**Version:** 0.22.0 (Beta)
 
 ---
 
 ## MonolithAnimation
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, AnimGraph, AnimGraphRuntime, BlueprintGraph, AnimationBlueprintLibrary, PoseSearch, BlendStackEditor, AnimationModifiers, EditorScriptingUtilities, Json, JsonUtilities
+
+**Engine compatibility:** ControlRig includes its engine-owned asset base through the version-appropriate public header; MirrorTable refresh and PoseSearch entry replacement use the native UE 5.7/5.8 APIs behind explicit boundaries. Animation indexing captures package residency before loading and releases only what that call acquired.
 
 > **`BlendStackEditor` dep (2026-06-07)** added for the Motion Matching action pack — `build_motion_matching_node` spawns the bound-graph `UAnimGraphNode_MotionMatching` / BlendStack nodes.
 

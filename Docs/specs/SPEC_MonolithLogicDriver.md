@@ -2,13 +2,15 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.21.3 (Beta)
+**Version:** 0.22.0 (Beta)
 
 ---
 
 ## MonolithLogicDriver
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore
+
+**Engine compatibility:** Module registration uses `MonolithCoreDelegates::GetPostEngineInit`, preserving the same late-registration phase across UE 5.7 and UE 5.8.
 **Namespace:** `logicdriver` | **Tool:** `logicdriver_query(action, params)` | **Actions:** 66
 **Conditional:** Logic Driver Pro plugin features wrapped in `#if WITH_LOGICDRIVER`. When Logic Driver Pro is absent, the module compiles to an empty stub (0 actions registered). Uses UObject reflection only — no direct C++ API linkage against Logic Driver binaries. Build.cs detection checks the `.uproject` via `IsPluginEnabled`.
 **Settings toggle:** `bEnableLogicDriver` (default: True)

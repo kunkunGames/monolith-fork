@@ -2,13 +2,15 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.21.3 (Beta)
+**Version:** 0.22.0 (Beta)
 
 ---
 
 ## MonolithIndex
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, AssetRegistry, Json, JsonUtilities, SQLiteCore, Slate, SlateCore, BlueprintGraph, KismetCompiler, EditorSubsystem, CollectionManager, ContentBrowserData
+
+**Engine compatibility:** SQLite step failures use each engine's supported error surface and always return an explicit diagnostic; material sampler inference selects the version-appropriate engine API. Asset/export traversal uses the MonolithCore wrapper. `ContentBrowserData` is a direct private dependency because collection actions link its item and subsystem APIs rather than relying on a transitive editor dependency.
 
 **UE 5.7 unity-build rule:** action `.cpp` helpers must use action-specific names even inside anonymous namespaces. Adaptive unity can include sibling action files in a single generated translation unit, so generic helpers like `AppendPathString`, `AppendPathField`, and `CollectChangedPaths` must not be duplicated across Project action sources.
 

@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.21.3 (Beta)
+**Version:** 0.22.0 (Beta)
 
 > **Action-count audit (2026-04-26):** source-of-truth count is **195 core + 45 experimental town gen = 240**, not the previously claimed 197 + 45 = 242. The detailed per-action tables below predate the audit and may sum to slightly different numbers per category — they are accurate per-row but the category subtotals have drifted. A full per-action sweep against `Source/MonolithMesh/Private/Monolith*Actions.cpp` is on the audit backlog.
 
@@ -11,6 +11,8 @@
 ## MonolithMesh
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, MonolithIndex, SQLiteCore, UnrealEd, EditorSubsystem, MeshDescription, StaticMeshDescription, MeshConversion, PhysicsCore, NavigationSystem, RenderCore, RHI, Json, JsonUtilities, Slate, SlateCore, AssetRegistry, AssetTools, MeshReductionInterface, MeshMergeUtilities, LevelInstanceEditor, SourceControl. Optional: GeometryScriptingCore, GeometryFramework, GeometryCore (Tier 5 mesh ops, gates `WITH_GEOMETRYSCRIPT`)
+
+**Engine compatibility:** Merge-pivot configuration selects UE 5.8's `PivotType=Automatic` or UE 5.7's equivalent `bPivotPointAtZero=false`; replacement-test object traversal uses the MonolithCore wrapper. No alternate mesh behavior or asset fallback is introduced.
 
 **Build.cs notes — conditional GeometryScripting (v0.14.1):** The Build.cs probes `Engine/Plugins/Runtime/GeometryScripting` and adds `GeometryScriptingCore`, `GeometryFramework`, `GeometryCore` + `WITH_GEOMETRYSCRIPT=1` only when found. **Release escape hatch:** setting `MONOLITH_RELEASE_BUILD=1` (env var) short-circuits detection so `WITH_GEOMETRYSCRIPT=0` regardless — the released DLL no longer carries a hard import on `UnrealEditor-GeometryScriptingCore.dll`. This fixes #26 / #30 where users without GeometryScripting enabled in their `.uproject` were hitting `GetLastError=126` at module load. Mirrors the canonical `MonolithBABridge.Build.cs` pattern (and matches the `MonolithUI` CommonUI detection). Source-tree users with GeometryScripting enabled still get full Tier 5 functionality.
 

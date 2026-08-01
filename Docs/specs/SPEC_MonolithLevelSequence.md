@@ -2,13 +2,15 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.21.3 (Beta)
+**Version:** 0.22.0 (Beta)
 
 ---
 
 ## MonolithLevelSequence
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, MonolithIndex, SQLiteCore, UnrealEd, AssetRegistry, Projects, MovieScene, MovieSceneTracks, LevelSequence, BlueprintGraph, Kismet, EditorSubsystem, Json, JsonUtilities
+
+**Engine compatibility:** Indexer registration uses `MonolithCoreDelegates::GetPostEngineInit`, selecting the supported delegate surface on UE 5.7 and UE 5.8 without changing registration timing.
 **Namespace:** `level_sequence` | **Tool:** `level_sequence_query(action, params)` | **Actions:** 13 (12 production + `ping` smoke)
 **Settings toggles:** `bEnableLevelSequence` (registers actions, default True) and `bIndexLevelSequences` (registers indexer, default True) — both under `[/Script/MonolithCore.MonolithSettings]`
 

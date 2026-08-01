@@ -2,13 +2,15 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.21.3 (Beta)
+**Version:** 0.22.0 (Beta)
 
 ---
 
 ## MonolithBlueprint
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, BlueprintGraph, EnhancedInput, Json, JsonUtilities
+
+**Engine compatibility:** Blueprint-owned object traversal and StringTable writes use the MonolithCore compatibility boundaries. Component value reads classify an explicitly supplied `None` independently from resolution failure, so the selected component cannot be silently substituted.
 
 ### Classes
 

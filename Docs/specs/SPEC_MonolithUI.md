@@ -2,13 +2,15 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.21.3 (Beta) — architecture expansion Phase A–L landed 2026-04-26 (plan: [`Docs/plans/2026-04-25-monolith-ui-architecture-expansion.md`](../../../../Docs/plans/2026-04-25-monolith-ui-architecture-expansion.md)); optional EffectSurface provider decouple (Wave 1/2 + Final.1) landed 2026-04-27.
+**Version:** 0.22.0 (Beta) — architecture expansion Phase A–L landed 2026-04-26 (plan: [`Docs/plans/2026-04-25-monolith-ui-architecture-expansion.md`](../../../../Docs/plans/2026-04-25-monolith-ui-architecture-expansion.md)); optional EffectSurface provider decouple (Wave 1/2 + Final.1) landed 2026-04-27.
 
 ---
 
 ## MonolithUI
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, UMGEditor, UMG, Slate, SlateCore, Json, JsonUtilities, XmlParser, GameplayTags, KismetCompiler, MovieScene, MovieSceneTracks, DeveloperSettings, AssetTools, ImageWrapper, ImageCore, Kismet, MaterialEditor, EditorSubsystem (Public — `UMonolithUIRegistrySubsystem` is exported), CommonUI (optional — `#if WITH_COMMONUI`)
+
+**Engine compatibility:** Widget cleanup/font traversal and post-engine-init registry refresh use MonolithCore's object-traversal/delegate boundaries. The UI module therefore keeps identical direct-child and late-plugin discovery semantics without calling deprecated UE 5.8 APIs or unavailable UE 5.7 APIs.
 
 **The optional EffectSurface provider is NOT a build-system dependency** (decoupled 2026-04-27). EffectSurface support is delivered via UClass-by-name reflection through `MonolithUI::GetEffectSurfaceClass()` — see § "Optional Dep Probe API" and § "Error Contract — Optional EffectSurface Provider Absence (-32010)". External providers may depend on MonolithUI for registry/spec structs, but MonolithUI must not depend on them.
 **MonolithUI-owned actions in `ui::` namespace:** large and registry-derived; use `monolith_discover({ namespace: "ui" })` for the exact live count in the running editor. The current CommonFramework surface contributes **7** always-on MonolithUI actions. **4 GAS UI binding aliases owned by `MonolithGAS`** may also register into `ui::` when `WITH_GBA` is enabled.
