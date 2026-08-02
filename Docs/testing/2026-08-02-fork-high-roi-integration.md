@@ -4,7 +4,7 @@
 
 **Origin baseline:** `3683c00e066f312c526a8054477c990519f967ab`
 
-**Verified source head:** `580b70abff7a2d21927ed127899d796686f04563`
+**Verified source head:** `39e9ba81cda0d6e4c9c659ea7b65ff177e420e06`
 
 **Scope:** Selectively port the merge-ready reliability work from
 `kunkunGames/monolith-fork` to `kunkunGames/monolith` without merging the
@@ -55,9 +55,11 @@ not catch:
 
 `.github/monolith-static-ci.json` and `Scripts/ci_static_checks.py` now encode
 both invariants. The checker rejects a direct optional Chooser reference and
-requires GameplayAbilities to be present with `Enabled=true` and without
-`Optional=true`; matching is case-insensitive so a case-only alias cannot evade
-the contract. Its self-test contains a mutation case for each regression.
+requires exactly one GameplayAbilities reference with `Enabled=true` and
+without `Optional=true`; matching is case-insensitive, and any duplicate
+case-only, disabled, or optional reference fails the contract. Its self-test
+contains a mutation case for each regression, including a valid entry paired
+with a conflicting lowercase duplicate.
 
 The final packaged descriptors on both engines contain zero direct Chooser
 references and exactly one enabled, non-optional GameplayAbilities reference.
@@ -92,6 +94,25 @@ requires `ErrorCode=invalid_params`, structured
 `expected string`. Both UE 5.7 and UE 5.8 pass that contract from their final
 packaged editor modules.
 
+### 2.3 Review-driven strict-save preflight
+
+The initial strict reference-fixup port proved that every candidate reference
+could be rewritten before mutation, but its `save=true` path did not prove that
+every changed package could be persisted before applying the first rewrite.
+That left a late save failure capable of producing a partially saved and dirty
+result despite the strict contract.
+
+The final action now performs a dry traversal first and records the complete
+`planned_changed_packages` set. Before any property mutation, every planned
+package filename and parent directory is validated, conflicting file/directory
+shapes are rejected, source-controlled destinations are prepared as one batch,
+and every destination receives a non-destructive write probe. A failed check
+returns `status=preflight_failed`, `applied_count=0`, per-package
+`save_preflight` diagnostics, and leaves the candidate reference and package
+dirty state unchanged. The focused automation test creates a file where a
+required save directory must exist and verifies that the action rejects that
+destination before mutation.
+
 ---
 
 ## 3. Full Release Package Builds
@@ -110,8 +131,8 @@ $env:MONOLITH_RELEASE_BUILD = "1"
 
 | Engine | Package | Editor | Development | Shipping | UAT result |
 |---|---|---|---|---|---|
-| UE 5.7 | `D:\P4\MonolithOriginHighRoiChooserUE57FinalPackage` | PASS | PASS | PASS | `BUILD SUCCESSFUL`, exit 0 |
-| UE 5.8 | `D:\P4\MonolithOriginHighRoiChooserUE58FinalPackage` | PASS | PASS | PASS | `BUILD SUCCESSFUL`, exit 0 |
+| UE 5.7 | `D:\P4\MonolithOriginReviewFixExact39e9ba81UE57Package` | PASS | PASS | PASS | `BUILD SUCCESSFUL`, exit 0 |
+| UE 5.8 | `D:\P4\MonolithOriginReviewFixExact39e9ba81UE58Package` | PASS | PASS | PASS | `BUILD SUCCESSFUL`, exit 0 |
 
 One earlier UE 5.7 diagnostic command omitted `-TargetPlatforms=Win64`; its
 Editor target compiled successfully but UAT then selected unavailable Android
@@ -128,12 +149,14 @@ packages above; the failed diagnostic package is excluded from evidence.
 
 | Engine | Artifact | Size | SHA-256 |
 |---|---|---:|---|
-| UE 5.7 | `UnrealEditor-MonolithAnimation.dll` | 3,357,696 bytes | `A5CA2693F3A8B5C8FBAB0DF8E761D1C7C2F7E3291A897A9CEC2BE17211B45F89` |
-| UE 5.7 | `UnrealEditor-MonolithInterchange.dll` | 457,728 bytes | `A4B773467C709CE9626C808C92EE54EEDD28F0221F0949B51FCB340D07F05FAC` |
-| UE 5.7 | `UnrealEditor-MonolithIndex.dll` | 1,912,832 bytes | `451595854B65F7EF5D75C62B3641F4180A643AA120F97B5DA877DC7D26845D50` |
-| UE 5.8 | `UnrealEditor-MonolithAnimation.dll` | 3,169,792 bytes | `A3EE2BC169F19EE773A185C0B0A432346A21AD03B3CAE05C75C36E6640CBCE40` |
-| UE 5.8 | `UnrealEditor-MonolithInterchange.dll` | 433,152 bytes | `11FAE7FDCA681B081602D4093CB24C0C76EC9A8DCA42AF87C8308652A11DCFD9` |
-| UE 5.8 | `UnrealEditor-MonolithIndex.dll` | 1,827,328 bytes | `4ECF41F63939C19A4B2D36B87332EC256B16CFC696F1A77EBACF2D0A0373131F` |
+| UE 5.7 | `UnrealEditor-MonolithAsset.dll` | 1,676,288 bytes | `9EB769249237A9B90443268DC78E0EF9B329933CA0C4B2CC51B829CD105144B6` |
+| UE 5.7 | `UnrealEditor-MonolithAnimation.dll` | 3,357,696 bytes | `05EA460B0F8B2E555AF333CF4120D3E3A7C2FE06AAE9F7D8AAC1554F02F93495` |
+| UE 5.7 | `UnrealEditor-MonolithInterchange.dll` | 457,728 bytes | `36CC8C7C7C358F0AFB7EC7250427A991FE0D8EC26E5CC49257984E8E84C1C537` |
+| UE 5.7 | `UnrealEditor-MonolithIndex.dll` | 1,912,832 bytes | `3068D0FAB8D6801D014A9A4161F0D04A748E4F77A223222C567DC6A0C2C1C270` |
+| UE 5.8 | `UnrealEditor-MonolithAsset.dll` | 1,579,008 bytes | `56CDB33D0FBCE1AE59652F4B68EC298B1C81604A9318720780AC0762D803E060` |
+| UE 5.8 | `UnrealEditor-MonolithAnimation.dll` | 3,169,792 bytes | `6EF43A859FBA9E6B224CB707F66C23EDE5A455C32B97E9A35E407BD595EFCB22` |
+| UE 5.8 | `UnrealEditor-MonolithInterchange.dll` | 433,152 bytes | `0CC22A7DF19D673C7FBD4F5EE4D8942EE5FFEADCF2482264410C287D90116FF6` |
+| UE 5.8 | `UnrealEditor-MonolithIndex.dll` | 1,827,328 bytes | `29933B7D02D45C9473D4F49342DBFF361EB5287DC6B5AAE271664B9404B4B78C` |
 
 ---
 
@@ -145,21 +168,31 @@ the tests through the packaged editor modules rather than the source worktree.
 
 | Engine | Test | Result | Report SHA-256 |
 |---|---|---|---|
-| UE 5.7 | `Monolith.Interchange.ExportTransaction` | 1 succeeded, 0 failed, 0 not run | `19803E885FD6283465E88C6A026C4B295B461324375D2D7EBFB412FF0E5D80E3` |
-| UE 5.7 | `Monolith.ParamGuard.MonolithInterchange.ImportRejectsMalformedParams` | 1 succeeded, 0 failed, 0 not run | `5C23551B65A2D64C3A808190726CD5E547C7EBDF512AD535F42A89CA9BB4201B` |
-| UE 5.7 | `Monolith.ParamGuard.Animation.ValidateChooser` | 1 succeeded, 0 failed, 0 not run | `53ABD15832F2841A392D4DE2087FA976E69506300DAB6B513481C901B5584DA8` |
-| UE 5.8 | `Monolith.Interchange.ExportTransaction` | 1 succeeded, 0 failed, 0 not run | `36E0D0C399D26453AB04628B819586716C879E8CEEED41194633C47A9410A416` |
-| UE 5.8 | `Monolith.ParamGuard.MonolithInterchange.ImportRejectsMalformedParams` | 1 succeeded, 0 failed, 0 not run | `7609731B46DFC0D5C1994DA79AB0AC5E92EB9D6BF4F573CD3343EC6371D88E21` |
-| UE 5.8 | `Monolith.ParamGuard.Animation.ValidateChooser` | 1 succeeded, 0 failed, 0 not run | `0DD583A62F5432C7A05BD6E47E5DA57BFF2A34DBB01060FBC5FEDF676904099C` |
+| UE 5.7 | `Monolith.Asset.PackageGraph.RegistryAndParamGuards` | 1 succeeded, 0 failed, 0 not run | `EB757184D0A5D78C87DA419EB8DE70EBF45FAB2924F3F6D7865AE2B7DBED2546` |
+| UE 5.7 | `Monolith.Interchange.ExportTransaction` | 1 succeeded, 0 failed, 0 not run | `81243F1CA3F577620C09BA04C94663BB22312BCD75EA33E36B9B32D239CCFA72` |
+| UE 5.7 | `Monolith.ParamGuard.MonolithInterchange.ImportRejectsMalformedParams` | 1 succeeded, 0 failed, 0 not run | `D681D70857D8D5C4F8AE5F15A191677AE742253CA8C14C44849546B878E546D5` |
+| UE 5.7 | `Monolith.ParamGuard.Animation.ValidateChooser` | 1 succeeded, 0 failed, 0 not run | `95E0D0C09E0B47637CFCC80D62A0A271195398E1F13712D3E27DDE04C04D3961` |
+| UE 5.8 | `Monolith.Asset.PackageGraph.RegistryAndParamGuards` | 1 succeeded, 0 failed, 0 not run | `5EA1DB88B84C02EE8793D7931E2E79AE2CBD19A925FE0A1B2B195490911F075F` |
+| UE 5.8 | `Monolith.Interchange.ExportTransaction` | 1 succeeded, 0 failed, 0 not run | `FC3B7EF0F80380EDCE26BCFEF2FC39FF440BC93C378BDA16C898D29DEEC6C0D0` |
+| UE 5.8 | `Monolith.ParamGuard.MonolithInterchange.ImportRejectsMalformedParams` | 1 succeeded, 0 failed, 0 not run | `2DD89DF8E1852284558D80146B59F8E018C335623359721AB9D4063A4180CFB2` |
+| UE 5.8 | `Monolith.ParamGuard.Animation.ValidateChooser` | 1 succeeded, 0 failed, 0 not run | `ED43F6D7E0AB23302DB3E7E2144A87F392546FAAADB877B6640E60C46C284A7B` |
 
 Report locations:
 
-- `D:\P4\MonolithOriginHighRoiChooserUE57FinalAutomationHost\Saved\AutomationReports`
-- `D:\P4\MonolithOriginHighRoiChooserUE58FinalAutomationHost\Saved\AutomationReports`
+- `D:\P4\MonolithOriginReviewFixExact39e9ba81UE57AutomationHost\Saved\AutomationReports`
+- `D:\P4\MonolithOriginReviewFixExact39e9ba81UE58AutomationHost\Saved\AutomationReports`
 
-All six selected logs contain GameplayAbilities and Chooser mount records and contain
+All eight selected logs contain GameplayAbilities and Chooser mount records and contain
 zero `Plugin 'Monolith' failed`, Monolith DLL load failure, or Monolith DLL
 preload failure records.
+
+One preliminary UE 5.8 package from an earlier review-fix head compiled, but
+the new strict-save test classified a file occupying the required parent path
+as `destination_not_writable` instead of the more exact
+`save_directory_unavailable`. The action still made zero changes and left the
+package clean. The implementation was corrected to detect that file/directory
+shape explicitly, then both exact-head packages and all tabled reports were
+regenerated; the preliminary package is excluded from evidence.
 
 The first attempt to run UE 5.7 and UE 5.8 commandlets concurrently produced
 one UE 5.7 exit 3 before test discovery: both installed engines switched the
@@ -174,7 +207,7 @@ environment-failed invocation is excluded from the report table.
 
 | Gate | Result |
 |---|---|
-| `python Scripts/ci_static_checks.py selftest` | PASS, including required-plugin and case-insensitive forbidden-optional regression mutations |
+| `python Scripts/ci_static_checks.py selftest` | PASS, including exactly-one required-plugin, conflicting duplicate, and case-insensitive forbidden-optional regression mutations |
 | Full hosted static checker | 8 blockers / 24 advisories, byte-for-byte category baseline already present on clean origin |
 | New `uplugin-dependency` findings | 0 |
 | `git diff --check` | PASS before verification-document commit |
@@ -206,7 +239,8 @@ exists for this source/API-only change, so
 The selected fork reliability fixes are compatible with current origin after
 preserving origin's stronger proxy ownership and schema-validation boundary.
 Clean UE 5.7 and UE 5.8 package builds, packaged-host module loading, portable
-export transaction tests, a real staged Texture2D export, and the always-on
-Chooser schema guard all pass. Release builds retain the ten Chooser actions
-through PoseSearch's required dependency edge. The integration is suitable for
-exact-head review and merge; it is not a wholesale fork-master merge.
+export transaction tests, a real staged Texture2D export, strict saveability
+preflight, and the always-on Chooser schema guard all pass. Release builds
+retain the ten Chooser actions through PoseSearch's required dependency edge.
+The integration is suitable for exact-head review and merge; it is not a
+wholesale fork-master merge.
