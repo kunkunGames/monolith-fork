@@ -42,6 +42,24 @@ struct FMonolithInterchangeStagingCleanupResult
 	FString Error;
 };
 
+struct FMonolithInterchangeStagingManifestValidationResult
+{
+	TArray<FString> InvalidExpectedFiles;
+	TArray<FString> InvalidActualFiles;
+	TArray<FString> DuplicateExpectedFiles;
+	TArray<FString> DuplicateActualFiles;
+	TArray<FString> UnexpectedFiles;
+
+	bool IsValid() const
+	{
+		return InvalidExpectedFiles.IsEmpty() &&
+			InvalidActualFiles.IsEmpty() &&
+			DuplicateExpectedFiles.IsEmpty() &&
+			DuplicateActualFiles.IsEmpty() &&
+			UnexpectedFiles.IsEmpty();
+	}
+};
+
 using FMonolithInterchangeMoveFile =
 	TFunctionRef<bool(const FString& Destination, const FString& Source)>;
 
@@ -49,9 +67,23 @@ using FMonolithInterchangeSymlinkQuery =
 	TFunctionRef<ESymlinkResult(const FString& Path)>;
 
 // Export output sets must remain unambiguous when moved between supported
-// filesystems. Treat case-only path variants as the same portable identity,
-// including before a destination exists and its volume can be queried.
-FString MonolithInterchangePortablePathKey(FString Path);
+// filesystems. Directory names retain host semantics and may be Unicode; the
+// exporter-owned filename is restricted to an explicit portable ASCII set,
+// component length, and non-reserved form so case folding is complete without
+// a locale, ICU data, or destination volume.
+bool TryMonolithInterchangePortableFilenameKey(
+	const FString& Path,
+	FString& OutKey,
+	FString& OutError);
+
+// Ownership and root-boundary checks follow the current host filesystem's
+// path semantics. Portable identity is only for detecting ambiguous sets.
+bool MonolithInterchangePathsMatchHostSemantics(const FString& PathA, const FString& PathB);
+
+FMonolithInterchangeStagingManifestValidationResult
+ValidateMonolithInterchangeStagingManifest(
+	const TArray<FString>& ExpectedFiles,
+	const TArray<FString>& ActualFiles);
 
 bool MonolithInterchangePathTraversesLinkBelowRoot(
 	const FString& Path,

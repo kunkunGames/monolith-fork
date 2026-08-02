@@ -4,23 +4,141 @@
 #include "HAL/PlatformFileManager.h"
 #include "Misc/Paths.h"
 
-FString MonolithInterchangePortablePathKey(FString Path)
+bool TryMonolithInterchangePortableFilenameKey(
+	const FString& Path,
+	FString& OutKey,
+	FString& OutError)
 {
-	Path = FPaths::ConvertRelativePathToFull(Path);
-	FPaths::NormalizeFilename(Path);
-	Path.ToLowerInline();
-	return Path;
+	OutKey.Reset();
+	OutError.Reset();
+	const FString Filename = FPaths::GetCleanFilename(Path);
+	if (Filename.IsEmpty() || Filename == TEXT(".") || Filename == TEXT(".."))
+	{
+		OutError = TEXT("Exporter output filename must be non-empty and cannot be '.' or '..'.");
+		return false;
+	}
+	if (Filename.Len() > 255)
+	{
+		OutError = TEXT("Exporter output filename exceeds the portable 255-character component limit.");
+		return false;
+	}
+
+	OutKey.Reserve(Filename.Len());
+	for (const TCHAR Character : Filename)
+	{
+		if (Character >= TEXT('A') && Character <= TEXT('Z'))
+		{
+			OutKey.AppendChar(static_cast<TCHAR>(Character + (TEXT('a') - TEXT('A'))));
+			continue;
+		}
+		if ((Character >= TEXT('a') && Character <= TEXT('z')) ||
+			(Character >= TEXT('0') && Character <= TEXT('9')) ||
+			Character == TEXT('.') || Character == TEXT('_') || Character == TEXT('-'))
+		{
+			OutKey.AppendChar(Character);
+			continue;
+		}
+
+		OutKey.Reset();
+		OutError = FString::Printf(
+			TEXT("Exporter output filename is not portable: %s. Use only ASCII letters, digits, '.', '_', and '-'."),
+			*Filename);
+		return false;
+	}
+
+	if (OutKey.EndsWith(TEXT(".")))
+	{
+		OutKey.Reset();
+		OutError = TEXT("Exporter output filename cannot end with '.' on supported filesystems.");
+		return false;
+	}
+
+	const int32 FirstDotIndex = OutKey.Find(TEXT("."));
+	const FString DeviceStem = FirstDotIndex == INDEX_NONE ? OutKey : OutKey.Left(FirstDotIndex);
+	const bool bReservedDeviceName =
+		DeviceStem == TEXT("con") || DeviceStem == TEXT("prn") ||
+		DeviceStem == TEXT("aux") || DeviceStem == TEXT("nul") ||
+		(DeviceStem.Len() == 4 &&
+			(DeviceStem.StartsWith(TEXT("com")) || DeviceStem.StartsWith(TEXT("lpt"))) &&
+			DeviceStem[3] >= TEXT('1') && DeviceStem[3] <= TEXT('9'));
+	if (bReservedDeviceName)
+	{
+		OutKey.Reset();
+		OutError = FString::Printf(
+			TEXT("Exporter output filename uses a reserved portable device name: %s."),
+			*Filename);
+		return false;
+	}
+	return true;
+}
+
+bool MonolithInterchangePathsMatchHostSemantics(const FString& PathA, const FString& PathB)
+{
+	FString NormalizedA = FPaths::ConvertRelativePathToFull(PathA);
+	FString NormalizedB = FPaths::ConvertRelativePathToFull(PathB);
+	FPaths::NormalizeFilename(NormalizedA);
+	FPaths::NormalizeFilename(NormalizedB);
+	return FPaths::IsSamePath(NormalizedA, NormalizedB);
+}
+
+FMonolithInterchangeStagingManifestValidationResult
+ValidateMonolithInterchangeStagingManifest(
+	const TArray<FString>& ExpectedFiles,
+	const TArray<FString>& ActualFiles)
+{
+	FMonolithInterchangeStagingManifestValidationResult Result;
+	TSet<FString> ExpectedKeys;
+	for (const FString& ExpectedFile : ExpectedFiles)
+	{
+		FString ExpectedKey;
+		FString KeyError;
+		if (!TryMonolithInterchangePortableFilenameKey(ExpectedFile, ExpectedKey, KeyError))
+		{
+			Result.InvalidExpectedFiles.Add(ExpectedFile);
+			continue;
+		}
+		if (ExpectedKeys.Contains(ExpectedKey))
+		{
+			Result.DuplicateExpectedFiles.Add(ExpectedFile);
+			continue;
+		}
+		ExpectedKeys.Add(ExpectedKey);
+	}
+
+	TSet<FString> SeenActualKeys;
+	for (const FString& ActualFile : ActualFiles)
+	{
+		FString ActualKey;
+		FString KeyError;
+		if (!TryMonolithInterchangePortableFilenameKey(ActualFile, ActualKey, KeyError))
+		{
+			Result.InvalidActualFiles.Add(ActualFile);
+			continue;
+		}
+		if (SeenActualKeys.Contains(ActualKey))
+		{
+			Result.DuplicateActualFiles.Add(ActualFile);
+			continue;
+		}
+		SeenActualKeys.Add(ActualKey);
+		if (!ExpectedKeys.Contains(ActualKey))
+		{
+			Result.UnexpectedFiles.Add(ActualFile);
+		}
+	}
+	return Result;
 }
 
 namespace
 {
 	bool IsLexicallyUnderRoot(FString Path, FString Root)
 	{
-		Path = MonolithInterchangePortablePathKey(MoveTemp(Path));
-		Root = MonolithInterchangePortablePathKey(MoveTemp(Root));
+		Path = FPaths::ConvertRelativePathToFull(Path);
+		Root = FPaths::ConvertRelativePathToFull(Root);
 		FPaths::NormalizeDirectoryName(Path);
 		FPaths::NormalizeDirectoryName(Root);
-		return Path == Root || FPaths::IsUnderDirectory(Path, Root);
+		return MonolithInterchangePathsMatchHostSemantics(Path, Root) ||
+			FPaths::IsUnderDirectory(Path, Root);
 	}
 
 	void AddRetainedFileIfPresent(TArray<FString>& RetainedPaths, const FString& Path)
@@ -166,11 +284,22 @@ FMonolithInterchangeExportCommitResult CommitMonolithInterchangeExportFiles(
 		File.bBackedUp = false;
 		File.bPromoted = false;
 
-		const FString StagedKey = MonolithInterchangePortablePathKey(File.StagedPath);
-		const FString DestinationKey = MonolithInterchangePortablePathKey(File.DestinationPath);
-		if (StagedKey == DestinationKey)
+		if (MonolithInterchangePathsMatchHostSemantics(File.StagedPath, File.DestinationPath))
 		{
 			Result.Error = TEXT("Staged and destination export paths must be non-empty and distinct.");
+			return Result;
+		}
+		FString StagedKey;
+		FString KeyError;
+		if (!TryMonolithInterchangePortableFilenameKey(File.StagedPath, StagedKey, KeyError))
+		{
+			Result.Error = KeyError;
+			return Result;
+		}
+		FString DestinationKey;
+		if (!TryMonolithInterchangePortableFilenameKey(File.DestinationPath, DestinationKey, KeyError))
+		{
+			Result.Error = KeyError;
 			return Result;
 		}
 		if (StagedPaths.Contains(StagedKey) || DestinationPaths.Contains(DestinationKey))

@@ -38,10 +38,73 @@ bool FMonolithInterchangeExportTransactionTest::RunTest(const FString& Parameter
 	{
 		const FString UpperPath = FixtureRoot / TEXT("Portable-Output.PNG");
 		const FString LowerPath = FixtureRoot / TEXT("portable-output.png");
+		FString UpperKey;
+		FString LowerKey;
+		FString KeyError;
+		TestTrue(
+			TEXT("portable uppercase filename is accepted"),
+			TryMonolithInterchangePortableFilenameKey(UpperPath, UpperKey, KeyError));
+		TestTrue(
+			TEXT("portable lowercase filename is accepted"),
+			TryMonolithInterchangePortableFilenameKey(LowerPath, LowerKey, KeyError));
 		TestEqual(
 			TEXT("portable export identity folds case on every platform"),
-			MonolithInterchangePortablePathKey(UpperPath),
-			MonolithInterchangePortablePathKey(LowerPath));
+			UpperKey,
+			LowerKey);
+
+		const FString GreekSigmaPath = FixtureRoot / TEXT("\u03A3.png");
+		FString RejectedKey;
+		TestFalse(
+			TEXT("non-ASCII exporter filename is rejected explicitly"),
+			TryMonolithInterchangePortableFilenameKey(GreekSigmaPath, RejectedKey, KeyError));
+		TestTrue(
+			TEXT("non-ASCII exporter filename reports the portable contract"),
+			KeyError.Contains(TEXT("ASCII letters")));
+		const FString UnicodeDirectoryPath = FixtureRoot / TEXT("\uD504\uB85C\uC81D\uD2B8") / TEXT("safe-output.png");
+		TestTrue(
+			TEXT("Unicode directories remain valid when the exporter filename is portable"),
+			TryMonolithInterchangePortableFilenameKey(UnicodeDirectoryPath, RejectedKey, KeyError));
+		TestFalse(
+			TEXT("trailing-dot filenames are rejected as non-portable"),
+			TryMonolithInterchangePortableFilenameKey(FixtureRoot / TEXT("output.png."), RejectedKey, KeyError));
+		TestFalse(
+			TEXT("Windows device names are rejected even with an extension"),
+			TryMonolithInterchangePortableFilenameKey(FixtureRoot / TEXT("CON.png"), RejectedKey, KeyError));
+		TestFalse(
+			TEXT("overlength portable filename components are rejected"),
+			TryMonolithInterchangePortableFilenameKey(
+				FixtureRoot / (FString::ChrN(252, TEXT('a')) + TEXT(".png")),
+				RejectedKey,
+				KeyError));
+
+		const FString HostUpperDirectory = FixtureRoot / TEXT("Host-Semantics");
+		const FString HostLowerDirectory = FixtureRoot / TEXT("host-semantics");
+#if PLATFORM_WINDOWS
+		TestTrue(
+			TEXT("Windows ownership comparison follows case-insensitive host semantics"),
+			MonolithInterchangePathsMatchHostSemantics(HostUpperDirectory, HostLowerDirectory));
+#else
+		TestFalse(
+			TEXT("non-Windows ownership comparison preserves case-sensitive host semantics"),
+			MonolithInterchangePathsMatchHostSemantics(HostUpperDirectory, HostLowerDirectory));
+#endif
+
+		const TArray<FString> ExpectedManifestFiles = { UpperPath };
+		const TArray<FString> ActualManifestFiles = { UpperPath, LowerPath };
+		const FMonolithInterchangeStagingManifestValidationResult ManifestValidation =
+			ValidateMonolithInterchangeStagingManifest(
+				ExpectedManifestFiles,
+				ActualManifestFiles);
+		TestFalse(
+			TEXT("duplicate actual portable identities fail staging validation"),
+			ManifestValidation.IsValid());
+		TestEqual(
+			TEXT("duplicate actual portable identity is reported once"),
+			ManifestValidation.DuplicateActualFiles.Num(),
+			1);
+		TestTrue(
+			TEXT("duplicate actual portable identity is not misclassified as unexpected"),
+			ManifestValidation.UnexpectedFiles.IsEmpty());
 
 		const FString StagedA = FixtureRoot / TEXT("portable-a.staged.png");
 		const FString StagedB = FixtureRoot / TEXT("portable-b.staged.png");
