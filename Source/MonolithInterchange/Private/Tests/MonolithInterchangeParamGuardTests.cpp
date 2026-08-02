@@ -58,6 +58,17 @@ namespace
 		}
 		return (*Rows)[0]->AsObject();
 	}
+
+	bool HasSchemaFailureCause(
+		const FMonolithActionResult& Result,
+		const FString& ExpectedCause)
+	{
+		FString ActualCause;
+		return !Result.bSuccess &&
+			Result.ErrorData.IsValid() &&
+			Result.ErrorData->TryGetStringField(TEXT("failure_cause"), ActualCause) &&
+			ActualCause == ExpectedCause;
+	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardInterchangeImportMalformedParamsTest, "Monolith.ParamGuard.MonolithInterchange.ImportRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -339,39 +350,15 @@ bool FMonolithParamGuardInterchangeImportMalformedParamsTest::RunTest(const FStr
 
 		const FMonolithActionResult Result =
 			Registry.ExecuteAction(TEXT("interchange"), TEXT("reimport_asset"), Params);
-		TestTrue(TEXT("reimport_asset returns structured index validation"), Result.bSuccess && Result.Result.IsValid());
-		if (Result.bSuccess && Result.Result.IsValid())
-		{
-			const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
-			if (TestTrue(
-				TEXT("reimport_asset index validation returns one row"),
-				Result.Result->TryGetArrayField(TEXT("rows"), Rows) &&
-					Rows &&
-					Rows->Num() == 1))
-			{
-				const TSharedPtr<FJsonObject> Row = (*Rows)[0]->AsObject();
-				const TArray<TSharedPtr<FJsonValue>>* Messages = nullptr;
-				bool bFoundInvalidIndex = false;
-				if (Row.IsValid() &&
-					Row->TryGetArrayField(TEXT("messages"), Messages) &&
-					Messages)
-				{
-					for (const TSharedPtr<FJsonValue>& MessageValue : *Messages)
-					{
-						const TSharedPtr<FJsonObject> Message = MessageValue->AsObject();
-						if (Message.IsValid() &&
-							Message->GetStringField(TEXT("code")) == TEXT("invalid_source_file_index"))
-						{
-							bFoundInvalidIndex = true;
-							break;
-						}
-					}
-				}
-				TestTrue(
-					TEXT("nonnumeric source_file_index is rejected explicitly"),
-					bFoundInvalidIndex);
-			}
-		}
+		TestFalse(
+			TEXT("reimport_asset rejects a nonnumeric source_file_index before dispatch"),
+			Result.bSuccess);
+		TestTrue(
+			TEXT("source_file_index type failure identifies the exact field"),
+			Result.ErrorMessage.Contains(TEXT("source_file_index")));
+		TestTrue(
+			TEXT("source_file_index type failure uses the registry invalid_param contract"),
+			HasSchemaFailureCause(Result, TEXT("invalid_param")));
 	}
 
 	{
@@ -384,13 +371,15 @@ bool FMonolithParamGuardInterchangeImportMalformedParamsTest::RunTest(const FStr
 
 		const FMonolithActionResult Result =
 			Registry.ExecuteAction(TEXT("interchange"), TEXT("reimport_asset"), Params);
-		const TSharedPtr<FJsonObject> Row = GetFirstRow(Result);
+		TestFalse(
+			TEXT("reimport_asset rejects a nonstring optional source_file before dispatch"),
+			Result.bSuccess);
 		TestTrue(
-			TEXT("reimport_asset returns a row for a mistyped optional source_file"),
-			Row.IsValid());
+			TEXT("source_file type failure identifies the exact field"),
+			Result.ErrorMessage.Contains(TEXT("source_file")));
 		TestTrue(
-			TEXT("mistyped optional source_file is rejected instead of falling back to stored metadata"),
-			HasMessageCode(Row, TEXT("invalid_source_file")));
+			TEXT("source_file type failure uses the registry invalid_param contract"),
+			HasSchemaFailureCause(Result, TEXT("invalid_param")));
 	}
 
 	{
