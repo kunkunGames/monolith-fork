@@ -183,9 +183,15 @@ def check_uplugin_and_modules(ctx: CheckContext) -> None:
                     f"Required plugin reference is missing: {required_name}",
                     descriptor_path,
                 )
-            elif not any(
-                reference.get("Enabled") is True and reference.get("Optional") is not True
-                for reference in matching_references
+            elif len(matching_references) != 1:
+                ctx.block(
+                    "uplugin-dependency",
+                    f"Required plugin reference must appear exactly once: {required_name}",
+                    descriptor_path,
+                )
+            elif not (
+                matching_references[0].get("Enabled") is True
+                and matching_references[0].get("Optional") is not True
             ):
                 ctx.block(
                     "uplugin-dependency",
@@ -1992,6 +1998,26 @@ def run_selftest() -> int:
                         "Modules": [{"Name": "Foo", "Type": "Editor"}],
                         "Plugins": [
                             {"Name": "GameplayAbilities", "Enabled": True, "Optional": True}
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            ),
+        ),
+        (
+            "duplicate required plugin references",
+            "uplugin-dependency",
+            lambda root: (root / "Foo.uplugin").write_text(
+                json.dumps(
+                    {
+                        "Modules": [{"Name": "Foo", "Type": "Editor"}],
+                        "Plugins": [
+                            {"Name": "GameplayAbilities", "Enabled": True},
+                            {
+                                "Name": "gameplayabilities",
+                                "Enabled": False,
+                                "Optional": True,
+                            },
                         ],
                     }
                 ),
