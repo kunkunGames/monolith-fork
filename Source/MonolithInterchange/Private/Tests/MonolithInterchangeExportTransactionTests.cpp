@@ -179,6 +179,13 @@ bool FMonolithInterchangeExportTransactionTest::RunTest(const FString& Parameter
 		TestTrue(
 			TEXT("incomplete rollback reports the retained backup path"),
 			Result.RetainedPaths.Contains(Files[0].BackupPath));
+		TestFalse(
+			TEXT("incomplete rollback does not report an absent destination path"),
+			Result.RetainedPaths.Contains(Destination));
+		TestEqual(
+			TEXT("incomplete rollback reports only the existing recovery artifact"),
+			Result.RetainedPaths.Num(),
+			1);
 	}
 
 	{
@@ -213,6 +220,47 @@ bool FMonolithInterchangeExportTransactionTest::RunTest(const FString& Parameter
 			LimitedScan.Files.Num() + LimitedScan.Directories.Num(),
 			2);
 		TestFalse(TEXT("entry-limit failure includes a diagnostic"), LimitedScan.Error.IsEmpty());
+	}
+
+	{
+		const FString CleanupRoot = FixtureRoot / TEXT(".monolith-export-flat-cleanup");
+		TestTrue(
+			TEXT("flat cleanup staging directory is created"),
+			IFileManager::Get().MakeDirectory(*CleanupRoot, true));
+		SaveFixture(CleanupRoot / TEXT("first.tmp"), TEXT("first"));
+		SaveFixture(CleanupRoot / TEXT("second.tmp"), TEXT("second"));
+
+		const FMonolithInterchangeStagingCleanupResult Cleanup =
+			CleanupMonolithInterchangeExportStagingDirectory(CleanupRoot, 8);
+		TestTrue(TEXT("flat staging cleanup completes"), Cleanup.bComplete);
+		TestEqual(TEXT("flat staging cleanup deletes both files"), Cleanup.DeletedFileCount, 2);
+		TestFalse(
+			TEXT("flat staging cleanup removes its owned root"),
+			IFileManager::Get().DirectoryExists(*CleanupRoot));
+	}
+
+	{
+		const FString CleanupRoot = FixtureRoot / TEXT(".monolith-export-directory-guard");
+		const FString NestedDirectory = CleanupRoot / TEXT("unexpected-directory");
+		TestTrue(
+			TEXT("guarded cleanup nested directory is created"),
+			IFileManager::Get().MakeDirectory(*NestedDirectory, true));
+		const FString ImmediateFile = CleanupRoot / TEXT("immediate.tmp");
+		const FString NestedFile = NestedDirectory / TEXT("must-be-preserved.tmp");
+		SaveFixture(ImmediateFile, TEXT("immediate"));
+		SaveFixture(NestedFile, TEXT("nested"));
+
+		const FMonolithInterchangeStagingCleanupResult Cleanup =
+			CleanupMonolithInterchangeExportStagingDirectory(CleanupRoot, 8);
+		TestFalse(TEXT("cleanup refuses a staging directory containing a directory"), Cleanup.bComplete);
+		TestTrue(TEXT("cleanup reports the directory guard"), Cleanup.bDirectoryEncountered);
+		TestEqual(TEXT("directory guard deletes no immediate files"), Cleanup.DeletedFileCount, 0);
+		TestTrue(
+			TEXT("directory guard preserves the immediate file"),
+			IFileManager::Get().FileExists(*ImmediateFile));
+		TestTrue(
+			TEXT("directory guard never descends into the nested directory"),
+			IFileManager::Get().FileExists(*NestedFile));
 	}
 
 	TestTrue(

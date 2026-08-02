@@ -1159,19 +1159,10 @@ namespace
 
 	bool DeleteExportStagingDirectory(const FString& StagingDirectory)
 	{
-		if (StagingDirectory.IsEmpty())
-		{
-			return true;
-		}
-
-		const FString LeafName = FPaths::GetCleanFilename(StagingDirectory);
-		if (!LeafName.StartsWith(TEXT(".monolith-export-")) ||
-			LeafName.Len() <= FCString::Strlen(TEXT(".monolith-export-")))
-		{
-			return false;
-		}
-		return !IFileManager::Get().DirectoryExists(*StagingDirectory) ||
-			IFileManager::Get().DeleteDirectory(*StagingDirectory, false, true);
+		return StagingDirectory.IsEmpty() ||
+			CleanupMonolithInterchangeExportStagingDirectory(
+				StagingDirectory,
+				MaxExportOutputFiles).bComplete;
 	}
 
 	TSharedPtr<FJsonObject> ImportOneSource(

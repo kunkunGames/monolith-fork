@@ -15,9 +15,9 @@ namespace
 		return Path;
 	}
 
-	void AddRetainedPath(TArray<FString>& RetainedPaths, const FString& Path)
+	void AddRetainedFileIfPresent(TArray<FString>& RetainedPaths, const FString& Path)
 	{
-		if (!Path.IsEmpty())
+		if (!Path.IsEmpty() && IFileManager::Get().FileExists(*Path))
 		{
 			RetainedPaths.AddUnique(Path);
 		}
@@ -37,7 +37,7 @@ namespace
 				if (!FileManager.Delete(*File.DestinationPath, false, false, true))
 				{
 					Result.bRollbackComplete = false;
-					AddRetainedPath(Result.RetainedPaths, File.DestinationPath);
+					AddRetainedFileIfPresent(Result.RetainedPaths, File.DestinationPath);
 				}
 			}
 		}
@@ -54,8 +54,8 @@ namespace
 				!MoveFile(File.DestinationPath, File.BackupPath))
 			{
 				Result.bRollbackComplete = false;
-				AddRetainedPath(Result.RetainedPaths, File.DestinationPath);
-				AddRetainedPath(Result.RetainedPaths, File.BackupPath);
+				AddRetainedFileIfPresent(Result.RetainedPaths, File.DestinationPath);
+				AddRetainedFileIfPresent(Result.RetainedPaths, File.BackupPath);
 				continue;
 			}
 
@@ -192,7 +192,7 @@ FMonolithInterchangeExportCommitResult CommitMonolithInterchangeExportFiles(
 				false,
 				false,
 				false,
-				false);
+				true);
 		});
 }
 
@@ -254,6 +254,84 @@ FMonolithInterchangeStagingScanResult ScanMonolithInterchangeExportStagingDirect
 			: FString::Printf(
 				TEXT("Failed to enumerate export staging directory: %s"),
 				*NormalizedDirectory);
+	}
+	return Result;
+}
+
+FMonolithInterchangeStagingCleanupResult CleanupMonolithInterchangeExportStagingDirectory(
+	const FString& StagingDirectory,
+	int32 MaxEntries)
+{
+	FMonolithInterchangeStagingCleanupResult Result;
+	FString NormalizedDirectory = FPaths::ConvertRelativePathToFull(StagingDirectory);
+	FPaths::NormalizeDirectoryName(NormalizedDirectory);
+
+	const FString LeafName = FPaths::GetCleanFilename(NormalizedDirectory);
+	if (!LeafName.StartsWith(TEXT(".monolith-export-")) ||
+		LeafName.Len() <= FCString::Strlen(TEXT(".monolith-export-")))
+	{
+		Result.Error = TEXT("Refusing to clean a directory without a Monolith export staging marker.");
+		return Result;
+	}
+
+	IFileManager& FileManager = IFileManager::Get();
+	if (!FileManager.DirectoryExists(*NormalizedDirectory))
+	{
+		Result.bComplete = true;
+		return Result;
+	}
+
+	const FMonolithInterchangeStagingScanResult Scan =
+		ScanMonolithInterchangeExportStagingDirectory(NormalizedDirectory, MaxEntries);
+	if (!Scan.bComplete)
+	{
+		Result.bEntryLimitExceeded = Scan.bEntryLimitExceeded;
+		Result.Error = Scan.Error;
+		return Result;
+	}
+	if (!Scan.Directories.IsEmpty())
+	{
+		Result.bDirectoryEncountered = true;
+		Result.Error = FString::Printf(
+			TEXT("Refusing recursive cleanup because export staging contains a directory: %s"),
+			*Scan.Directories[0]);
+		return Result;
+	}
+
+	for (const FString& File : Scan.Files)
+	{
+		if (!FileManager.Delete(
+				*File,
+				/*RequireExists=*/true,
+				/*EvenReadOnly=*/true,
+				/*Quiet=*/true))
+		{
+			Result.Error = FString::Printf(
+				TEXT("Failed to remove export staging file: %s"),
+				*File);
+			return Result;
+		}
+		++Result.DeletedFileCount;
+	}
+
+	if (FileManager.DirectoryExists(*NormalizedDirectory) &&
+		!FileManager.DeleteDirectory(
+			*NormalizedDirectory,
+			/*RequireExists=*/true,
+			/*Tree=*/false))
+	{
+		Result.Error = FString::Printf(
+			TEXT("Failed to remove empty export staging directory: %s"),
+			*NormalizedDirectory);
+		return Result;
+	}
+
+	Result.bComplete = !FileManager.DirectoryExists(*NormalizedDirectory);
+	if (!Result.bComplete)
+	{
+		Result.Error = FString::Printf(
+			TEXT("Export staging directory still exists after cleanup: %s"),
+			*NormalizedDirectory);
 	}
 	return Result;
 }
