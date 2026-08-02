@@ -18,3 +18,9 @@ ProxyKeeper PRs maintain proxy scripts, MCP templates, and install/proxy README 
 **Learning:** General instructions are being ignored when branch names collide. The agent must yield rather than renaming the branch.
 **Prevention:** If your intended branch name (e.g., `jules/proxy-keeper/cpp-instructions-parity`) is already taken, you MUST stop without creating a PR and use the `done` tool. Do not generate a new name by appending numbers.
 **Avoid:** Generating branches with `-<number>` suffixes.
+
+## 2026-07-30 - Forbid announcing no-ops via branches or PRs
+**Coordination issue:** ProxyKeeper created an empty PR to announce a no-op with the title `ProxyKeeper: No safe candidate found for mcp-proxy improvement` (e.g., branch `jules/proxy-keeper/cpp-instructions-parity-9713868983158924545`), which violates the rule against creating PRs for no-ops.
+**Learning:** General instructions in `AGENTS.md` to avoid no-op PRs are missed unless directly included in the agent's specific instructions. A clean no-op requires stopping without creating a branch or PR.
+**Prevention:** If there is no safe, non-overlapping candidate for improvement, you MUST stop without creating a branch or PR. Report your findings in the task log using the `done` tool. Never push a branch or open a PR to announce a no-op.
+**Avoid:** Creating empty commits or PRs with titles like `ProxyKeeper: No safe candidate found...`.
