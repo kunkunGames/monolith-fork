@@ -1002,21 +1002,53 @@ FMonolithActionResult FMonolithSourceActions::HandleReviewHotspots(const TShared
 
 FMonolithActionResult FMonolithSourceActions::HandleReviewContext(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString Symbol = FMonolithSourceReview::PStr(Params, TEXT("symbol"));
-	if (Symbol.IsEmpty())
+	FString Symbol;
+	if (!Params->TryGetStringField(TEXT("symbol"), Symbol) || Symbol.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("'symbol' parameter is required"), -32602);
 	}
+
+	FString Direction = TEXT("both");
+	if (Params->HasField(TEXT("direction")) && !Params->TryGetStringField(TEXT("direction"), Direction))
+	{
+		return FMonolithActionResult::Error(TEXT("'direction' parameter must be a string"), -32602);
+	}
+
+	int32 MaxDepth = 2;
+	if (Params->HasField(TEXT("max_depth")))
+	{
+		double RawDepth = 0;
+		if (!Params->TryGetNumberField(TEXT("max_depth"), RawDepth))
+		{
+			return FMonolithActionResult::Error(TEXT("'max_depth' parameter must be a number"), -32602);
+		}
+		MaxDepth = static_cast<int32>(RawDepth);
+	}
+
+	int32 MaxResults = 200;
+	if (Params->HasField(TEXT("max_results")))
+	{
+		double RawResults = 0;
+		if (!Params->TryGetNumberField(TEXT("max_results"), RawResults))
+		{
+			return FMonolithActionResult::Error(TEXT("'max_results' parameter must be a number"), -32602);
+		}
+		MaxResults = static_cast<int32>(RawResults);
+	}
+
+	FString DetailLevel = TEXT("minimal");
+	if (Params->HasField(TEXT("detail_level")) && !Params->TryGetStringField(TEXT("detail_level"), DetailLevel))
+	{
+		return FMonolithActionResult::Error(TEXT("'detail_level' parameter must be a string"), -32602);
+	}
+
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB)
 	{
 		return FMonolithActionResult::Error(TEXT("Source index database not available"));
 	}
-	TSharedPtr<FJsonObject> R = FMonolithSourceReview::ReviewContext(*DB, Symbol,
-		FMonolithSourceReview::PStr(Params, TEXT("direction"), TEXT("both")),
-		FMonolithSourceReview::PInt(Params, TEXT("max_depth"), 2),
-		FMonolithSourceReview::PInt(Params, TEXT("max_results"), 200),
-		FMonolithSourceReview::PStr(Params, TEXT("detail_level"), TEXT("minimal")));
+
+	TSharedPtr<FJsonObject> R = FMonolithSourceReview::ReviewContext(*DB, Symbol, Direction, MaxDepth, MaxResults, DetailLevel);
 	return WrapReviewResult(R, Symbol);
 }
 
