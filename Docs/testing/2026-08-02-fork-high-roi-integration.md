@@ -1,10 +1,10 @@
 # Monolith Fork High-ROI Follow-up Integration Verification
 
-**Date:** 2026-08-02 (KST)
+**Date:** 2026-08-03 (KST)
 
 **Origin baseline:** `3683c00e066f312c526a8054477c990519f967ab`
 
-**Verified source head:** `3eafd563d6832a80f1fd45c750a85914c0c53838`
+**Verified source head:** `580b70abff7a2d21927ed127899d796686f04563`
 
 **Scope:** Selectively port the merge-ready reliability work from
 `kunkunGames/monolith-fork` to `kunkunGames/monolith` without merging the
@@ -56,14 +56,25 @@ not catch:
 `.github/monolith-static-ci.json` and `Scripts/ci_static_checks.py` now encode
 both invariants. The checker rejects a direct optional Chooser reference and
 requires GameplayAbilities to be present with `Enabled=true` and without
-`Optional=true`; its self-test contains a mutation case for each regression.
+`Optional=true`; matching is case-insensitive so a case-only alias cannot evade
+the contract. Its self-test contains a mutation case for each regression.
 
 The final packaged descriptors on both engines contain zero direct Chooser
 references and exactly one enabled, non-optional GameplayAbilities reference.
 Minimal-host logs confirm that Unreal mounts both Chooser (through PoseSearch)
 and GameplayAbilities, with no Monolith module load/preload failure.
 
-### 2.2 Parameter-validation boundary
+The final manual dependency pass found a second half of the Chooser contract:
+`MonolithAnimation.Build.cs` still compiled `WITH_CHOOSER=0` whenever
+`MONOLITH_RELEASE_BUILD=1`, even though required PoseSearch guarantees Chooser
+on both supported engines. That silently removed the ten Monolith-owned Chooser
+actions from release binaries. `MonolithAnimation` now follows the required
+transitive edge with unconditional `Chooser` and `GameplayTags` module links
+and fixes `WITH_CHOOSER=1` for every supported target. Enabling that previously
+dark translation unit exposed and fixed its missing direct
+`MonolithJsonUtils.h` include.
+
+### 2.2 Parameter-validation boundaries
 
 The fork's Interchange ParamGuard expected malformed optional JSON types to
 reach the action handler and return a row-level error. Current origin validates
@@ -72,6 +83,14 @@ contract and updates the focused test to require the registry's
 `failure_cause=invalid_param` result naming the exact bad field. The later
 native Texture2D PNG export, staged replacement, rollback, and cleanup
 assertions remain unchanged.
+
+The newly active `Monolith.ParamGuard.Animation.ValidateChooser` test had the
+same stale assumption: it expected handler-local wording even though registry
+schema validation rejects the malformed optional string first. The final test
+requires `ErrorCode=invalid_params`, structured
+`failure_cause=invalid_param`, and an error naming the exact field plus
+`expected string`. Both UE 5.7 and UE 5.8 pass that contract from their final
+packaged editor modules.
 
 ---
 
@@ -91,22 +110,30 @@ $env:MONOLITH_RELEASE_BUILD = "1"
 
 | Engine | Package | Editor | Development | Shipping | UAT result |
 |---|---|---|---|---|---|
-| UE 5.7 | `D:\P4\MonolithOriginHighRoiExactUE57Package` | PASS | PASS | PASS | `BUILD SUCCESSFUL`, exit 0 |
-| UE 5.8 | `D:\P4\MonolithOriginHighRoiExactUE58Package` | PASS | PASS | PASS | `BUILD SUCCESSFUL`, exit 0 |
+| UE 5.7 | `D:\P4\MonolithOriginHighRoiChooserUE57FinalPackage` | PASS | PASS | PASS | `BUILD SUCCESSFUL`, exit 0 |
+| UE 5.8 | `D:\P4\MonolithOriginHighRoiChooserUE58FinalPackage` | PASS | PASS | PASS | `BUILD SUCCESSFUL`, exit 0 |
 
 One earlier UE 5.7 diagnostic command omitted `-TargetPlatforms=Win64`; its
 Editor target compiled successfully but UAT then selected unavailable Android
 support and exited 6. That package is excluded from evidence. All tabled final
 packages were created later from the exact verified source with Win64 explicit.
 
+The first UE 5.7 build after making Chooser always-on failed while compiling
+`MonolithChooserAuthoringActions.cpp`: that previously dark translation unit
+used `FMonolithJsonUtils::ErrInvalidParams` without including
+`MonolithJsonUtils.h`. The direct include was added before both clean final
+packages above; the failed diagnostic package is excluded from evidence.
+
 ### 3.1 Final editor artifact identities
 
 | Engine | Artifact | Size | SHA-256 |
 |---|---|---:|---|
-| UE 5.7 | `UnrealEditor-MonolithInterchange.dll` | 457,728 bytes | `B3810D535DDE472B85E28B734F51ADBF8EBC26AA4C59EA0264C63DECBB25B9CE` |
-| UE 5.7 | `UnrealEditor-MonolithIndex.dll` | — | `39BBD3E9DCF4370A14CB6B0E4185BAB67EC2AB55016D3732EF05380508957E74` |
-| UE 5.8 | `UnrealEditor-MonolithInterchange.dll` | 433,152 bytes | `8A5A52CB581429C94C59D2F5279E49983BD879CDC4A18504140981371CA26EF6` |
-| UE 5.8 | `UnrealEditor-MonolithIndex.dll` | — | `00CDEFBF292533C002CA21363845A976064B24E2EC31DCC09EF81C86C8A39B8D` |
+| UE 5.7 | `UnrealEditor-MonolithAnimation.dll` | 3,357,696 bytes | `A5CA2693F3A8B5C8FBAB0DF8E761D1C7C2F7E3291A897A9CEC2BE17211B45F89` |
+| UE 5.7 | `UnrealEditor-MonolithInterchange.dll` | 457,728 bytes | `A4B773467C709CE9626C808C92EE54EEDD28F0221F0949B51FCB340D07F05FAC` |
+| UE 5.7 | `UnrealEditor-MonolithIndex.dll` | 1,912,832 bytes | `451595854B65F7EF5D75C62B3641F4180A643AA120F97B5DA877DC7D26845D50` |
+| UE 5.8 | `UnrealEditor-MonolithAnimation.dll` | 3,169,792 bytes | `A3EE2BC169F19EE773A185C0B0A432346A21AD03B3CAE05C75C36E6640CBCE40` |
+| UE 5.8 | `UnrealEditor-MonolithInterchange.dll` | 433,152 bytes | `11FAE7FDCA681B081602D4093CB24C0C76EC9A8DCA42AF87C8308652A11DCFD9` |
+| UE 5.8 | `UnrealEditor-MonolithIndex.dll` | 1,827,328 bytes | `4ECF41F63939C19A4B2D36B87332EC256B16CFC696F1A77EBACF2D0A0373131F` |
 
 ---
 
@@ -118,19 +145,28 @@ the tests through the packaged editor modules rather than the source worktree.
 
 | Engine | Test | Result | Report SHA-256 |
 |---|---|---|---|
-| UE 5.7 | `Monolith.Interchange.ExportTransaction` | 1 succeeded, 0 failed, 0 not run | `DE5B3FD3D44B639399016763BA903E5618A450189D70689BCFF2092C08BF14CC` |
-| UE 5.7 | `Monolith.ParamGuard.MonolithInterchange.ImportRejectsMalformedParams` | 1 succeeded, 0 failed, 0 not run | `EBA08E28B55C66056DC7B09FDB152EFEBB416AD78DECA4E38981B52CF46499C9` |
-| UE 5.8 | `Monolith.Interchange.ExportTransaction` | 1 succeeded, 0 failed, 0 not run | `21A83A2203F1D2FD4D247B42125B5C9E0385FAD802FB8DB0B6CBF40F06C87312` |
-| UE 5.8 | `Monolith.ParamGuard.MonolithInterchange.ImportRejectsMalformedParams` | 1 succeeded, 0 failed, 0 not run | `5B04512FC3E005376E089F69A2364571DC5E72F53DB4360CC1691405637A4FC9` |
+| UE 5.7 | `Monolith.Interchange.ExportTransaction` | 1 succeeded, 0 failed, 0 not run | `19803E885FD6283465E88C6A026C4B295B461324375D2D7EBFB412FF0E5D80E3` |
+| UE 5.7 | `Monolith.ParamGuard.MonolithInterchange.ImportRejectsMalformedParams` | 1 succeeded, 0 failed, 0 not run | `5C23551B65A2D64C3A808190726CD5E547C7EBDF512AD535F42A89CA9BB4201B` |
+| UE 5.7 | `Monolith.ParamGuard.Animation.ValidateChooser` | 1 succeeded, 0 failed, 0 not run | `53ABD15832F2841A392D4DE2087FA976E69506300DAB6B513481C901B5584DA8` |
+| UE 5.8 | `Monolith.Interchange.ExportTransaction` | 1 succeeded, 0 failed, 0 not run | `36E0D0C399D26453AB04628B819586716C879E8CEEED41194633C47A9410A416` |
+| UE 5.8 | `Monolith.ParamGuard.MonolithInterchange.ImportRejectsMalformedParams` | 1 succeeded, 0 failed, 0 not run | `7609731B46DFC0D5C1994DA79AB0AC5E92EB9D6BF4F573CD3343EC6371D88E21` |
+| UE 5.8 | `Monolith.ParamGuard.Animation.ValidateChooser` | 1 succeeded, 0 failed, 0 not run | `0DD583A62F5432C7A05BD6E47E5DA57BFF2A34DBB01060FBC5FEDF676904099C` |
 
 Report locations:
 
-- `D:\P4\MonolithOriginHighRoiExactUE57AutomationHost\Saved\AutomationReports`
-- `D:\P4\MonolithOriginHighRoiExactUE58AutomationHost\Saved\AutomationReports`
+- `D:\P4\MonolithOriginHighRoiChooserUE57FinalAutomationHost\Saved\AutomationReports`
+- `D:\P4\MonolithOriginHighRoiChooserUE58FinalAutomationHost\Saved\AutomationReports`
 
-All four logs contain GameplayAbilities and Chooser mount records and contain
+All six selected logs contain GameplayAbilities and Chooser mount records and contain
 zero `Plugin 'Monolith' failed`, Monolith DLL load failure, or Monolith DLL
 preload failure records.
+
+The first attempt to run UE 5.7 and UE 5.8 commandlets concurrently produced
+one UE 5.7 exit 3 before test discovery: both installed engines switched the
+shared Zen DDC service at the same time, temporarily leaving UE 5.7 with no
+writable DDC node. The engines were then run sequentially without changing the
+source or cache configuration; all six tabled final reports passed. The
+environment-failed invocation is excluded from the report table.
 
 ---
 
@@ -138,7 +174,7 @@ preload failure records.
 
 | Gate | Result |
 |---|---|
-| `python Scripts/ci_static_checks.py selftest` | PASS, including both plugin-dependency regression mutations |
+| `python Scripts/ci_static_checks.py selftest` | PASS, including required-plugin and case-insensitive forbidden-optional regression mutations |
 | Full hosted static checker | 8 blockers / 24 advisories, byte-for-byte category baseline already present on clean origin |
 | New `uplugin-dependency` findings | 0 |
 | `git diff --check` | PASS before verification-document commit |
@@ -170,6 +206,7 @@ exists for this source/API-only change, so
 The selected fork reliability fixes are compatible with current origin after
 preserving origin's stronger proxy ownership and schema-validation boundary.
 Clean UE 5.7 and UE 5.8 package builds, packaged-host module loading, portable
-export transaction tests, and a real staged Texture2D export all pass. The
-integration is suitable for exact-head review and merge; it is not a wholesale
-fork-master merge.
+export transaction tests, a real staged Texture2D export, and the always-on
+Chooser schema guard all pass. Release builds retain the ten Chooser actions
+through PoseSearch's required dependency edge. The integration is suitable for
+exact-head review and merge; it is not a wholesale fork-master merge.
