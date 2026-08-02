@@ -1984,7 +1984,7 @@ namespace
 				NewObjectPath,
 				false,
 				TEXT("target_type_mismatch"))));
-			Stats.bHasBlockingErrors = Options.bRequireTargets;
+			Stats.bHasBlockingErrors = true;
 			return false;
 		}
 
@@ -2303,7 +2303,7 @@ namespace
 		if (!Package)
 		{
 			AddWarning(Stats, PackagePath, TEXT("Could not load package"));
-			Stats.bHasBlockingErrors = Options.Mutation.bStrict;
+			Stats.bHasBlockingErrors |= Options.Mutation.bStrict;
 			return false;
 		}
 

@@ -9,7 +9,9 @@
 #include "Curves/CurveFloat.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Engine/Font.h"
 #include "Engine/PrimaryAssetLabel.h"
+#include "Engine/Texture2D.h"
 #include "HAL/FileManager.h"
 #include "ISourceControlModule.h"
 #include "Misc/Guid.h"
@@ -683,6 +685,99 @@ bool FMonolithAssetPackageGraphRegistryTest::RunTest(const FString& Parameters)
 			TEXT("fixup_copied_references strict cap leaves the already-remapped reference untouched"),
 			FixupContainer->ExplicitAssets[0].ToSoftObjectPath().ToString(),
 			ExistingDestinationAsset->GetPathName());
+
+		const FString TypeSourcePackageName = FixupSourceRoot + TEXT("/TypeCheckedTexture");
+		const FString TypeDestinationPackageName = FixupDestinationRoot + TEXT("/TypeCheckedTexture");
+		const FString TypeContainerPackageName = FixupDestinationRoot + TEXT("/TypeCheckedFont");
+		UPackage* TypeSourcePackage = CreatePackage(*TypeSourcePackageName);
+		UPackage* TypeDestinationPackage = CreatePackage(*TypeDestinationPackageName);
+		UPackage* TypeContainerPackage = CreatePackage(*TypeContainerPackageName);
+		UTexture2D* SourceTexture = TypeSourcePackage
+			? NewObject<UTexture2D>(
+				TypeSourcePackage,
+				UTexture2D::StaticClass(),
+				TEXT("TypeCheckedTexture"),
+				RF_Public | RF_Standalone)
+			: nullptr;
+		UCurveFloat* WrongTypeDestination = TypeDestinationPackage
+			? NewObject<UCurveFloat>(
+				TypeDestinationPackage,
+				UCurveFloat::StaticClass(),
+				TEXT("TypeCheckedTexture"),
+				RF_Public | RF_Standalone)
+			: nullptr;
+		UFont* TypeContainer = TypeContainerPackage
+			? NewObject<UFont>(
+				TypeContainerPackage,
+				UFont::StaticClass(),
+				TEXT("TypeCheckedFont"),
+				RF_Public | RF_Standalone)
+			: nullptr;
+		TestNotNull(TEXT("type-mismatch source texture"), SourceTexture);
+		TestNotNull(TEXT("type-mismatch wrong destination object"), WrongTypeDestination);
+		TestNotNull(TEXT("type-mismatch reference container"), TypeContainer);
+		if (SourceTexture && WrongTypeDestination && TypeContainer)
+		{
+			TestAssetRegistry.AssetCreated(SourceTexture);
+			TestAssetRegistry.AssetCreated(WrongTypeDestination);
+			TestAssetRegistry.AssetCreated(TypeContainer);
+			TypeContainer->Textures.Add(SourceTexture);
+			TypeSourcePackage->SetDirtyFlag(false);
+			TypeDestinationPackage->SetDirtyFlag(false);
+			TypeContainerPackage->SetDirtyFlag(false);
+
+			TSharedPtr<FJsonObject> TypeMismatchParams = MakeShared<FJsonObject>();
+			TypeMismatchParams->SetObjectField(TEXT("root_remaps"), StrictFixupRemaps);
+			SetStringArray(TypeMismatchParams, TEXT("destination_roots"), { FixupDestinationRoot });
+			SetStringArray(TypeMismatchParams, TEXT("package_paths"), { TypeContainerPackageName });
+			TypeMismatchParams->SetBoolField(TEXT("confirm"), true);
+			TypeMismatchParams->SetBoolField(TEXT("save"), false);
+			TypeMismatchParams->SetBoolField(TEXT("strict"), true);
+			TypeMismatchParams->SetBoolField(TEXT("require_targets"), false);
+
+			const FMonolithActionResult TypeMismatchFixup =
+				FMonolithAssetPackageGraphActions::FixupCopiedReferences(TypeMismatchParams);
+			TestFalse(
+				TEXT("strict preflight rejects an incompatible hard-reference target"),
+				TypeMismatchFixup.bSuccess);
+			TestEqual(
+				TEXT("type mismatch leaves the source texture reference untouched"),
+				TypeContainer->Textures[0].Get(),
+				SourceTexture);
+			TestFalse(
+				TEXT("type mismatch leaves the reference package clean"),
+				TypeContainerPackage->IsDirty());
+			if (const TSharedPtr<FJsonObject> TypeErrorData =
+					MonolithAsset::GetErrorDataObject(TypeMismatchFixup))
+			{
+				FString Status;
+				TypeErrorData->TryGetStringField(TEXT("status"), Status);
+				TestEqual(
+					TEXT("type mismatch is reported during preflight"),
+					Status,
+					FString(TEXT("preflight_failed")));
+			}
+			else
+			{
+				AddError(TEXT("type-mismatch preflight must return structured error data"));
+			}
+
+			TestAssetRegistry.AssetDeleted(TypeContainer);
+			TestAssetRegistry.AssetDeleted(WrongTypeDestination);
+			TestAssetRegistry.AssetDeleted(SourceTexture);
+		}
+		if (TypeContainerPackage)
+		{
+			TypeContainerPackage->SetDirtyFlag(false);
+		}
+		if (TypeDestinationPackage)
+		{
+			TypeDestinationPackage->SetDirtyFlag(false);
+		}
+		if (TypeSourcePackage)
+		{
+			TypeSourcePackage->SetDirtyFlag(false);
+		}
 
 		TestAssetRegistry.AssetDeleted(FixupContainer);
 		TestAssetRegistry.AssetDeleted(ExistingDestinationAsset);
