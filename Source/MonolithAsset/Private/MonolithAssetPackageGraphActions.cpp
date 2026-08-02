@@ -4,6 +4,7 @@
 
 #include "MonolithParamSchema.h"
 #include "MonolithObjectTraversal.h"
+#include "MonolithSourceControlUtils.h"
 
 #include "AssetToolsModule.h"
 #include "AssetRegistry/ARFilter.h"
@@ -15,6 +16,7 @@
 #include "Dom/JsonValue.h"
 #include "Engine/World.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformFileManager.h"
 #include "HAL/IConsoleManager.h"
 #include "IAssetTools.h"
 #include "ISourceControlModule.h"
@@ -87,9 +89,17 @@ namespace
 		int32 AppliedCount = 0;
 		bool bTruncated = false;
 		bool bHasBlockingErrors = false;
+		TSet<FString> PlannedChangedPackages;
 		TSet<FString> ChangedPackages;
 		TArray<TSharedPtr<FJsonValue>> References;
 		TArray<TSharedPtr<FJsonValue>> Warnings;
+	};
+
+	struct FPackageSavePreflightTarget
+	{
+		FString PackageName;
+		FString Filename;
+		TSharedPtr<FJsonObject> Report;
 	};
 
 	enum class EDependencyKind : uint8
@@ -1264,6 +1274,230 @@ namespace
 		return bContainsWorld;
 	}
 
+	static bool ResolvePackageSaveDestination(
+		UPackage* Package,
+		FString& OutFilename,
+		FString& OutError)
+	{
+		if (!Package)
+		{
+			OutError = TEXT("Package is not loaded");
+			return false;
+		}
+
+		const FString PackageName = Package->GetName();
+		const FString Extension = DoesPackageContainWorld(Package)
+			? FPackageName::GetMapPackageExtension()
+			: FPackageName::GetAssetPackageExtension();
+		if (!FPackageName::TryConvertLongPackageNameToFilename(PackageName, OutFilename, Extension))
+		{
+			OutError = FString::Printf(
+				TEXT("Could not resolve a save destination for package '%s'"),
+				*PackageName);
+			return false;
+		}
+
+		OutFilename = FPaths::ConvertRelativePathToFull(OutFilename);
+		FPaths::NormalizeFilename(OutFilename);
+		OutError.Reset();
+		return true;
+	}
+
+	static bool PreflightPackageSaveDestinations(
+		const TSet<FString>& PlannedPackageNames,
+		FReferenceFixupStats& Stats,
+		TArray<TSharedPtr<FJsonValue>>& OutReports,
+		TSharedPtr<FJsonObject>& OutSourceControlPrepare)
+	{
+		if (PlannedPackageNames.Num() == 0)
+		{
+			return true;
+		}
+
+		TArray<FString> SortedPackageNames = PlannedPackageNames.Array();
+		SortedPackageNames.Sort();
+		TArray<FPackageSavePreflightTarget> Targets;
+		Targets.Reserve(SortedPackageNames.Num());
+		IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+
+		bool bPathsReady = true;
+		for (const FString& PackageName : SortedPackageNames)
+		{
+			FPackageSavePreflightTarget Target;
+			Target.PackageName = PackageName;
+			Target.Report = MakeShared<FJsonObject>();
+			Target.Report->SetStringField(TEXT("package_path"), PackageName);
+
+			UPackage* Package = FindPackage(nullptr, *PackageName);
+			FString ResolveError;
+			if (!ResolvePackageSaveDestination(Package, Target.Filename, ResolveError))
+			{
+				Target.Report->SetBoolField(TEXT("ready"), false);
+				Target.Report->SetStringField(TEXT("status"), TEXT("destination_resolution_failed"));
+				Target.Report->SetStringField(TEXT("detail"), ResolveError);
+				AddWarning(Stats, PackageName, ResolveError);
+				Stats.bHasBlockingErrors = true;
+				bPathsReady = false;
+				OutReports.Add(MakeShared<FJsonValueObject>(Target.Report));
+				continue;
+			}
+
+			Target.Report->SetStringField(TEXT("filename"), Target.Filename);
+			const FString Directory = FPaths::GetPath(Target.Filename);
+			Target.Report->SetStringField(TEXT("directory"), Directory);
+			if (PlatformFile.DirectoryExists(*Target.Filename))
+			{
+				const FString Detail = FString::Printf(
+					TEXT("Save destination is a directory: %s"),
+					*Target.Filename);
+				Target.Report->SetBoolField(TEXT("ready"), false);
+				Target.Report->SetStringField(TEXT("status"), TEXT("destination_is_directory"));
+				Target.Report->SetStringField(TEXT("detail"), Detail);
+				AddWarning(Stats, PackageName, Detail);
+				Stats.bHasBlockingErrors = true;
+				bPathsReady = false;
+				OutReports.Add(MakeShared<FJsonValueObject>(Target.Report));
+				continue;
+			}
+			if (PlatformFile.FileExists(*Directory))
+			{
+				const FString Detail = FString::Printf(
+					TEXT("Save directory path is occupied by a file: %s"),
+					*Directory);
+				Target.Report->SetBoolField(TEXT("ready"), false);
+				Target.Report->SetBoolField(TEXT("directory_ready"), false);
+				Target.Report->SetStringField(TEXT("status"), TEXT("save_directory_unavailable"));
+				Target.Report->SetStringField(TEXT("detail"), Detail);
+				AddWarning(Stats, PackageName, Detail);
+				Stats.bHasBlockingErrors = true;
+				bPathsReady = false;
+				OutReports.Add(MakeShared<FJsonValueObject>(Target.Report));
+				continue;
+			}
+
+			const bool bDirectoryReady = PlatformFile.DirectoryExists(*Directory)
+				|| PlatformFile.CreateDirectoryTree(*Directory);
+			Target.Report->SetBoolField(TEXT("directory_ready"), bDirectoryReady);
+			if (!bDirectoryReady)
+			{
+				const FString Detail = FString::Printf(
+					TEXT("Could not create or access save directory: %s"),
+					*Directory);
+				Target.Report->SetBoolField(TEXT("ready"), false);
+				Target.Report->SetStringField(TEXT("status"), TEXT("save_directory_unavailable"));
+				Target.Report->SetStringField(TEXT("detail"), Detail);
+				AddWarning(Stats, PackageName, Detail);
+				Stats.bHasBlockingErrors = true;
+				bPathsReady = false;
+				OutReports.Add(MakeShared<FJsonValueObject>(Target.Report));
+				continue;
+			}
+
+			Target.Report->SetStringField(TEXT("status"), TEXT("path_ready"));
+			Targets.Add(Target);
+			OutReports.Add(MakeShared<FJsonValueObject>(Target.Report));
+		}
+
+		if (!bPathsReady)
+		{
+			return false;
+		}
+
+		FMonolithSourceControlPrepareOptions SourceControlOptions;
+		SourceControlOptions.bDryRun = false;
+		SourceControlOptions.bUnavailableIsSuccess = true;
+		SourceControlOptions.bAddMissingFiles = false;
+		OutSourceControlPrepare = FMonolithSourceControlUtils::CheckoutOrAddPackageNames(
+			SortedPackageNames,
+			SourceControlOptions);
+		bool bSourceControlReady = false;
+		if (!OutSourceControlPrepare.IsValid()
+			|| !OutSourceControlPrepare->TryGetBoolField(TEXT("ok"), bSourceControlReady)
+			|| !bSourceControlReady)
+		{
+			FString Detail = TEXT("Source-control preparation could not prove all save targets editable");
+			if (OutSourceControlPrepare.IsValid())
+			{
+				FString ProviderMessage;
+				if (OutSourceControlPrepare->TryGetStringField(TEXT("message"), ProviderMessage)
+					&& !ProviderMessage.IsEmpty())
+				{
+					Detail += TEXT(": ") + ProviderMessage;
+				}
+			}
+			for (FPackageSavePreflightTarget& Target : Targets)
+			{
+				Target.Report->SetBoolField(TEXT("ready"), false);
+				Target.Report->SetStringField(TEXT("status"), TEXT("source_control_prepare_failed"));
+				Target.Report->SetStringField(TEXT("detail"), Detail);
+				AddWarning(Stats, Target.PackageName, Detail);
+			}
+			Stats.bHasBlockingErrors = true;
+			return false;
+		}
+
+		bool bAllWritable = true;
+		for (FPackageSavePreflightTarget& Target : Targets)
+		{
+			const bool bFileExists = PlatformFile.FileExists(*Target.Filename);
+			Target.Report->SetBoolField(TEXT("file_exists"), bFileExists);
+			if (bFileExists && PlatformFile.IsReadOnly(*Target.Filename))
+			{
+				const FString Detail = FString::Printf(
+					TEXT("Save destination remains read-only after source-control preparation: %s"),
+					*Target.Filename);
+				Target.Report->SetBoolField(TEXT("ready"), false);
+				Target.Report->SetStringField(TEXT("status"), TEXT("destination_read_only"));
+				Target.Report->SetStringField(TEXT("detail"), Detail);
+				AddWarning(Stats, Target.PackageName, Detail);
+				Stats.bHasBlockingErrors = true;
+				bAllWritable = false;
+				continue;
+			}
+
+			FString ProbeFilename = Target.Filename;
+			if (!bFileExists)
+			{
+				ProbeFilename = FPaths::CreateTempFilename(
+					*FPaths::GetPath(Target.Filename),
+					TEXT("MonolithSavePreflight"),
+					TEXT(".tmp"));
+			}
+
+			TUniquePtr<IFileHandle> WriteProbe(
+				PlatformFile.OpenWrite(*ProbeFilename, /*bAppend=*/bFileExists, /*bAllowRead=*/true));
+			const bool bWritable = WriteProbe.IsValid();
+			WriteProbe.Reset();
+			bool bProbeRemoved = true;
+			if (!bFileExists && PlatformFile.FileExists(*ProbeFilename))
+			{
+				bProbeRemoved = PlatformFile.DeleteFile(*ProbeFilename);
+			}
+
+			Target.Report->SetBoolField(TEXT("write_probe_succeeded"), bWritable);
+			Target.Report->SetBoolField(TEXT("write_probe_removed"), bProbeRemoved);
+			if (!bWritable || !bProbeRemoved)
+			{
+				const FString Detail = FString::Printf(
+					TEXT("Save destination write probe failed%s: %s"),
+					bProbeRemoved ? TEXT("") : TEXT(" or could not be removed"),
+					*Target.Filename);
+				Target.Report->SetBoolField(TEXT("ready"), false);
+				Target.Report->SetStringField(TEXT("status"), TEXT("destination_not_writable"));
+				Target.Report->SetStringField(TEXT("detail"), Detail);
+				AddWarning(Stats, Target.PackageName, Detail);
+				Stats.bHasBlockingErrors = true;
+				bAllWritable = false;
+				continue;
+			}
+
+			Target.Report->SetBoolField(TEXT("ready"), true);
+			Target.Report->SetStringField(TEXT("status"), TEXT("ready"));
+		}
+
+		return bAllWritable;
+	}
+
 	static bool SavePackageIfRequested(UPackage* Package, bool bSave, FString& OutSavedFilename, FString& OutError)
 	{
 		if (!bSave || !Package)
@@ -1271,11 +1505,10 @@ namespace
 			return true;
 		}
 
-		const FString PackageName = Package->GetName();
-		const FString Extension = DoesPackageContainWorld(Package)
-			? FPackageName::GetMapPackageExtension()
-			: FPackageName::GetAssetPackageExtension();
-		OutSavedFilename = FPackageName::LongPackageNameToFilename(PackageName, Extension);
+		if (!ResolvePackageSaveDestination(Package, OutSavedFilename, OutError))
+		{
+			return false;
+		}
 
 		FSavePackageArgs SaveArgs;
 		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
@@ -1986,6 +2219,7 @@ namespace
 		}
 
 		const bool bApply = !Options.Mutation.bDryRun;
+		Stats.PlannedChangedPackages.Add(PackagePath);
 		if (bApply)
 		{
 			ObjectProperty->SetObjectPropertyValue(ValuePtr, NewObject);
@@ -2049,6 +2283,7 @@ namespace
 		}
 
 		const bool bApply = !Options.Mutation.bDryRun;
+		Stats.PlannedChangedPackages.Add(PackagePath);
 		if (bApply)
 		{
 			SoftObjectProperty->SetPropertyValue(ValuePtr, FSoftObjectPtr(FSoftObjectPath(NewPathString)));
@@ -2110,6 +2345,7 @@ namespace
 
 		const bool bApply = !Options.Mutation.bDryRun;
 		const FString OldPathString = OldPath->ToString();
+		Stats.PlannedChangedPackages.Add(PackagePath);
 		if (bApply)
 		{
 			*OldPath = FSoftObjectPath(NewPathString);
@@ -3479,12 +3715,22 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::FixupCopiedReferences(c
 		}
 	};
 
-	auto MakeFixupError = [&PackagePaths](const FReferenceFixupStats& ErrorStats, const TCHAR* Status)
+	TArray<TSharedPtr<FJsonValue>> SavePreflightRows;
+	TSharedPtr<FJsonObject> SourceControlPrepare;
+	auto MakeFixupError = [
+		&PackagePaths,
+		&SavePreflightRows,
+		&SourceControlPrepare](const FReferenceFixupStats& ErrorStats, const TCHAR* Status)
 	{
 		TSharedPtr<FJsonObject> ErrorResult = MakeShared<FJsonObject>();
 		ErrorResult->SetStringField(TEXT("namespace"), TEXT("asset"));
 		ErrorResult->SetStringField(TEXT("action"), TEXT("fixup_copied_references"));
 		ErrorResult->SetArrayField(TEXT("checked_packages"), StringsToJson(PackagePaths));
+		TArray<FString> PlannedChangedPackageNames = ErrorStats.PlannedChangedPackages.Array();
+		PlannedChangedPackageNames.Sort();
+		ErrorResult->SetArrayField(
+			TEXT("planned_changed_packages"),
+			StringsToJson(PlannedChangedPackageNames));
 		ErrorResult->SetArrayField(TEXT("references"), ErrorStats.References);
 		ErrorResult->SetArrayField(TEXT("warnings"), ErrorStats.Warnings);
 		ErrorResult->SetNumberField(TEXT("checked_package_count"), ErrorStats.CheckedPackageCount);
@@ -3492,13 +3738,22 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::FixupCopiedReferences(c
 		ErrorResult->SetNumberField(TEXT("candidate_count"), ErrorStats.CandidateCount);
 		ErrorResult->SetNumberField(TEXT("applied_count"), ErrorStats.AppliedCount);
 		ErrorResult->SetNumberField(TEXT("warning_count"), ErrorStats.Warnings.Num());
+		ErrorResult->SetNumberField(
+			TEXT("planned_changed_package_count"),
+			ErrorStats.PlannedChangedPackages.Num());
 		ErrorResult->SetNumberField(TEXT("changed_package_count"), ErrorStats.ChangedPackages.Num());
+		ErrorResult->SetArrayField(TEXT("save_preflight"), SavePreflightRows);
+		if (SourceControlPrepare.IsValid())
+		{
+			ErrorResult->SetObjectField(TEXT("source_control_prepare"), SourceControlPrepare);
+		}
 		ErrorResult->SetBoolField(TEXT("truncated"), ErrorStats.bTruncated);
 		ErrorResult->SetStringField(TEXT("status"), Status);
 		return ErrorResult;
 	};
 
-	if (!Options.Mutation.bDryRun && Options.Mutation.bStrict)
+	if (!Options.Mutation.bDryRun
+		&& (Options.Mutation.bStrict || Options.Mutation.bSave))
 	{
 		FReferenceFixupOptions PreflightOptions = Options;
 		PreflightOptions.Mutation.bDryRun = true;
@@ -3506,16 +3761,30 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::FixupCopiedReferences(c
 
 		FReferenceFixupStats PreflightStats;
 		PreflightStats.bTruncated = bTruncated;
-		PreflightStats.bHasBlockingErrors = bTruncated;
-		if (!bTruncated)
+		PreflightStats.bHasBlockingErrors = Options.Mutation.bStrict && bTruncated;
+		if (!bTruncated || !Options.Mutation.bStrict)
 		{
 			VisitPackages(PreflightOptions, PreflightStats);
 		}
 
-		if (PreflightStats.bHasBlockingErrors)
+		const bool bStrictReferenceFailure =
+			Options.Mutation.bStrict && PreflightStats.bHasBlockingErrors;
+		bool bSavePreflightSucceeded = true;
+		if (!bStrictReferenceFailure && Options.Mutation.bSave)
+		{
+			bSavePreflightSucceeded = PreflightPackageSaveDestinations(
+				PreflightStats.PlannedChangedPackages,
+				PreflightStats,
+				SavePreflightRows,
+				SourceControlPrepare);
+		}
+
+		if (bStrictReferenceFailure || !bSavePreflightSucceeded)
 		{
 			return FMonolithActionResult::Error(
-				TEXT("fixup_copied_references strict preflight found blocking reference issues"),
+				bStrictReferenceFailure
+					? TEXT("fixup_copied_references strict preflight found blocking reference issues")
+					: TEXT("fixup_copied_references save preflight found an unavailable destination"),
 				ErrInvalidParams)
 				.WithErrorData(MakeFixupError(PreflightStats, TEXT("preflight_failed")));
 		}
@@ -3534,7 +3803,9 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::FixupCopiedReferences(c
 	TArray<TSharedPtr<FJsonValue>> SavedRows;
 	if (!Options.Mutation.bDryRun && Options.Mutation.bSave)
 	{
-		for (const FString& ChangedPackageName : Stats.ChangedPackages)
+		TArray<FString> SortedChangedPackageNames = Stats.ChangedPackages.Array();
+		SortedChangedPackageNames.Sort();
+		for (const FString& ChangedPackageName : SortedChangedPackageNames)
 		{
 			UPackage* Package = FindPackage(nullptr, *ChangedPackageName);
 			if (!Package)
@@ -3567,7 +3838,9 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::FixupCopiedReferences(c
 	}
 
 	TArray<TSharedPtr<FJsonValue>> ChangedPackageRows;
-	for (const FString& ChangedPackageName : Stats.ChangedPackages)
+	TArray<FString> SortedChangedPackageNames = Stats.ChangedPackages.Array();
+	SortedChangedPackageNames.Sort();
+	for (const FString& ChangedPackageName : SortedChangedPackageNames)
 	{
 		ChangedPackageRows.Add(MakeShared<FJsonValueString>(ChangedPackageName));
 	}
@@ -3589,12 +3862,25 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::FixupCopiedReferences(c
 	Result->SetArrayField(TEXT("references"), Stats.References);
 	Result->SetArrayField(TEXT("warnings"), Stats.Warnings);
 	Result->SetArrayField(TEXT("changed_packages"), ChangedPackageRows);
+	TArray<FString> PlannedChangedPackageNames = Stats.PlannedChangedPackages.Array();
+	PlannedChangedPackageNames.Sort();
+	Result->SetArrayField(
+		TEXT("planned_changed_packages"),
+		StringsToJson(PlannedChangedPackageNames));
+	Result->SetArrayField(TEXT("save_preflight"), SavePreflightRows);
+	if (SourceControlPrepare.IsValid())
+	{
+		Result->SetObjectField(TEXT("source_control_prepare"), SourceControlPrepare);
+	}
 	Result->SetArrayField(TEXT("saved_packages"), SavedRows);
 	Result->SetNumberField(TEXT("checked_package_count"), Stats.CheckedPackageCount);
 	Result->SetNumberField(TEXT("checked_object_count"), Stats.CheckedObjectCount);
 	Result->SetNumberField(TEXT("candidate_count"), Stats.CandidateCount);
 	Result->SetNumberField(TEXT("applied_count"), Stats.AppliedCount);
 	Result->SetNumberField(TEXT("warning_count"), Stats.Warnings.Num());
+	Result->SetNumberField(
+		TEXT("planned_changed_package_count"),
+		Stats.PlannedChangedPackages.Num());
 	Result->SetNumberField(TEXT("changed_package_count"), Stats.ChangedPackages.Num());
 	Result->SetNumberField(TEXT("saved_count"), SavedRows.Num());
 	Result->SetStringField(TEXT("next_recommended_action"), TEXT("asset.validate_dependency_closure"));

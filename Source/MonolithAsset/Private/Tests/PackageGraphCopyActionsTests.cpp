@@ -14,6 +14,7 @@
 #include "Engine/Texture2D.h"
 #include "HAL/FileManager.h"
 #include "ISourceControlModule.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
@@ -662,6 +663,118 @@ bool FMonolithAssetPackageGraphRegistryTest::RunTest(const FString& Parameters)
 			SuccessfulStrictFixup.Result->TryGetNumberField(TEXT("applied_count"), AppliedCount);
 			TestEqual(TEXT("fixup_copied_references clean strict apply rewrites one reference"), static_cast<int32>(AppliedCount), 1);
 		}
+
+		const FString BlockedSaveDirectory = FPaths::Combine(
+			FixupDestinationContent,
+			TEXT("Blocked"));
+		TestTrue(
+			TEXT("strict save preflight fixture blocks its would-be directory with a file"),
+			FFileHelper::SaveStringToFile(TEXT("not a directory"), *BlockedSaveDirectory));
+		const FString BlockedContainerPackageName =
+			FixupDestinationRoot + TEXT("/Blocked/Container");
+		UPackage* BlockedContainerPackage = CreatePackage(*BlockedContainerPackageName);
+		UPrimaryAssetLabel* BlockedContainer = BlockedContainerPackage
+			? NewObject<UPrimaryAssetLabel>(
+				BlockedContainerPackage,
+				UPrimaryAssetLabel::StaticClass(),
+				TEXT("Container"),
+				RF_Public | RF_Standalone)
+			: nullptr;
+		TestNotNull(TEXT("strict save preflight blocked destination container"), BlockedContainer);
+		if (BlockedContainer)
+		{
+			TestAssetRegistry.AssetCreated(BlockedContainer);
+			BlockedContainer->ExplicitAssets.Add(
+				TSoftObjectPtr<UObject>(FSoftObjectPath(ExistingSourceAsset->GetPathName())));
+			BlockedContainerPackage->SetDirtyFlag(false);
+			const FSoftObjectPath OriginalBlockedReference =
+				BlockedContainer->ExplicitAssets[0].ToSoftObjectPath();
+
+			TSharedPtr<FJsonObject> BlockedSaveParams = MakeShared<FJsonObject>();
+			BlockedSaveParams->SetObjectField(TEXT("root_remaps"), StrictFixupRemaps);
+			SetStringArray(BlockedSaveParams, TEXT("destination_roots"), { FixupDestinationRoot });
+			SetStringArray(BlockedSaveParams, TEXT("package_paths"), { BlockedContainerPackageName });
+			BlockedSaveParams->SetBoolField(TEXT("confirm"), true);
+			BlockedSaveParams->SetBoolField(TEXT("save"), true);
+			BlockedSaveParams->SetBoolField(TEXT("strict"), true);
+			BlockedSaveParams->SetBoolField(TEXT("require_targets"), true);
+
+			const FMonolithActionResult BlockedSaveFixup =
+				FMonolithAssetPackageGraphActions::FixupCopiedReferences(BlockedSaveParams);
+			TestFalse(
+				TEXT("strict save preflight rejects an unavailable package destination"),
+				BlockedSaveFixup.bSuccess);
+			TestEqual(
+				TEXT("failed save preflight leaves the candidate reference untouched"),
+				BlockedContainer->ExplicitAssets[0].ToSoftObjectPath(),
+				OriginalBlockedReference);
+			TestFalse(
+				TEXT("failed save preflight leaves the candidate package clean"),
+				BlockedContainerPackage->IsDirty());
+			if (const TSharedPtr<FJsonObject> BlockedSaveErrorData =
+					MonolithAsset::GetErrorDataObject(BlockedSaveFixup))
+			{
+				FString Status;
+				double AppliedCount = -1.0;
+				double PlannedChangedPackageCount = 0.0;
+				BlockedSaveErrorData->TryGetStringField(TEXT("status"), Status);
+				BlockedSaveErrorData->TryGetNumberField(TEXT("applied_count"), AppliedCount);
+				BlockedSaveErrorData->TryGetNumberField(
+					TEXT("planned_changed_package_count"),
+					PlannedChangedPackageCount);
+				TestEqual(
+					TEXT("save destination failure is reported during preflight"),
+					Status,
+					FString(TEXT("preflight_failed")));
+				TestEqual(
+					TEXT("save destination preflight applies no references"),
+					static_cast<int32>(AppliedCount),
+					0);
+				TestEqual(
+					TEXT("save destination preflight identifies one changed package"),
+					static_cast<int32>(PlannedChangedPackageCount),
+					1);
+				const TArray<TSharedPtr<FJsonValue>>* SavePreflightRows = nullptr;
+				if (BlockedSaveErrorData->TryGetArrayField(TEXT("save_preflight"), SavePreflightRows)
+					&& SavePreflightRows
+					&& SavePreflightRows->Num() == 1)
+				{
+					const TSharedPtr<FJsonObject>* SavePreflightRow = nullptr;
+					if ((*SavePreflightRows)[0]->TryGetObject(SavePreflightRow)
+						&& SavePreflightRow
+						&& SavePreflightRow->IsValid())
+					{
+						FString SaveStatus;
+						(*SavePreflightRow)->TryGetStringField(TEXT("status"), SaveStatus);
+						TestEqual(
+							TEXT("save preflight reports the blocked directory contract"),
+							SaveStatus,
+							FString(TEXT("save_directory_unavailable")));
+					}
+					else
+					{
+						AddError(TEXT("save preflight row must be a JSON object"));
+					}
+				}
+				else
+				{
+					AddError(TEXT("save preflight failure must report exactly one target row"));
+				}
+			}
+			else
+			{
+				AddError(TEXT("save preflight failure must return structured error data"));
+			}
+
+			TestAssetRegistry.AssetDeleted(BlockedContainer);
+		}
+		if (BlockedContainerPackage)
+		{
+			BlockedContainerPackage->SetDirtyFlag(false);
+		}
+		TestTrue(
+			TEXT("strict save preflight fixture file is removed"),
+			IFileManager::Get().Delete(*BlockedSaveDirectory));
 
 		TSharedPtr<FJsonObject> TruncatedFixupParams = MakeShared<FJsonObject>();
 		TruncatedFixupParams->Values = StrictFixupParams->Values;
