@@ -3481,6 +3481,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSequenceFrames(
 	}
 
 	TArray<float> Timestamps;
+	Timestamps.Reserve(TimestampArray->Num());
 	for (const auto& Val : *TimestampArray)
 	{
 		Timestamps.Add((float)Val->AsNumber());
