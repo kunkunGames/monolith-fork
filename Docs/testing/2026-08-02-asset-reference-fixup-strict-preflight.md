@@ -3,7 +3,7 @@
 **Date:** 2026-08-02
 **Branch:** `jules/codex/asset/reference-fixup-exactness`
 **Reviewed base head:** `07faaf0583a8190f5aa021c9c6cc22fe556427c5`
-**Scope:** `asset.fixup_copied_references` strict blocker preflight, mutation ordering, traversal cap, diagnostics, and regression coverage
+**Scope:** `asset.fixup_copied_references` strict blocker preflight, hard-reference type safety, mutation ordering, traversal cap, diagnostics, and regression coverage
 **Engines:** Unreal Engine 5.7 and 5.8, resolved from installed associations matching the verification hosts
 
 ---
@@ -37,6 +37,7 @@ non-mutating blocker preflight.
 | `Engine\Source\Editor\UnrealEd\Private\ScopedTransaction.cpp` | `Cancel()` delegates to the editor transaction buffer. |
 | `Engine\Source\Editor\UnrealEd\Private\EditorTransaction.cpp` | `UTransBuffer::Cancel()` cancels/removes transaction bookkeeping without replaying object state. |
 | `Engine\Source\Runtime\Engine\Classes\Engine\PrimaryAssetLabel.h` | `ExplicitAssets` is a reflected array of soft object references in both UE 5.7 and 5.8. |
+| `Engine\Source\Runtime\Engine\Classes\Engine\Font.h` | `UFont::Textures` is a reflected array of hard `UTexture2D` references in both UE 5.7 and 5.8, providing a production reflected-property path for incompatible-target regression coverage. |
 
 ---
 
@@ -47,6 +48,8 @@ non-mutating blocker preflight.
 | Late strict blocker left earlier edits applied | One traversal both validated and wrote references; the handler returned `preflight_failed` only after earlier candidates could already be changed | Confirmed strict runs the complete traversal with `dry_run=true` first, then runs the applying traversal only when no blocker exists | A valid first soft reference followed by a missing second target returns failure, preserves the first source path, and leaves the package clean |
 | Traversal cap permitted partial strict mutation | `max_packages` set `truncated=true` but still applied the bounded prefix | Strict mutation treats truncation itself as a blocker and returns before visiting or changing a package | Two requested packages with `max_packages=1` return `truncated=true`, `applied_count=0`, and preserve the reference |
 | A later non-blocking hard-target miss could clear an earlier blocker | Hard-object miss assigned the aggregate blocker flag | Aggregate with logical OR so an earlier blocker cannot be erased | Both supported engines compile and run the complete fixture |
+| Incompatible hard target could pass strict preflight | Hard-target class mismatch copied `require_targets`; with `require_targets=false`, strict mode could report the mismatch but continue | A resolved incompatible hard target is unconditionally blocking in strict mode; `require_targets` applies only to absent targets | A real `UFont::Textures` `UTexture2D*` reference remapped to a `UCurveFloat` target returns `preflight_failed`, preserves the original pointer, and leaves the package clean |
+| Package-load failure could erase an earlier blocker | The aggregate blocker flag was assigned instead of accumulated | Package-load failure now uses logical OR, preserving every prior blocker | The complete strict fixture succeeds on both supported engines without aggregate-state regression |
 | Strict success path needed two-pass coverage | Existing tests only covered guards and a generic dry-run | The fixture removes the missing row, reruns the same confirmed strict action, and asserts one real rewrite plus package dirtying | `applied_count=1` and the reference points to the remapped destination object |
 
 Structured strict failures now return `checked_packages`, reference and warning
@@ -57,16 +60,17 @@ arrays, checked object/package counts, `candidate_count`, `applied_count`,
 
 ## 4. Current-byte Identity
 
-The final build staging copies were compared to the branch source before the
-last engine builds.
+Git blob object IDs identify the canonical committed source independently of
+checkout line endings. The SHA-256 column is the exact Windows worktree byte
+sequence copied into both the UE 5.7 and UE 5.8 verification packages.
 
-| File | SHA-256 |
-|---|---|
-| `Source\MonolithAsset\Private\MonolithAssetPackageGraphActions.cpp` | `AB11258CD0FBAADB7899B7C935698A0800AFB4DD69FB7EDC1D26AE96DD3B50D1` |
-| `Source\MonolithAsset\Private\Tests\PackageGraphCopyActionsTests.cpp` | `2DDAB3E0C1CF195D54963BDED781C044A1B7D112D7EFB4E1A196585A69476B6E` |
+| File | Git blob OID | Windows checkout and both packages SHA-256 |
+|---|---|---|
+| `Source\MonolithAsset\Private\MonolithAssetPackageGraphActions.cpp` | `c9c09e02a5ace1bcfc891c39a1959298a956ea43` | `19C479F66E6AB318A157257FD7AD1A98160C5DCC78BE8975B3B5E347714D5802` |
+| `Source\MonolithAsset\Private\Tests\PackageGraphCopyActionsTests.cpp` | `0f182f07049c0a58554456a4366f56c81bfa3365` | `D2B40B642F3F6BF2C85CFF62A18F8760EBB64029D234F7F9E1B61384EBA082F3` |
 
-The same hashes were observed under the final UE 5.7 release package and UE
-5.8 foreign-plugin host immediately before compilation.
+The package copies were hashed after `BuildPlugin` completed and before the
+focused automation hosts were populated from those packages.
 
 ---
 
@@ -78,13 +82,13 @@ plugin contract.
 
 | Gate | Result | Evidence |
 |---|---|---|
-| Final Editor build | PASS | `529/529`; `Result: Succeeded`; `D:\P4\MonolithFollowupUE57Host\Saved\Logs\PackageGraphFixup-UE57-FinalIncremental-20260802.log` |
+| Final Editor plugin build | PASS | `529/529`; `Result: Succeeded`; `BUILD SUCCESSFUL`; package `D:\P4\MonolithReferenceReviewUE57MergeReady404997cPackage` |
 | Changed production TU | PASS | `MonolithAssetPackageGraphActions.cpp` compiled in the final build |
 | Changed regression TU | PASS | `PackageGraphCopyActionsTests.cpp` compiled in the final build |
 | Focused automation | PASS | `1/1` succeeded, `0` failed, test warnings `0`, test errors `0` |
 | Test | PASS | `Monolith.Asset.PackageGraph.RegistryAndParamGuards` |
-| Report | PASS | `D:\P4\MonolithPackageGraphFixupUE57ReleaseAutomationHost\Saved\Automation\PackageGraphFixup-UE57-Final-20260802\index.json` |
-| Final module binary | PASS | `UnrealEditor-MonolithAsset.dll`; SHA-256 `BD55E41C286B60D6B12DDA43E51507DDAB8F9890F04571851407C0F6964FFE4A` |
+| Report | PASS | `D:\P4\MonolithReferenceReviewUE57MergeReadyHost\Saved\Automation\ReferenceFixup-MergeReady-UE57\index.json`; SHA-256 `2C0259EFB67AFFE845F2CB6EF5F75BA85730D0B0C4A34E038B650F6CC32BD9BC` |
+| Final module binary | PASS | `UnrealEditor-MonolithAsset.dll`; 1,605,120 bytes; SHA-256 `C9573039F3914FED68210CF47483ABDF002CED25ABE7A6269C054C3BBAC463FB` |
 
 ---
 
@@ -95,20 +99,13 @@ editor and its Live Coding session remained untouched.
 
 | Gate | Result | Evidence |
 |---|---|---|
-| Full Editor baseline build | PASS | The isolated package completed `529/529` before its unrelated optional `UnrealGame` pass; Editor `Result: Succeeded` |
-| Final current-byte Editor build | PASS | `83/83`; `Result: Succeeded`; `D:\P4\MonolithFollowupUE58Host\Saved\Logs\PackageGraphFixup-UE58-Final-20260802.log` |
-| Changed production TU | PASS | Final action `13/83` compiled `MonolithAssetPackageGraphActions.cpp` |
-| Changed regression TU | PASS | Final action `8/83` compiled `PackageGraphCopyActionsTests.cpp` |
+| Final Editor plugin build | PASS | `529/529`; `Result: Succeeded`; `BUILD SUCCESSFUL`; package `D:\P4\MonolithReferenceReviewUE58MergeReady404997cPackage` |
+| Changed production TU | PASS | `MonolithAssetPackageGraphActions.cpp` compiled in the final build |
+| Changed regression TU | PASS | `PackageGraphCopyActionsTests.cpp` compiled in the final build |
 | Focused automation | PASS | `1/1` succeeded, `0` failed, test warnings `0`, test errors `0` |
 | Test | PASS | `Monolith.Asset.PackageGraph.RegistryAndParamGuards` |
-| Report | PASS | `D:\P4\MonolithPackageGraphFixupUE58Package\HostProject\Saved\Automation\PackageGraphFixup-UE58-Final-20260802\index.json` |
-| Final module binary | PASS | `UnrealEditor-MonolithAsset.dll`; SHA-256 `220E38B4EA91DAD36F00C7AFBB99C5C2604DA5C5390F120177B5EE01F88AA0E2` |
-
-The first UE 5.8 `BuildPlugin` invocation continued after the successful Editor
-build into an optional `UnrealGame` target and exposed pre-existing
-`MonolithAudioRuntime` compile errors. The final verification explicitly builds
-the supported Editor target only and succeeds. This distinction is not treated
-as a source regression in `MonolithAsset`.
+| Report | PASS | `D:\P4\MonolithReferenceReviewUE58MergeReadyHost\Saved\Automation\ReferenceFixup-MergeReady-UE58\index.json`; SHA-256 `CED3B1704DA8DB52433DB805DB838673D684A92DEB7B043E34E435838C79351A` |
+| Final module binary | PASS | `UnrealEditor-MonolithAsset.dll`; 1,514,496 bytes; SHA-256 `702D29B3C7906355FE5BBCB4434A3CDB8668F84C90DF0DBA97209C8B33472221` |
 
 Both minimal automation hosts log an unrelated missing `GameFeatureData` Asset
 Manager rule. They also cannot bind Monolith HTTP port `9316` because the
@@ -144,6 +141,7 @@ errors.
 ## 9. Result
 
 Confirmed strict reference fix-up is now fail-before-mutation for every blocker
-that can be discovered by the bounded traversal. UE 5.7 and UE 5.8 compile the
-same final production and regression sources and pass the same production-path
-automation fixture.
+that can be discovered by the bounded traversal, including an incompatible
+resolved hard-reference target even when missing targets are optional. UE 5.7
+and UE 5.8 compile the same final production and regression sources and pass the
+same production-path automation fixture.
