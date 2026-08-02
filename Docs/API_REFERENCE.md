@@ -2440,7 +2440,9 @@ Optional Interchange framework discovery, validation, and asset import/export op
 | `update_reimport_path` | `asset_path` (required string), `source_file` (required string), `source_file_index` (optional integer), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean) |
 | `reimport_asset` | `asset_path` (required string), `source_file` (optional string), `source_file_index` (optional integer), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean) |
 | `reimport_assets` | `asset_paths` (required array), `confirm` (optional boolean), `dry_run` (optional boolean) |
-| `export_asset` | `asset_path` (required string), `file_path` (required string), `replace_existing` (optional boolean), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean) |
+| `export_asset` | `asset_path` (required string), `file_path` (required string), `replace_existing` (optional boolean), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean); resolves at most 256 native exporter-declared outputs, stages them beside the destination, validates the complete output set, and promotes it atomically with rollback backups |
+
+`export_asset` rejects script exporters whose arbitrary filesystem side effects cannot be bounded. Native output planning requires every declared file to remain in the requested directory. After export, every expected staged path must exist without symlink or junction traversal, and no undeclared file or directory may appear. Promotion and restoration use immediate no-retry/no-dialog moves; a failed promotion removes already-promoted read-only files and restores all backups. The stable response reports exporter, commit, rollback, cleanup, partial-mutation, promotion/restoration-count, and exact retained-path evidence. A bounded non-recursive cleanup deletes only a completely scanned flat staging directory; incomplete rollback or unsafe cleanup preserves recovery artifacts instead of hiding them.
 
 
 ## ndisplay

@@ -549,6 +549,135 @@ bool FMonolithParamGuardInterchangeImportMalformedParamsTest::RunTest(const FStr
 	}
 
 	{
+		const FString DryRunPath =
+			FPaths::ConvertRelativePathToFull(
+				FPaths::ProjectSavedDir() /
+				TEXT("Automation/MonolithInterchange") /
+				(FGuid::NewGuid().ToString(EGuidFormats::Digits) + TEXT(".png")));
+
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(
+			TEXT("asset_path"),
+			TEXT("/Engine/EngineResources/DefaultTexture.DefaultTexture"));
+		Params->SetStringField(TEXT("file_path"), DryRunPath);
+		Params->SetBoolField(TEXT("dry_run"), true);
+
+		const FMonolithActionResult Result =
+			Registry.ExecuteAction(TEXT("interchange"), TEXT("export_asset"), Params);
+		TestTrue(
+			TEXT("valid export dry-run returns structured data"),
+			Result.bSuccess && Result.Result.IsValid());
+		if (Result.Result.IsValid())
+		{
+			TestEqual(
+				TEXT("valid export dry-run reports would_export"),
+				Result.Result->GetStringField(TEXT("status")),
+				FString(TEXT("would_export")));
+
+			auto TestBoolField = [this, &Result](const TCHAR* FieldName, bool Expected)
+			{
+				const bool bHasField = Result.Result->HasTypedField<EJson::Boolean>(FieldName);
+				TestTrue(
+					FString::Printf(TEXT("dry-run includes boolean field %s"), FieldName),
+					bHasField);
+				if (bHasField)
+				{
+					TestEqual(
+						FString::Printf(TEXT("dry-run field %s has the not-attempted default"), FieldName),
+						Result.Result->GetBoolField(FieldName),
+						Expected);
+				}
+			};
+			TestBoolField(TEXT("mutation_attempted"), false);
+			TestBoolField(TEXT("exporter_succeeded"), false);
+			TestBoolField(TEXT("commit_succeeded"), false);
+			TestBoolField(TEXT("rollback_complete"), true);
+			TestBoolField(TEXT("partial_mutation"), false);
+			TestBoolField(TEXT("staging_cleanup_complete"), true);
+
+			TestEqual(
+				TEXT("dry-run promotes no files"),
+				static_cast<int32>(Result.Result->GetNumberField(TEXT("promoted_file_count"))),
+				0);
+			TestEqual(
+				TEXT("dry-run restores no files"),
+				static_cast<int32>(Result.Result->GetNumberField(TEXT("restored_file_count"))),
+				0);
+			const TArray<TSharedPtr<FJsonValue>>* RetainedPaths = nullptr;
+			TestTrue(
+				TEXT("dry-run includes retained_paths"),
+				Result.Result->TryGetArrayField(TEXT("retained_paths"), RetainedPaths) &&
+				RetainedPaths != nullptr);
+			if (RetainedPaths)
+			{
+				TestTrue(TEXT("dry-run retains no paths"), RetainedPaths->IsEmpty());
+			}
+		}
+		TestFalse(
+			TEXT("dry-run does not create its destination"),
+			IFileManager::Get().FileExists(*DryRunPath));
+	}
+
+	{
+		const FString ExportPath =
+			FPaths::ConvertRelativePathToFull(
+				FPaths::ProjectSavedDir() /
+				TEXT("Automation/MonolithInterchange") /
+				(FGuid::NewGuid().ToString(EGuidFormats::Digits) + TEXT(".png")));
+		TestTrue(
+			TEXT("transactional export replacement fixture was created"),
+			FFileHelper::SaveStringToFile(TEXT("original destination sentinel"), *ExportPath));
+
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(
+			TEXT("asset_path"),
+			TEXT("/Engine/EngineResources/DefaultTexture.DefaultTexture"));
+		Params->SetStringField(TEXT("file_path"), ExportPath);
+		Params->SetBoolField(TEXT("replace_existing"), true);
+		Params->SetBoolField(TEXT("confirm"), true);
+
+		const FMonolithActionResult Result =
+			Registry.ExecuteAction(TEXT("interchange"), TEXT("export_asset"), Params);
+		TestTrue(
+			TEXT("transactional export returns structured data"),
+			Result.bSuccess && Result.Result.IsValid());
+		if (Result.Result.IsValid())
+		{
+			TestEqual(
+				TEXT("transactional export reports success"),
+				Result.Result->GetStringField(TEXT("status")),
+				FString(TEXT("exported")));
+			TestTrue(
+				TEXT("transactional export commits the staged file"),
+				Result.Result->GetBoolField(TEXT("commit_succeeded")));
+			TestTrue(
+				TEXT("transactional export reports a complete rollback capability"),
+				Result.Result->GetBoolField(TEXT("rollback_complete")));
+			TestFalse(
+				TEXT("successful transactional export is not a partial mutation"),
+				Result.Result->GetBoolField(TEXT("partial_mutation")));
+			TestTrue(
+				TEXT("transactional export removes its staging directory"),
+				Result.Result->GetBoolField(TEXT("staging_cleanup_complete")));
+			TestEqual(
+				TEXT("default texture export resolves one output file"),
+				static_cast<int32>(Result.Result->GetNumberField(TEXT("output_file_count"))),
+				1);
+		}
+
+		TArray<uint8> ExportedBytes;
+		TestTrue(
+			TEXT("transactional export destination exists"),
+			FFileHelper::LoadFileToArray(ExportedBytes, *ExportPath));
+		TestTrue(
+			TEXT("transactional export replaced the short original sentinel with PNG bytes"),
+			ExportedBytes.Num() > FCString::Strlen(TEXT("original destination sentinel")));
+		TestTrue(
+			TEXT("transactional export fixture was removed"),
+			IFileManager::Get().Delete(*ExportPath, false, true, true));
+	}
+
+	{
 		const FString RollbackId = FGuid::NewGuid().ToString(EGuidFormats::Digits);
 		const FString NewPackagePath =
 			FString::Printf(TEXT("/Game/Tests/Monolith/Interchange/Rollback_%s/NewAsset"), *RollbackId);
