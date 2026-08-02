@@ -25,9 +25,11 @@ Make `Tools/MonolithProxy/build_proxy.bat` truthful and failure-safe: every fail
 | Existing binary | Direct destination copying could partially overwrite the live binary. | A unique candidate is copied beside the destination, size-checked, then moved over the target as the final publication step. |
 | Cleanup ownership | A random staging collision could enter generic cleanup without proving that this execution created the directory. | Explicit ownership markers restrict cleanup to staging and candidate files created by the current execution. |
 | Staging/output alias | Equal override paths could publish successfully and then delete the published executable during owned staging cleanup. | Canonical absolute staging and output directories are compared before creation; equality fails without creating or deleting either path. |
+| Output below staging | An absent `stage\output` destination could be created inside the owned staging tree, published successfully, and then keep staging non-empty so the next run collided. | The script walks output ancestors and rejects staging ancestry before creation; a post-output directory invariant also catches physical aliases through reparse paths before candidate creation. |
 | Filesystem alias | `%~fI` canonicalization does not resolve junction or 8.3 aliases, so different text could still name the same not-yet-existing child directory. | The script records whether the output directory existed before staging creation. If creating the owned staging directory also makes a previously absent output directory appear, it fails before compilation and removes only the owned staging directory. |
+| Target path shape | `move` treats an existing `monolith_proxy.exe` directory as a destination container and could leave the candidate inside it after ownership was cleared. | Attribute-based directory checks reject the target before candidate creation and after the move; a raced move retains the actual nested candidate path for owned cleanup. |
 | Windows PowerShell | The harness used the .NET Core-only `ProcessStartInfo.Environment` collection despite documenting `powershell -File`. | The harness uses `EnvironmentVariables`, which is supported by Windows PowerShell 5.1 and current PowerShell. |
-| Regression coverage | No automated native build-script failure test existed. | `Scripts/test_proxy_build.ps1` exercises both entry points, intentional compile failure, byte preservation, publication failure, a pre-existing staging sentinel, an equal staging/output path, and a real directory junction whose aliased child does not exist before the run. |
+| Regression coverage | No automated native build-script failure test existed. | `Scripts/test_proxy_build.ps1` exercises both entry points, intentional compile failure, byte preservation, publication failure, a pre-existing staging sentinel, equal and nested staging/output paths, a directory-shaped executable target with an unowned sentinel, and a real directory junction whose aliased child does not exist before the run. |
 
 The optional `MONOLITH_PROXY_SOURCE_FILE`, `MONOLITH_PROXY_OUTPUT_DIR`, `MONOLITH_PROXY_STAGING_DIR`, and `MONOLITH_PROXY_VSWHERE` inputs make isolated verification explicit without changing the default repository output contract.
 
@@ -37,7 +39,7 @@ The optional `MONOLITH_PROXY_SOURCE_FILE`, `MONOLITH_PROXY_OUTPUT_DIR`, `MONOLIT
 
 | Gate | Command | Result |
 |------|---------|--------|
-| Native success and failure regression | `powershell -NoProfile -ExecutionPolicy Bypass -File Scripts\test_proxy_build.ps1` | PASS on Windows PowerShell 5.1.26100.8655 and PowerShell 7.5.5 — both entry points built; intentional compiler failure preserved exact sentinel bytes; blocked output and pre-existing staging failures were non-destructive; textual equality and a real junction-backed staging/output alias both failed before compilation without leaving the shared child or an executable; no failure printed success. |
+| Native success and failure regression | `powershell -NoProfile -ExecutionPolicy Bypass -File Scripts\test_proxy_build.ps1` | PASS on Windows PowerShell 5.1.26100.8655 and PowerShell 7.5.5 — both entry points built; intentional compiler failure preserved exact sentinel bytes; blocked output and pre-existing staging failures were non-destructive; textual equality, output-below-staging, a directory-shaped executable target, and a real junction-backed staging/output alias all failed without changing unowned sentinels or leaving candidates; no failure printed success. |
 | Offline dispatcher parity | `python Scripts/test_proxy_seed_parity.py` | PASS — Python/native seed lists match with 19 unique dispatchers, including `dataflow_query`. |
 | Patch hygiene | `git diff --check` | PASS. |
 
@@ -47,8 +49,8 @@ Windows checkout bytes (the batch file was exercised with CRLF line endings).
 
 | File | Git blob OID | Tested checkout SHA-256 |
 |------|--------------|------------------------|
-| `Tools\MonolithProxy\build_proxy.bat` | `6bbbac5be6022ddbfa0469ac9b973fed98a8274b` | `408D45A75736641FB4A7BDDA6119553C00AAF2BE1627079099F07A30C92F66D0` |
-| `Scripts\test_proxy_build.ps1` | `e8e68a25a1060af15fd752810e3a9700a4603237` | `9C3ADB394739807D60204EBC43D105DB41F060B769F753F953393CAF3DE583AA` |
+| `Tools\MonolithProxy\build_proxy.bat` | `b7f779fcaa5434762ae4acce456680d681d4dc6e` | `E7284C85E1AC81A56EF44A4CED51B3053E1C085E12ED366B43ABD11A7B8B2000` |
+| `Scripts\test_proxy_build.ps1` | `e8c12dfacd390d506d46674f5cfc3a905d02cfe4` | `E6F31C36BC0C6BCF706393890E9E0368A00F0E332A20079E3F65B516576F0A37` |
 
 The regression harness creates a GUID-named directory under the system temporary directory, passes explicit source/output paths to the batch script, and validates the temporary root before recursively removing it. It does not write `Binaries/monolith_proxy.exe` in the repository.
 
