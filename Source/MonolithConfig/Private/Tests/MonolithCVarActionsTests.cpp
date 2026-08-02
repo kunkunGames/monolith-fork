@@ -64,14 +64,27 @@ bool FMonolithConfigGetCVarTest::RunTest(const FString& /*Parameters*/)
 	TestTrue(TEXT("known CVar lookup succeeds"), Found.bSuccess);
 	if (TestTrue(TEXT("known CVar lookup has a payload"), Found.Result.IsValid()))
 	{
-		TestTrue(TEXT("known CVar reports found"), Found.Result->GetBoolField(TEXT("found")));
+		bool bFoundCVar = false;
+		Found.Result->TryGetBoolField(TEXT("found"), bFoundCVar);
+		TestTrue(TEXT("known CVar reports found"), bFoundCVar);
+
+		FString ValueStr;
+		Found.Result->TryGetStringField(TEXT("value"), ValueStr);
 		TestEqual(
 			TEXT("known CVar reports its current value"),
-			Found.Result->GetStringField(TEXT("value")),
+			ValueStr,
 			FString(TEXT("7")));
+
 		TestTrue(TEXT("known CVar includes help"), Found.Result->HasField(TEXT("help")));
-		TestTrue(TEXT("known CVar exposes read-only flag"), Found.Result->GetBoolField(TEXT("read_only")));
-		TestFalse(TEXT("known CVar is not marked cheat"), Found.Result->GetBoolField(TEXT("cheat")));
+
+		bool bReadOnly = false;
+		Found.Result->TryGetBoolField(TEXT("read_only"), bReadOnly);
+		TestTrue(TEXT("known CVar exposes read-only flag"), bReadOnly);
+
+		bool bCheat = true;
+		Found.Result->TryGetBoolField(TEXT("cheat"), bCheat);
+		TestFalse(TEXT("known CVar is not marked cheat"), bCheat);
+
 		TestTrue(TEXT("known CVar includes set-by source"), Found.Result->HasField(TEXT("set_by")));
 	}
 
@@ -80,7 +93,9 @@ bool FMonolithConfigGetCVarTest::RunTest(const FString& /*Parameters*/)
 	TestTrue(TEXT("unknown CVar lookup is a successful read"), Missing.bSuccess);
 	if (TestTrue(TEXT("unknown CVar lookup has a payload"), Missing.Result.IsValid()))
 	{
-		TestFalse(TEXT("unknown CVar reports found=false"), Missing.Result->GetBoolField(TEXT("found")));
+		bool bMissingFound = true;
+		Missing.Result->TryGetBoolField(TEXT("found"), bMissingFound);
+		TestFalse(TEXT("unknown CVar reports found=false"), bMissingFound);
 		TestFalse(TEXT("unknown CVar does not fabricate a value"), Missing.Result->HasField(TEXT("value")));
 	}
 
@@ -103,22 +118,36 @@ bool FMonolithConfigFindCVarsTest::RunTest(const FString& /*Parameters*/)
 	TestTrue(TEXT("prefix search succeeds"), PrefixResult.bSuccess);
 	if (TestTrue(TEXT("prefix search has a payload"), PrefixResult.Result.IsValid()))
 	{
+		FString PrefixMode;
+		PrefixResult.Result->TryGetStringField(TEXT("mode"), PrefixMode);
 		TestEqual(
 			TEXT("mode is normalized"),
-			PrefixResult.Result->GetStringField(TEXT("mode")),
+			PrefixMode,
 			FString(TEXT("prefix")));
+
+		int32 MatchedCount = 0;
+		PrefixResult.Result->TryGetNumberField(TEXT("matched_count"), MatchedCount);
 		TestEqual(
 			TEXT("both prefix fixtures match"),
-			static_cast<int32>(PrefixResult.Result->GetIntegerField(TEXT("matched_count"))),
+			MatchedCount,
 			2);
+
+		int32 ReturnedCount = 0;
+		PrefixResult.Result->TryGetNumberField(TEXT("returned_count"), ReturnedCount);
 		TestEqual(
 			TEXT("limit bounds returned rows"),
-			static_cast<int32>(PrefixResult.Result->GetIntegerField(TEXT("returned_count"))),
+			ReturnedCount,
 			1);
-		TestTrue(TEXT("bounded result reports truncation"), PrefixResult.Result->GetBoolField(TEXT("truncated")));
+
+		bool bTruncated = false;
+		PrefixResult.Result->TryGetBoolField(TEXT("truncated"), bTruncated);
+		TestTrue(TEXT("bounded result reports truncation"), bTruncated);
+
+		int32 TruncatedRemaining = 0;
+		PrefixResult.Result->TryGetNumberField(TEXT("truncated_remaining"), TruncatedRemaining);
 		TestEqual(
 			TEXT("bounded result reports remaining rows"),
-			static_cast<int32>(PrefixResult.Result->GetIntegerField(TEXT("truncated_remaining"))),
+			TruncatedRemaining,
 			1);
 
 		const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
@@ -128,9 +157,11 @@ bool FMonolithConfigFindCVarsTest::RunTest(const FString& /*Parameters*/)
 			&& TestEqual(TEXT("prefix result contains one row"), Rows->Num(), 1))
 		{
 			const TSharedPtr<FJsonObject> First = (*Rows)[0]->AsObject();
+			FString CVarName;
+			First->TryGetStringField(TEXT("name"), CVarName);
 			TestEqual(
 				TEXT("results are sorted before applying limit"),
-				First->GetStringField(TEXT("name")),
+				CVarName,
 				FString(TEXT("Monolith.ConfigCVarTest.Alpha")));
 			TestFalse(TEXT("find rows omit verbose help text"), First->HasField(TEXT("help")));
 		}
@@ -144,11 +175,16 @@ bool FMonolithConfigFindCVarsTest::RunTest(const FString& /*Parameters*/)
 	TestTrue(TEXT("contains search succeeds"), ContainsResult.bSuccess);
 	if (TestTrue(TEXT("contains search has a payload"), ContainsResult.Result.IsValid()))
 	{
+		int32 ContainsMatchedCount = 0;
+		ContainsResult.Result->TryGetNumberField(TEXT("matched_count"), ContainsMatchedCount);
 		TestEqual(
 			TEXT("contains search finds prefix and non-prefix fixtures"),
-			static_cast<int32>(ContainsResult.Result->GetIntegerField(TEXT("matched_count"))),
+			ContainsMatchedCount,
 			3);
-		TestFalse(TEXT("complete result is not truncated"), ContainsResult.Result->GetBoolField(TEXT("truncated")));
+
+		bool bContainsTruncated = true;
+		ContainsResult.Result->TryGetBoolField(TEXT("truncated"), bContainsTruncated);
+		TestFalse(TEXT("complete result is not truncated"), bContainsTruncated);
 	}
 
 	TSharedPtr<FJsonObject> EmptyContainsParams = MakeShared<FJsonObject>();
@@ -159,13 +195,18 @@ bool FMonolithConfigFindCVarsTest::RunTest(const FString& /*Parameters*/)
 	TestTrue(TEXT("empty contains search safely enumerates CVars"), EmptyContainsResult.bSuccess);
 	if (TestTrue(TEXT("empty contains search has a payload"), EmptyContainsResult.Result.IsValid()))
 	{
+		FString EmptyMode;
+		EmptyContainsResult.Result->TryGetStringField(TEXT("mode"), EmptyMode);
 		TestEqual(
 			TEXT("empty contains search still reports requested mode"),
-			EmptyContainsResult.Result->GetStringField(TEXT("mode")),
+			EmptyMode,
 			FString(TEXT("contains")));
+
+		int32 EmptyReturnedCount = 0;
+		EmptyContainsResult.Result->TryGetNumberField(TEXT("returned_count"), EmptyReturnedCount);
 		TestEqual(
 			TEXT("empty contains search remains bounded"),
-			static_cast<int32>(EmptyContainsResult.Result->GetIntegerField(TEXT("returned_count"))),
+			EmptyReturnedCount,
 			1);
 	}
 
