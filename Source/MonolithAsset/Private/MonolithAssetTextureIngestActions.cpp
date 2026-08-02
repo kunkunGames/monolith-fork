@@ -30,6 +30,7 @@
 // Image decoding
 #include "IImageWrapper.h"                      // IImageWrapper, ERGBFormat, EImageFormat
 #include "IImageWrapperModule.h"                // IImageWrapperModule
+#include "DDSFile.h"                            // UE::DDS header-only metadata validation
 #include "Modules/ModuleManager.h"              // FModuleManager::LoadModuleChecked
 
 // Texture creation
@@ -88,6 +89,41 @@ namespace MonolithAsset::TextureIngestInternal
         }
 
         OutExpectedBytes = Width * Height * BytesPerPixel;
+        return true;
+    }
+
+    bool ValidateDdsSingleTexture2DSurface(
+        const TArray<uint8>& CompressedBytes,
+        FString& OutError)
+    {
+        OutError.Reset();
+
+        UE::DDS::EDDSError DdsError = UE::DDS::EDDSError::OK;
+        TUniquePtr<UE::DDS::FDDSFile> Dds(
+            UE::DDS::FDDSFile::CreateFromDDSInMemory(
+                CompressedBytes.GetData(),
+                static_cast<int64>(CompressedBytes.Num()),
+                &DdsError,
+                UE::DDS::EDDSReadMipMode::HeaderOnly));
+        if (!Dds.IsValid() || DdsError != UE::DDS::EDDSError::OK)
+        {
+            OutError = FString::Printf(
+                TEXT("DDS header validation failed before decode (error=%d)"),
+                static_cast<int32>(DdsError));
+            return false;
+        }
+
+        if (!Dds->IsValidTexture2D())
+        {
+            OutError = FString::Printf(
+                TEXT("DDS input must contain exactly one 2D texture surface; "
+                     "dimension=%d depth=%u array_slices=%u"),
+                Dds->Dimension,
+                Dds->Depth,
+                Dds->ArraySize);
+            return false;
+        }
+
         return true;
     }
 
@@ -2348,6 +2384,15 @@ FMonolithActionResult MonolithAsset::FTextureIngestActions::HandleImportTextureF
                 TEXT("Decoded bytes_b64 exceeds the compressed image byte limit of %lld"),
                 MaxCompressedImageBytes),
             -32602);
+    }
+
+    if (Format == EImageFormat::DDS)
+    {
+        FString DdsSurfaceError;
+        if (!ValidateDdsSingleTexture2DSurface(CompressedBytes, DdsSurfaceError))
+        {
+            return FMonolithActionResult::Error(DdsSurfaceError, -32602);
+        }
     }
 
     // --- Image wrapper: decode compressed bytes to raw BGRA8 ---

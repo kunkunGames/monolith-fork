@@ -15,4 +15,11 @@ namespace MonolithAsset::TextureIngestInternal
         int64 Height,
         int64& OutExpectedBytes,
         FString& OutError);
+
+    // Byte imports always materialize a single UTexture2D surface. Parse DDS
+    // metadata without reading its mip payload so arrays, cubes, and volumes
+    // are rejected before IImageWrapper can request a decoded pixel buffer.
+    bool ValidateDdsSingleTexture2DSurface(
+        const TArray<uint8>& CompressedBytes,
+        FString& OutError);
 }
