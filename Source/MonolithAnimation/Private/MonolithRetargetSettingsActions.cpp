@@ -466,6 +466,7 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleSetRetargetPose(co
 		const TArray<TSharedPtr<FJsonValue>>* ResetBonesArr = nullptr;
 		if (Params->TryGetArrayField(TEXT("bones"), ResetBonesArr))
 		{
+			BonesToReset.Reserve(ResetBonesArr->Num());
 			for (const TSharedPtr<FJsonValue>& V : *ResetBonesArr)
 			{
 				FString BoneStr;
@@ -489,6 +490,7 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleSetRetargetPose(co
 
 		if (bHasDeltasArray)
 		{
+			PreparedDeltas.Reserve(DeltasArr->Num());
 			for (const TSharedPtr<FJsonValue>& V : *DeltasArr)
 			{
 				const TSharedPtr<FJsonObject>* EntryPtr = nullptr;
