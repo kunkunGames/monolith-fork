@@ -2694,6 +2694,7 @@ static void CollectParametersFromStore(const FNiagaraParameterStore& Store, cons
 	TArray<TSharedPtr<FJsonValue>>& OutArray)
 {
 	TArrayView<const FNiagaraVariableWithOffset> Variables = Store.ReadParameterVariables();
+	OutArray.Reserve(OutArray.Num() + Variables.Num());
 	for (const FNiagaraVariableWithOffset& VWO : Variables)
 	{
 		const FNiagaraVariable& Var = VWO;
