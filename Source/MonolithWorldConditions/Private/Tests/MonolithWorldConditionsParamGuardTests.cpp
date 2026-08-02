@@ -82,6 +82,16 @@ bool FMonolithWorldConditionsTypedParamsTest::RunTest(const FString& Parameters)
 				TEXT("world_conditions.describe_query rejects non-integer slot_index")
 			},
 			{
+				TEXT("describe_query"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetStringField(TEXT("asset_path"), TEXT("/Game/AI/SO_Test.SO_Test"));
+					Params->SetNumberField(TEXT("query"), 42.0);
+				},
+				TEXT("query"),
+				TEXT("world_conditions.describe_query rejects non-string query parameter")
+			},
+			{
 				TEXT("describe_condition_types"),
 				[](TSharedRef<FJsonObject> Params)
 				{
