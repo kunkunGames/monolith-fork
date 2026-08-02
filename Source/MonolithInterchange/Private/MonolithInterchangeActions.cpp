@@ -1015,16 +1015,6 @@ namespace
 		return bAllowExternal || IsUnderDefaultImportRoots(FilePath);
 	}
 
-	FString FilesystemPathKey(FString Path)
-	{
-		Path = FPaths::ConvertRelativePathToFull(Path);
-		FPaths::NormalizeFilename(Path);
-#if PLATFORM_WINDOWS
-		Path.ToLowerInline();
-#endif
-		return Path;
-	}
-
 	bool TryResolveExporterOutputPaths(
 		UExporter* Exporter,
 		UObject* Asset,
@@ -1057,7 +1047,11 @@ namespace
 
 			OutputPath = FPaths::ConvertRelativePathToFull(OutputPath);
 			FPaths::NormalizeFilename(OutputPath);
-			const FString OutputKey = FilesystemPathKey(OutputPath);
+			FString OutputKey;
+			if (!TryMonolithInterchangePortableFilenameKey(OutputPath, OutputKey, OutError))
+			{
+				return false;
+			}
 			if (UniquePaths.Contains(OutputKey))
 			{
 				OutError = FString::Printf(
@@ -2427,10 +2421,11 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 	}
 
 	const FString OutputDirectory = FPaths::GetPath(NormalizedFilePath);
-	const FString OutputDirectoryKey = FilesystemPathKey(OutputDirectory);
 	for (const FString& OutputPath : OutputPaths)
 	{
-		if (FilesystemPathKey(FPaths::GetPath(OutputPath)) != OutputDirectoryKey)
+		if (!MonolithInterchangePathsMatchHostSemantics(
+				FPaths::GetPath(OutputPath),
+				OutputDirectory))
 		{
 			AddMessage(
 				Messages,
@@ -2564,7 +2559,9 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 	for (const FString& StagedOutputPath : StagedOutputPaths)
 	{
 		if (!IsLexicallyUnderRoot(StagedOutputPath, StagingDirectory) ||
-			FilesystemPathKey(FPaths::GetPath(StagedOutputPath)) != FilesystemPathKey(StagingDirectory))
+			!MonolithInterchangePathsMatchHostSemantics(
+				FPaths::GetPath(StagedOutputPath),
+				StagingDirectory))
 		{
 			AddMessage(
 				Messages,
@@ -2611,10 +2608,8 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 
 	if (bExporterSucceeded)
 	{
-		TSet<FString> ExpectedStagedPaths;
 		for (const FString& StagedOutputPath : StagedOutputPaths)
 		{
-			ExpectedStagedPaths.Add(FilesystemPathKey(StagedOutputPath));
 			if (MonolithInterchangePathTraversesLinkBelowRoot(
 					StagedOutputPath,
 					StagingDirectory))
@@ -2650,17 +2645,54 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 					: TEXT("export_staging_scan_failed"),
 				StagingScan.Error);
 		}
-		for (const FString& ActualStagedFile : StagingScan.Files)
+		const FMonolithInterchangeStagingManifestValidationResult ManifestValidation =
+			ValidateMonolithInterchangeStagingManifest(
+				StagedOutputPaths,
+				StagingScan.Files);
+		for (const FString& InvalidExpectedFile : ManifestValidation.InvalidExpectedFiles)
 		{
-			if (!ExpectedStagedPaths.Contains(FilesystemPathKey(ActualStagedFile)))
-			{
-				AddMessage(
-					Messages,
-					TEXT("unexpected_export_output"),
-					FString::Printf(
-						TEXT("Exporter produced an undeclared staged file: %s"),
-						*ActualStagedFile));
-			}
+			AddMessage(
+				Messages,
+				TEXT("non_portable_declared_export_output"),
+				FString::Printf(
+					TEXT("Exporter declared a staged filename outside the portable ASCII contract: %s"),
+					*InvalidExpectedFile));
+		}
+		for (const FString& InvalidActualFile : ManifestValidation.InvalidActualFiles)
+		{
+			AddMessage(
+				Messages,
+				TEXT("non_portable_actual_export_output"),
+				FString::Printf(
+					TEXT("Exporter produced a staged filename outside the portable ASCII contract: %s"),
+					*InvalidActualFile));
+		}
+		for (const FString& DuplicateExpectedFile : ManifestValidation.DuplicateExpectedFiles)
+		{
+			AddMessage(
+				Messages,
+				TEXT("duplicate_declared_export_output_identity"),
+				FString::Printf(
+					TEXT("Exporter declared duplicate staged output identities: %s"),
+					*DuplicateExpectedFile));
+		}
+		for (const FString& DuplicateActualFile : ManifestValidation.DuplicateActualFiles)
+		{
+			AddMessage(
+				Messages,
+				TEXT("duplicate_export_output_identity"),
+				FString::Printf(
+					TEXT("Exporter produced multiple staged files with one portable identity: %s"),
+					*DuplicateActualFile));
+		}
+		for (const FString& ActualStagedFile : ManifestValidation.UnexpectedFiles)
+		{
+			AddMessage(
+				Messages,
+				TEXT("unexpected_export_output"),
+				FString::Printf(
+					TEXT("Exporter produced an undeclared staged file: %s"),
+					*ActualStagedFile));
 		}
 
 		for (const FString& ActualStagedDirectory : StagingScan.Directories)
