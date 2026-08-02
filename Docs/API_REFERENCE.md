@@ -2855,7 +2855,10 @@ Import a font family from one or more TTF files as a composite UFont plus UFontF
 | `faces` | array | **required** | Typeface specs with `typeface` and absolute `source_path`; non-empty. |
 | `loading_policy` | string | optional | LazyLoad, Stream, or Inline. Default: `LazyLoad` |
 | `hinting` | string | optional | Default, Auto, AutoLight, Monochrome, or None. Default: `Default` |
+| `allow_unique_names` | bool | optional | Explicitly allow suffixed family/face package names when an exact requested path already exists. Default: `false` |
 | `save` | bool | optional | Save imported font assets. Default: `true` |
+
+The action accepts 1-64 faces, caps each `.ttf` source at 64 MiB and the aggregate family input at 256 MiB, and preflights every source plus every requested output package before creating a package. Accepted source bytes are retained across the mutation phase so a file cannot change between validation and `UFontFace` creation. Exact package names are the default; suffixing occurs only through `allow_unique_names=true`.
 
 ### `asset.save_asset`
 

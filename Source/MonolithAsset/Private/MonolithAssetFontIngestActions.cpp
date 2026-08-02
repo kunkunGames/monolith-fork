@@ -1,5 +1,6 @@
 // Copyright tumourlove. All Rights Reserved.
 #include "MonolithAssetFontIngestActions.h"
+#include "MonolithAssetFontIngestInternal.h"
 
 // Monolith registry
 #include "MonolithPackagePathValidator.h"
@@ -11,9 +12,9 @@
 #include "Dom/JsonValue.h"
 #include "HAL/UnrealMemory.h"
 #include "HAL/FileManager.h"                 // IFileManager
-#include "Misc/FileHelper.h"                    // FFileHelper::LoadFileToArray
 #include "Misc/PackageName.h"                   // FPackageName::LongPackageNameToFilename / GetAssetPackageExtension
-#include "Misc/Paths.h"                         // FPaths::FileExists
+#include "Misc/Paths.h"                         // FPaths path helpers
+#include "Serialization/Archive.h"              // FArchive
 #include "UObject/Package.h"                    // UPackage, SavePackage
 #include "UObject/SavePackage.h"                // FSavePackageArgs
 #include "UObject/UObjectGlobals.h"             // CreatePackage, NewObject
@@ -36,6 +37,88 @@
 
 namespace MonolithAsset::FontIngestInternal
 {
+    bool ValidateFontFaceCount(int32 FaceCount, FString& OutError)
+    {
+        if (FaceCount <= 0)
+        {
+            OutError = TEXT("faces must be a non-empty array");
+            return false;
+        }
+        if (FaceCount > MaxFontFacesPerFamily)
+        {
+            OutError = FString::Printf(
+                TEXT("faces contains %d entries; at most %d font faces are allowed per family"),
+                FaceCount,
+                MaxFontFacesPerFamily);
+            return false;
+        }
+        return true;
+    }
+
+    bool AccumulateFontSourceSize(
+        int64 SourceSize,
+        int64& InOutFamilySourceBytes,
+        FString& OutError)
+    {
+        if (SourceSize <= 0)
+        {
+            OutError = TEXT("font source file is empty");
+            return false;
+        }
+        if (SourceSize > MaxFontFaceSourceBytes)
+        {
+            OutError = FString::Printf(
+                TEXT("font source file is %lld bytes; the per-face limit is %lld bytes"),
+                SourceSize,
+                MaxFontFaceSourceBytes);
+            return false;
+        }
+        if (InOutFamilySourceBytes > MaxFontFamilySourceBytes - SourceSize)
+        {
+            OutError = FString::Printf(
+                TEXT("font family source payload exceeds the %lld-byte aggregate limit"),
+                MaxFontFamilySourceBytes);
+            return false;
+        }
+
+        InOutFamilySourceBytes += SourceSize;
+        return true;
+    }
+
+    bool LoadBoundedFontFile(
+        const FString& SourcePath,
+        int64& InOutFamilySourceBytes,
+        TArray<uint8>& OutBytes,
+        FString& OutError)
+    {
+        OutBytes.Reset();
+
+        TUniquePtr<FArchive> Reader(IFileManager::Get().CreateFileReader(*SourcePath, FILEREAD_Silent));
+        if (!Reader)
+        {
+            OutError = TEXT("file does not exist or is unreadable");
+            return false;
+        }
+
+        const int64 SourceSize = Reader->TotalSize();
+        if (!AccumulateFontSourceSize(SourceSize, InOutFamilySourceBytes, OutError))
+        {
+            return false;
+        }
+
+        OutBytes.SetNumUninitialized(static_cast<int32>(SourceSize));
+        Reader->Serialize(OutBytes.GetData(), SourceSize);
+        const bool bClosed = Reader->Close();
+        if (Reader->IsError() || !bClosed)
+        {
+            InOutFamilySourceBytes -= SourceSize;
+            OutBytes.Reset();
+            OutError = TEXT("file could not be read completely");
+            return false;
+        }
+        return true;
+    }
+
     /**
      * Validates the sfnt container header of a font payload.
      *
@@ -194,6 +277,7 @@ namespace MonolithAsset::FontIngestInternal
     {
         FString Typeface;   // "Regular", "Bold", ...
         FString SourcePath; // Absolute path to TTF on disk
+        TArray<uint8> SourceBytes;
     };
 
     /** Per-face import outputs, including saved asset path for the result payload. */
@@ -258,6 +342,11 @@ FMonolithActionResult MonolithAsset::FFontIngestActions::HandleImportFontFamily(
     if (!Params->TryGetArrayField(TEXT("faces"), FacesArr) || !FacesArr || FacesArr->Num() == 0)
     {
         return FMonolithActionResult::Error(TEXT("faces must be a non-empty array"), -32602);
+    }
+    FString FaceCountError;
+    if (!ValidateFontFaceCount(FacesArr->Num(), FaceCountError))
+    {
+        return FMonolithActionResult::Error(FaceCountError, -32602);
     }
 
     // --- Optional params ---
@@ -426,9 +515,10 @@ FMonolithActionResult MonolithAsset::FFontIngestActions::HandleImportFontFamily(
 
     // Validate every source before creating any package. Invalid or unreadable
     // faces fail the entire request instead of producing a partial family.
+    int64 FamilySourceBytes = 0;
     for (int32 i = 0; i < FaceSpecs.Num(); ++i)
     {
-        const FFaceSpec& Spec = FaceSpecs[i];
+        FFaceSpec& Spec = FaceSpecs[i];
         if (FPaths::IsRelative(Spec.SourcePath))
         {
             return FMonolithActionResult::Error(
@@ -449,14 +539,19 @@ FMonolithActionResult MonolithAsset::FFontIngestActions::HandleImportFontFamily(
                     *Spec.SourcePath),
                 -32602);
         }
-        TArray<uint8> SourceBytes;
-        if (!FFileHelper::LoadFileToArray(SourceBytes, *Spec.SourcePath) || SourceBytes.IsEmpty())
+        FString FontLoadError;
+        if (!LoadBoundedFontFile(
+                Spec.SourcePath,
+                FamilySourceBytes,
+                Spec.SourceBytes,
+                FontLoadError))
         {
             return FMonolithActionResult::Error(
                 FString::Printf(
-                    TEXT("faces[%d] ('%s').source_path does not exist, is unreadable, or is empty: '%s'"),
+                    TEXT("faces[%d] ('%s').source_path is not an acceptable font source: %s ('%s')"),
                     i,
                     *Spec.Typeface,
+                    *FontLoadError,
                     *Spec.SourcePath),
                 -32602);
         }
@@ -466,7 +561,7 @@ FMonolithActionResult MonolithAsset::FFontIngestActions::HandleImportFontFamily(
         // whose faces cannot render. Validate the sfnt container header before any
         // package is created.
         FString FontFormatError;
-        if (!IsSupportedFontPayload(SourceBytes, FontFormatError))
+        if (!IsSupportedFontPayload(Spec.SourceBytes, FontFormatError))
         {
             return FMonolithActionResult::Error(
                 FString::Printf(
@@ -491,19 +586,8 @@ FMonolithActionResult MonolithAsset::FFontIngestActions::HandleImportFontFamily(
 
     for (int32 i = 0; i < FaceSpecs.Num(); ++i)
     {
-        const FFaceSpec& Spec = FaceSpecs[i];
-
-        TArray<uint8> TtfBytes;
-        if (!FFileHelper::LoadFileToArray(TtfBytes, *Spec.SourcePath) || TtfBytes.Num() == 0)
-        {
-            return FMonolithActionResult::Error(
-                FString::Printf(
-                    TEXT("faces[%d] ('%s').source_path became unreadable after preflight: '%s'"),
-                    i,
-                    *Spec.Typeface,
-                    *Spec.SourcePath),
-                -32603);
-        }
+        FFaceSpec& Spec = FaceSpecs[i];
+        TArray<uint8> TtfBytes = MoveTemp(Spec.SourceBytes);
 
         const FString DesiredFaceAssetName = FString::Printf(TEXT("F_%s"), *Spec.Typeface);
         const FString DesiredFacePackageBase = Destination / DesiredFaceAssetName;
@@ -716,18 +800,18 @@ void MonolithAsset::FFontIngestActions::Register(FMonolithToolRegistry& Registry
         TEXT("Import a font family (one-or-more TTF files) as a UFont composite asset plus one UFontFace per typeface entry. "
              "Params: destination (string, required, /Game/... output directory), "
              "family_name (string, required, UFont composite asset name), "
-             "faces (array<object>, required, non-empty, each { typeface: string (e.g. 'Regular','Bold'), source_path: string (absolute TTF path) }), "
+             "faces (array<object>, required, 1-64 entries, each { typeface: string (e.g. 'Regular','Bold'), source_path: string (absolute TTF path, up to 64 MiB) }), "
              "loading_policy (string, optional, default 'LazyLoad', one of LazyLoad|Stream|Inline), "
              "hinting (string, optional, default 'Default', one of Default|Auto|AutoLight|Monochrome|None), "
              "save (bool, optional, default true), "
              "allow_unique_names (bool, optional, default false; true explicitly opts into suffixed package names when requested paths exist). "
-             "All source files and exact output paths are preflighted before package creation. "
+             "All source files and exact output paths are preflighted before package creation; aggregate source bytes are limited to 256 MiB. "
              "Returns { family_asset_path, face_asset_paths[], faces_imported, faces_requested }."),
         FMonolithActionHandler::CreateStatic(&MonolithAsset::FFontIngestActions::HandleImportFontFamily),
         FParamSchemaBuilder()
             .Required(TEXT("destination"), TEXT("string"), TEXT("Output directory, e.g. /Game/UI/Fonts"))
             .Required(TEXT("family_name"), TEXT("string"), TEXT("Composite UFont asset name"))
-            .Required(TEXT("faces"), TEXT("array"), TEXT("Typeface specs with typeface and absolute source_path"))
+            .Required(TEXT("faces"), TEXT("array"), TEXT("1-64 typeface specs with typeface and an absolute source_path up to 64 MiB; aggregate source payload is limited to 256 MiB"))
             .Optional(TEXT("loading_policy"), TEXT("string"), TEXT("LazyLoad, Stream, or Inline"), TEXT("LazyLoad"))
             .Optional(TEXT("hinting"), TEXT("string"), TEXT("Default, Auto, AutoLight, Monochrome, or None"), TEXT("Default"))
             .Optional(TEXT("save"), TEXT("bool"), TEXT("Save imported font assets"), TEXT("true"))
