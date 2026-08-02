@@ -725,7 +725,7 @@ Generic asset lifecycle and package-graph workflows. **20 actions.** The namespa
 | Action | Kind | Contract |
 |--------|------|----------|
 | `import_texture_from_bytes` | write | Decode base64 image bytes into an exact `/Game/...` `UTexture2D`; explicit `fail`, `replace`, or `unique` collision policy and strict texture-role/settings validation. |
-| `import_font_family` | write | Preflight absolute `.ttf` sources and every output package, then create a composite `UFont` plus `UFontFace` assets; suffixing requires `allow_unique_names=true`. |
+| `import_font_family` | write | Preflight 1-64 absolute `.ttf` sources and every output package, limit each source to 64 MiB and the family aggregate to 256 MiB, then create a composite `UFont` plus `UFontFace` assets; suffixing requires `allow_unique_names=true`. |
 | `import_texture_from_file` | write | Import an external image to the exact requested texture path; nested and compatibility top-level `srgb`/`tiling` must be native JSON booleans, and malformed/duplicate settings or unexpected imported packages are errors. |
 | `save_asset` | write | Save one loaded asset package and optionally verify persistence by a non-interactive reload. |
 | `delete_assets` | write | Guarded, non-interactive deletion with dry-run, allowed-root checks, postconditions, and optional source-control preflight. |
