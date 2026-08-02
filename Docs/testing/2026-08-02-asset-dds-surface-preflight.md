@@ -2,10 +2,11 @@
 
 **Date:** 2026-08-02
 **Branch:** `jules/codex/asset/dds-surface-preflight`
-**Fork base:** `kunkunGames/monolith-fork@41329470a1fe07337ca45fc63b2f129371bbc0d6`
+**Verified source head:** `f586dc89310b6143999211c61234b7cd5b9e463d`
+**Fork baseline:** AudioRuntime package fix content through `eac23d1c80819815a5bbb4e4d35047e963e09b09` (merged by PR #19 as `fffae542e07830493d87ebe97055d1e4d76ed02b`)
 **Engine floor:** Unreal Engine 5.7
 **Additional engine:** Unreal Engine 5.8
-**Status:** PENDING VERIFICATION
+**Status:** VERIFIED
 
 ---
 
@@ -20,7 +21,7 @@ UE 5.7 and UE 5.8 expose the same public `UE::DDS::FDDSFile::CreateFromDDSInMemo
 | Contract | Required behavior |
 |---|---|
 | DDS metadata read | Header-only; no mip payload or decoded BGRA allocation |
-| Accepted shape | Dimension 2, depth 1, and exactly one array surface |
+| Accepted shape | UE-valid `Texture2D` resource with exactly one array surface; UE represents a 1D DDS as a height-one `UTexture2D` |
 | Rejected shapes | Texture arrays, cubemaps/cubemap arrays, and volume textures |
 | Failure | `-32602` before `IImageWrapper::SetCompressed`, package creation, or replacement mutation |
 
@@ -28,11 +29,18 @@ UE 5.7 and UE 5.8 expose the same public `UE::DDS::FDDSFile::CreateFromDDSInMemo
 
 | Gate | Expected result | Status |
 |---|---|---|
-| UE 5.7 BuildPlugin | Current branch compiles and links | Pending |
-| UE 5.8 BuildPlugin | Current branch compiles and links | Pending |
-| `MonolithAsset.ImportTextureFromBytes.DdsSurfacePreflight` | A one-surface DDS passes metadata validation; a two-slice DX10 DDS is rejected with explicit evidence and no asset | Pending |
-| Full `MonolithAsset.ImportTextureFromBytes` filter | All byte-ingest regressions pass | Pending |
-| `git diff --check` | No whitespace errors | Pending |
+| UE 5.7 BuildPlugin | Current source head compiles and links | PASS — UAT exit 0 and `BUILD SUCCESSFUL`; Editor 531/531, Development game 5/5, Shipping game 5/5. Package: `D:\P4\MonolithDdsRebasedUE57Package`. |
+| UE 5.8 BuildPlugin | Current source head compiles and links | PASS — UAT exit 0 and `BUILD SUCCESSFUL`; Editor 531/531, Development game 5/5, Shipping game 5/5. Package: `D:\P4\MonolithDdsRebasedUE58Package`. |
+| `MonolithAsset.ImportTextureFromBytes.DdsSurfacePreflight` | A one-surface DDS passes metadata validation; a two-slice DX10 DDS is rejected with explicit evidence and no asset | PASS on UE 5.7 and UE 5.8; each run found 1 test and completed with `Result={Success}`. Reports: `D:\P4\MonolithDdsRebasedUE57AutomationHost\Saved\AutomationReports\DdsSurfacePreflight` and `D:\P4\MonolithDdsRebasedUE58AutomationHost\Saved\AutomationReports\DdsSurfacePreflight`. |
+| Full `MonolithAsset.ImportTextureFromBytes` filter | All byte-ingest regressions pass | PASS on UE 5.7 and UE 5.8: 14/14 tests completed with `Result={Success}` in each engine. Reports: `D:\P4\MonolithDdsRebasedUE57AutomationHost\Saved\AutomationReports\ImportTextureFromBytes` and `D:\P4\MonolithDdsRebasedUE58AutomationHost\Saved\AutomationReports\ImportTextureFromBytes`. |
+| `git diff --check` | No whitespace errors | PASS after verification documentation finalization. |
+
+### 3.1 Editor module artifact identities
+
+| Engine | Artifact | Size | SHA-256 |
+|---|---|---:|---|
+| UE 5.7 | `D:\P4\MonolithDdsRebasedUE57Package\Binaries\Win64\UnrealEditor-MonolithAsset.dll` | 1,635,840 bytes | `FB97E2F43EE2E4D972E732D43FDC3441709C040D1845DB20CAE1524C967132C5` |
+| UE 5.8 | `D:\P4\MonolithDdsRebasedUE58Package\Binaries\Win64\UnrealEditor-MonolithAsset.dll` | 1,543,168 bytes | `DBAA57D870C70C940BEAD3DDFA9B73C4C90681FC5F5CBF3169E8A40EE4788444` |
 
 ## 4. Visual and Discord Evidence
 
@@ -42,4 +50,4 @@ Discord screenshot upload is **N/A**. No `Build\BatchFiles\Script\UploadScreensh
 
 ## 5. Result
 
-Pending current-byte UE 5.7 and UE 5.8 build and automation evidence.
+The DDS surface-shape contract is verified on the supported UE 5.7 floor and the UE 5.8 ceiling. Complex DDS resources fail as invalid parameters before wrapper decode or asset mutation, while the complete byte-ingest regression filter remains green in both engines.
