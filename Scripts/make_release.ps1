@@ -1086,7 +1086,7 @@ $trackedFiles = $allTrackedFiles | Where-Object {
     }
     # Strip internal planning, spec, and documentation folders.
     # These are explicitly excluded from the release ZIP as per AGENTS.md rule 19.
-    if ($keep -and ($path -like ".jules/*" -or $path -like ".github/*" -or $path -like ".claude/*" -or $path -like "CRG/*" -or $path -like "PRD/*" -or $path -like "Docs/plans/*" -or $path -like "Docs/specs/*" -or $path -like "Plans/*" -or $path -like "Docs/research/*" -or $path -like "TrainingMemory/*" -or $path -like ".code-review-graph/*" -or $path -like "Analyzer/*" -or $path -like "Skills/_catalog_dumps/*")) {
+    if ($keep -and ($path -like ".jules/*" -or $path -like ".github/*" -or $path -like ".claude/*" -or $path -like "CRG/*" -or $path -like "PRD/*" -or $path -like "Docs/plans/*" -or $path -like "Docs/specs/*" -or $path -like "Plans/*" -or $path -like "Docs/research/*" -or $path -like "TrainingMemory/*" -or $path -like ".code-review-graph/*" -or $path -like "Analyzer/*" -or $path -like "Logs/*" -or $path -like "Skills/_catalog_dumps/*")) {
         $keep = $false
     }
     # Exclude developer environment cache directories
