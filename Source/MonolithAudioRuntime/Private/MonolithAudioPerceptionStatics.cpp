@@ -2,6 +2,7 @@
 #include "MonolithAudioRuntimeModule.h"
 #include "MonolithSoundPerceptionUserData.h"
 
+#include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
 #include "Sound/SoundAttenuation.h"
