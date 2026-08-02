@@ -24,9 +24,11 @@ Make `Tools/MonolithProxy/build_proxy.bat` truthful and failure-safe: every fail
 | Build output | Compilation wrote into the source directory before copying to `Binaries`. | Compilation writes only into a unique private `%TEMP%` directory. |
 | Existing binary | Direct destination copying could partially overwrite the live binary. | A unique candidate is copied beside the destination, size-checked, then moved over the target as the final publication step. |
 | Cleanup ownership | A random staging collision could enter generic cleanup without proving that this execution created the directory. | Explicit ownership markers restrict cleanup to staging and candidate files created by the current execution. |
-| Regression coverage | No automated native build-script failure test existed. | `Scripts/test_proxy_build.ps1` exercises both entry points, intentional compile failure, byte preservation, publication failure, and a pre-existing staging sentinel. |
+| Staging/output alias | Equal override paths could publish successfully and then delete the published executable during owned staging cleanup. | Canonical absolute staging and output directories are compared before creation; equality fails without creating or deleting either path. |
+| Windows PowerShell | The harness used the .NET Core-only `ProcessStartInfo.Environment` collection despite documenting `powershell -File`. | The harness uses `EnvironmentVariables`, which is supported by Windows PowerShell 5.1 and current PowerShell. |
+| Regression coverage | No automated native build-script failure test existed. | `Scripts/test_proxy_build.ps1` exercises both entry points, intentional compile failure, byte preservation, publication failure, a pre-existing staging sentinel, and an equal staging/output path. |
 
-The optional `MONOLITH_PROXY_SOURCE_FILE`, `MONOLITH_PROXY_OUTPUT_DIR`, and `MONOLITH_PROXY_VSWHERE` inputs make isolated verification explicit without changing the default repository output contract.
+The optional `MONOLITH_PROXY_SOURCE_FILE`, `MONOLITH_PROXY_OUTPUT_DIR`, `MONOLITH_PROXY_STAGING_DIR`, and `MONOLITH_PROXY_VSWHERE` inputs make isolated verification explicit without changing the default repository output contract.
 
 ---
 
@@ -34,9 +36,11 @@ The optional `MONOLITH_PROXY_SOURCE_FILE`, `MONOLITH_PROXY_OUTPUT_DIR`, and `MON
 
 | Gate | Command | Result |
 |------|---------|--------|
-| Native success and failure regression | `powershell -NoProfile -ExecutionPolicy Bypass -File Scripts\test_proxy_build.ps1` | PASS — both `build_proxy.bat` and compatibility `build.bat` produced non-empty optimized executables in isolated outputs; intentional compiler failure returned non-zero and preserved the exact sentinel bytes; a blocked output path returned non-zero; a pre-existing staging directory and its sentinel survived unchanged. No failure printed success. |
+| Native success and failure regression | `powershell -NoProfile -ExecutionPolicy Bypass -File Scripts\test_proxy_build.ps1` | PASS on Windows PowerShell 5.1.26100.8655 and PowerShell 7.5.5 — both entry points built; intentional compiler failure preserved exact sentinel bytes; blocked output and pre-existing staging failures were non-destructive; an equal staging/output path failed without leaving a directory or executable; no failure printed success. |
 | Offline dispatcher parity | `python Scripts/test_proxy_seed_parity.py` | PASS — Python/native seed lists match with 19 unique dispatchers, including `dataflow_query`. |
 | Patch hygiene | `git diff --check` | PASS. |
+
+The accepted review-hardening runs used `Tools\MonolithProxy\build_proxy.bat` SHA-256 `7CBF60098AB26926FAA553A3D37B7193D42ED6809F4619436C8BDBD8F284AC5F` and `Scripts\test_proxy_build.ps1` SHA-256 `0E7DEFC411B3F6F2BE8742EFCA327C68FE41D9D2332BBEF5C602D012AA7826EA`.
 
 The regression harness creates a GUID-named directory under the system temporary directory, passes explicit source/output paths to the batch script, and validates the temporary root before recursively removing it. It does not write `Binaries/monolith_proxy.exe` in the repository.
 

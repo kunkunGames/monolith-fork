@@ -30,6 +30,10 @@ set "STAGE_DIR=%TEMP%\MonolithProxyBuild-%RANDOM%-%RANDOM%"
 
 :stage_dir_selected
 for %%I in ("%STAGE_DIR%") do set "STAGE_DIR=%%~fI"
+if /I "%STAGE_DIR%"=="%OUTPUT_DIR%" (
+    echo FAILED: staging directory must differ from output directory: "%STAGE_DIR%"
+    goto :cleanup
+)
 set "STAGE_EXE=%STAGE_DIR%\monolith_proxy.exe"
 set "STAGE_OBJ=%STAGE_DIR%\monolith_proxy.obj"
 

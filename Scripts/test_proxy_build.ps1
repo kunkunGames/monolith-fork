@@ -27,13 +27,13 @@ function Invoke-ProxyBuild {
     $startInfo.RedirectStandardError = $true
     $startInfo.WorkingDirectory = Split-Path -Parent $EntryPoint
     $startInfo.Arguments = '/d /s /c ""{0}""' -f $EntryPoint.Replace('"', '""')
-    $startInfo.Environment['MONOLITH_PROXY_SOURCE_FILE'] = $SourceFile
-    $startInfo.Environment['MONOLITH_PROXY_OUTPUT_DIR'] = $OutputDirectory
+    $startInfo.EnvironmentVariables['MONOLITH_PROXY_SOURCE_FILE'] = $SourceFile
+    $startInfo.EnvironmentVariables['MONOLITH_PROXY_OUTPUT_DIR'] = $OutputDirectory
     if ($StagingDirectory) {
-        $startInfo.Environment['MONOLITH_PROXY_STAGING_DIR'] = $StagingDirectory
+        $startInfo.EnvironmentVariables['MONOLITH_PROXY_STAGING_DIR'] = $StagingDirectory
     }
     else {
-        [void] $startInfo.Environment.Remove('MONOLITH_PROXY_STAGING_DIR')
+        [void] $startInfo.EnvironmentVariables.Remove('MONOLITH_PROXY_STAGING_DIR')
     }
 
     $process = [Diagnostics.Process]::new()
@@ -127,7 +127,17 @@ try {
     Assert-Condition -Condition ($collisionResult.StdOut -notmatch 'SUCCESS:') `
         -Message 'Staging collision printed a success message'
 
-    Write-Host 'PASS: both entry points build, failures preserve prior outputs, and cleanup removes only owned staging files.'
+    $sharedOutputAndStage = Join-Path $testRoot 'shared-output-and-stage'
+    $sharedPathResult = Invoke-ProxyBuild -SourceFile $proxySource -OutputDirectory $sharedOutputAndStage `
+        -EntryPoint $buildScript -StagingDirectory $sharedOutputAndStage
+    Assert-Condition -Condition ($sharedPathResult.ExitCode -ne 0) `
+        -Message 'Equal output and staging directories incorrectly returned exit code 0'
+    Assert-Condition -Condition (-not (Test-Path -LiteralPath $sharedOutputAndStage)) `
+        -Message 'Equal output and staging directories left an owned directory or executable behind'
+    Assert-Condition -Condition ($sharedPathResult.StdOut -notmatch 'SUCCESS:') `
+        -Message 'Equal output and staging directories printed a success message'
+
+    Write-Host 'PASS: both entry points build, failures preserve prior outputs, and staging/output ownership boundaries are enforced.'
 }
 finally {
     $resolvedTestRoot = [IO.Path]::GetFullPath($testRoot)
