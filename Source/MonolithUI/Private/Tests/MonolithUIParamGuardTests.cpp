@@ -431,3 +431,69 @@ bool FMonolithUIParamGuardSetSlotGridNumericFields::RunTest(const FString& Param
 
     return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithUIParamGuardSetSlotMissingNumericField, "Monolith.ParamGuard.MonolithUI.SetSlotMissingNumericField", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIParamGuardSetSlotMissingNumericField::RunTest(const FString& Parameters)
+{
+    const FString AssetPath = TEXT("/Game/Tests/Monolith/UI/WBP_SetSlotMissingNumericField");
+    UWidgetBlueprint* WBP = nullptr;
+    UWidget* Child = nullptr;
+    FString Error;
+    if (!MonolithUI::TestUtils::CreateOrReuseTestWidgetBlueprint(
+            AssetPath,
+            NAME_None,
+            UImage::StaticClass(),
+            UCanvasPanel::StaticClass(),
+            TEXT("CanvasChild"),
+            WBP,
+            Child,
+            Error))
+    {
+        AddError(Error);
+        return false;
+    }
+
+    TSharedPtr<FJsonObject> BadOffsetsParams = MakeShared<FJsonObject>();
+    BadOffsetsParams->SetStringField(TEXT("asset_path"), AssetPath);
+    BadOffsetsParams->SetStringField(TEXT("widget_name"), TEXT("CanvasChild"));
+    TSharedPtr<FJsonObject> OffsetsObj = MakeShared<FJsonObject>();
+    OffsetsObj->SetStringField(TEXT("left"), TEXT("10px"));
+    BadOffsetsParams->SetObjectField(TEXT("offsets"), OffsetsObj);
+
+    const FMonolithActionResult Result = FMonolithUISlotActions::HandleSetSlotProperty(BadOffsetsParams);
+
+    TestFalse(TEXT("set_slot_property correctly rejects malformed string for offsets 'left'"), Result.bSuccess);
+    if (!Result.bSuccess)
+    {
+        TestTrue(TEXT("error message indicates offsets.left must be a number"), Result.ErrorMessage.Contains(TEXT("offsets.left must be a number")));
+    }
+
+    TSharedPtr<FJsonObject> BadZOrderParams = MakeShared<FJsonObject>();
+    BadZOrderParams->SetStringField(TEXT("asset_path"), AssetPath);
+    BadZOrderParams->SetStringField(TEXT("widget_name"), TEXT("CanvasChild"));
+    BadZOrderParams->SetStringField(TEXT("z_order"), TEXT("10px"));
+
+    const FMonolithActionResult ZOrderResult = FMonolithUISlotActions::HandleSetSlotProperty(BadZOrderParams);
+
+    TestFalse(TEXT("set_slot_property correctly rejects malformed string for z_order"), ZOrderResult.bSuccess);
+    if (!ZOrderResult.bSuccess)
+    {
+        TestTrue(TEXT("error message indicates z_order must be a number"), ZOrderResult.ErrorMessage.Contains(TEXT("z_order must be a number")));
+    }
+
+    TSharedPtr<FJsonObject> BadAutoSizeParams = MakeShared<FJsonObject>();
+    BadAutoSizeParams->SetStringField(TEXT("asset_path"), AssetPath);
+    BadAutoSizeParams->SetStringField(TEXT("widget_name"), TEXT("CanvasChild"));
+    BadAutoSizeParams->SetStringField(TEXT("auto_size"), TEXT("yes"));
+
+    const FMonolithActionResult AutoSizeResult = FMonolithUISlotActions::HandleSetSlotProperty(BadAutoSizeParams);
+
+    TestFalse(TEXT("set_slot_property correctly rejects malformed string for auto_size"), AutoSizeResult.bSuccess);
+    if (!AutoSizeResult.bSuccess)
+    {
+        TestTrue(TEXT("error message indicates auto_size must be a boolean"), AutoSizeResult.ErrorMessage.Contains(TEXT("auto_size must be a boolean")));
+    }
+
+    return true;
+}
