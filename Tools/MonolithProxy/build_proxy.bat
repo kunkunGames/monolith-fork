@@ -5,6 +5,7 @@ set "EXIT_CODE=1"
 set "PUSHED_STAGE_DIR="
 set "STAGE_DIR_OWNED="
 set "PUBLISH_CANDIDATE="
+set "PUBLISH_CANDIDATE_NAME="
 set "PUBLISH_CANDIDATE_OWNED="
 set "OUTPUT_DIR_WAS_DIRECTORY="
 set "SCRIPT_DIR=%~dp0"
@@ -21,6 +22,11 @@ if not defined OUTPUT_DIR set "OUTPUT_DIR=%SCRIPT_DIR%..\..\Binaries"
 for %%I in ("%OUTPUT_DIR%") do set "OUTPUT_DIR=%%~fI"
 if exist "%OUTPUT_DIR%\." set "OUTPUT_DIR_WAS_DIRECTORY=1"
 set "TARGET_EXE=%OUTPUT_DIR%\monolith_proxy.exe"
+call :target_path_is_directory
+if not errorlevel 1 (
+    echo FAILED: target executable path is an existing directory: "%TARGET_EXE%"
+    goto :cleanup
+)
 
 set "STAGE_DIR=%MONOLITH_PROXY_STAGING_DIR%"
 if defined STAGE_DIR goto :stage_dir_selected
@@ -36,6 +42,8 @@ if /I "%STAGE_DIR%"=="%OUTPUT_DIR%" (
     echo FAILED: staging directory must differ from output directory: "%STAGE_DIR%"
     goto :cleanup
 )
+call :validate_output_not_nested_under_staging
+if errorlevel 1 goto :cleanup
 set "STAGE_EXE=%STAGE_DIR%\monolith_proxy.exe"
 set "STAGE_OBJ=%STAGE_DIR%\monolith_proxy.obj"
 
@@ -112,8 +120,23 @@ if not exist "%OUTPUT_DIR%\." (
     echo FAILED: output path is not a directory: "%OUTPUT_DIR%"
     goto :cleanup
 )
+call :target_path_is_directory
+if not errorlevel 1 (
+    echo FAILED: target executable path is an existing directory: "%TARGET_EXE%"
+    goto :cleanup
+)
 
-set "PUBLISH_CANDIDATE=%OUTPUT_DIR%\monolith_proxy.exe.new-%RANDOM%-%RANDOM%"
+rem The compiler owns files directly in STAGE_DIR and never creates a child
+rem directory. If making OUTPUT_DIR created any directory below STAGE_DIR,
+rem the paths are physically aliased through a junction or another reparse
+rem point. Reject before a publication candidate is created.
+for /D %%I in ("%STAGE_DIR%\*") do (
+    echo FAILED: output directory aliases a path nested under staging: "%OUTPUT_DIR%"
+    goto :cleanup
+)
+
+set "PUBLISH_CANDIDATE_NAME=monolith_proxy.exe.new-%RANDOM%-%RANDOM%"
+set "PUBLISH_CANDIDATE=%OUTPUT_DIR%\%PUBLISH_CANDIDATE_NAME%"
 if exist "%PUBLISH_CANDIDATE%" (
     echo FAILED: publish candidate collision: "%PUBLISH_CANDIDATE%"
     goto :cleanup
@@ -142,8 +165,14 @@ if errorlevel 1 (
     echo FAILED: could not replace "%TARGET_EXE%"; any existing binary was preserved
     goto :cleanup
 )
-set "PUBLISH_CANDIDATE="
-set "PUBLISH_CANDIDATE_OWNED="
+call :target_path_is_directory
+if not errorlevel 1 (
+    rem move treats an existing directory as a destination container. Retain
+    rem ownership of the candidate at its actual moved path for cleanup.
+    set "PUBLISH_CANDIDATE=%TARGET_EXE%\%PUBLISH_CANDIDATE_NAME%"
+    echo FAILED: target executable path became a directory during publication: "%TARGET_EXE%"
+    goto :cleanup
+)
 if not exist "%TARGET_EXE%" (
     echo FAILED: publish returned success but "%TARGET_EXE%" does not exist
     goto :cleanup
@@ -154,10 +183,32 @@ if not "%STAGE_SIZE%"=="%TARGET_SIZE%" (
     echo FAILED: published executable size does not match the compiled executable
     goto :cleanup
 )
+set "PUBLISH_CANDIDATE="
+set "PUBLISH_CANDIDATE_NAME="
+set "PUBLISH_CANDIDATE_OWNED="
 
 echo SUCCESS: Built and published "%TARGET_EXE%" ^(%TARGET_SIZE% bytes^)
 set "EXIT_CODE=0"
 goto :cleanup
+
+:target_path_is_directory
+set "TARGET_PATH_ATTRIBUTES="
+for %%I in ("%TARGET_EXE%") do set "TARGET_PATH_ATTRIBUTES=%%~aI"
+if not defined TARGET_PATH_ATTRIBUTES exit /b 1
+if /I "%TARGET_PATH_ATTRIBUTES:~0,1%"=="d" exit /b 0
+exit /b 1
+
+:validate_output_not_nested_under_staging
+set "OUTPUT_ANCESTOR_CURSOR=%OUTPUT_DIR%"
+:validate_output_ancestor_loop
+for %%I in ("%OUTPUT_ANCESTOR_CURSOR%\..") do set "OUTPUT_ANCESTOR_PARENT=%%~fI"
+if /I "%OUTPUT_ANCESTOR_PARENT%"=="%STAGE_DIR%" (
+    echo FAILED: output directory must not be nested under staging directory: "%OUTPUT_DIR%"
+    exit /b 1
+)
+if /I "%OUTPUT_ANCESTOR_PARENT%"=="%OUTPUT_ANCESTOR_CURSOR%" exit /b 0
+set "OUTPUT_ANCESTOR_CURSOR=%OUTPUT_ANCESTOR_PARENT%"
+goto :validate_output_ancestor_loop
 
 :configure_toolchain
 if not defined MONOLITH_PROXY_VSWHERE goto :find_vswhere

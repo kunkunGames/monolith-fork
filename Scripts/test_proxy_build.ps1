@@ -137,6 +137,38 @@ try {
     Assert-Condition -Condition ($sharedPathResult.StdOut -notmatch 'SUCCESS:') `
         -Message 'Equal output and staging directories printed a success message'
 
+    $nestedStage = Join-Path $testRoot 'nested-stage'
+    $nestedOutput = Join-Path $nestedStage 'child-output'
+    $nestedPathResult = Invoke-ProxyBuild -SourceFile $proxySource -OutputDirectory $nestedOutput `
+        -EntryPoint $buildScript -StagingDirectory $nestedStage
+    Assert-Condition -Condition ($nestedPathResult.ExitCode -ne 0) `
+        -Message 'Output nested under staging incorrectly returned exit code 0'
+    Assert-Condition -Condition (-not (Test-Path -LiteralPath $nestedStage)) `
+        -Message 'Nested output/staging rejection created an owned path before failing'
+    Assert-Condition -Condition ($nestedPathResult.StdOut -match 'must not be nested under staging') `
+        -Message 'Nested output/staging rejection did not report the ownership conflict'
+    Assert-Condition -Condition ($nestedPathResult.StdOut -notmatch 'SUCCESS:') `
+        -Message 'Output nested under staging printed a success message'
+
+    $directoryTargetOutput = Join-Path $testRoot 'directory-target-output'
+    $directoryTarget = Join-Path $directoryTargetOutput 'monolith_proxy.exe'
+    New-Item -ItemType Directory -Path $directoryTarget | Out-Null
+    $directoryTargetSentinel = Join-Path $directoryTarget 'owned-by-another-process.txt'
+    [IO.File]::WriteAllText($directoryTargetSentinel, 'preserve target directory')
+    $directoryTargetResult = Invoke-ProxyBuild -SourceFile $proxySource -OutputDirectory $directoryTargetOutput `
+        -EntryPoint $buildScript
+    Assert-Condition -Condition ($directoryTargetResult.ExitCode -ne 0) `
+        -Message 'Directory at the target executable path incorrectly returned exit code 0'
+    Assert-Condition -Condition (Test-Path -LiteralPath $directoryTargetSentinel -PathType Leaf) `
+        -Message 'Target-directory rejection changed or removed an unowned sentinel'
+    Assert-Condition -Condition (-not (Get-ChildItem -LiteralPath $directoryTargetOutput -Recurse -File |
+            Where-Object Name -Like 'monolith_proxy.exe.new-*')) `
+        -Message 'Target-directory rejection left a publication candidate behind'
+    Assert-Condition -Condition ($directoryTargetResult.StdOut -match 'target executable path is an existing directory') `
+        -Message 'Target-directory rejection did not report the path-shape conflict'
+    Assert-Condition -Condition ($directoryTargetResult.StdOut -notmatch 'SUCCESS:') `
+        -Message 'Directory at the target executable path printed a success message'
+
     $aliasTargetParent = Join-Path $testRoot 'alias-target-parent'
     $aliasJunctionParent = Join-Path $testRoot 'alias-junction-parent'
     New-Item -ItemType Directory -Path $aliasTargetParent | Out-Null
@@ -157,7 +189,7 @@ try {
     Assert-Condition -Condition ($aliasedPathResult.StdOut -notmatch 'SUCCESS:') `
         -Message 'Junction-aliased output and staging directories printed a success message'
 
-    Write-Host 'PASS: both entry points build, failures preserve prior outputs, and textual or aliased staging/output collisions are rejected.'
+    Write-Host 'PASS: both entry points build, failures preserve prior outputs, and target-directory or nested/aliased staging collisions are rejected.'
 }
 finally {
     $resolvedTestRoot = [IO.Path]::GetFullPath($testRoot)
