@@ -15747,8 +15747,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleScriptInputs(const
 	if (ScriptPath.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Missing required param: script_path"));
 
-	UNiagaraScript* Script = LoadObject<UNiagaraScript>(nullptr, *ScriptPath);
-	if (!Script)
+	UNiagaraScript* Script = nullptr;
+	FString ResolvedPath, LoadError;
+	if (!FMonolithAssetUtils::TryLoadAssetByPath<UNiagaraScript>(ScriptPath, Script, ResolvedPath, LoadError))
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load script '%s'"), *ScriptPath));
 
 	// Get the latest source and cast to UNiagaraScriptSource to access the NodeGraph
