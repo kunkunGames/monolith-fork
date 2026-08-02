@@ -201,13 +201,13 @@ def check_uplugin_and_modules(ctx: CheckContext) -> None:
             ctx.config_path,
         )
     else:
-        forbidden_optional_names = {str(name) for name in forbidden_optional}
+        forbidden_optional_names = {str(name).casefold() for name in forbidden_optional}
         for reference in plugin_references:
             if not isinstance(reference, dict):
                 continue
             name = str(reference.get("Name", ""))
             if (
-                name in forbidden_optional_names
+                name.casefold() in forbidden_optional_names
                 and reference.get("Enabled") is True
                 and reference.get("Optional") is True
             ):
@@ -1976,7 +1976,7 @@ def run_selftest() -> int:
                         "Modules": [{"Name": "Foo", "Type": "Editor"}],
                         "Plugins": [
                             {"Name": "GameplayAbilities", "Enabled": True},
-                            {"Name": "Chooser", "Enabled": True, "Optional": True},
+                            {"Name": "chooser", "Enabled": True, "Optional": True},
                         ],
                     }
                 ),
