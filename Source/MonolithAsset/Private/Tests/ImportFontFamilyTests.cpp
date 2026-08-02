@@ -11,12 +11,14 @@
 // JSON / registry
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "MonolithAssetFontIngestInternal.h"
 #include "MonolithToolRegistry.h"
 
 // Font verification
 #include "Engine/Font.h"
 #include "Engine/FontFace.h"
 #include "Fonts/CompositeFont.h"
+#include "Serialization/Archive.h"
 #include "UObject/Package.h"
 #include "UObject/UObjectGlobals.h"
 
@@ -188,6 +190,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMonolithAssetImportFontFamilyInvalidParamsTest::RunTest(const FString& Parameters)
 {
+    using namespace MonolithAsset::FontIngestInternal;
+
     {
         TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
         const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
@@ -225,6 +229,114 @@ bool FMonolithAssetImportFontFamilyInvalidParamsTest::RunTest(const FString& Par
             TEXT("asset"), TEXT("import_font_family"), P);
         TestFalse(TEXT("empty faces -> failure"), R.bSuccess);
         TestEqual(TEXT("empty faces -> -32602"), R.ErrorCode, -32602);
+    }
+
+    {
+        TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+        P->SetStringField(TEXT("destination"), TEXT("/Game/Foo/Bar"));
+        P->SetStringField(TEXT("family_name"), TEXT("Fam"));
+        TArray<TSharedPtr<FJsonValue>> Faces;
+        for (int32 Index = 0; Index < MaxFontFacesPerFamily + 1; ++Index)
+        {
+            TSharedPtr<FJsonObject> Face = MakeShared<FJsonObject>();
+            Face->SetStringField(TEXT("typeface"), FString::Printf(TEXT("Face%d"), Index));
+            Face->SetStringField(TEXT("source_path"), TEXT("C:/nonexistent.ttf"));
+            Faces.Add(MakeShared<FJsonValueObject>(Face));
+        }
+        P->SetArrayField(TEXT("faces"), Faces);
+
+        const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("asset"), TEXT("import_font_family"), P);
+        TestFalse(TEXT("too many faces -> failure"), R.bSuccess);
+        TestEqual(TEXT("too many faces -> -32602"), R.ErrorCode, -32602);
+        TestTrue(TEXT("too many faces explains the cap"), R.ErrorMessage.Contains(TEXT("at most 64")));
+    }
+
+    {
+        int64 TotalBytes = 0;
+        FString Error;
+        TestTrue(
+            TEXT("per-face boundary is accepted"),
+            AccumulateFontSourceSize(MaxFontFaceSourceBytes, TotalBytes, Error));
+        TestEqual(TEXT("accepted boundary contributes exact bytes"), TotalBytes, MaxFontFaceSourceBytes);
+
+        Error.Reset();
+        int64 OversizedTotal = 0;
+        TestFalse(
+            TEXT("per-face boundary plus one is rejected"),
+            AccumulateFontSourceSize(MaxFontFaceSourceBytes + 1, OversizedTotal, Error));
+        TestEqual(TEXT("rejected source does not change aggregate bytes"), OversizedTotal, int64(0));
+        TestTrue(TEXT("per-face rejection reports the limit"), Error.Contains(TEXT("per-face limit")));
+
+        Error.Reset();
+        int64 AggregateTotal = MaxFontFamilySourceBytes - MaxFontFaceSourceBytes + 1;
+        const int64 AggregateBefore = AggregateTotal;
+        TestFalse(
+            TEXT("aggregate boundary plus one is rejected"),
+            AccumulateFontSourceSize(MaxFontFaceSourceBytes, AggregateTotal, Error));
+        TestEqual(TEXT("aggregate rejection preserves the running total"), AggregateTotal, AggregateBefore);
+        TestTrue(TEXT("aggregate rejection reports the limit"), Error.Contains(TEXT("aggregate limit")));
+    }
+
+    {
+        const FString OversizedDirectory = FPaths::ConvertRelativePathToFull(
+            FPaths::ProjectSavedDir() / TEXT("Automation/MonolithAsset"));
+        IFileManager::Get().MakeDirectory(*OversizedDirectory, true);
+        const FString OversizedPath = OversizedDirectory /
+            FString::Printf(TEXT("OversizedFont_%s.ttf"), *FGuid::NewGuid().ToString(EGuidFormats::Short));
+
+        bool bFixtureCreated = false;
+        {
+            TUniquePtr<FArchive> Writer(IFileManager::Get().CreateFileWriter(*OversizedPath));
+            if (Writer)
+            {
+                Writer->Seek(MaxFontFaceSourceBytes);
+                uint8 LastByte = 0;
+                Writer->Serialize(&LastByte, 1);
+                bFixtureCreated = !Writer->IsError() && Writer->Close();
+            }
+        }
+        TestTrue(TEXT("oversized sparse font fixture created"), bFixtureCreated);
+
+        if (bFixtureCreated)
+        {
+            const FString PackageSuffix = FGuid::NewGuid().ToString(EGuidFormats::Short);
+            const FString Destination =
+                FString::Printf(TEXT("/Game/Tests/Monolith/Asset/Fonts/Oversized_%s"), *PackageSuffix);
+            const FString FamilyName = FString::Printf(TEXT("Oversized_%s"), *PackageSuffix);
+
+            TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+            P->SetStringField(TEXT("destination"), Destination);
+            P->SetStringField(TEXT("family_name"), FamilyName);
+            TArray<TSharedPtr<FJsonValue>> Faces;
+            TSharedPtr<FJsonObject> Face = MakeShared<FJsonObject>();
+            Face->SetStringField(TEXT("typeface"), TEXT("Regular"));
+            Face->SetStringField(TEXT("source_path"), OversizedPath);
+            Faces.Add(MakeShared<FJsonValueObject>(Face));
+            P->SetArrayField(TEXT("faces"), Faces);
+            P->SetBoolField(TEXT("save"), false);
+
+            const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
+                TEXT("asset"), TEXT("import_font_family"), P);
+            TestFalse(TEXT("oversized source -> failure"), R.bSuccess);
+            TestEqual(TEXT("oversized source -> -32602"), R.ErrorCode, -32602);
+            TestTrue(
+                *FString::Printf(
+                    TEXT("oversized source explains the cap (actual error: %s)"),
+                    *R.ErrorMessage),
+                R.ErrorMessage.Contains(TEXT("per-face limit")));
+            TestNull(
+                TEXT("oversized source creates no family package"),
+                FindPackage(nullptr, *(Destination / FamilyName)));
+            TestNull(
+                TEXT("oversized source creates no face package"),
+                FindPackage(nullptr, *(Destination / TEXT("F_Regular"))));
+        }
+
+        TestTrue(
+            TEXT("oversized sparse font fixture removed"),
+            !IFileManager::Get().FileExists(*OversizedPath) ||
+                IFileManager::Get().Delete(*OversizedPath, false, true));
     }
 
     {

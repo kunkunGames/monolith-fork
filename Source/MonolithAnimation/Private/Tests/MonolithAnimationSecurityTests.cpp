@@ -515,7 +515,17 @@ bool FMonolithValidateChooserParamGuardTest::RunTest(const FString& Parameters)
 		Params->SetNumberField(TEXT("expected_context_class"), 123);
 		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("chooser"), TEXT("validate_chooser"), Params);
 		TestFalse(TEXT("validate_chooser with malformed expected_context_class should return Error"), Result.bSuccess);
-		TestTrue(TEXT("Error message should complain about invalid type for parameter 'expected_context_class'"), Result.ErrorMessage.Contains(TEXT("Invalid type for parameter 'expected_context_class'")));
+		TestEqual(TEXT("expected_context_class schema rejection uses InvalidParams"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+		FString FailureCause;
+		TestTrue(
+			TEXT("expected_context_class schema rejection reports invalid_param"),
+			Result.ErrorData.IsValid()
+				&& Result.ErrorData->TryGetStringField(TEXT("failure_cause"), FailureCause)
+				&& FailureCause == TEXT("invalid_param"));
+		TestTrue(
+			TEXT("expected_context_class schema rejection names the field and expected type"),
+			Result.ErrorMessage.Contains(TEXT("expected_context_class"))
+				&& Result.ErrorMessage.Contains(TEXT("expected string")));
 	}
 
 	// test expected_result_type
@@ -525,7 +535,17 @@ bool FMonolithValidateChooserParamGuardTest::RunTest(const FString& Parameters)
 		Params->SetNumberField(TEXT("expected_result_type"), 123);
 		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("chooser"), TEXT("validate_chooser"), Params);
 		TestFalse(TEXT("validate_chooser with malformed expected_result_type should return Error"), Result.bSuccess);
-		TestTrue(TEXT("Error message should complain about invalid type for parameter 'expected_result_type'"), Result.ErrorMessage.Contains(TEXT("Invalid type for parameter 'expected_result_type'")));
+		TestEqual(TEXT("expected_result_type schema rejection uses InvalidParams"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+		FString FailureCause;
+		TestTrue(
+			TEXT("expected_result_type schema rejection reports invalid_param"),
+			Result.ErrorData.IsValid()
+				&& Result.ErrorData->TryGetStringField(TEXT("failure_cause"), FailureCause)
+				&& FailureCause == TEXT("invalid_param"));
+		TestTrue(
+			TEXT("expected_result_type schema rejection names the field and expected type"),
+			Result.ErrorMessage.Contains(TEXT("expected_result_type"))
+				&& Result.ErrorMessage.Contains(TEXT("expected string")));
 	}
 
 	return true;

@@ -52,7 +52,7 @@ See [SPEC_CORE.md §11 Recent Fixes](../SPEC_CORE.md#recent-fixes-phase-j--shipp
 
 > **Runtime actions (Inspect category) require PIE.** These actions query live game state and return errors if called outside a Play-In-Editor session.
 >
-> **GBA conditional support:** The `WITH_GBA` define is set automatically by the module's `Build.cs` when GameplayAbilities is found. Projects without GAS get zero compile overhead — the entire module compiles to an empty stub.
+> **GBA conditional support:** GameplayAbilities is a required engine-plugin dependency because the module's core action surface directly links GAS modules. The module's `Build.cs` sets `WITH_GBA` only when the optional Blueprint Attributes plugin is enabled; without it, Blueprint AttributeSet creation is omitted while the core GAS actions still compile and register.
 >
 > **UI Binding cooked-build caveat.** `UMonolithGASAttributeBindingClassExtension` is an editor-only class — content WBPs that reference it will fail to apply bindings in cooked Steam builds. See [COOKED_BUILD_TODO.md](../COOKED_BUILD_TODO.md) for the resolution path (Option A/B/C deferred to pre-Steam-launch checkpoint).
 >

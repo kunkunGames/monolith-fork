@@ -1,5 +1,13 @@
 {
   "plugin_descriptor": "auto",
+  "uplugin": {
+    "required_plugin_references": [
+      "GameplayAbilities"
+    ],
+    "forbidden_optional_plugin_references": [
+      "Chooser"
+    ]
+  },
   "source_dir": "Source",
   "severity": {
     "line_endings": "advisory",
