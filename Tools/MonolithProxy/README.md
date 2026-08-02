@@ -45,7 +45,9 @@ New public namespaces must be added to the native and Python seed lists together
 
 ## Native Proxy Build
 
-Run `build_proxy.bat` from `Tools\MonolithProxy`. The script uses `cl.exe` from the active developer environment when available; otherwise it locates the latest installed Visual C++ x64 toolchain through `vswhere`. A missing compiler, compile failure, output-directory failure, or binary-copy failure returns a non-zero exit code.
+Run `build_proxy.bat` from `Tools\MonolithProxy`. The script uses `cl.exe` from the active developer environment when available; otherwise it locates the latest installed Visual C++ x64 toolchain through `vswhere`. It compiles in a private `%TEMP%` directory, copies the completed executable to a unique candidate beside the destination, verifies the byte count, and only then replaces `Binaries\monolith_proxy.exe`. A missing compiler, compile failure, output-directory failure, candidate-copy failure, or replacement failure returns a non-zero exit code without printing success; failures before replacement preserve any existing proxy binary.
+
+`MONOLITH_PROXY_SOURCE_FILE`, `MONOLITH_PROXY_OUTPUT_DIR`, and `MONOLITH_PROXY_STAGING_DIR` may point at alternate source, output, and not-yet-existing staging paths for isolated verification. The build refuses to reuse or clean a pre-existing staging directory. `MONOLITH_PROXY_VSWHERE` may point at an explicit `vswhere.exe` when the compiler is not already configured. Run `powershell -NoProfile -ExecutionPolicy Bypass -File Scripts\test_proxy_build.ps1` to exercise real optimized builds through both entry points, compile-failure preservation, owned-cleanup boundaries, and publish-failure signaling without writing into the repository's `Binaries` directory.
 
 ## Call Log
 
