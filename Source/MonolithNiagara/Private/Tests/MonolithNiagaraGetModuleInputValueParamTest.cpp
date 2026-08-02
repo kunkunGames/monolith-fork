@@ -6,6 +6,17 @@
 #include "Serialization/JsonReader.h"
 #include "Dom/JsonObject.h"
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithNiagaraParamGuardGetParameterTypeTest, "Monolith.ParamGuard.Niagara.GetParameterType", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithNiagaraParamGuardGetParameterTypeTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetNumberField(TEXT("type"), 123);
+	FMonolithActionResult Result = FMonolithNiagaraActions::HandleGetParameterType(Params);
+	TestTrue(TEXT("GetParameterType rejects non-string type"), !Result.bSuccess);
+	TestTrue(TEXT("GetParameterType returns correct error"), Result.ErrorMessage.Contains(TEXT("Parameter 'type' must be a string")));
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithNiagaraGetModuleInputValueParamTest, "Monolith.ParamGuard.Niagara.GetModuleInputValue", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithNiagaraGetModuleInputValueParamTest::RunTest(const FString& Parameters)

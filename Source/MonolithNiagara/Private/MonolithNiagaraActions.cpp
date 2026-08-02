@@ -6431,7 +6431,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetUserParameters(const TSh
 FMonolithActionResult FMonolithNiagaraActions::HandleGetParameterValue(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString ParamName = Params->GetStringField(TEXT("parameter"));
+	FString ParamName = FString();
+	if (Params->HasField(TEXT("parameter")) && !Params->TryGetStringField(TEXT("parameter"), ParamName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'parameter' must be a string"));
+	}
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -6459,7 +6463,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetParameterValue(const TSh
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetParameterType(const TSharedPtr<FJsonObject>& Params)
 {
-	FString TypeName = Params->GetStringField(TEXT("type"));
+	FString TypeName = FString();
+	if (Params->HasField(TEXT("type")) && !Params->TryGetStringField(TEXT("type"), TypeName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'type' must be a string"));
+	}
 	FNiagaraTypeDefinition TD = ResolveNiagaraType(TypeName);
 
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
@@ -6477,7 +6485,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetParameterType(const TSha
 FMonolithActionResult FMonolithNiagaraActions::HandleTraceParameterBinding(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString ParamName = Params->GetStringField(TEXT("parameter"));
+	FString ParamName = FString();
+	if (Params->HasField(TEXT("parameter")) && !Params->TryGetStringField(TEXT("parameter"), ParamName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'parameter' must be a string"));
+	}
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -6817,7 +6829,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddUserParameter(const TSha
 FMonolithActionResult FMonolithNiagaraActions::HandleRemoveUserParameter(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString ParamName = Params->GetStringField(TEXT("name"));
+	FString ParamName = FString();
+	if (Params->HasField(TEXT("name")) && !Params->TryGetStringField(TEXT("name"), ParamName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'name' must be a string"));
+	}
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
