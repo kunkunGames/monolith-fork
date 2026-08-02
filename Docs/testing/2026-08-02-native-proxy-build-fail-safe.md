@@ -25,8 +25,9 @@ Make `Tools/MonolithProxy/build_proxy.bat` truthful and failure-safe: every fail
 | Existing binary | Direct destination copying could partially overwrite the live binary. | A unique candidate is copied beside the destination, size-checked, then moved over the target as the final publication step. |
 | Cleanup ownership | A random staging collision could enter generic cleanup without proving that this execution created the directory. | Explicit ownership markers restrict cleanup to staging and candidate files created by the current execution. |
 | Staging/output alias | Equal override paths could publish successfully and then delete the published executable during owned staging cleanup. | Canonical absolute staging and output directories are compared before creation; equality fails without creating or deleting either path. |
+| Filesystem alias | `%~fI` canonicalization does not resolve junction or 8.3 aliases, so different text could still name the same not-yet-existing child directory. | The script records whether the output directory existed before staging creation. If creating the owned staging directory also makes a previously absent output directory appear, it fails before compilation and removes only the owned staging directory. |
 | Windows PowerShell | The harness used the .NET Core-only `ProcessStartInfo.Environment` collection despite documenting `powershell -File`. | The harness uses `EnvironmentVariables`, which is supported by Windows PowerShell 5.1 and current PowerShell. |
-| Regression coverage | No automated native build-script failure test existed. | `Scripts/test_proxy_build.ps1` exercises both entry points, intentional compile failure, byte preservation, publication failure, a pre-existing staging sentinel, and an equal staging/output path. |
+| Regression coverage | No automated native build-script failure test existed. | `Scripts/test_proxy_build.ps1` exercises both entry points, intentional compile failure, byte preservation, publication failure, a pre-existing staging sentinel, an equal staging/output path, and a real directory junction whose aliased child does not exist before the run. |
 
 The optional `MONOLITH_PROXY_SOURCE_FILE`, `MONOLITH_PROXY_OUTPUT_DIR`, `MONOLITH_PROXY_STAGING_DIR`, and `MONOLITH_PROXY_VSWHERE` inputs make isolated verification explicit without changing the default repository output contract.
 
@@ -36,11 +37,18 @@ The optional `MONOLITH_PROXY_SOURCE_FILE`, `MONOLITH_PROXY_OUTPUT_DIR`, `MONOLIT
 
 | Gate | Command | Result |
 |------|---------|--------|
-| Native success and failure regression | `powershell -NoProfile -ExecutionPolicy Bypass -File Scripts\test_proxy_build.ps1` | PASS on Windows PowerShell 5.1.26100.8655 and PowerShell 7.5.5 — both entry points built; intentional compiler failure preserved exact sentinel bytes; blocked output and pre-existing staging failures were non-destructive; an equal staging/output path failed without leaving a directory or executable; no failure printed success. |
+| Native success and failure regression | `powershell -NoProfile -ExecutionPolicy Bypass -File Scripts\test_proxy_build.ps1` | PASS on Windows PowerShell 5.1.26100.8655 and PowerShell 7.5.5 — both entry points built; intentional compiler failure preserved exact sentinel bytes; blocked output and pre-existing staging failures were non-destructive; textual equality and a real junction-backed staging/output alias both failed before compilation without leaving the shared child or an executable; no failure printed success. |
 | Offline dispatcher parity | `python Scripts/test_proxy_seed_parity.py` | PASS — Python/native seed lists match with 19 unique dispatchers, including `dataflow_query`. |
 | Patch hygiene | `git diff --check` | PASS. |
 
-The accepted review-hardening runs used `Tools\MonolithProxy\build_proxy.bat` SHA-256 `7CBF60098AB26926FAA553A3D37B7193D42ED6809F4619436C8BDBD8F284AC5F` and `Scripts\test_proxy_build.ps1` SHA-256 `0E7DEFC411B3F6F2BE8742EFCA327C68FE41D9D2332BBEF5C602D012AA7826EA`.
+The accepted review-hardening runs used these exact committed sources. Git blob
+object IDs identify canonical repository content; SHA-256 identifies the tested
+Windows checkout bytes (the batch file was exercised with CRLF line endings).
+
+| File | Git blob OID | Tested checkout SHA-256 |
+|------|--------------|------------------------|
+| `Tools\MonolithProxy\build_proxy.bat` | `6bbbac5be6022ddbfa0469ac9b973fed98a8274b` | `408D45A75736641FB4A7BDDA6119553C00AAF2BE1627079099F07A30C92F66D0` |
+| `Scripts\test_proxy_build.ps1` | `e8e68a25a1060af15fd752810e3a9700a4603237` | `9C3ADB394739807D60204EBC43D105DB41F060B769F753F953393CAF3DE583AA` |
 
 The regression harness creates a GUID-named directory under the system temporary directory, passes explicit source/output paths to the batch script, and validates the temporary root before recursively removing it. It does not write `Binaries/monolith_proxy.exe` in the repository.
 
