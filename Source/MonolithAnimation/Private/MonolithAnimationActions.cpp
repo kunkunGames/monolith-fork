@@ -8568,7 +8568,11 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetTransitionRule(const T
 	// Legacy form: a bare `variable_name` (string) meaning a bool-variable rule. New form: a
 	// structured `rule` object (or plain `rule` string). If both are absent, error.
 	FParsedTransitionRule ParsedRule;
-	FString LegacyVariableName = Params->GetStringField(TEXT("variable_name"));
+	FString LegacyVariableName;
+	if (Params->HasField(TEXT("variable_name")) && !Params->TryGetStringField(TEXT("variable_name"), LegacyVariableName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'variable_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (!Params->HasField(TEXT("rule")) && !LegacyVariableName.IsEmpty())
 	{
 		ParsedRule.Kind = FParsedTransitionRule::EKind::Bool;

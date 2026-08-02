@@ -6,6 +6,30 @@
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAnimationParamGuardSetSectionNextTest, "Monolith.ParamGuard.Animation.SetSectionNext", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAnimationNumericContractTest, "Monolith.ParamGuard.Animation.NumericContracts", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAnimationBatchSchemaDispatchTest, "Monolith.ParamGuard.Animation.BatchSchemaDispatch", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAnimationParamGuardSetTransitionRuleTest, "Monolith.ParamGuard.Animation.SetTransitionRule", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithAnimationParamGuardSetTransitionRuleTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+
+	// Test set_transition_rule with wrong type for variable_name
+	{
+		TSharedPtr<FJsonObject> BadParams = MakeShared<FJsonObject>();
+		BadParams->SetStringField(TEXT("asset_path"), TEXT("/Game/DoesntExist.DoesntExist"));
+		BadParams->SetStringField(TEXT("machine_name"), TEXT("Locomotion"));
+		BadParams->SetStringField(TEXT("from_state"), TEXT("Idle"));
+		BadParams->SetStringField(TEXT("to_state"), TEXT("Walk"));
+		BadParams->SetNumberField(TEXT("variable_name"), 123); // Invalid type
+
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("animation"), TEXT("set_transition_rule"), BadParams);
+
+		TestFalse(TEXT("SetTransitionRule should fail if variable_name is not a string"), Result.bSuccess);
+		TestEqual(TEXT("SetTransitionRule should report invalid_params"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+		TestTrue(TEXT("SetTransitionRule error should identify variable_name"), Result.ErrorMessage.Contains(TEXT("variable_name")));
+	}
+
+	return true;
+}
 
 bool FMonolithAnimationParamGuardSetSectionNextTest::RunTest(const FString& Parameters)
 {

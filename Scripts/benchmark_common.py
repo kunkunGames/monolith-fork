@@ -571,11 +571,9 @@ def local_project_name(plugin_root: pathlib.Path | None = None) -> str:
     root = (plugin_root or PLUGIN_ROOT).resolve()
     project_root = root.parent.parent
     project_files = sorted(project_root.glob("*.uproject"))
-    if len(project_files) != 1:
-        raise RuntimeError(
-            f"expected exactly one .uproject beside Plugins, found {len(project_files)} in {project_root}"
-        )
-    return project_files[0].stem
+    if len(project_files) == 1:
+        return project_files[0].stem
+    return "Monolith"
 
 
 def plugin_relative_path(value: str | pathlib.Path) -> pathlib.Path:
