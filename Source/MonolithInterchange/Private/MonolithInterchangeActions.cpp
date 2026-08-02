@@ -2521,6 +2521,15 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 	Result->SetBoolField(TEXT("script_exporter"), bScriptExporter);
 	Result->SetNumberField(TEXT("output_file_count"), OutputPaths.Num());
 	Result->SetArrayField(TEXT("output_files"), ExportOutputPathsToJson(OutputPaths));
+	Result->SetBoolField(TEXT("mutation_attempted"), false);
+	Result->SetBoolField(TEXT("exporter_succeeded"), false);
+	Result->SetBoolField(TEXT("commit_succeeded"), false);
+	Result->SetBoolField(TEXT("rollback_complete"), true);
+	Result->SetBoolField(TEXT("partial_mutation"), false);
+	Result->SetBoolField(TEXT("staging_cleanup_complete"), true);
+	Result->SetNumberField(TEXT("promoted_file_count"), 0);
+	Result->SetNumberField(TEXT("restored_file_count"), 0);
+	Result->SetArrayField(TEXT("retained_paths"), TArray<TSharedPtr<FJsonValue>>());
 
 	if (Messages.Num() > 0)
 	{
@@ -2656,14 +2665,20 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 			}
 		}
 
-		TArray<FString> ActualStagedFiles;
-		IFileManager::Get().FindFilesRecursive(
-			ActualStagedFiles,
-			*StagingDirectory,
-			TEXT("*"),
-			true,
-			false);
-		for (const FString& ActualStagedFile : ActualStagedFiles)
+		const FMonolithInterchangeStagingScanResult StagingScan =
+			ScanMonolithInterchangeExportStagingDirectory(
+				StagingDirectory,
+				MaxExportOutputFiles);
+		if (!StagingScan.bComplete)
+		{
+			AddMessage(
+				Messages,
+				StagingScan.bEntryLimitExceeded
+					? TEXT("export_staging_entry_limit_exceeded")
+					: TEXT("export_staging_scan_failed"),
+				StagingScan.Error);
+		}
+		for (const FString& ActualStagedFile : StagingScan.Files)
 		{
 			if (!ExpectedStagedPaths.Contains(FilesystemPathKey(ActualStagedFile)))
 			{
@@ -2676,14 +2691,7 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 			}
 		}
 
-		TArray<FString> ActualStagedDirectories;
-		IFileManager::Get().FindFilesRecursive(
-			ActualStagedDirectories,
-			*StagingDirectory,
-			TEXT("*"),
-			false,
-			true);
-		for (const FString& ActualStagedDirectory : ActualStagedDirectories)
+		for (const FString& ActualStagedDirectory : StagingScan.Directories)
 		{
 			AddMessage(
 				Messages,

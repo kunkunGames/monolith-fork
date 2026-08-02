@@ -181,6 +181,40 @@ bool FMonolithInterchangeExportTransactionTest::RunTest(const FString& Parameter
 			Result.RetainedPaths.Contains(Files[0].BackupPath));
 	}
 
+	{
+		const FString ScanRoot = FixtureRoot / TEXT("bounded-scan");
+		const FString NestedDirectory = ScanRoot / TEXT("unexpected-directory");
+		TestTrue(
+			TEXT("bounded scan fixture directories are created"),
+			IFileManager::Get().MakeDirectory(*NestedDirectory, true));
+		SaveFixture(ScanRoot / TEXT("expected.txt"), TEXT("expected"));
+		SaveFixture(NestedDirectory / TEXT("must-not-be-visited.txt"), TEXT("nested"));
+
+		const FMonolithInterchangeStagingScanResult CompleteScan =
+			ScanMonolithInterchangeExportStagingDirectory(ScanRoot, 8);
+		TestTrue(TEXT("bounded staging scan completes within its entry budget"), CompleteScan.bComplete);
+		TestFalse(TEXT("completed staging scan does not report a limit breach"), CompleteScan.bEntryLimitExceeded);
+		TestEqual(TEXT("bounded staging scan visits immediate entries only"), CompleteScan.EntriesVisited, 2);
+		TestEqual(TEXT("bounded staging scan reports one immediate file"), CompleteScan.Files.Num(), 1);
+		TestEqual(TEXT("bounded staging scan reports one immediate directory"), CompleteScan.Directories.Num(), 1);
+		TestFalse(
+			TEXT("bounded staging scan never descends into exporter-created directories"),
+			CompleteScan.Files.Contains(NestedDirectory / TEXT("must-not-be-visited.txt")));
+
+		SaveFixture(ScanRoot / TEXT("extra-a.txt"), TEXT("a"));
+		SaveFixture(ScanRoot / TEXT("extra-b.txt"), TEXT("b"));
+		const FMonolithInterchangeStagingScanResult LimitedScan =
+			ScanMonolithInterchangeExportStagingDirectory(ScanRoot, 2);
+		TestFalse(TEXT("staging scan stops when the entry budget is exceeded"), LimitedScan.bComplete);
+		TestTrue(TEXT("staging scan identifies an entry-limit stop"), LimitedScan.bEntryLimitExceeded);
+		TestEqual(TEXT("staging scan retains at most the requested entry budget"), LimitedScan.EntriesVisited, 2);
+		TestEqual(
+			TEXT("staging scan arrays remain within the requested entry budget"),
+			LimitedScan.Files.Num() + LimitedScan.Directories.Num(),
+			2);
+		TestFalse(TEXT("entry-limit failure includes a diagnostic"), LimitedScan.Error.IsEmpty());
+	}
+
 	TestTrue(
 		TEXT("transaction fixture root is removed"),
 		IFileManager::Get().DeleteDirectory(*FixtureRoot, false, true));

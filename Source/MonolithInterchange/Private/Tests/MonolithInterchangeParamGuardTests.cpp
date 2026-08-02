@@ -549,6 +549,76 @@ bool FMonolithParamGuardInterchangeImportMalformedParamsTest::RunTest(const FStr
 	}
 
 	{
+		const FString DryRunPath =
+			FPaths::ConvertRelativePathToFull(
+				FPaths::ProjectSavedDir() /
+				TEXT("Automation/MonolithInterchange") /
+				(FGuid::NewGuid().ToString(EGuidFormats::Digits) + TEXT(".png")));
+
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(
+			TEXT("asset_path"),
+			TEXT("/Engine/EngineResources/DefaultTexture.DefaultTexture"));
+		Params->SetStringField(TEXT("file_path"), DryRunPath);
+		Params->SetBoolField(TEXT("dry_run"), true);
+
+		const FMonolithActionResult Result =
+			Registry.ExecuteAction(TEXT("interchange"), TEXT("export_asset"), Params);
+		TestTrue(
+			TEXT("valid export dry-run returns structured data"),
+			Result.bSuccess && Result.Result.IsValid());
+		if (Result.Result.IsValid())
+		{
+			TestEqual(
+				TEXT("valid export dry-run reports would_export"),
+				Result.Result->GetStringField(TEXT("status")),
+				FString(TEXT("would_export")));
+
+			auto TestBoolField = [this, &Result](const TCHAR* FieldName, bool Expected)
+			{
+				const bool bHasField = Result.Result->HasTypedField<EJson::Boolean>(FieldName);
+				TestTrue(
+					FString::Printf(TEXT("dry-run includes boolean field %s"), FieldName),
+					bHasField);
+				if (bHasField)
+				{
+					TestEqual(
+						FString::Printf(TEXT("dry-run field %s has the not-attempted default"), FieldName),
+						Result.Result->GetBoolField(FieldName),
+						Expected);
+				}
+			};
+			TestBoolField(TEXT("mutation_attempted"), false);
+			TestBoolField(TEXT("exporter_succeeded"), false);
+			TestBoolField(TEXT("commit_succeeded"), false);
+			TestBoolField(TEXT("rollback_complete"), true);
+			TestBoolField(TEXT("partial_mutation"), false);
+			TestBoolField(TEXT("staging_cleanup_complete"), true);
+
+			TestEqual(
+				TEXT("dry-run promotes no files"),
+				static_cast<int32>(Result.Result->GetNumberField(TEXT("promoted_file_count"))),
+				0);
+			TestEqual(
+				TEXT("dry-run restores no files"),
+				static_cast<int32>(Result.Result->GetNumberField(TEXT("restored_file_count"))),
+				0);
+			const TArray<TSharedPtr<FJsonValue>>* RetainedPaths = nullptr;
+			TestTrue(
+				TEXT("dry-run includes retained_paths"),
+				Result.Result->TryGetArrayField(TEXT("retained_paths"), RetainedPaths) &&
+				RetainedPaths != nullptr);
+			if (RetainedPaths)
+			{
+				TestTrue(TEXT("dry-run retains no paths"), RetainedPaths->IsEmpty());
+			}
+		}
+		TestFalse(
+			TEXT("dry-run does not create its destination"),
+			IFileManager::Get().FileExists(*DryRunPath));
+	}
+
+	{
 		const FString ExportPath =
 			FPaths::ConvertRelativePathToFull(
 				FPaths::ProjectSavedDir() /

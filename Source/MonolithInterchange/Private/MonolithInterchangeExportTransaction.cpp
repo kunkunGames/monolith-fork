@@ -195,3 +195,65 @@ FMonolithInterchangeExportCommitResult CommitMonolithInterchangeExportFiles(
 				false);
 		});
 }
+
+FMonolithInterchangeStagingScanResult ScanMonolithInterchangeExportStagingDirectory(
+	const FString& StagingDirectory,
+	int32 MaxEntries)
+{
+	FMonolithInterchangeStagingScanResult Result;
+	if (MaxEntries <= 0)
+	{
+		Result.Error = TEXT("Staging scan entry limit must be positive.");
+		return Result;
+	}
+
+	FString NormalizedDirectory = FPaths::ConvertRelativePathToFull(StagingDirectory);
+	FPaths::NormalizeDirectoryName(NormalizedDirectory);
+	if (!IFileManager::Get().DirectoryExists(*NormalizedDirectory))
+	{
+		Result.Error = FString::Printf(
+			TEXT("Export staging directory does not exist: %s"),
+			*NormalizedDirectory);
+		return Result;
+	}
+
+	// Declared exporter outputs are constrained to this exact directory. A
+	// subdirectory is already an invalid result, so do not recurse into it and
+	// allow an exporter-controlled tree to consume unbounded work or memory.
+	const bool bIterationComplete = IFileManager::Get().IterateDirectory(
+		*NormalizedDirectory,
+		[&Result, MaxEntries](const TCHAR* FilenameOrDirectory, bool bIsDirectory)
+		{
+			if (Result.EntriesVisited >= MaxEntries)
+			{
+				Result.bEntryLimitExceeded = true;
+				return false;
+			}
+
+			++Result.EntriesVisited;
+			FString NormalizedEntry = FPaths::ConvertRelativePathToFull(FilenameOrDirectory);
+			FPaths::NormalizeFilename(NormalizedEntry);
+			if (bIsDirectory)
+			{
+				Result.Directories.Add(MoveTemp(NormalizedEntry));
+			}
+			else
+			{
+				Result.Files.Add(MoveTemp(NormalizedEntry));
+			}
+			return true;
+		});
+
+	Result.bComplete = bIterationComplete;
+	if (!bIterationComplete)
+	{
+		Result.Error = Result.bEntryLimitExceeded
+			? FString::Printf(
+				TEXT("Export staging directory contains more than %d immediate entries."),
+				MaxEntries)
+			: FString::Printf(
+				TEXT("Failed to enumerate export staging directory: %s"),
+				*NormalizedDirectory);
+	}
+	return Result;
+}

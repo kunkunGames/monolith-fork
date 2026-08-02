@@ -20,6 +20,7 @@ The defect and the compatible fix were checked against both installed engine sou
 | Direct exporter writes | `Engine\Source\Runtime\Engine\Private\UnrealExporter.cpp`, `UExporter::RunAssetExportTask`, writes `Task->Filename` or each `GetUniqueFilename` result directly. |
 | Declared multi-file outputs | `Engine\Source\Runtime\Engine\Classes\Exporters\Exporter.h` exposes `GetFileCount` and `GetUniqueFilename`; texture UDIM/layers and surround WAV exporters override them. |
 | Replacement move behavior | `Engine\Source\Runtime\Core\Private\HAL\FileManagerGeneric.cpp`, `FFileManagerGeneric::Move`, deletes an existing destination before `MoveFile` when replacement is requested. |
+| Bounded directory enumeration | `Engine\Source\Runtime\Core\Public\HAL\FileManager.h` exposes both immediate `IterateDirectory` and recursive `IterateDirectoryRecursively`. The recursive implementation in `Engine\Source\Runtime\Core\Private\GenericPlatform\GenericPlatformFile.cpp` explicitly accumulates directories to visit, so staging validation uses the immediate callback form and stops it at the entry budget. |
 | Cross-version surface | The relevant signatures and control flow are present in both `D:\Engine\UE_5.7` and `D:\Engine\UE_5.8`. |
 
 ---
@@ -32,12 +33,13 @@ The defect and the compatible fix were checked against both installed engine sou
 | Script exporters | Blueprint/script implementations of `ScriptRunAssetExportTask` fail closed because their arbitrary filesystem side effects cannot be bounded from the native filename contract. |
 | Staging | The exporter receives a unique `.monolith-export-<guid>` directory beside the destination. Its resolved outputs must stay in that exact staging directory. |
 | Postcondition | A reported exporter success is rejected if any declared output is missing or if an undeclared file or directory appears in staging. |
+| Bounded staging inspection | At most 256 immediate staging entries are retained. The scan stops on entry 257 and never descends into a directory because a nested output is already invalid. |
 | Commit | Existing destinations move into unique rollback backups inside staging. All staged outputs are then promoted with no implicit replacement. |
 | Complete rollback | If any later promotion fails, every already-promoted output is removed and every original destination is restored. |
 | Incomplete rollback | `status=partial_export`, `partial_mutation=true`, and exact `retained_paths` are returned. Staging and backups are preserved instead of being deleted. |
 | Success cleanup | A successful commit removes staging and backups. A cleanup failure keeps `status=exported` but reports `staging_cleanup_complete=false` and the retained staging path. |
 
-The response additionally exposes `output_file_count`, per-file `output_files`, exporter/commit flags, rollback and partial-mutation flags, promotion/restoration counts, staging cleanup status, and retained recovery paths.
+The response additionally exposes `output_file_count`, per-file `output_files`, mutation/exporter/commit flags, rollback and partial-mutation flags, promotion/restoration counts, staging cleanup status, and retained recovery paths. Successful dry runs and preflight errors use the same field set with explicit not-attempted defaults.
 
 ---
 
@@ -47,11 +49,11 @@ The source files copied by each foreign-plugin build matched the worktree byte-f
 
 | File | SHA-256 |
 |------|---------|
-| `Source\MonolithInterchange\Private\MonolithInterchangeActions.cpp` | `8E5608C239C83EFD33945BA76C04FFC022A6CD8F03D3D86129091682920DC51E` |
-| `Source\MonolithInterchange\Private\MonolithInterchangeExportTransaction.cpp` | `E29265209979E50EC605E08E708237F2DCCCBD13E339B9E95A85407A7F62810A` |
-| `Source\MonolithInterchange\Private\MonolithInterchangeExportTransaction.h` | `069AB22F12E18271957B0C135816F83F35C6E19566BDA2B67E6B0F2ED06DFEB4` |
-| `Source\MonolithInterchange\Private\Tests\MonolithInterchangeExportTransactionTests.cpp` | `F483CB64D1FE85AEEAEFC505D126F8B61D0C275FCEC7DB1C46F19280921E8631` |
-| `Source\MonolithInterchange\Private\Tests\MonolithInterchangeParamGuardTests.cpp` | `7AB523667A62A928D8383995B64E706699440CD17F8668996DA9E98322D965C8` |
+| `Source\MonolithInterchange\Private\MonolithInterchangeActions.cpp` | `FEB52E86AC2DF05FCC264F951BAD2D412C0AFCB4100917FF8D43325D1F8F70EB` |
+| `Source\MonolithInterchange\Private\MonolithInterchangeExportTransaction.cpp` | `B528A26F4343829E6E4FF043E31E8E8DB8B296C9FBB0B77936269CE08A95AC82` |
+| `Source\MonolithInterchange\Private\MonolithInterchangeExportTransaction.h` | `B9E90D68091453736BCF21D614C2A58FD19AF727980DF3F45F23950037641545` |
+| `Source\MonolithInterchange\Private\Tests\MonolithInterchangeExportTransactionTests.cpp` | `A74CE0D45434D45C1452C79C51D4198F48D2B5AAB291A20316FB4672CDE7847B` |
+| `Source\MonolithInterchange\Private\Tests\MonolithInterchangeParamGuardTests.cpp` | `3A2DC430F248B57534B67C6DF1AAF4752025E6502DEAE5181850495C618324AF` |
 
 ---
 
@@ -61,8 +63,8 @@ The source files copied by each foreign-plugin build matched the worktree byte-f
 
 | Gate | Result | Package artifact | Build log |
 |------|--------|------------------|-----------|
-| UE 5.7 Editor plugin | Passed, 531/531 actions, `BUILD SUCCESSFUL` | `D:\P4\MonolithInterchangeExportUE57CurrentPackage\Binaries\Win64\UnrealEditor-MonolithInterchange.dll`; 414,208 bytes; SHA-256 `C8B5F7AC3F5D046BFDDEEE0C3C66C81AABEEE1822CCC767B9849DACD90AB74A2` | `C:\Users\12336\AppData\Roaming\Unreal Engine\AutomationTool\Logs\D+Engine+UE_5.7\Log.txt`; SHA-256 `E9CDCB5DD0B3AD08BFE789AF9E16B42F453AC81EBA063671FB77CAE4909093C3` |
-| UE 5.8 Editor plugin | Passed, 531/531 actions, `BUILD SUCCESSFUL` | `D:\P4\MonolithInterchangeExportUE58CurrentPackage\Binaries\Win64\UnrealEditor-MonolithInterchange.dll`; 392,192 bytes; SHA-256 `EB8713E11609DF82C4DFA70E115A24DFDE1ED94DFE4B888498305BCF95CD37E7` | `C:\Users\12336\AppData\Roaming\Unreal Engine\AutomationTool\Logs\D+Engine+UE_5.8\Log.txt`; SHA-256 `0FBD320914C5E9158F5405D543F834F463F2DD70EAF3ACFE8CE93288FAF90682` |
+| UE 5.7 Editor plugin | Passed, 531/531 actions, `BUILD SUCCESSFUL` | `D:\P4\MonolithInterchangeReviewUE57Package\Binaries\Win64\UnrealEditor-MonolithInterchange.dll`; 427,008 bytes; SHA-256 `13D5C67A8A9FF075CFEB4979B4658D9FB55280B72C84A23AD5EE563352946190` | `C:\Users\12336\AppData\Roaming\Unreal Engine\AutomationTool\Logs\D+Engine+UE_5.7\Log.txt`; SHA-256 `8FF2D949D0760E17F3DF39B77F2AAC0C2B385399FFAE87F81D205CDCCC8447D4` |
+| UE 5.8 Editor plugin | Passed, 531/531 actions, `BUILD SUCCESSFUL` | `D:\P4\MonolithInterchangeReviewUE58Package\Binaries\Win64\UnrealEditor-MonolithInterchange.dll`; 402,944 bytes; SHA-256 `CB72F98A297F1A4D775903042F2B4686A603CAC8E799E466E374241B03AC0B94` | `C:\Users\12336\AppData\Roaming\Unreal Engine\AutomationTool\Logs\D+Engine+UE_5.8\Log.txt`; SHA-256 `D7EDB4B27A1A3B9335AD2F26EF1DD5BBE232F6EBB6E089CB13EF58CF0257D7E6` |
 
 ---
 
@@ -70,12 +72,12 @@ The source files copied by each foreign-plugin build matched the worktree byte-f
 
 | Engine | Test | Result | Report |
 |--------|------|--------|--------|
-| UE 5.7 | `Monolith.Interchange.ExportTransaction` | 1 succeeded, 0 warnings, 0 errors | `D:\P4\MonolithInterchangeExportUE57CurrentAutomationHost\Saved\AutomationReports\ExportTransaction\index.json`; SHA-256 `C0A80E55E18D4ED8B1FC51ABBD447D861EFB1E256CF21CCAA3EC17E7EF1234EC` |
-| UE 5.7 | `Monolith.ParamGuard.MonolithInterchange.ImportRejectsMalformedParams` | 1 succeeded, 0 warnings, 0 errors | `D:\P4\MonolithInterchangeExportUE57CurrentAutomationHost\Saved\AutomationReports\ParamGuard\index.json`; SHA-256 `B1578546F5CDE78CF4D9B595BBF8C1FE7852900453EFAB62691512E7E86262E2` |
-| UE 5.8 | `Monolith.Interchange.ExportTransaction` | 1 succeeded, 0 warnings, 0 errors | `D:\P4\MonolithInterchangeExportUE58CurrentAutomationHost\Saved\AutomationReports\ExportTransaction\index.json`; SHA-256 `3EE31A506FE019DF2ED720132C50146ECD3D339F3263B23F6638886AA17368F8` |
-| UE 5.8 | `Monolith.ParamGuard.MonolithInterchange.ImportRejectsMalformedParams` | 1 succeeded, 0 warnings, 0 errors | `D:\P4\MonolithInterchangeExportUE58CurrentAutomationHost\Saved\AutomationReports\ParamGuard\index.json`; SHA-256 `A0A1C845A6E2F2E5ECB8DB875C961FFA92675A474A292DE41DAFF6BED309B694` |
+| UE 5.7 | `Monolith.Interchange.ExportTransaction` | `Result={Success}` | `D:\P4\MonolithInterchangeReviewUE57Host\Saved\Logs\Automation_20260802_ExportTransaction_UE57_Review.log:1172`; SHA-256 `49272686754B47A42EC322F5CC7DA68D5CB042F90EB0B27EFAC5A0DBB39300B9` |
+| UE 5.7 | `Monolith.ParamGuard.MonolithInterchange.ImportRejectsMalformedParams` | `Result={Success}` | `D:\P4\MonolithInterchangeReviewUE57Host\Saved\Logs\Automation_20260802_ParamGuard_UE57_Review.log:1184`; SHA-256 `02B01ED3AA01C6E2D1802C24741ED48BFD551D58D37571DBCB3732EA6FFF72B2` |
+| UE 5.8 | `Monolith.Interchange.ExportTransaction` | `Result={Success}` | `D:\P4\MonolithInterchangeReviewUE58Host\Saved\Logs\Automation_20260802_ExportTransaction_UE58_Review.log:2054`; SHA-256 `90B36C35970A612E2993FC388445CC50B6CC767F17A6620F3EAFDB68ACFDB58D` |
+| UE 5.8 | `Monolith.ParamGuard.MonolithInterchange.ImportRejectsMalformedParams` | `Result={Success}` | `D:\P4\MonolithInterchangeReviewUE58Host\Saved\Logs\Automation_20260802_ParamGuard_UE58_Review_Retry.log:2044`; SHA-256 `C65828ABE3BE24F9A683FC049242B98B19D7B4A307E61D5DCD2ABCC37620C1FE` |
 
-`ExportTransaction` covers successful replacement, a complete two-file rollback after the second promotion fails, a late no-replace collision, and preservation/reporting of the original backup when both promotion and restoration are injected to fail. The existing Interchange suite now also performs a confirmed real `DefaultTexture` PNG export over a sentinel destination and verifies staged commit, cleanup, and non-partial status.
+`ExportTransaction` covers successful replacement, a complete two-file rollback after the second promotion fails, a late no-replace collision, preservation/reporting of the original backup when both promotion and restoration are injected to fail, non-recursive immediate staging inspection, and an enforced entry budget. The existing Interchange suite also performs a confirmed real `DefaultTexture` PNG export over a sentinel destination, verifies staged commit/cleanup/non-partial status, and verifies that a successful dry run exposes every transaction field without mutation.
 
 Both automation hosts logged an unrelated failure to bind Monolith port `9316` because another process owned that endpoint during the run. The focused automation reports themselves contain zero warnings and zero errors, and no external process was stopped or reconfigured.
 

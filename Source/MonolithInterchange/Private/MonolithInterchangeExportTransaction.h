@@ -22,6 +22,16 @@ struct FMonolithInterchangeExportCommitResult
 	TArray<FString> RetainedPaths;
 };
 
+struct FMonolithInterchangeStagingScanResult
+{
+	bool bComplete = false;
+	bool bEntryLimitExceeded = false;
+	int32 EntriesVisited = 0;
+	FString Error;
+	TArray<FString> Files;
+	TArray<FString> Directories;
+};
+
 using FMonolithInterchangeMoveFile =
 	TFunctionRef<bool(const FString& Destination, const FString& Source)>;
 
@@ -33,3 +43,7 @@ FMonolithInterchangeExportCommitResult CommitMonolithInterchangeExportFiles(
 FMonolithInterchangeExportCommitResult CommitMonolithInterchangeExportFiles(
 	TArray<FMonolithInterchangeExportFileCommit>& Files,
 	bool bReplaceExisting);
+
+FMonolithInterchangeStagingScanResult ScanMonolithInterchangeExportStagingDirectory(
+	const FString& StagingDirectory,
+	int32 MaxEntries);
