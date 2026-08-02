@@ -1922,22 +1922,18 @@ FMonolithActionResult FAssetCollectionActions::SetCollectionColor(const TSharedP
 		double G = 0.0;
 		double B = 0.0;
 		double A = 1.0;
-		if (!(*ColorObj)->HasTypedField<EJson::Number>(TEXT("r"))
-			|| !(*ColorObj)->HasTypedField<EJson::Number>(TEXT("g"))
-			|| !(*ColorObj)->HasTypedField<EJson::Number>(TEXT("b")))
+		if (!(*ColorObj)->TryGetNumberField(TEXT("r"), R)
+			|| !(*ColorObj)->TryGetNumberField(TEXT("g"), G)
+			|| !(*ColorObj)->TryGetNumberField(TEXT("b"), B))
 		{
 			return FMonolithActionResult::Error(TEXT("color must contain numeric r, g, and b fields"), -32602);
 		}
-		R = (*ColorObj)->GetNumberField(TEXT("r"));
-		G = (*ColorObj)->GetNumberField(TEXT("g"));
-		B = (*ColorObj)->GetNumberField(TEXT("b"));
 		if ((*ColorObj)->HasField(TEXT("a")))
 		{
-			if (!(*ColorObj)->HasTypedField<EJson::Number>(TEXT("a")))
+			if (!(*ColorObj)->TryGetNumberField(TEXT("a"), A))
 			{
 				return FMonolithActionResult::Error(TEXT("color.a must be numeric"), -32602);
 			}
-			A = (*ColorObj)->GetNumberField(TEXT("a"));
 		}
 		if (!FMath::IsFinite(R) || !FMath::IsFinite(G) || !FMath::IsFinite(B) || !FMath::IsFinite(A)
 			|| R < 0.0 || R > 1.0
