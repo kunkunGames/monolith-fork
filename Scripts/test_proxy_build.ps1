@@ -137,7 +137,27 @@ try {
     Assert-Condition -Condition ($sharedPathResult.StdOut -notmatch 'SUCCESS:') `
         -Message 'Equal output and staging directories printed a success message'
 
-    Write-Host 'PASS: both entry points build, failures preserve prior outputs, and staging/output ownership boundaries are enforced.'
+    $aliasTargetParent = Join-Path $testRoot 'alias-target-parent'
+    $aliasJunctionParent = Join-Path $testRoot 'alias-junction-parent'
+    New-Item -ItemType Directory -Path $aliasTargetParent | Out-Null
+    & $env:ComSpec /d /c ('mklink /J "{0}" "{1}" >nul' -f $aliasJunctionParent, $aliasTargetParent)
+    Assert-Condition -Condition ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $aliasJunctionParent -PathType Container)) `
+        -Message 'Failed to create the directory-junction regression fixture'
+
+    $aliasedOutput = Join-Path $aliasTargetParent 'shared-child'
+    $aliasedStage = Join-Path $aliasJunctionParent 'shared-child'
+    $aliasedPathResult = Invoke-ProxyBuild -SourceFile $proxySource -OutputDirectory $aliasedOutput `
+        -EntryPoint $buildScript -StagingDirectory $aliasedStage
+    Assert-Condition -Condition ($aliasedPathResult.ExitCode -ne 0) `
+        -Message 'Junction-aliased output and staging directories incorrectly returned exit code 0'
+    Assert-Condition -Condition (-not (Test-Path -LiteralPath $aliasedOutput)) `
+        -Message 'Junction-alias rejection left the shared output/staging directory behind'
+    Assert-Condition -Condition ($aliasedPathResult.StdOut -match 'aliases the output directory') `
+        -Message 'Junction-alias rejection did not report the ownership conflict'
+    Assert-Condition -Condition ($aliasedPathResult.StdOut -notmatch 'SUCCESS:') `
+        -Message 'Junction-aliased output and staging directories printed a success message'
+
+    Write-Host 'PASS: both entry points build, failures preserve prior outputs, and textual or aliased staging/output collisions are rejected.'
 }
 finally {
     $resolvedTestRoot = [IO.Path]::GetFullPath($testRoot)

@@ -6,6 +6,7 @@ set "PUSHED_STAGE_DIR="
 set "STAGE_DIR_OWNED="
 set "PUBLISH_CANDIDATE="
 set "PUBLISH_CANDIDATE_OWNED="
+set "OUTPUT_DIR_WAS_DIRECTORY="
 set "SCRIPT_DIR=%~dp0"
 
 set "SOURCE_FILE=%MONOLITH_PROXY_SOURCE_FILE%"
@@ -18,6 +19,7 @@ for %%I in ("%INCLUDE_DIR%") do set "INCLUDE_DIR=%%~fI"
 set "OUTPUT_DIR=%MONOLITH_PROXY_OUTPUT_DIR%"
 if not defined OUTPUT_DIR set "OUTPUT_DIR=%SCRIPT_DIR%..\..\Binaries"
 for %%I in ("%OUTPUT_DIR%") do set "OUTPUT_DIR=%%~fI"
+if exist "%OUTPUT_DIR%\." set "OUTPUT_DIR_WAS_DIRECTORY=1"
 set "TARGET_EXE=%OUTPUT_DIR%\monolith_proxy.exe"
 
 set "STAGE_DIR=%MONOLITH_PROXY_STAGING_DIR%"
@@ -68,6 +70,14 @@ if errorlevel 1 (
     goto :cleanup
 )
 set "STAGE_DIR_OWNED=1"
+
+rem A junction or 8.3 alias can make two different absolute strings identify
+rem the same not-yet-existing child. Creating the private stage makes that
+rem alias visible through OUTPUT_DIR; fail before compilation or publication.
+if not defined OUTPUT_DIR_WAS_DIRECTORY if exist "%OUTPUT_DIR%\." (
+    echo FAILED: staging directory aliases the output directory: "%STAGE_DIR%"
+    goto :cleanup
+)
 
 pushd "%STAGE_DIR%"
 if errorlevel 1 (
