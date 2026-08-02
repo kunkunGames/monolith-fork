@@ -6908,22 +6908,29 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetParameterDefault(const T
 				if (O.IsValid())
 				{
 					float V_A = 1.0f;
-		double V_A_Double = V_A;
-		if (O->TryGetNumberField(TEXT("a"), V_A_Double)) V_A = static_cast<float>(V_A_Double);
-		FLinearColor V(static_cast<float>(O->GetNumberField(TEXT("r"))), static_cast<float>(O->GetNumberField(TEXT("g"))), static_cast<float>(O->GetNumberField(TEXT("b"))), V_A);
+						double V_A_Double = V_A;
+						if (O->TryGetNumberField(TEXT("a"), V_A_Double)) V_A = static_cast<float>(V_A_Double);
+						double OutR = 0.0, OutG = 0.0, OutB = 0.0;
+						if (!O->TryGetNumberField(TEXT("r"), OutR)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Color) must have numeric 'r' field"), FMonolithJsonUtils::ErrInvalidParams);
+						if (!O->TryGetNumberField(TEXT("g"), OutG)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Color) must have numeric 'g' field"), FMonolithJsonUtils::ErrInvalidParams);
+						if (!O->TryGetNumberField(TEXT("b"), OutB)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Color) must have numeric 'b' field"), FMonolithJsonUtils::ErrInvalidParams);
+						FLinearColor V(static_cast<float>(OutR), static_cast<float>(OutG), static_cast<float>(OutB), V_A);
 					WriteVar.SetValue<FLinearColor>(V);
 				}
 			}
 			else if (FTD == FNiagaraTypeDefinition::GetFloatDef())
 			{
+					if (JV->Type != EJson::Number) return FMonolithActionResult::Error(TEXT("Parameter 'value' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 				WriteVar.SetValue<float>(static_cast<float>(JV->AsNumber()));
 			}
 			else if (FTD == FNiagaraTypeDefinition::GetIntDef())
 			{
+					if (JV->Type != EJson::Number) return FMonolithActionResult::Error(TEXT("Parameter 'value' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 				WriteVar.SetValue<int32>(static_cast<int32>(JV->AsNumber()));
 			}
 			else if (FTD == FNiagaraTypeDefinition::GetBoolDef())
 			{
+					if (JV->Type != EJson::Boolean) return FMonolithActionResult::Error(TEXT("Parameter 'value' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 				FNiagaraBool BV; BV.SetValue(JV->AsBool());
 				WriteVar.SetValue<FNiagaraBool>(BV);
 			}
@@ -6932,9 +6939,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetParameterDefault(const T
 				TSharedPtr<FJsonObject> O = AsObjectOrParseString(JV);
 				if (O.IsValid())
 				{
-					FVector3f V(static_cast<float>(O->GetNumberField(TEXT("x"))),
-						static_cast<float>(O->GetNumberField(TEXT("y"))),
-						static_cast<float>(O->GetNumberField(TEXT("z"))));
+						double OutX = 0.0, OutY = 0.0, OutZ = 0.0;
+						if (!O->TryGetNumberField(TEXT("x"), OutX)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Vec3) must have numeric 'x' field"), FMonolithJsonUtils::ErrInvalidParams);
+						if (!O->TryGetNumberField(TEXT("y"), OutY)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Vec3) must have numeric 'y' field"), FMonolithJsonUtils::ErrInvalidParams);
+						if (!O->TryGetNumberField(TEXT("z"), OutZ)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Vec3) must have numeric 'z' field"), FMonolithJsonUtils::ErrInvalidParams);
+						FVector3f V(static_cast<float>(OutX), static_cast<float>(OutY), static_cast<float>(OutZ));
 					WriteVar.SetValue<FVector3f>(V);
 				}
 			}
@@ -6943,8 +6952,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetParameterDefault(const T
 				TSharedPtr<FJsonObject> O = AsObjectOrParseString(JV);
 				if (O.IsValid())
 				{
-					FVector2f V(static_cast<float>(O->GetNumberField(TEXT("x"))),
-						static_cast<float>(O->GetNumberField(TEXT("y"))));
+						double OutX = 0.0, OutY = 0.0;
+						if (!O->TryGetNumberField(TEXT("x"), OutX)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Vec2) must have numeric 'x' field"), FMonolithJsonUtils::ErrInvalidParams);
+						if (!O->TryGetNumberField(TEXT("y"), OutY)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Vec2) must have numeric 'y' field"), FMonolithJsonUtils::ErrInvalidParams);
+						FVector2f V(static_cast<float>(OutX), static_cast<float>(OutY));
 					WriteVar.SetValue<FVector2f>(V);
 				}
 			}
@@ -6953,10 +6964,15 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetParameterDefault(const T
 				TSharedPtr<FJsonObject> O = AsObjectOrParseString(JV);
 				if (O.IsValid())
 				{
-					FVector4f V(static_cast<float>(O->GetNumberField(TEXT("x"))),
-						static_cast<float>(O->GetNumberField(TEXT("y"))),
-						static_cast<float>(O->GetNumberField(TEXT("z"))),
-						static_cast<float>(O->GetNumberField(TEXT("w"))));
+						double OutX = 0.0, OutY = 0.0, OutZ = 0.0, OutW = 0.0;
+						if (!O->TryGetNumberField(TEXT("x"), OutX)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Vec4) must have numeric 'x' field"), FMonolithJsonUtils::ErrInvalidParams);
+						if (!O->TryGetNumberField(TEXT("y"), OutY)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Vec4) must have numeric 'y' field"), FMonolithJsonUtils::ErrInvalidParams);
+						if (!O->TryGetNumberField(TEXT("z"), OutZ)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Vec4) must have numeric 'z' field"), FMonolithJsonUtils::ErrInvalidParams);
+						if (!O->TryGetNumberField(TEXT("w"), OutW)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Vec4) must have numeric 'w' field"), FMonolithJsonUtils::ErrInvalidParams);
+						FVector4f V(static_cast<float>(OutX),
+							static_cast<float>(OutY),
+							static_cast<float>(OutZ),
+							static_cast<float>(OutW));
 					WriteVar.SetValue<FVector4f>(V);
 				}
 			}
