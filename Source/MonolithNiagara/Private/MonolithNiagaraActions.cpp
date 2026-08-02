@@ -14416,6 +14416,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 		for (auto& P : MapA) AllNames.Add(P.Key);
 		for (auto& P : MapB) AllNames.Add(P.Key);
 
+		ParamDiffs.Reserve(AllNames.Num());
 		for (const FString& Name : AllNames)
 		{
 			TSharedPtr<FJsonObject>* PA = MapA.Find(Name);
@@ -14459,6 +14460,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 		for (auto& P : EmMapA) AllEmitters.Add(P.Key);
 		for (auto& P : EmMapB) AllEmitters.Add(P.Key);
 
+		EmitterDiffs.Reserve(AllEmitters.Num());
 		for (const FString& EmName : AllEmitters)
 		{
 			TSharedPtr<FJsonObject>* EmA = EmMapA.Find(EmName);
@@ -14475,6 +14477,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 			{
 				TArray<FString> SimpleProps = { TEXT("sim_target"), TEXT("local_space"), TEXT("determinism"), TEXT("calculate_bounds_mode"), TEXT("allocation_mode") };
 				TArray<TSharedPtr<FJsonValue>> PropDiffs;
+				PropDiffs.Reserve(SimpleProps.Num());
 				for (const FString& Prop : SimpleProps)
 				{
 					TSharedPtr<FJsonValue> VA = (*EmA)->TryGetField(Prop);
@@ -14543,6 +14546,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 					for (auto& P : ScriptMapA) AllScripts.Add(P.Key);
 					for (auto& P : ScriptMapB) AllScripts.Add(P.Key);
 
+					ModDiffs.Reserve(ModDiffs.Num() + AllScripts.Num());
 					for (const FString& Script : AllScripts)
 					{
 						TSharedPtr<FJsonObject>* MA = ScriptMapA.Find(Script);
@@ -14625,6 +14629,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 				else if (RendA && RendB)
 				{
 					TArray<TSharedPtr<FJsonValue>> RendDiffs;
+					RendDiffs.Reserve(RendCountA);
 					for (int32 ri = 0; ri < RendCountA; ++ri)
 					{
 						auto RA = (*RendA)[ri]->AsObject();
