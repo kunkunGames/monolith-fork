@@ -1015,16 +1015,6 @@ namespace
 		return bAllowExternal || IsUnderDefaultImportRoots(FilePath);
 	}
 
-	FString FilesystemPathKey(FString Path)
-	{
-		Path = FPaths::ConvertRelativePathToFull(Path);
-		FPaths::NormalizeFilename(Path);
-#if PLATFORM_WINDOWS
-		Path.ToLowerInline();
-#endif
-		return Path;
-	}
-
 	bool TryResolveExporterOutputPaths(
 		UExporter* Exporter,
 		UObject* Asset,
@@ -1057,7 +1047,7 @@ namespace
 
 			OutputPath = FPaths::ConvertRelativePathToFull(OutputPath);
 			FPaths::NormalizeFilename(OutputPath);
-			const FString OutputKey = FilesystemPathKey(OutputPath);
+			const FString OutputKey = MonolithInterchangePortablePathKey(OutputPath);
 			if (UniquePaths.Contains(OutputKey))
 			{
 				OutError = FString::Printf(
@@ -2427,10 +2417,10 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 	}
 
 	const FString OutputDirectory = FPaths::GetPath(NormalizedFilePath);
-	const FString OutputDirectoryKey = FilesystemPathKey(OutputDirectory);
+	const FString OutputDirectoryKey = MonolithInterchangePortablePathKey(OutputDirectory);
 	for (const FString& OutputPath : OutputPaths)
 	{
-		if (FilesystemPathKey(FPaths::GetPath(OutputPath)) != OutputDirectoryKey)
+		if (MonolithInterchangePortablePathKey(FPaths::GetPath(OutputPath)) != OutputDirectoryKey)
 		{
 			AddMessage(
 				Messages,
@@ -2564,7 +2554,8 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 	for (const FString& StagedOutputPath : StagedOutputPaths)
 	{
 		if (!IsLexicallyUnderRoot(StagedOutputPath, StagingDirectory) ||
-			FilesystemPathKey(FPaths::GetPath(StagedOutputPath)) != FilesystemPathKey(StagingDirectory))
+			MonolithInterchangePortablePathKey(FPaths::GetPath(StagedOutputPath)) !=
+				MonolithInterchangePortablePathKey(StagingDirectory))
 		{
 			AddMessage(
 				Messages,
@@ -2614,7 +2605,7 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 		TSet<FString> ExpectedStagedPaths;
 		for (const FString& StagedOutputPath : StagedOutputPaths)
 		{
-			ExpectedStagedPaths.Add(FilesystemPathKey(StagedOutputPath));
+			ExpectedStagedPaths.Add(MonolithInterchangePortablePathKey(StagedOutputPath));
 			if (MonolithInterchangePathTraversesLinkBelowRoot(
 					StagedOutputPath,
 					StagingDirectory))
@@ -2652,7 +2643,7 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 		}
 		for (const FString& ActualStagedFile : StagingScan.Files)
 		{
-			if (!ExpectedStagedPaths.Contains(FilesystemPathKey(ActualStagedFile)))
+			if (!ExpectedStagedPaths.Contains(MonolithInterchangePortablePathKey(ActualStagedFile)))
 			{
 				AddMessage(
 					Messages,

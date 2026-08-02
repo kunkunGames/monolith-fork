@@ -48,6 +48,11 @@ using FMonolithInterchangeMoveFile =
 using FMonolithInterchangeSymlinkQuery =
 	TFunctionRef<ESymlinkResult(const FString& Path)>;
 
+// Export output sets must remain unambiguous when moved between supported
+// filesystems. Treat case-only path variants as the same portable identity,
+// including before a destination exists and its volume can be queried.
+FString MonolithInterchangePortablePathKey(FString Path);
+
 bool MonolithInterchangePathTraversesLinkBelowRoot(
 	const FString& Path,
 	const FString& Root,
