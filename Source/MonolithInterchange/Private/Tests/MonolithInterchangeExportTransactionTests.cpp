@@ -36,6 +36,46 @@ bool FMonolithInterchangeExportTransactionTest::RunTest(const FString& Parameter
 	};
 
 	{
+		const FString UpperPath = FixtureRoot / TEXT("Portable-Output.PNG");
+		const FString LowerPath = FixtureRoot / TEXT("portable-output.png");
+		TestEqual(
+			TEXT("portable export identity folds case on every platform"),
+			MonolithInterchangePortablePathKey(UpperPath),
+			MonolithInterchangePortablePathKey(LowerPath));
+
+		const FString StagedA = FixtureRoot / TEXT("portable-a.staged.png");
+		const FString StagedB = FixtureRoot / TEXT("portable-b.staged.png");
+		SaveFixture(StagedA, TEXT("a"));
+		SaveFixture(StagedB, TEXT("b"));
+		TArray<FMonolithInterchangeExportFileCommit> Files;
+		FMonolithInterchangeExportFileCommit& FileA = Files.AddDefaulted_GetRef();
+		FileA.StagedPath = StagedA;
+		FileA.DestinationPath = UpperPath;
+		FMonolithInterchangeExportFileCommit& FileB = Files.AddDefaulted_GetRef();
+		FileB.StagedPath = StagedB;
+		FileB.DestinationPath = LowerPath;
+
+		int32 MoveCallCount = 0;
+		const FMonolithInterchangeExportCommitResult Result =
+			CommitMonolithInterchangeExportFiles(
+				Files,
+				false,
+				[&MoveCallCount](const FString&, const FString&)
+				{
+					++MoveCallCount;
+					return false;
+				});
+
+		TestFalse(TEXT("case-only destination aliases fail closed"), Result.bSucceeded);
+		TestTrue(
+			TEXT("case-only alias failure reports a duplicate output"),
+			Result.Error.Contains(TEXT("duplicate staged or destination output paths")));
+		TestEqual(TEXT("case-only aliases are rejected before filesystem mutation"), MoveCallCount, 0);
+		TestTrue(TEXT("first staged file remains after preflight rejection"), IFileManager::Get().FileExists(*StagedA));
+		TestTrue(TEXT("second staged file remains after preflight rejection"), IFileManager::Get().FileExists(*StagedB));
+	}
+
+	{
 		const FString Destination = FixtureRoot / TEXT("replace.txt");
 		const FString Staged = FixtureRoot / TEXT("replace.staged.txt");
 		SaveFixture(Destination, TEXT("original"));

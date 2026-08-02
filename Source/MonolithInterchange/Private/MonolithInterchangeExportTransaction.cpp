@@ -4,30 +4,23 @@
 #include "HAL/PlatformFileManager.h"
 #include "Misc/Paths.h"
 
+FString MonolithInterchangePortablePathKey(FString Path)
+{
+	Path = FPaths::ConvertRelativePathToFull(Path);
+	FPaths::NormalizeFilename(Path);
+	Path.ToLowerInline();
+	return Path;
+}
+
 namespace
 {
-	FString PathKey(FString Path)
-	{
-		Path = FPaths::ConvertRelativePathToFull(Path);
-		FPaths::NormalizeFilename(Path);
-#if PLATFORM_WINDOWS
-		Path.ToLowerInline();
-#endif
-		return Path;
-	}
-
 	bool IsLexicallyUnderRoot(FString Path, FString Root)
 	{
-		Path = FPaths::ConvertRelativePathToFull(Path);
-		Root = FPaths::ConvertRelativePathToFull(Root);
+		Path = MonolithInterchangePortablePathKey(MoveTemp(Path));
+		Root = MonolithInterchangePortablePathKey(MoveTemp(Root));
 		FPaths::NormalizeDirectoryName(Path);
 		FPaths::NormalizeDirectoryName(Root);
-#if PLATFORM_WINDOWS
-		constexpr ESearchCase::Type PathCase = ESearchCase::IgnoreCase;
-#else
-		constexpr ESearchCase::Type PathCase = ESearchCase::CaseSensitive;
-#endif
-		return Path.Equals(Root, PathCase) || FPaths::IsUnderDirectory(Path, Root);
+		return Path == Root || FPaths::IsUnderDirectory(Path, Root);
 	}
 
 	void AddRetainedFileIfPresent(TArray<FString>& RetainedPaths, const FString& Path)
@@ -173,8 +166,8 @@ FMonolithInterchangeExportCommitResult CommitMonolithInterchangeExportFiles(
 		File.bBackedUp = false;
 		File.bPromoted = false;
 
-		const FString StagedKey = PathKey(File.StagedPath);
-		const FString DestinationKey = PathKey(File.DestinationPath);
+		const FString StagedKey = MonolithInterchangePortablePathKey(File.StagedPath);
+		const FString DestinationKey = MonolithInterchangePortablePathKey(File.DestinationPath);
 		if (StagedKey == DestinationKey)
 		{
 			Result.Error = TEXT("Staged and destination export paths must be non-empty and distinct.");
