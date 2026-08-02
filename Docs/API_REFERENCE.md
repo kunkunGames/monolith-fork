@@ -3079,6 +3079,8 @@ Guarded reflected hard/soft reference rewrite inside copied destination packages
 | `save` | boolean | optional | Save changed packages. Default: `true` |
 | `strict` | boolean | optional | Treat load/fixup blockers as errors. Default: `true` |
 
+Confirmed strict runs preflight every candidate object and property before applying any rewrite, so a blocker cannot leave earlier objects partially mutated. A remapped hard-reference target with an incompatible reflected class is always a strict blocker even when `require_targets=false`; that option controls missing targets only. Strict preflight also validates read-only fields, object loadability, outer ownership, and save requirements before commit.
+
 ### `asset.validate_dependency_closure`
 
 Validate that destination packages do not depend on disallowed external roots or legacy source roots after a package graph copy/remap.
