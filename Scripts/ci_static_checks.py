@@ -152,6 +152,71 @@ def check_uplugin_and_modules(ctx: CheckContext) -> None:
     for module in duplicate_modules:
         ctx.block("module-map", f"Duplicate module in descriptor: {module}", descriptor_path)
 
+    uplugin_contract = ctx.config.get("uplugin", {})
+    if not isinstance(uplugin_contract, dict):
+        ctx.block("uplugin-dependency", "uplugin config must be an object", ctx.config_path)
+        uplugin_contract = {}
+
+    plugin_references = data.get("Plugins", [])
+    if not isinstance(plugin_references, list):
+        ctx.block("uplugin-dependency", "Plugins must be a list", descriptor_path)
+        plugin_references = []
+
+    required_plugins = uplugin_contract.get("required_plugin_references", [])
+    if not isinstance(required_plugins, list):
+        ctx.block(
+            "uplugin-dependency",
+            "uplugin.required_plugin_references must be a list",
+            ctx.config_path,
+        )
+    else:
+        for required_name in sorted({str(name) for name in required_plugins}):
+            matching_references = [
+                reference
+                for reference in plugin_references
+                if isinstance(reference, dict)
+                and str(reference.get("Name", "")).casefold() == required_name.casefold()
+            ]
+            if not matching_references:
+                ctx.block(
+                    "uplugin-dependency",
+                    f"Required plugin reference is missing: {required_name}",
+                    descriptor_path,
+                )
+            elif not any(
+                reference.get("Enabled") is True and reference.get("Optional") is not True
+                for reference in matching_references
+            ):
+                ctx.block(
+                    "uplugin-dependency",
+                    f"Required plugin reference must set Enabled=true and must not set Optional=true: {required_name}",
+                    descriptor_path,
+                )
+
+    forbidden_optional = uplugin_contract.get("forbidden_optional_plugin_references", [])
+    if not isinstance(forbidden_optional, list):
+        ctx.block(
+            "uplugin-dependency",
+            "uplugin.forbidden_optional_plugin_references must be a list",
+            ctx.config_path,
+        )
+    else:
+        forbidden_optional_names = {str(name) for name in forbidden_optional}
+        for reference in plugin_references:
+            if not isinstance(reference, dict):
+                continue
+            name = str(reference.get("Name", ""))
+            if (
+                name in forbidden_optional_names
+                and reference.get("Enabled") is True
+                and reference.get("Optional") is True
+            ):
+                ctx.block(
+                    "uplugin-dependency",
+                    f"Enabled optional plugin reference is forbidden by repository contract: {name}",
+                    descriptor_path,
+                )
+
     source_dir = ctx.path(str(ctx.config.get("source_dir", "Source")))
     if not source_dir.is_dir():
         ctx.block("module-map", "Source directory is missing", source_dir)
@@ -1711,6 +1776,10 @@ def write_selftest_fixture(root: Path) -> tuple[dict[str, Any], Path]:
     )
     config = {
         "plugin_descriptor": "auto",
+        "uplugin": {
+            "required_plugin_references": ["GameplayAbilities"],
+            "forbidden_optional_plugin_references": ["Chooser"],
+        },
         "source_dir": "Source",
         "buildcs": {"release_guard_env": "RELEASE", "optional_dependency_tokens": []},
         "repo_hygiene": {"generated_or_binary_patterns": [r"(^|/)Binaries/"]},
@@ -1777,7 +1846,12 @@ def write_selftest_fixture(root: Path) -> tuple[dict[str, Any], Path]:
     config_path = root / ".github/monolith-static-ci.json"
     config_path.write_text(json.dumps(config), encoding="utf-8")
     (root / "Foo.uplugin").write_text(
-        json.dumps({"Modules": [{"Name": "Foo", "Type": "Editor"}]}),
+        json.dumps(
+            {
+                "Modules": [{"Name": "Foo", "Type": "Editor"}],
+                "Plugins": [{"Name": "GameplayAbilities", "Enabled": True}],
+            }
+        ),
         encoding="utf-8",
     )
     (root / "Source/Foo/Foo.Build.cs").write_text(
@@ -1892,6 +1966,37 @@ def run_selftest() -> int:
             "module map drift",
             "module-map",
             lambda root: (root / "Source/Bar").mkdir(parents=True),
+        ),
+        (
+            "forbidden optional plugin reference",
+            "uplugin-dependency",
+            lambda root: (root / "Foo.uplugin").write_text(
+                json.dumps(
+                    {
+                        "Modules": [{"Name": "Foo", "Type": "Editor"}],
+                        "Plugins": [
+                            {"Name": "GameplayAbilities", "Enabled": True},
+                            {"Name": "Chooser", "Enabled": True, "Optional": True},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            ),
+        ),
+        (
+            "required plugin reference made optional",
+            "uplugin-dependency",
+            lambda root: (root / "Foo.uplugin").write_text(
+                json.dumps(
+                    {
+                        "Modules": [{"Name": "Foo", "Type": "Editor"}],
+                        "Plugins": [
+                            {"Name": "GameplayAbilities", "Enabled": True, "Optional": True}
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            ),
         ),
         (
             "Build.cs class drift",

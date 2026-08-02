@@ -8,9 +8,9 @@
 
 ## MonolithIndex
 
-**Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, AssetRegistry, Json, JsonUtilities, SQLiteCore, Slate, SlateCore, BlueprintGraph, KismetCompiler, EditorSubsystem, CollectionManager, ContentBrowserData
+**Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, AssetRegistry, Json, JsonUtilities, SQLiteCore, Slate, SlateCore, BlueprintGraph, KismetCompiler, EditorSubsystem, CollectionManager, ContentBrowserData, GameplayAbilities
 
-**Engine compatibility:** SQLite step failures use each engine's supported error surface and always return an explicit diagnostic; material sampler inference selects the version-appropriate engine API. Asset/export traversal uses the MonolithCore wrapper. `ContentBrowserData` is a direct private dependency because collection actions link its item and subsystem APIs rather than relying on a transitive editor dependency.
+**Engine compatibility:** SQLite step failures use each engine's supported error surface and always return an explicit diagnostic; material sampler inference selects the version-appropriate engine API. Asset/export traversal uses the MonolithCore wrapper. `ContentBrowserData` is a direct private dependency because collection actions link its item and subsystem APIs rather than relying on a transitive editor dependency. `GameplayAbilities` is likewise a required plugin reference because the index module directly links gameplay-attribute indexing APIs; declaring it optional can let Unreal filter the plugin before Monolith loads and leaves `MonolithIndex` with an unresolved DLL import.
 
 **UE 5.7 unity-build rule:** action `.cpp` helpers must use action-specific names even inside anonymous namespaces. Adaptive unity can include sibling action files in a single generated translation unit, so generic helpers like `AppendPathString`, `AppendPathField`, and `CollectChangedPaths` must not be duplicated across Project action sources.
 

@@ -14,6 +14,8 @@
 
 > **`BlendStackEditor` dep (2026-06-07)** added for the Motion Matching action pack — `build_motion_matching_node` spawns the bound-graph `UAnimGraphNode_MotionMatching` / BlendStack nodes.
 
+> **Chooser ownership contract:** `PoseSearch` is a required `Monolith.uplugin` dependency and its engine descriptor owns the required `PoseSearch -> Chooser` runtime edge. Monolith must not repeat Chooser as a direct optional plugin reference: UE 5.7/5.8 filter optional references against the target receipt, and a filtered direct entry marks Chooser seen before PoseSearch can enqueue its required dependency, causing `UnrealEditor-PoseSearch.dll` to fail with a missing `UnrealEditor-Chooser.dll` import. The Monolith-owned chooser action surface remains independently guarded by `WITH_CHOOSER`, and `MONOLITH_RELEASE_BUILD=1` still compiles that optional action surface out.
+
 ### Classes
 
 | Class | Responsibility |
