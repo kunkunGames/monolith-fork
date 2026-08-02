@@ -3624,7 +3624,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleBatchExecute(const TS
 		{
 			SubParams->SetField(Pair.Key, Pair.Value);
 		}
-		if (!TopLevelGraphName.IsEmpty() && !SubParams->HasField(TEXT("graph_name")))
+		FString DummyGraphName;
+		if (!TopLevelGraphName.IsEmpty() && !SubParams->TryGetStringField(TEXT("graph_name"), DummyGraphName))
 		{
 			SubParams->SetStringField(TEXT("graph_name"), TopLevelGraphName);
 		}
