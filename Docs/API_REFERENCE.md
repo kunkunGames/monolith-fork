@@ -3953,6 +3953,23 @@ List Dataflow editor comment boxes with bounded node membership hints without mu
 | `asset_path` | string | **required** | Dataflow asset path, e.g. /Game/Geometry/DF_Fracture |
 | `node_limit` | integer | optional | Maximum contained-node rows per comment, clamped to 1..500. Default: `128` |
 
+### `water.get_status`
+
+Report Water/Landscape module availability and reflected Water-like actor counts. Read-only; no Water or Landscape hard dependency.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| (none) | | | |
+
+### `water.list_bodies`
+
+List Water-like actors/components in the current editor world using reflected class names only. Does not mutate actors, splines, landscapes, or zones.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `limit` | integer | optional | Maximum returned rows, clamped to 1..500. Default: `100` |
+| `actor_name_filter` | string | optional | Optional case-insensitive substring filter on actor label/name. |
+
 
 
 ## Public C++ Surface (MonolithCore)
