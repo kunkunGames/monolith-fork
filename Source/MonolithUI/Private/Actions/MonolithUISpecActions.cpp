@@ -2451,8 +2451,9 @@ namespace MonolithUI::SpecActionsInternal
                     RequestedPath);
             }
 
-            UWidgetBlueprint* const WidgetBlueprint = LoadObject<UWidgetBlueprint>(nullptr, *ObjectPath);
-            if (!IsValid(WidgetBlueprint))
+            UWidgetBlueprint* WidgetBlueprint = nullptr;
+            FString ResolvedPath, LoadError;
+            if (!FMonolithAssetUtils::TryLoadAssetByPath<UWidgetBlueprint>(ObjectPath, WidgetBlueprint, ResolvedPath, LoadError))
             {
                 return MakeUISpecFingerprintError(
                     TEXT("WidgetBlueprintLoadFailed"),
