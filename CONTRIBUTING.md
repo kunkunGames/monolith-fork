@@ -93,7 +93,7 @@ Actions are the atomic units of functionality. Each domain module registers acti
 In your module's `Actions.h`, add a static method:
 
 ```cpp
-static TSharedPtr<FJsonObject> HandleMyAction(const TSharedPtr<FJsonObject>& Params);
+static FMonolithActionResult HandleMyAction(const TSharedPtr<FJsonObject>& Params);
 ```
 
 ### 2. Implement the handler
@@ -101,7 +101,7 @@ static TSharedPtr<FJsonObject> HandleMyAction(const TSharedPtr<FJsonObject>& Par
 In your module's `Actions.cpp`:
 
 ```cpp
-TSharedPtr<FJsonObject> FMonolithFooActions::HandleMyAction(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithFooActions::HandleMyAction(const TSharedPtr<FJsonObject>& Params)
 {
     // Extract params
     FString AssetPath;
@@ -115,7 +115,7 @@ TSharedPtr<FJsonObject> FMonolithFooActions::HandleMyAction(const TSharedPtr<FJs
     // Return result
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
     Result->SetStringField(TEXT("status"), TEXT("success"));
-    return Result;
+    return FMonolithActionResult::Success(Result);
 }
 ```
 
@@ -233,13 +233,13 @@ Never use string formatting to build SQL queries.
 
 ### Error Handling
 
-Return errors as JSON with a clear message:
+Return errors with a clear message, and optionally attach structured `ErrorData`:
 
 ```cpp
-TSharedPtr<FJsonObject> Error = MakeShared<FJsonObject>();
-Error->SetStringField(TEXT("error"), TEXT("Asset not found"));
-Error->SetStringField(TEXT("asset_path"), AssetPath);
-return Error;
+FMonolithActionResult Result = FMonolithActionResult::Error(TEXT("Asset not found"));
+Result.ErrorData = MakeShared<FJsonObject>();
+Result.ErrorData->SetStringField(TEXT("asset_path"), AssetPath);
+return Result;
 ```
 
 ### Asset Loading
