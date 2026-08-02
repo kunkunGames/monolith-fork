@@ -1571,7 +1571,10 @@ FMonolithActionResult FMonolithMaterialActions::BuildMaterialGraph(const TShared
 		return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	bool bClearExisting = true;
-	Params->TryGetBoolField(TEXT("clear_existing"), bClearExisting);
+	if (Params->HasField(TEXT("clear_existing")) && !Params->TryGetBoolField(TEXT("clear_existing"), bClearExisting))
+	{
+		return FMonolithActionResult::Error(TEXT("clear_existing must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UMaterial* Mat = LoadBaseMaterial(AssetPath);
 	if (!Mat)
@@ -1809,8 +1812,14 @@ FMonolithActionResult FMonolithMaterialActions::ExportMaterialGraph(const TShare
 	bool bIncludePositions = true;
 	if (Params.IsValid())
 	{
-		Params->TryGetBoolField(TEXT("include_properties"), bIncludeProperties);
-		Params->TryGetBoolField(TEXT("include_positions"), bIncludePositions);
+		if (Params->HasField(TEXT("include_properties")) && !Params->TryGetBoolField(TEXT("include_properties"), bIncludeProperties))
+		{
+			return FMonolithActionResult::Error(TEXT("include_properties must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (Params->HasField(TEXT("include_positions")) && !Params->TryGetBoolField(TEXT("include_positions"), bIncludePositions))
+		{
+			return FMonolithActionResult::Error(TEXT("include_positions must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 
 	UMaterial* Mat = LoadBaseMaterial(AssetPath);
@@ -2017,7 +2026,10 @@ FMonolithActionResult FMonolithMaterialActions::ImportMaterialGraph(const TShare
 		return FMonolithActionResult::Error(TEXT("Parameter 'graph_json' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	FString Mode = TEXT("overwrite");
-	Params->TryGetStringField(TEXT("mode"), Mode);
+	if (Params->HasField(TEXT("mode")) && !Params->TryGetStringField(TEXT("mode"), Mode))
+	{
+		return FMonolithActionResult::Error(TEXT("mode must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UMaterial* Mat = LoadBaseMaterial(AssetPath);
 	if (!Mat)
@@ -2099,7 +2111,10 @@ FMonolithActionResult FMonolithMaterialActions::ValidateMaterial(const TSharedPt
 		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
 	}
 	bool bFixIssues = false;
-	Params->TryGetBoolField(TEXT("fix_issues"), bFixIssues);
+	if (Params->HasField(TEXT("fix_issues")) && !Params->TryGetBoolField(TEXT("fix_issues"), bFixIssues))
+	{
+		return FMonolithActionResult::Error(TEXT("fix_issues must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UMaterialInterface* RequestedMaterial = FMonolithAssetUtils::LoadAssetByPath<UMaterialInterface>(AssetPath);
 	if (!RequestedMaterial)
@@ -2500,9 +2515,15 @@ FMonolithActionResult FMonolithMaterialActions::RenderPreview(const TSharedPtr<F
 
 	// Read new params
 	double UVTiling = 1.0;
-	Params->TryGetNumberField(TEXT("uv_tiling"), UVTiling);
+	if (Params->HasField(TEXT("uv_tiling")) && !Params->TryGetNumberField(TEXT("uv_tiling"), UVTiling))
+	{
+		return FMonolithActionResult::Error(TEXT("uv_tiling must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString PreviewMesh = TEXT("sphere");
-	Params->TryGetStringField(TEXT("preview_mesh"), PreviewMesh);
+	if (Params->HasField(TEXT("preview_mesh")) && !Params->TryGetStringField(TEXT("preview_mesh"), PreviewMesh))
+	{
+		return FMonolithActionResult::Error(TEXT("preview_mesh must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Custom preview pipeline: route through editor capture_scene_preview when
 	// uv_tiling or preview_mesh differ from defaults (avoids MonolithEditor dependency)
@@ -2624,7 +2645,10 @@ FMonolithActionResult FMonolithMaterialActions::GetThumbnail(const TSharedPtr<FJ
 	bool bSaveToFile = false;
 	if (Params.IsValid())
 	{
-		Params->TryGetBoolField(TEXT("save_to_file"), bSaveToFile);
+		if (Params->HasField(TEXT("save_to_file")) && !Params->TryGetBoolField(TEXT("save_to_file"), bSaveToFile))
+		{
+			return FMonolithActionResult::Error(TEXT("save_to_file must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
@@ -2706,9 +2730,15 @@ FMonolithActionResult FMonolithMaterialActions::CreateCustomHLSLNode(const TShar
 		return FMonolithActionResult::Error(ErrorMsg_Code, FMonolithJsonUtils::ErrInvalidParams);
 	}
 	FString Description = TEXT("");
-	Params->TryGetStringField(TEXT("description"), Description);
+	if (Params->HasField(TEXT("description")) && !Params->TryGetStringField(TEXT("description"), Description))
+	{
+		return FMonolithActionResult::Error(TEXT("description must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString OutputType = TEXT("");
-	Params->TryGetStringField(TEXT("output_type"), OutputType);
+	if (Params->HasField(TEXT("output_type")) && !Params->TryGetStringField(TEXT("output_type"), OutputType))
+	{
+		return FMonolithActionResult::Error(TEXT("output_type must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	int32 PosX = 0;
 	double PosX_Val;
 	if (Params->TryGetNumberField(TEXT("pos_x"), PosX_Val)) PosX = static_cast<int32>(PosX_Val);
@@ -2978,13 +3008,25 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterial(const TSharedPtr<
 
 	// Parse optional properties
 	FString BlendModeStr = TEXT("Opaque");
-	Params->TryGetStringField(TEXT("blend_mode"), BlendModeStr);
+	if (Params->HasField(TEXT("blend_mode")) && !Params->TryGetStringField(TEXT("blend_mode"), BlendModeStr))
+	{
+		return FMonolithActionResult::Error(TEXT("blend_mode must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString ShadingModelStr = TEXT("DefaultLit");
-	Params->TryGetStringField(TEXT("shading_model"), ShadingModelStr);
+	if (Params->HasField(TEXT("shading_model")) && !Params->TryGetStringField(TEXT("shading_model"), ShadingModelStr))
+	{
+		return FMonolithActionResult::Error(TEXT("shading_model must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString DomainStr = TEXT("Surface");
-	Params->TryGetStringField(TEXT("material_domain"), DomainStr);
+	if (Params->HasField(TEXT("material_domain")) && !Params->TryGetStringField(TEXT("material_domain"), DomainStr))
+	{
+		return FMonolithActionResult::Error(TEXT("material_domain must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	bool bTwoSided = false;
-	Params->TryGetBoolField(TEXT("two_sided"), bTwoSided);
+	if (Params->HasField(TEXT("two_sided")) && !Params->TryGetBoolField(TEXT("two_sided"), bTwoSided))
+	{
+		return FMonolithActionResult::Error(TEXT("two_sided must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Extract package path and asset name from the asset path
 	FString PackagePath, AssetName;
@@ -3891,7 +3933,10 @@ FMonolithActionResult FMonolithMaterialActions::RecompileMaterial(const TSharedP
 	bool bIncludeStats = false;
 	if (Params->HasField(TEXT("include_stats")))
 	{
-		Params->TryGetBoolField(TEXT("include_stats"), bIncludeStats);
+		if (Params->HasField(TEXT("include_stats")) && !Params->TryGetBoolField(TEXT("include_stats"), bIncludeStats))
+		{
+			return FMonolithActionResult::Error(TEXT("include_stats must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 
 	if (bIncludeStats && BaseMat)
@@ -4330,16 +4375,34 @@ FMonolithActionResult FMonolithMaterialActions::ConnectExpressions(const TShared
 		return FMonolithActionResult::Error(ErrorMsg_FromExprName, FMonolithJsonUtils::ErrInvalidParams);
 	}
 	FString FromOutput = TEXT("");
-	Params->TryGetStringField(TEXT("from_pin"), FromOutput);
-	Params->TryGetStringField(TEXT("from_output"), FromOutput);
+	if (Params->HasField(TEXT("from_pin")) && !Params->TryGetStringField(TEXT("from_pin"), FromOutput))
+	{
+		return FMonolithActionResult::Error(TEXT("from_pin must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	if (Params->HasField(TEXT("from_output")) && !Params->TryGetStringField(TEXT("from_output"), FromOutput))
+	{
+		return FMonolithActionResult::Error(TEXT("from_output must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString ToExprName = TEXT("");
-	Params->TryGetStringField(TEXT("to_expression"), ToExprName);
+	if (Params->HasField(TEXT("to_expression")) && !Params->TryGetStringField(TEXT("to_expression"), ToExprName))
+	{
+		return FMonolithActionResult::Error(TEXT("to_expression must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString ToInput = TEXT("");
-	Params->TryGetStringField(TEXT("to_pin"), ToInput);
-	Params->TryGetStringField(TEXT("to_input"), ToInput);
+	if (Params->HasField(TEXT("to_pin")) && !Params->TryGetStringField(TEXT("to_pin"), ToInput))
+	{
+		return FMonolithActionResult::Error(TEXT("to_pin must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	if (Params->HasField(TEXT("to_input")) && !Params->TryGetStringField(TEXT("to_input"), ToInput))
+	{
+		return FMonolithActionResult::Error(TEXT("to_input must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	ToInput = NormalizeInputPinName(ToInput);
 	FString ToProperty = TEXT("");
-	Params->TryGetStringField(TEXT("to_property"), ToProperty);
+	if (Params->HasField(TEXT("to_property")) && !Params->TryGetStringField(TEXT("to_property"), ToProperty))
+	{
+		return FMonolithActionResult::Error(TEXT("to_property must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	if (ToExprName.IsEmpty() && ToProperty.IsEmpty())
 	{
@@ -4699,9 +4762,15 @@ namespace
 FMonolithActionResult FMonolithMaterialActions::ListExpressionClasses(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Filter = TEXT("");
-	Params->TryGetStringField(TEXT("filter"), Filter);
+	if (Params->HasField(TEXT("filter")) && !Params->TryGetStringField(TEXT("filter"), Filter))
+	{
+		return FMonolithActionResult::Error(TEXT("filter must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString Category = TEXT("");
-	Params->TryGetStringField(TEXT("category"), Category);
+	if (Params->HasField(TEXT("category")) && !Params->TryGetStringField(TEXT("category"), Category))
+	{
+		return FMonolithActionResult::Error(TEXT("category must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	EnsureExpressionClassCache();
 
@@ -4906,7 +4975,10 @@ FMonolithActionResult FMonolithMaterialActions::MoveExpression(const TSharedPtr<
 	};
 	TArray<FMoveOp> MoveOps;
 	bool bRelative = false;
-	Params->TryGetBoolField(TEXT("relative"), bRelative);
+	if (Params->HasField(TEXT("relative")) && !Params->TryGetBoolField(TEXT("relative"), bRelative))
+	{
+		return FMonolithActionResult::Error(TEXT("relative must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	const TArray<TSharedPtr<FJsonValue>>* ExpressionsArr = nullptr;
 	// Handle Claude Code JSON string serialization quirk — array may arrive as string
@@ -6649,9 +6721,15 @@ FMonolithActionResult FMonolithMaterialActions::ClearInstanceParameter(const TSh
 	}
 
 	FString ParamName = TEXT("");
-	Params->TryGetStringField(TEXT("parameter_name"), ParamName);
+	if (Params->HasField(TEXT("parameter_name")) && !Params->TryGetStringField(TEXT("parameter_name"), ParamName))
+	{
+		return FMonolithActionResult::Error(TEXT("parameter_name must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString ParamType = TEXT("all");
-	Params->TryGetStringField(TEXT("parameter_type"), ParamType);
+	if (Params->HasField(TEXT("parameter_type")) && !Params->TryGetStringField(TEXT("parameter_type"), ParamType))
+	{
+		return FMonolithActionResult::Error(TEXT("parameter_type must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	GEditor->BeginTransaction(FText::FromString(TEXT("ClearInstanceParameter")));
 	MIC->Modify();
@@ -6776,7 +6854,10 @@ FMonolithActionResult FMonolithMaterialActions::SaveMaterial(const TSharedPtr<FJ
 		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
 	}
 	bool bOnlyIfDirty = true;
-	Params->TryGetBoolField(TEXT("only_if_dirty"), bOnlyIfDirty);
+	if (Params->HasField(TEXT("only_if_dirty")) && !Params->TryGetBoolField(TEXT("only_if_dirty"), bOnlyIfDirty))
+	{
+		return FMonolithActionResult::Error(TEXT("only_if_dirty must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Verify asset exists
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
@@ -7037,7 +7118,10 @@ FMonolithActionResult FMonolithMaterialActions::ReplaceExpression(const TSharedP
 		return FMonolithActionResult::Error(ErrorMsg_NewClassName, FMonolithJsonUtils::ErrInvalidParams);
 	}
 	bool bPreserveConnections = true;
-	Params->TryGetBoolField(TEXT("preserve_connections"), bPreserveConnections);
+	if (Params->HasField(TEXT("preserve_connections")) && !Params->TryGetBoolField(TEXT("preserve_connections"), bPreserveConnections))
+	{
+		return FMonolithActionResult::Error(TEXT("preserve_connections must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UMaterial* Mat = LoadBaseMaterial(AssetPath);
 	if (!Mat)
@@ -7572,7 +7656,10 @@ FMonolithActionResult FMonolithMaterialActions::ListMaterialInstances(const TSha
 		return FMonolithActionResult::Error(ErrorMsg_ParentPath, FMonolithJsonUtils::ErrInvalidParams);
 	}
 	bool bRecursive = true;
-	Params->TryGetBoolField(TEXT("recursive"), bRecursive);
+	if (Params->HasField(TEXT("recursive")) && !Params->TryGetBoolField(TEXT("recursive"), bRecursive))
+	{
+		return FMonolithActionResult::Error(TEXT("recursive must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Verify parent exists
 	UObject* ParentAsset = FMonolithAssetUtils::LoadAssetByPath(ParentPath);
@@ -8320,7 +8407,10 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialFunction(const TSh
 
 	// Resolve function class from type param
 	FString FuncType = TEXT("MaterialFunction");
-	Params->TryGetStringField(TEXT("type"), FuncType);
+	if (Params->HasField(TEXT("type")) && !Params->TryGetStringField(TEXT("type"), FuncType))
+	{
+		return FMonolithActionResult::Error(TEXT("type must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UClass* FuncClass = UMaterialFunction::StaticClass();
 	if (FuncType == TEXT("MaterialLayer"))
@@ -8363,7 +8453,10 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialFunction(const TSh
 	}
 
 	bool bExposeToLibrary = true;
-	Params->TryGetBoolField(TEXT("expose_to_library"), bExposeToLibrary);
+	if (Params->HasField(TEXT("expose_to_library")) && !Params->TryGetBoolField(TEXT("expose_to_library"), bExposeToLibrary))
+	{
+		return FMonolithActionResult::Error(TEXT("expose_to_library must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	NewFunc->bExposeToLibrary = bExposeToLibrary;
 
 	// LibraryCategories was renamed to LibraryCategoriesText (TArray<FString> → TArray<FText>) in UE 5.x
@@ -8416,7 +8509,10 @@ FMonolithActionResult FMonolithMaterialActions::BuildFunctionGraph(const TShared
 		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
 	}
 	bool bClearExisting = false;
-	Params->TryGetBoolField(TEXT("clear_existing"), bClearExisting);
+	if (Params->HasField(TEXT("clear_existing")) && !Params->TryGetBoolField(TEXT("clear_existing"), bClearExisting))
+	{
+		return FMonolithActionResult::Error(TEXT("clear_existing must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Load the material function
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
@@ -8926,8 +9022,14 @@ FMonolithActionResult FMonolithMaterialActions::ExportFunctionGraph(const TShare
 
 	bool bIncludeProperties = true;
 	bool bIncludePositions = true;
-	Params->TryGetBoolField(TEXT("include_properties"), bIncludeProperties);
-	Params->TryGetBoolField(TEXT("include_positions"), bIncludePositions);
+	if (Params->HasField(TEXT("include_properties")) && !Params->TryGetBoolField(TEXT("include_properties"), bIncludeProperties))
+	{
+		return FMonolithActionResult::Error(TEXT("include_properties must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	if (Params->HasField(TEXT("include_positions")) && !Params->TryGetBoolField(TEXT("include_positions"), bIncludePositions))
+	{
+		return FMonolithActionResult::Error(TEXT("include_positions must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
@@ -10079,9 +10181,15 @@ FMonolithActionResult FMonolithMaterialActions::ImportTexture(const TSharedPtr<F
 		return FMonolithActionResult::Error(ErrorMsg_DestPath, FMonolithJsonUtils::ErrInvalidParams);
 	}
 	FString DestName;
-	Params->TryGetStringField(TEXT("dest_name"), DestName);
+	if (Params->HasField(TEXT("dest_name")) && !Params->TryGetStringField(TEXT("dest_name"), DestName))
+	{
+		return FMonolithActionResult::Error(TEXT("dest_name must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	bool bReplaceExisting = false;
-	Params->TryGetBoolField(TEXT("replace_existing"), bReplaceExisting);
+	if (Params->HasField(TEXT("replace_existing")) && !Params->TryGetBoolField(TEXT("replace_existing"), bReplaceExisting))
+	{
+		return FMonolithActionResult::Error(TEXT("replace_existing must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Parse optional settings
 	TextureCompressionSettings Compression = TC_Default;
@@ -10102,7 +10210,10 @@ FMonolithActionResult FMonolithMaterialActions::ImportTexture(const TSharedPtr<F
 	}
 
 	bool bSRGB = true;
-	Params->TryGetBoolField(TEXT("srgb"), bSRGB);
+	if (Params->HasField(TEXT("srgb")) && !Params->TryGetBoolField(TEXT("srgb"), bSRGB))
+	{
+		return FMonolithActionResult::Error(TEXT("srgb must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	TextureGroup LODGroup = TEXTUREGROUP_World;
 	if (Params->HasField(TEXT("lod_group")))
@@ -10249,20 +10360,38 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 
 	// ---- Parse optional params ----
 	FString BlendModeStr = TEXT("Opaque");
-	Params->TryGetStringField(TEXT("blend_mode"), BlendModeStr);
+	if (Params->HasField(TEXT("blend_mode")) && !Params->TryGetStringField(TEXT("blend_mode"), BlendModeStr))
+	{
+		return FMonolithActionResult::Error(TEXT("blend_mode must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString ShadingModelStr = TEXT("DefaultLit");
-	Params->TryGetStringField(TEXT("shading_model"), ShadingModelStr);
+	if (Params->HasField(TEXT("shading_model")) && !Params->TryGetStringField(TEXT("shading_model"), ShadingModelStr))
+	{
+		return FMonolithActionResult::Error(TEXT("shading_model must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString DomainStr = TEXT("Surface");
-	Params->TryGetStringField(TEXT("material_domain"), DomainStr);
+	if (Params->HasField(TEXT("material_domain")) && !Params->TryGetStringField(TEXT("material_domain"), DomainStr))
+	{
+		return FMonolithActionResult::Error(TEXT("material_domain must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	bool bTwoSided = false;
-	Params->TryGetBoolField(TEXT("two_sided"), bTwoSided);
+	if (Params->HasField(TEXT("two_sided")) && !Params->TryGetBoolField(TEXT("two_sided"), bTwoSided))
+	{
+		return FMonolithActionResult::Error(TEXT("two_sided must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	int32 MaxTextureSize = 2048;
 	double MaxTextureSize_Val;
 	if (Params->TryGetNumberField(TEXT("max_texture_size"), MaxTextureSize_Val)) MaxTextureSize = static_cast<int32>(MaxTextureSize_Val);
 	bool bOpacityFromAlpha = false;
-	Params->TryGetBoolField(TEXT("opacity_from_alpha"), bOpacityFromAlpha);
+	if (Params->HasField(TEXT("opacity_from_alpha")) && !Params->TryGetBoolField(TEXT("opacity_from_alpha"), bOpacityFromAlpha))
+	{
+		return FMonolithActionResult::Error(TEXT("opacity_from_alpha must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	bool bReplaceExisting = false;
-	Params->TryGetBoolField(TEXT("replace_existing"), bReplaceExisting);
+	if (Params->HasField(TEXT("replace_existing")) && !Params->TryGetBoolField(TEXT("replace_existing"), bReplaceExisting))
+	{
+		return FMonolithActionResult::Error(TEXT("replace_existing must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Reject unmountable/malformed destinations before any registry lookup, texture import
 	// or CreatePackage (CreatePackage asserts on inputs such as "//Game/..."). Runs BEFORE
@@ -11505,7 +11634,10 @@ FMonolithActionResult FMonolithMaterialActions::ClearGraph(const TSharedPtr<FJso
 		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
 	}
 	bool bPreserveParams = false;
-	Params->TryGetBoolField(TEXT("preserve_parameters"), bPreserveParams);
+	if (Params->HasField(TEXT("preserve_parameters")) && !Params->TryGetBoolField(TEXT("preserve_parameters"), bPreserveParams))
+	{
+		return FMonolithActionResult::Error(TEXT("preserve_parameters must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UMaterial* Mat = LoadBaseMaterial(AssetPath);
 	if (!Mat)
@@ -11774,7 +11906,10 @@ FMonolithActionResult FMonolithMaterialActions::PreviewTexture(const TSharedPtr<
 		if (Params->TryGetNumberField(TEXT("resolution"), Tmp) && Tmp > 0) Resolution = static_cast<int32>(Tmp);
 	}
 	FString OutputPath;
-	Params->TryGetStringField(TEXT("output_path"), OutputPath);
+	if (Params->HasField(TEXT("output_path")) && !Params->TryGetStringField(TEXT("output_path"), OutputPath))
+	{
+		return FMonolithActionResult::Error(TEXT("output_path must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
@@ -11860,7 +11995,10 @@ FMonolithActionResult FMonolithMaterialActions::PreviewTextures(const TSharedPtr
 		if (Params->TryGetNumberField(TEXT("per_texture_size"), Tmp) && Tmp > 0) TileSize = static_cast<int32>(Tmp);
 	}
 	FString OutputPath;
-	Params->TryGetStringField(TEXT("output_path"), OutputPath);
+	if (Params->HasField(TEXT("output_path")) && !Params->TryGetStringField(TEXT("output_path"), OutputPath))
+	{
+		return FMonolithActionResult::Error(TEXT("output_path must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	int32 Count = PathsArray->Num();
 	int32 Cols = FMath::CeilToInt(FMath::Sqrt(static_cast<float>(Count)));
