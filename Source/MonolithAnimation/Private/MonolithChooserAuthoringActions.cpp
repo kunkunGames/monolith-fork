@@ -1,4 +1,5 @@
 #include "MonolithChooserAuthoringActions.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 
 #include "Dom/JsonObject.h"

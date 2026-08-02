@@ -1,6 +1,7 @@
 #include "MonolithInterchangeActions.h"
 
 #include "MonolithAssetUtils.h"
+#include "MonolithInterchangeExportTransaction.h"
 #include "MonolithInterchangeImportRollback.h"
 #include "MonolithParamSchema.h"
 
@@ -68,6 +69,7 @@ namespace
 
 	constexpr int32 MaxDestinationFilesystemEntries = 10000;
 	constexpr int32 MaxDestinationLoadedAssets = 1000000;
+	constexpr int32 MaxExportOutputFiles = 256;
 
 	const TCHAR* ImportKindToString(ERequestedImportKind Kind)
 	{
@@ -215,55 +217,10 @@ namespace
 		return Path.Equals(Root, PathCase) || FPaths::IsUnderDirectory(Path, Root);
 	}
 
-	bool PathTraversesLinkBelowRoot(FString Path, FString Root)
-	{
-		Path = FPaths::ConvertRelativePathToFull(Path);
-		Root = FPaths::ConvertRelativePathToFull(Root);
-		FPaths::NormalizeFilename(Path);
-		FPaths::NormalizeDirectoryName(Root);
-		if (!IsLexicallyUnderRoot(Path, Root))
-		{
-			return false;
-		}
-
-		FString RelativePath = Path;
-		FString RelativeBase = Root;
-		if (!RelativeBase.EndsWith(TEXT("/")))
-		{
-			RelativeBase += TEXT("/");
-		}
-		if (!FPaths::MakePathRelativeTo(RelativePath, *RelativeBase))
-		{
-			return true;
-		}
-
-		FPaths::NormalizeFilename(RelativePath);
-		TArray<FString> Components;
-		RelativePath.ParseIntoArray(Components, TEXT("/"), true);
-		FString CurrentPath = Root;
-		for (const FString& Component : Components)
-		{
-			if (Component.IsEmpty() || Component == TEXT("."))
-			{
-				continue;
-			}
-			if (Component == TEXT(".."))
-			{
-				return true;
-			}
-
-			CurrentPath /= Component;
-			if (FPlatformFileManager::Get().GetPlatformPhysical().IsSymlink(*CurrentPath) == ESymlinkResult::Symlink)
-			{
-				return true;
-			}
-		}
-		return false;
-	}
-
 	bool IsUnderRootWithoutLinkTraversal(const FString& Path, const FString& Root)
 	{
-		return IsLexicallyUnderRoot(Path, Root) && !PathTraversesLinkBelowRoot(Path, Root);
+		return IsLexicallyUnderRoot(Path, Root) &&
+			!MonolithInterchangePathTraversesLinkBelowRoot(Path, Root);
 	}
 
 	TArray<TSharedPtr<FJsonValue>> GetAllowedRootRows()
@@ -1056,6 +1013,120 @@ namespace
 	bool ValidateOutputFileRoot(const FString& FilePath, bool bAllowExternal)
 	{
 		return bAllowExternal || IsUnderDefaultImportRoots(FilePath);
+	}
+
+	bool TryResolveExporterOutputPaths(
+		UExporter* Exporter,
+		UObject* Asset,
+		const FString& BaseFilePath,
+		int32 FileCount,
+		TArray<FString>& OutPaths,
+		FString& OutError)
+	{
+		OutPaths.Reset();
+		if (!Exporter || !Asset || BaseFilePath.IsEmpty() || FileCount <= 0)
+		{
+			OutError = TEXT("Exporter output paths cannot be resolved from invalid inputs.");
+			return false;
+		}
+
+		OutPaths.Reserve(FileCount);
+		TSet<FString> UniquePaths;
+		for (int32 FileIndex = 0; FileIndex < FileCount; ++FileIndex)
+		{
+			FString OutputPath = Exporter->bText
+				? BaseFilePath
+				: Exporter->GetUniqueFilename(Asset, *BaseFilePath, FileIndex, FileCount);
+			if (OutputPath.IsEmpty())
+			{
+				OutError = FString::Printf(
+					TEXT("Exporter returned an empty output path for file index %d."),
+					FileIndex);
+				return false;
+			}
+
+			OutputPath = FPaths::ConvertRelativePathToFull(OutputPath);
+			FPaths::NormalizeFilename(OutputPath);
+			FString OutputKey;
+			if (!TryMonolithInterchangePortableFilenameKey(OutputPath, OutputKey, OutError))
+			{
+				return false;
+			}
+			if (UniquePaths.Contains(OutputKey))
+			{
+				OutError = FString::Printf(
+					TEXT("Exporter resolved duplicate output path: %s"),
+					*OutputPath);
+				return false;
+			}
+			UniquePaths.Add(OutputKey);
+			OutPaths.Add(MoveTemp(OutputPath));
+		}
+		return true;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> ExportOutputPathsToJson(const TArray<FString>& OutputPaths)
+	{
+		TArray<TSharedPtr<FJsonValue>> Rows;
+		Rows.Reserve(OutputPaths.Num());
+		for (const FString& OutputPath : OutputPaths)
+		{
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("file_path"), OutputPath);
+			Row->SetBoolField(TEXT("exists"), IFileManager::Get().FileExists(*OutputPath));
+			Row->SetBoolField(TEXT("path_is_directory"), IFileManager::Get().DirectoryExists(*OutputPath));
+			Row->SetNumberField(
+				TEXT("file_size_bytes"),
+				static_cast<double>(IFileManager::Get().FileSize(*OutputPath)));
+			Rows.Add(MakeShared<FJsonValueObject>(Row));
+		}
+		return Rows;
+	}
+
+	bool CreateExportStagingDirectory(const FString& OutputDirectory, FString& OutStagingDirectory)
+	{
+		OutStagingDirectory.Reset();
+		for (int32 Attempt = 0; Attempt < 16; ++Attempt)
+		{
+			const FString Candidate = FPaths::Combine(
+				OutputDirectory,
+				TEXT(".monolith-export-") + FGuid::NewGuid().ToString(EGuidFormats::Digits));
+			if (IFileManager::Get().FileExists(*Candidate) ||
+				IFileManager::Get().DirectoryExists(*Candidate))
+			{
+				continue;
+			}
+			if (IFileManager::Get().MakeDirectory(*Candidate, false))
+			{
+				OutStagingDirectory = FPaths::ConvertRelativePathToFull(Candidate);
+				FPaths::NormalizeDirectoryName(OutStagingDirectory);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool DeleteExportStagingDirectory(const FString& StagingDirectory)
+	{
+		return StagingDirectory.IsEmpty() ||
+			CleanupMonolithInterchangeExportStagingDirectory(
+				StagingDirectory,
+				MaxExportOutputFiles).bComplete;
+	}
+
+	void SetExportStagingCleanupEvidence(
+		const TSharedPtr<FJsonObject>& Result,
+		const FString& StagingDirectory,
+		bool bCleanupComplete)
+	{
+		Result->SetBoolField(TEXT("staging_cleanup_complete"), bCleanupComplete);
+		TArray<FString> RetainedPaths;
+		if (!bCleanupComplete &&
+			IFileManager::Get().DirectoryExists(*StagingDirectory))
+		{
+			RetainedPaths.Add(StagingDirectory);
+		}
+		Result->SetArrayField(TEXT("retained_paths"), StringArrayToJson(RetainedPaths));
 	}
 
 	TSharedPtr<FJsonObject> ImportOneSource(
@@ -2264,31 +2335,27 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 	{
 		FilePath = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / FilePath);
 	}
-	const FString NormalizedFilePath = FPaths::ConvertRelativePathToFull(FilePath);
+	FString NormalizedFilePath = FilePath.IsEmpty()
+		? FString()
+		: FPaths::ConvertRelativePathToFull(FilePath);
+	FPaths::NormalizeFilename(NormalizedFilePath);
 
 	bool bAllowExternal = false;
-	Params->TryGetBoolField(TEXT("allow_external"), bAllowExternal);
+	if (Params->HasField(TEXT("allow_external")) &&
+		!Params->TryGetBoolField(TEXT("allow_external"), bAllowExternal))
+	{
+		AddMessage(Messages, TEXT("invalid_allow_external"), TEXT("allow_external must be a boolean."));
+	}
 	bool bReplaceExisting = false;
-	Params->TryGetBoolField(TEXT("replace_existing"), bReplaceExisting);
+	if (Params->HasField(TEXT("replace_existing")) &&
+		!Params->TryGetBoolField(TEXT("replace_existing"), bReplaceExisting))
+	{
+		AddMessage(Messages, TEXT("invalid_replace_existing"), TEXT("replace_existing must be a boolean."));
+	}
 	const bool bFileExists = !NormalizedFilePath.IsEmpty() && FPaths::FileExists(NormalizedFilePath);
 	const bool bPathIsDirectory =
 		!NormalizedFilePath.IsEmpty() &&
 		IFileManager::Get().DirectoryExists(*NormalizedFilePath);
-	if (!NormalizedFilePath.IsEmpty() && !ValidateOutputFileRoot(NormalizedFilePath, bAllowExternal))
-	{
-		AddMessage(Messages, TEXT("external_output_blocked"), TEXT("Output path is outside project/content/saved roots. Pass allow_external=true only after caller-side policy allows it."));
-	}
-	if (bPathIsDirectory)
-	{
-		AddMessage(
-			Messages,
-			TEXT("output_path_is_directory"),
-			TEXT("file_path resolves to an existing directory, not a writable output file."));
-	}
-	if (bFileExists && !bReplaceExisting)
-	{
-		AddMessage(Messages, TEXT("output_exists"), TEXT("Output file already exists and replace_existing=false."));
-	}
 	const FString Extension = FPaths::GetExtension(NormalizedFilePath, false);
 	UExporter* Exporter = Extension.IsEmpty()
 		? UExporter::FindExporter(Asset, TEXT(""))
@@ -2305,6 +2372,98 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 				*Extension));
 	}
 
+	const bool bScriptExporter = Exporter &&
+		Exporter->GetClass()->IsFunctionImplementedInScript(TEXT("ScriptRunAssetExportTask"));
+	if (bScriptExporter)
+	{
+		AddMessage(
+			Messages,
+			TEXT("script_exporter_not_transactional"),
+			TEXT("Blueprint/script exporters are rejected because their output files cannot be bounded for transactional promotion."));
+	}
+
+	int32 ExportFileCount = 0;
+	TArray<FString> OutputPaths;
+	if (Exporter && !bScriptExporter)
+	{
+		ExportFileCount = Exporter->bText ? 1 : Exporter->GetFileCount(Asset);
+		if (ExportFileCount <= 0)
+		{
+			AddMessage(
+				Messages,
+				TEXT("invalid_export_file_count"),
+				TEXT("Exporter reported no output files."));
+		}
+		else if (ExportFileCount > MaxExportOutputFiles)
+		{
+			AddMessage(
+				Messages,
+				TEXT("export_file_count_exceeds_limit"),
+				FString::Printf(
+					TEXT("Exporter reported %d output files; the transactional limit is %d."),
+					ExportFileCount,
+					MaxExportOutputFiles));
+		}
+		else
+		{
+			FString ResolveError;
+			if (!TryResolveExporterOutputPaths(
+				Exporter,
+				Asset,
+				NormalizedFilePath,
+				ExportFileCount,
+				OutputPaths,
+				ResolveError))
+			{
+				AddMessage(Messages, TEXT("export_output_resolution_failed"), ResolveError);
+			}
+		}
+	}
+
+	const FString OutputDirectory = FPaths::GetPath(NormalizedFilePath);
+	for (const FString& OutputPath : OutputPaths)
+	{
+		if (!MonolithInterchangePathsMatchHostSemantics(
+				FPaths::GetPath(OutputPath),
+				OutputDirectory))
+		{
+			AddMessage(
+				Messages,
+				TEXT("exporter_output_directory_escape"),
+				FString::Printf(
+					TEXT("Exporter resolved an output outside the requested directory: %s"),
+					*OutputPath));
+			continue;
+		}
+		if (!ValidateOutputFileRoot(OutputPath, bAllowExternal))
+		{
+			AddMessage(
+				Messages,
+				TEXT("external_output_blocked"),
+				FString::Printf(
+					TEXT("Output path is outside project/content/saved roots: %s. Pass allow_external=true only after caller-side policy allows it."),
+					*OutputPath));
+		}
+		if (IFileManager::Get().DirectoryExists(*OutputPath))
+		{
+			AddMessage(
+				Messages,
+				TEXT("output_path_is_directory"),
+				FString::Printf(
+					TEXT("Exporter output resolves to an existing directory: %s"),
+					*OutputPath));
+		}
+		if (IFileManager::Get().FileExists(*OutputPath) && !bReplaceExisting)
+		{
+			AddMessage(
+				Messages,
+				TEXT("output_exists"),
+				FString::Printf(
+					TEXT("Output file already exists and replace_existing=false: %s"),
+					*OutputPath));
+		}
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("asset_path"), AssetPath);
 	Result->SetStringField(TEXT("asset_class"), Asset->GetClass()->GetName());
@@ -2315,6 +2474,18 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 	Result->SetBoolField(TEXT("dry_run"), bDryRun);
 	Result->SetBoolField(TEXT("exporter_available"), Exporter != nullptr);
 	Result->SetStringField(TEXT("exporter_class"), Exporter ? Exporter->GetClass()->GetPathName() : FString());
+	Result->SetBoolField(TEXT("script_exporter"), bScriptExporter);
+	Result->SetNumberField(TEXT("output_file_count"), OutputPaths.Num());
+	Result->SetArrayField(TEXT("output_files"), ExportOutputPathsToJson(OutputPaths));
+	Result->SetBoolField(TEXT("mutation_attempted"), false);
+	Result->SetBoolField(TEXT("exporter_succeeded"), false);
+	Result->SetBoolField(TEXT("commit_succeeded"), false);
+	Result->SetBoolField(TEXT("rollback_complete"), true);
+	Result->SetBoolField(TEXT("partial_mutation"), false);
+	Result->SetBoolField(TEXT("staging_cleanup_complete"), true);
+	Result->SetNumberField(TEXT("promoted_file_count"), 0);
+	Result->SetNumberField(TEXT("restored_file_count"), 0);
+	Result->SetArrayField(TEXT("retained_paths"), TArray<TSharedPtr<FJsonValue>>());
 
 	if (Messages.Num() > 0)
 	{
@@ -2329,31 +2500,301 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 		return FMonolithActionResult::Success(Result);
 	}
 
-	const FString OutDir = FPaths::GetPath(NormalizedFilePath);
-	if (!OutDir.IsEmpty() && !IFileManager::Get().DirectoryExists(*OutDir))
+	if (OutputDirectory.IsEmpty() ||
+		(!IFileManager::Get().DirectoryExists(*OutputDirectory) &&
+			!IFileManager::Get().MakeDirectory(*OutputDirectory, true)))
 	{
-		IFileManager::Get().MakeDirectory(*OutDir, true);
+		AddMessage(
+			Messages,
+			TEXT("output_directory_unavailable"),
+			FString::Printf(
+				TEXT("Failed to create output directory: %s"),
+				*OutputDirectory));
+		Result->SetStringField(TEXT("status"), TEXT("error"));
+		Result->SetArrayField(TEXT("messages"), Messages);
+		return FMonolithActionResult::Success(Result);
+	}
+
+	FString StagingDirectory;
+	if (!CreateExportStagingDirectory(OutputDirectory, StagingDirectory))
+	{
+		AddMessage(
+			Messages,
+			TEXT("export_staging_unavailable"),
+			FString::Printf(
+				TEXT("Failed to create a unique export staging directory under: %s"),
+				*OutputDirectory));
+		Result->SetStringField(TEXT("status"), TEXT("error"));
+		Result->SetArrayField(TEXT("messages"), Messages);
+		return FMonolithActionResult::Success(Result);
+	}
+
+	const FString StagedBasePath = FPaths::Combine(
+		StagingDirectory,
+		FPaths::GetCleanFilename(NormalizedFilePath));
+	TArray<FString> StagedOutputPaths;
+	FString StagedResolveError;
+	if (!TryResolveExporterOutputPaths(
+		Exporter,
+		Asset,
+		StagedBasePath,
+		ExportFileCount,
+		StagedOutputPaths,
+		StagedResolveError) ||
+		StagedOutputPaths.Num() != OutputPaths.Num())
+	{
+		AddMessage(
+			Messages,
+			TEXT("staged_output_resolution_failed"),
+			StagedResolveError.IsEmpty()
+				? TEXT("Exporter resolved a different number of staged and destination files.")
+				: StagedResolveError);
+		const bool bCleanupComplete = DeleteExportStagingDirectory(StagingDirectory);
+		Result->SetStringField(TEXT("status"), TEXT("error"));
+		SetExportStagingCleanupEvidence(Result, StagingDirectory, bCleanupComplete);
+		Result->SetArrayField(TEXT("messages"), Messages);
+		return FMonolithActionResult::Success(Result);
+	}
+
+	for (const FString& StagedOutputPath : StagedOutputPaths)
+	{
+		if (!IsLexicallyUnderRoot(StagedOutputPath, StagingDirectory) ||
+			!MonolithInterchangePathsMatchHostSemantics(
+				FPaths::GetPath(StagedOutputPath),
+				StagingDirectory))
+		{
+			AddMessage(
+				Messages,
+				TEXT("staged_output_directory_escape"),
+				FString::Printf(
+					TEXT("Exporter resolved a staged output outside the isolated staging directory: %s"),
+					*StagedOutputPath));
+		}
+	}
+	if (Messages.Num() > 0)
+	{
+		const bool bCleanupComplete = DeleteExportStagingDirectory(StagingDirectory);
+		Result->SetStringField(TEXT("status"), TEXT("error"));
+		SetExportStagingCleanupEvidence(Result, StagingDirectory, bCleanupComplete);
+		Result->SetArrayField(TEXT("messages"), Messages);
+		return FMonolithActionResult::Success(Result);
 	}
 
 	UAssetExportTask* Task = NewObject<UAssetExportTask>();
 	Task->AddToRoot();
 	Task->Object = Asset;
-	Task->Filename = NormalizedFilePath;
+	Task->Filename = StagedBasePath;
 	Task->bSelected = false;
-	Task->bReplaceIdentical = bReplaceExisting;
+	Task->bReplaceIdentical = true;
 	Task->bPrompt = false;
 	Task->bUseFileArchive = false;
 	Task->bWriteEmptyFiles = false;
 	Task->bAutomated = true;
 	Task->Exporter = Exporter;
-	const bool bSucceeded = UExporter::RunAssetExportTask(Task);
+	const bool bExporterSucceeded = UExporter::RunAssetExportTask(Task);
+	const TArray<FString> ExporterErrors = Task->Errors;
 	Task->RemoveFromRoot();
 
-	Result->SetStringField(TEXT("status"), bSucceeded ? TEXT("exported") : TEXT("error"));
-	if (!bSucceeded)
+	Result->SetBoolField(TEXT("mutation_attempted"), true);
+	Result->SetBoolField(TEXT("exporter_succeeded"), bExporterSucceeded);
+	if (!bExporterSucceeded)
 	{
 		AddMessage(Messages, TEXT("export_failed"), TEXT("Unreal exporter returned failure."));
 	}
+	for (const FString& ExporterError : ExporterErrors)
+	{
+		AddMessage(Messages, TEXT("exporter_error"), ExporterError);
+	}
+
+	if (bExporterSucceeded)
+	{
+		for (const FString& StagedOutputPath : StagedOutputPaths)
+		{
+			if (MonolithInterchangePathTraversesLinkBelowRoot(
+					StagedOutputPath,
+					StagingDirectory))
+			{
+				AddMessage(
+					Messages,
+					TEXT("staged_output_link_traversal"),
+					FString::Printf(
+						TEXT("Exporter produced a staged output that traverses a symlink or junction: %s"),
+						*StagedOutputPath));
+			}
+			else if (!IFileManager::Get().FileExists(*StagedOutputPath))
+			{
+				AddMessage(
+					Messages,
+					TEXT("export_output_missing"),
+					FString::Printf(
+						TEXT("Exporter reported success without producing expected staged file: %s"),
+						*StagedOutputPath));
+			}
+		}
+
+		const FMonolithInterchangeStagingScanResult StagingScan =
+			ScanMonolithInterchangeExportStagingDirectory(
+				StagingDirectory,
+				MaxExportOutputFiles);
+		if (!StagingScan.bComplete)
+		{
+			AddMessage(
+				Messages,
+				StagingScan.bEntryLimitExceeded
+					? TEXT("export_staging_entry_limit_exceeded")
+					: TEXT("export_staging_scan_failed"),
+				StagingScan.Error);
+		}
+		const FMonolithInterchangeStagingManifestValidationResult ManifestValidation =
+			ValidateMonolithInterchangeStagingManifest(
+				StagedOutputPaths,
+				StagingScan.Files);
+		for (const FString& InvalidExpectedFile : ManifestValidation.InvalidExpectedFiles)
+		{
+			AddMessage(
+				Messages,
+				TEXT("non_portable_declared_export_output"),
+				FString::Printf(
+					TEXT("Exporter declared a staged filename outside the portable ASCII contract: %s"),
+					*InvalidExpectedFile));
+		}
+		for (const FString& InvalidActualFile : ManifestValidation.InvalidActualFiles)
+		{
+			AddMessage(
+				Messages,
+				TEXT("non_portable_actual_export_output"),
+				FString::Printf(
+					TEXT("Exporter produced a staged filename outside the portable ASCII contract: %s"),
+					*InvalidActualFile));
+		}
+		for (const FString& DuplicateExpectedFile : ManifestValidation.DuplicateExpectedFiles)
+		{
+			AddMessage(
+				Messages,
+				TEXT("duplicate_declared_export_output_identity"),
+				FString::Printf(
+					TEXT("Exporter declared duplicate staged output identities: %s"),
+					*DuplicateExpectedFile));
+		}
+		for (const FString& DuplicateActualFile : ManifestValidation.DuplicateActualFiles)
+		{
+			AddMessage(
+				Messages,
+				TEXT("duplicate_export_output_identity"),
+				FString::Printf(
+					TEXT("Exporter produced multiple staged files with one portable identity: %s"),
+					*DuplicateActualFile));
+		}
+		for (const FString& ActualStagedFile : ManifestValidation.UnexpectedFiles)
+		{
+			AddMessage(
+				Messages,
+				TEXT("unexpected_export_output"),
+				FString::Printf(
+					TEXT("Exporter produced an undeclared staged file: %s"),
+					*ActualStagedFile));
+		}
+
+		for (const FString& ActualStagedDirectory : StagingScan.Directories)
+		{
+			AddMessage(
+				Messages,
+				TEXT("unexpected_export_directory"),
+				FString::Printf(
+					TEXT("Exporter produced an undeclared staged directory: %s"),
+					*ActualStagedDirectory));
+		}
+	}
+
+	if (Messages.Num() > 0)
+	{
+		const bool bCleanupComplete = DeleteExportStagingDirectory(StagingDirectory);
+		if (!bCleanupComplete)
+		{
+			AddMessage(
+				Messages,
+				TEXT("staging_cleanup_failed"),
+				FString::Printf(
+					TEXT("Failed to remove export staging directory: %s"),
+					*StagingDirectory),
+				TEXT("warning"));
+		}
+		Result->SetStringField(TEXT("status"), TEXT("error"));
+		Result->SetBoolField(TEXT("commit_succeeded"), false);
+		Result->SetBoolField(TEXT("rollback_complete"), true);
+		Result->SetBoolField(TEXT("partial_mutation"), false);
+		SetExportStagingCleanupEvidence(Result, StagingDirectory, bCleanupComplete);
+		Result->SetArrayField(TEXT("messages"), Messages);
+		return FMonolithActionResult::Success(Result);
+	}
+
+	TArray<FMonolithInterchangeExportFileCommit> CommitFiles;
+	CommitFiles.Reserve(OutputPaths.Num());
+	for (int32 FileIndex = 0; FileIndex < OutputPaths.Num(); ++FileIndex)
+	{
+		FMonolithInterchangeExportFileCommit& CommitFile = CommitFiles.AddDefaulted_GetRef();
+		CommitFile.StagedPath = StagedOutputPaths[FileIndex];
+		CommitFile.DestinationPath = OutputPaths[FileIndex];
+	}
+	const FMonolithInterchangeExportCommitResult Commit =
+		CommitMonolithInterchangeExportFiles(CommitFiles, bReplaceExisting);
+	const bool bPreserveStagingForRecovery =
+		!Commit.bSucceeded && !Commit.bRollbackComplete;
+	const bool bCleanupComplete = !bPreserveStagingForRecovery &&
+		DeleteExportStagingDirectory(StagingDirectory);
+
+	TArray<FString> RetainedPaths = Commit.RetainedPaths;
+	if (bPreserveStagingForRecovery)
+	{
+		if (IFileManager::Get().DirectoryExists(*StagingDirectory))
+		{
+			RetainedPaths.AddUnique(StagingDirectory);
+		}
+		AddMessage(
+			Messages,
+			TEXT("staging_preserved_for_recovery"),
+			FString::Printf(
+				TEXT("Rollback was incomplete, so staged files and backups were preserved for recovery: %s"),
+				*StagingDirectory));
+	}
+	else if (!bCleanupComplete)
+	{
+		if (IFileManager::Get().DirectoryExists(*StagingDirectory))
+		{
+			RetainedPaths.AddUnique(StagingDirectory);
+		}
+		AddMessage(
+			Messages,
+			TEXT("staging_cleanup_failed"),
+			FString::Printf(
+				TEXT("Failed to remove export staging directory: %s"),
+				*StagingDirectory),
+			TEXT("warning"));
+	}
+	if (!Commit.bSucceeded)
+	{
+		AddMessage(Messages, TEXT("export_commit_failed"), Commit.Error);
+		if (!Commit.bRollbackComplete)
+		{
+			AddMessage(
+				Messages,
+				TEXT("export_rollback_incomplete"),
+				TEXT("Export promotion failed and one or more destination files could not be restored."));
+		}
+	}
+
+	const bool bPartialMutation = !Commit.bSucceeded && !Commit.bRollbackComplete;
+	Result->SetStringField(
+		TEXT("status"),
+		Commit.bSucceeded ? TEXT("exported") : (bPartialMutation ? TEXT("partial_export") : TEXT("error")));
+	Result->SetBoolField(TEXT("commit_succeeded"), Commit.bSucceeded);
+	Result->SetBoolField(TEXT("rollback_complete"), Commit.bRollbackComplete);
+	Result->SetBoolField(TEXT("partial_mutation"), bPartialMutation);
+	Result->SetBoolField(TEXT("staging_cleanup_complete"), bCleanupComplete);
+	Result->SetNumberField(TEXT("promoted_file_count"), Commit.PromotedFileCount);
+	Result->SetNumberField(TEXT("restored_file_count"), Commit.RestoredFileCount);
+	Result->SetArrayField(TEXT("retained_paths"), StringArrayToJson(RetainedPaths));
+	Result->SetArrayField(TEXT("output_files"), ExportOutputPathsToJson(OutputPaths));
 	Result->SetNumberField(TEXT("file_size_bytes"), static_cast<double>(IFileManager::Get().FileSize(*NormalizedFilePath)));
 	Result->SetArrayField(TEXT("messages"), Messages);
 	return FMonolithActionResult::Success(Result);

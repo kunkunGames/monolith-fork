@@ -1,5 +1,6 @@
 // Copyright tumourlove. All Rights Reserved.
 #include "MonolithAssetTextureIngestActions.h"
+#include "MonolithAssetTextureIngestInternal.h"
 
 // Monolith registry
 #include "MonolithJsonUtils.h"
@@ -29,6 +30,7 @@
 // Image decoding
 #include "IImageWrapper.h"                      // IImageWrapper, ERGBFormat, EImageFormat
 #include "IImageWrapperModule.h"                // IImageWrapperModule
+#include "DDSFile.h"                            // UE::DDS header-only metadata validation
 #include "Modules/ModuleManager.h"              // FModuleManager::LoadModuleChecked
 
 // Texture creation
@@ -46,6 +48,85 @@
 
 namespace MonolithAsset::TextureIngestInternal
 {
+    bool ValidateDecodedImageBounds(
+        int64 Width,
+        int64 Height,
+        int64& OutExpectedBytes,
+        FString& OutError)
+    {
+        OutExpectedBytes = 0;
+        OutError.Reset();
+
+        if (Width <= 0 || Height <= 0)
+        {
+            OutError = FString::Printf(
+                TEXT("Image header has invalid dimensions: %lldx%lld"),
+                Width,
+                Height);
+            return false;
+        }
+
+        if (Width > MaxDecodedImageDimension || Height > MaxDecodedImageDimension)
+        {
+            OutError = FString::Printf(
+                TEXT("Image dimensions %lldx%lld exceed the per-axis limit of %lld"),
+                Width,
+                Height,
+                MaxDecodedImageDimension);
+            return false;
+        }
+
+        constexpr int64 BytesPerPixel = 4;
+        constexpr int64 MaxPixelCount = MaxDecodedImageBytes / BytesPerPixel;
+        if (Width > MaxPixelCount / Height)
+        {
+            OutError = FString::Printf(
+                TEXT("Image dimensions %lldx%lld exceed the decoded BGRA8 byte limit of %lld"),
+                Width,
+                Height,
+                MaxDecodedImageBytes);
+            return false;
+        }
+
+        OutExpectedBytes = Width * Height * BytesPerPixel;
+        return true;
+    }
+
+    bool ValidateDdsSingleTexture2DSurface(
+        const TArray<uint8>& CompressedBytes,
+        FString& OutError)
+    {
+        OutError.Reset();
+
+        UE::DDS::EDDSError DdsError = UE::DDS::EDDSError::OK;
+        TUniquePtr<UE::DDS::FDDSFile> Dds(
+            UE::DDS::FDDSFile::CreateFromDDSInMemory(
+                CompressedBytes.GetData(),
+                static_cast<int64>(CompressedBytes.Num()),
+                &DdsError,
+                UE::DDS::EDDSReadMipMode::HeaderOnly));
+        if (!Dds.IsValid() || DdsError != UE::DDS::EDDSError::OK)
+        {
+            OutError = FString::Printf(
+                TEXT("DDS header validation failed before decode (error=%d)"),
+                static_cast<int32>(DdsError));
+            return false;
+        }
+
+        if (!Dds->IsValidTexture2D())
+        {
+            OutError = FString::Printf(
+                TEXT("DDS input must contain exactly one 2D texture surface; "
+                     "dimension=%d depth=%u array_slices=%u"),
+                Dds->Dimension,
+                Dds->Depth,
+                Dds->ArraySize);
+            return false;
+        }
+
+        return true;
+    }
+
     enum class ETextureConflictPolicy : uint8
     {
         Fail,
@@ -1022,7 +1103,7 @@ namespace MonolithAsset::TextureIngestInternal
             }
             Package->MarkAsGarbage();
         }
-        CollectGarbage(RF_NoFlags);
+        CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
 
         TArray<FString> ResidualFiles;
         for (const FString& PackageFilename : GetTexturePackageFilenameCandidates(PackageName))
@@ -2276,11 +2357,42 @@ FMonolithActionResult MonolithAsset::FTextureIngestActions::HandleImportTextureF
         }
     }
 
+    // Reject the payload before FBase64 allocates its output buffer. The exact
+    // size helper accounts for '=' padding and divides before multiplying, so
+    // it neither rejects an in-budget padded payload nor overflows for a large
+    // FString length like GetMaxDecodedDataSize's uint32 multiplication can.
+    const uint32 DecodedCompressedSize = FBase64::GetDecodedDataSize(BytesB64);
+    if (static_cast<int64>(DecodedCompressedSize) > MaxCompressedImageBytes)
+    {
+        return FMonolithActionResult::Error(
+            FString::Printf(
+                TEXT("bytes_b64 exceeds the compressed image byte limit of %lld"),
+                MaxCompressedImageBytes),
+            -32602);
+    }
+
     // --- Base64 decode ---
     TArray<uint8> CompressedBytes;
     if (!FBase64::Decode(BytesB64, CompressedBytes) || CompressedBytes.Num() == 0)
     {
         return FMonolithActionResult::Error(TEXT("Base64 decode of bytes_b64 failed or produced empty buffer"), -32602);
+    }
+    if (static_cast<int64>(CompressedBytes.Num()) > MaxCompressedImageBytes)
+    {
+        return FMonolithActionResult::Error(
+            FString::Printf(
+                TEXT("Decoded bytes_b64 exceeds the compressed image byte limit of %lld"),
+                MaxCompressedImageBytes),
+            -32602);
+    }
+
+    if (Format == EImageFormat::DDS)
+    {
+        FString DdsSurfaceError;
+        if (!ValidateDdsSingleTexture2DSurface(CompressedBytes, DdsSurfaceError))
+        {
+            return FMonolithActionResult::Error(DdsSurfaceError, -32602);
+        }
     }
 
     // --- Image wrapper: decode compressed bytes to raw BGRA8 ---
@@ -2302,6 +2414,21 @@ FMonolithActionResult MonolithAsset::FTextureIngestActions::HandleImportTextureF
             -32603);
     }
 
+    // IImageWrapper guarantees that header information is available after
+    // SetCompressed and that decompression is deferred until GetRaw. Bound the
+    // allocation using the header before requesting any raw pixels.
+    const int64 HeaderWidth = Wrapper->GetWidth();
+    const int64 HeaderHeight = Wrapper->GetHeight();
+    int64 ExpectedBytes = 0;
+    FString DecodeBoundsError;
+    if (!ValidateDecodedImageBounds(HeaderWidth, HeaderHeight, ExpectedBytes, DecodeBoundsError))
+    {
+        return FMonolithActionResult::Error(DecodeBoundsError, -32602);
+    }
+
+    const int32 W = static_cast<int32>(HeaderWidth);
+    const int32 H = static_cast<int32>(HeaderHeight);
+
     // GetRaw(BGRA, 8) is the documented happy path for 8-bit PNG/JPEG/BMP input;
     // wrapper implementations handle the RGBA<->BGRA swizzle internally.
     TArray<uint8> RawBgra;
@@ -2312,20 +2439,10 @@ FMonolithActionResult MonolithAsset::FTextureIngestActions::HandleImportTextureF
             -32603);
     }
 
-    const int32 W = Wrapper->GetWidth();
-    const int32 H = Wrapper->GetHeight();
-    if (W <= 0 || H <= 0)
+    if (static_cast<int64>(RawBgra.Num()) != ExpectedBytes)
     {
         return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Decoded image has invalid dimensions: %dx%d"), W, H),
-            -32603);
-    }
-
-    const int64 ExpectedBytes = (int64)W * (int64)H * 4;
-    if (RawBgra.Num() < ExpectedBytes)
-    {
-        return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Decoded pixel buffer too small: got %d, expected %lld for %dx%d BGRA8"),
+            FString::Printf(TEXT("Decoded pixel buffer size mismatch: got %d, expected %lld for %dx%d BGRA8"),
                 RawBgra.Num(), ExpectedBytes, W, H),
             -32603);
     }

@@ -2493,7 +2493,9 @@ Optional Interchange framework discovery, validation, and asset import/export op
 | `update_reimport_path` | `asset_path` (required string), `source_file` (required string), `source_file_index` (optional integer), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean) |
 | `reimport_asset` | `asset_path` (required string), `source_file` (optional string), `source_file_index` (optional integer), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean) |
 | `reimport_assets` | `asset_paths` (required array), `confirm` (optional boolean), `dry_run` (optional boolean) |
-| `export_asset` | `asset_path` (required string), `file_path` (required string), `replace_existing` (optional boolean), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean) |
+| `export_asset` | `asset_path` (required string), `file_path` (required string), `replace_existing` (optional boolean), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean); resolves at most 256 native exporter-declared outputs, stages them beside the destination, validates the complete output set, and promotes it atomically with rollback backups |
+
+`export_asset` rejects script exporters whose arbitrary filesystem side effects cannot be bounded. Native output planning requires every declared file to remain in the requested directory under the current host filesystem's path semantics. Directory names may be Unicode, while each exporter-owned filename is restricted to at most 255 ASCII letters, digits, `.`, `_`, and `-`, cannot end in `.`, and cannot use a Windows reserved device stem. Planning, staged-output inspection, and commit lowercase that complete locale-independent set before alias checks, so case-only filenames are rejected even before a destination exists and each observed staging identity can satisfy only one declaration. Requested-directory, staging-root, and ownership checks remain host-sensitive and do not use the portable alias key. After export, every expected staged path must exist without symlink or junction traversal, and no invalid, duplicate, undeclared file or directory may appear. Promotion and restoration use immediate no-retry/no-dialog moves; a failed promotion removes already-promoted read-only files and restores all backups. The stable response reports exporter, commit, rollback, cleanup, partial-mutation, promotion/restoration-count, and exact retained-path evidence. A bounded non-recursive cleanup deletes only a completely scanned flat staging directory; incomplete rollback or unsafe cleanup preserves recovery artifacts instead of hiding them.
 
 
 ## ndisplay
@@ -2893,6 +2895,8 @@ Decode base64 image bytes and import them as a UTexture2D asset.
 
 `fail` guarantees the exact requested package path and errors on any existing package instead of silently suffixing it. Only `unique` may call Unreal unique-name resolution and return a different `asset_path`. `replace` updates the exact existing top-level `UTexture2D` in the same UObject and package identity; another class, missing top-level asset, or redirected identity is rejected. Before mutation, replacement moves the complete original `FTextureSource` object, caller-facing settings, PostEdit/save side-effect values, CPU-copy helper identity, and package dirty state into an armed RAII snapshot. Complete running/cooked platform ownership is moved with it, preserving mip bulk and derived-data handles, VT/CPU copies, encoder metadata, hashes, and DDC/fetch keys rather than rebuilding from pixel bytes. A failure restores and verifies that state and re-notifies dependent materials; failed new creation removes the object/package header and sidecars. `LODGroup`, `CompressionSettings`, `SRGB`, `MipGenSettings`, `AddressX`, and `AddressY` changes emit property-specific editor callbacks. Whole-object source transfer supports long-lat, compressed, blocked/layered, and missing-running-platform-data textures; a null original platform pointer is restored to null. Replacement rejects active running/cooked platform builds, non-null `ResourceMem`, and aliased/duplicate cooked platform ownership before mutation. The response distinguishes intent and outcome through `requested_asset_path`, `asset_path`, `created`, `replaced`, and `conflict_policy`.
 
+The action bounds allocations before image decompression: base64 payloads may decode to at most 256 MiB of compressed data, image axes may not exceed 16,384 pixels, and the expected BGRA8 surface may not exceed 512 MiB. DDS metadata is parsed header-only before `IImageWrapper`; arrays, cubemaps, and volume textures are rejected because this action materializes exactly one `UTexture2D` surface. Limit and DDS-surface violations return `-32602` before package creation or replacement mutation.
+
 ### `asset.import_font_family`
 
 Import a font family from one or more TTF files as a composite UFont plus UFontFace assets.
@@ -2904,7 +2908,10 @@ Import a font family from one or more TTF files as a composite UFont plus UFontF
 | `faces` | array | **required** | Typeface specs with `typeface` and absolute `source_path`; non-empty. |
 | `loading_policy` | string | optional | LazyLoad, Stream, or Inline. Default: `LazyLoad` |
 | `hinting` | string | optional | Default, Auto, AutoLight, Monochrome, or None. Default: `Default` |
+| `allow_unique_names` | bool | optional | Explicitly allow suffixed family/face package names when an exact requested path already exists. Default: `false` |
 | `save` | bool | optional | Save imported font assets. Default: `true` |
+
+The action accepts 1-64 faces, caps each `.ttf` source at 64 MiB and the aggregate family input at 256 MiB, and preflights every source plus every requested output package before creating a package. Accepted source bytes are retained across the mutation phase so a file cannot change between validation and `UFontFace` creation. Exact package names are the default; suffixing occurs only through `allow_unique_names=true`.
 
 ### `asset.save_asset`
 
@@ -3127,6 +3134,8 @@ Guarded reflected hard/soft reference rewrite inside copied destination packages
 | `confirm` | boolean | optional | Required for mutation when `dry_run=false`. Default: `false` |
 | `save` | boolean | optional | Save changed packages. Default: `true` |
 | `strict` | boolean | optional | Treat load/fixup blockers as errors. Default: `true` |
+
+Confirmed strict runs preflight over every candidate object and property before applying any rewrite, so a reference blocker cannot leave earlier objects partially mutated. A remapped hard-reference target with an incompatible reflected class is always a strict blocker even when `require_targets=false`; that option controls missing targets only. When `save=true`, the preflight also collects every package that would change, resolves every save filename, prepares all existing files through source control as one batch, creates or validates destination directories, and probes write access before the applying traversal begins. Any unavailable save target returns `status="preflight_failed"`, `applied_count=0`, `planned_changed_packages[]`, `planned_changed_package_count`, `save_preflight[]`, and (when package targets reached source-control preparation) `source_control_prepare`; this saveability gate also protects explicit `strict=false` best-effort writes from predictable partial-save failures.
 
 ### `asset.validate_dependency_closure`
 
