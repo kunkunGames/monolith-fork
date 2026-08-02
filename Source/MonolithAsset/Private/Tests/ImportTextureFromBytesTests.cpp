@@ -20,6 +20,7 @@
 // Image fixture generation
 #include "IImageWrapper.h"
 #include "IImageWrapperModule.h"
+#include "DDSFile.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
 
@@ -105,6 +106,37 @@ namespace
         WritePngUint32(PngBytes, 20, Height);
         WritePngUint32(PngBytes, 29, FCrc::MemCrc32(PngBytes.GetData() + 12, 17));
         return FBase64::Encode(PngBytes);
+    }
+
+    bool MakeDdsBytes(uint32 ArraySize, TArray<uint8>& OutBytes)
+    {
+        OutBytes.Reset();
+        UE::DDS::EDDSError DdsError = UE::DDS::EDDSError::OK;
+        TUniquePtr<UE::DDS::FDDSFile> Dds(
+            UE::DDS::FDDSFile::CreateEmpty(
+                /*InDimension=*/2,
+                /*InWidth=*/2,
+                /*InHeight=*/2,
+                /*InDepth=*/1,
+                /*InMipCount=*/1,
+                ArraySize,
+                UE::DDS::EDXGIFormat::B8G8R8A8_UNORM,
+                UE::DDS::FDDSFile::CREATE_FLAG_NONE,
+                &DdsError));
+        if (!Dds.IsValid() || DdsError != UE::DDS::EDDSError::OK)
+        {
+            return false;
+        }
+
+        TArray64<uint8> DdsBytes64;
+        DdsError = Dds->WriteDDS(DdsBytes64, UE::DDS::EDDSFormatVersion::D3D10);
+        if (DdsError != UE::DDS::EDDSError::OK || DdsBytes64.IsEmpty() || DdsBytes64.Num() > MAX_int32)
+        {
+            return false;
+        }
+
+        OutBytes.Append(DdsBytes64.GetData(), static_cast<int32>(DdsBytes64.Num()));
+        return true;
     }
 
     FString MakeUniqueTestAssetPath(const TCHAR* Prefix)
@@ -328,6 +360,48 @@ bool FMonolithAssetTextureDecodeBoundsActionTest::RunTest(const FString& Paramet
         Result.ErrorMessage.Contains(TEXT("decoded BGRA8 byte limit")));
     TestNull(TEXT("oversized header does not create a texture"), FindTextureAtPackagePath(AssetPath));
     TestFalse(TEXT("oversized header does not save a package"), UEditorAssetLibrary::DoesAssetExist(AssetPath));
+    CleanupSavedTextureAtPackagePath(AssetPath);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithAssetTextureDdsSurfacePreflightTest,
+    "MonolithAsset.ImportTextureFromBytes.DdsSurfacePreflight",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithAssetTextureDdsSurfacePreflightTest::RunTest(const FString& Parameters)
+{
+    using namespace MonolithAsset::TextureIngestInternal;
+
+    TArray<uint8> SingleSurfaceBytes;
+    TestTrue(TEXT("single-surface DDS fixture is created"), MakeDdsBytes(1, SingleSurfaceBytes));
+    FString SurfaceError;
+    TestTrue(
+        TEXT("single 2D DDS surface passes metadata preflight"),
+        ValidateDdsSingleTexture2DSurface(SingleSurfaceBytes, SurfaceError));
+    TestTrue(TEXT("accepted DDS metadata has no error"), SurfaceError.IsEmpty());
+
+    TArray<uint8> ArrayBytes;
+    TestTrue(TEXT("two-slice DDS fixture is created"), MakeDdsBytes(2, ArrayBytes));
+    const FString AssetPath = MakeUniqueTestAssetPath(TEXT("DdsArrayPreflight"));
+    TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+    Params->SetStringField(TEXT("destination"), AssetPath);
+    Params->SetStringField(TEXT("format_hint"), TEXT("dds"));
+    Params->SetStringField(TEXT("bytes_b64"), FBase64::Encode(ArrayBytes));
+
+    const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("asset"), TEXT("import_texture_from_bytes"), Params);
+
+    TestFalse(TEXT("multi-slice DDS is rejected before wrapper decode"), Result.bSuccess);
+    TestEqual(TEXT("DDS surface contract uses invalid-params code"), Result.ErrorCode, -32602);
+    TestTrue(
+        *FString::Printf(
+            TEXT("DDS surface error is explicit (actual: %s)"),
+            *Result.ErrorMessage),
+        Result.ErrorMessage.Contains(TEXT("exactly one 2D texture surface"))
+            && Result.ErrorMessage.Contains(TEXT("array_slices=2")));
+    TestNull(TEXT("rejected DDS array does not create a texture"), FindTextureAtPackagePath(AssetPath));
+    TestFalse(TEXT("rejected DDS array does not save a package"), UEditorAssetLibrary::DoesAssetExist(AssetPath));
     CleanupSavedTextureAtPackagePath(AssetPath);
     return true;
 }
