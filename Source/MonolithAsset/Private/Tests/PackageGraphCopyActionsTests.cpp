@@ -9,6 +9,9 @@
 #include "Curves/CurveFloat.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Engine/Font.h"
+#include "Engine/PrimaryAssetLabel.h"
+#include "Engine/Texture2D.h"
 #include "HAL/FileManager.h"
 #include "ISourceControlModule.h"
 #include "Misc/Guid.h"
@@ -562,6 +565,239 @@ bool FMonolithAssetPackageGraphRegistryTest::RunTest(const FString& Parameters)
 	FPackageName::UnRegisterMountPoint(CopySourceRootWithSlash, CopySourceContent);
 	FPackageName::UnRegisterMountPoint(CopyDestRootWithSlash, CopyDestContent);
 	IFileManager::Get().DeleteDirectory(*CopyBaseDir, false, true);
+
+	const FString FixupMountSuffix = TestRunId.Right(12);
+	const FString FixupSourceRootWithSlash = FString::Printf(TEXT("/MonolithFixupSrc%s/"), *FixupMountSuffix);
+	const FString FixupDestinationRootWithSlash = FString::Printf(TEXT("/MonolithFixupDst%s/"), *FixupMountSuffix);
+	const FString FixupSourceRoot = FixupSourceRootWithSlash.LeftChop(1);
+	const FString FixupDestinationRoot = FixupDestinationRootWithSlash.LeftChop(1);
+	const FString FixupBaseDir = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Automation"), TEXT("MonolithPackageGraphFixup"), TestRunId);
+	const FString FixupSourceContent = NormalizeTestContentDir(FPaths::Combine(FixupBaseDir, TEXT("Source"), TEXT("Content")));
+	const FString FixupDestinationContent = NormalizeTestContentDir(FPaths::Combine(FixupBaseDir, TEXT("Destination"), TEXT("Content")));
+	TestTrue(TEXT("fixup_copied_references source temp content exists"), IFileManager::Get().MakeDirectory(*FixupSourceContent, true));
+	TestTrue(TEXT("fixup_copied_references destination temp content exists"), IFileManager::Get().MakeDirectory(*FixupDestinationContent, true));
+	FPackageName::RegisterMountPoint(FixupSourceRootWithSlash, FixupSourceContent);
+	FPackageName::RegisterMountPoint(FixupDestinationRootWithSlash, FixupDestinationContent);
+
+	const FString ExistingSourcePackageName = FixupSourceRoot + TEXT("/Existing");
+	const FString ExistingDestinationPackageName = FixupDestinationRoot + TEXT("/Existing");
+	const FString MissingSourceObjectPath = FixupSourceRoot + TEXT("/Missing.Missing");
+	const FString FixupContainerPackageName = FixupDestinationRoot + TEXT("/Container");
+	UPackage* ExistingSourcePackage = CreatePackage(*ExistingSourcePackageName);
+	UPackage* ExistingDestinationPackage = CreatePackage(*ExistingDestinationPackageName);
+	UPackage* FixupContainerPackage = CreatePackage(*FixupContainerPackageName);
+	UCurveFloat* ExistingSourceAsset = ExistingSourcePackage
+		? NewObject<UCurveFloat>(ExistingSourcePackage, UCurveFloat::StaticClass(), TEXT("Existing"), RF_Public | RF_Standalone)
+		: nullptr;
+	UCurveFloat* ExistingDestinationAsset = ExistingDestinationPackage
+		? NewObject<UCurveFloat>(ExistingDestinationPackage, UCurveFloat::StaticClass(), TEXT("Existing"), RF_Public | RF_Standalone)
+		: nullptr;
+	UPrimaryAssetLabel* FixupContainer = FixupContainerPackage
+		? NewObject<UPrimaryAssetLabel>(FixupContainerPackage, UPrimaryAssetLabel::StaticClass(), TEXT("Container"), RF_Public | RF_Standalone)
+		: nullptr;
+	TestNotNull(TEXT("fixup_copied_references existing source asset"), ExistingSourceAsset);
+	TestNotNull(TEXT("fixup_copied_references existing destination asset"), ExistingDestinationAsset);
+	TestNotNull(TEXT("fixup_copied_references destination container"), FixupContainer);
+	if (ExistingSourceAsset && ExistingDestinationAsset && FixupContainer)
+	{
+		IAssetRegistry& TestAssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		TestAssetRegistry.AssetCreated(ExistingSourceAsset);
+		TestAssetRegistry.AssetCreated(ExistingDestinationAsset);
+		TestAssetRegistry.AssetCreated(FixupContainer);
+		FixupContainer->ExplicitAssets.Add(TSoftObjectPtr<UObject>(FSoftObjectPath(ExistingSourceAsset->GetPathName())));
+		FixupContainer->ExplicitAssets.Add(TSoftObjectPtr<UObject>(FSoftObjectPath(MissingSourceObjectPath)));
+		ExistingSourcePackage->SetDirtyFlag(false);
+		ExistingDestinationPackage->SetDirtyFlag(false);
+		FixupContainerPackage->SetDirtyFlag(false);
+
+		const FSoftObjectPath OriginalExistingReference = FixupContainer->ExplicitAssets[0].ToSoftObjectPath();
+		TSharedPtr<FJsonObject> StrictFixupParams = MakeShared<FJsonObject>();
+		TSharedPtr<FJsonObject> StrictFixupRemaps = MakeShared<FJsonObject>();
+		StrictFixupRemaps->SetStringField(FixupSourceRoot, FixupDestinationRoot);
+		StrictFixupParams->SetObjectField(TEXT("root_remaps"), StrictFixupRemaps);
+		SetStringArray(StrictFixupParams, TEXT("destination_roots"), { FixupDestinationRoot });
+		SetStringArray(StrictFixupParams, TEXT("package_paths"), { FixupContainerPackageName });
+		StrictFixupParams->SetBoolField(TEXT("confirm"), true);
+		StrictFixupParams->SetBoolField(TEXT("save"), false);
+		StrictFixupParams->SetBoolField(TEXT("strict"), true);
+		StrictFixupParams->SetBoolField(TEXT("require_targets"), true);
+
+		const FMonolithActionResult StrictFixup = FMonolithAssetPackageGraphActions::FixupCopiedReferences(StrictFixupParams);
+		TestFalse(TEXT("fixup_copied_references strict preflight rejects a missing remapped target"), StrictFixup.bSuccess);
+		TestEqual(
+			TEXT("fixup_copied_references strict preflight leaves earlier valid references untouched"),
+			FixupContainer->ExplicitAssets[0].ToSoftObjectPath(),
+			OriginalExistingReference);
+		TestFalse(TEXT("fixup_copied_references strict preflight leaves package clean"), FixupContainerPackage->IsDirty());
+		if (const TSharedPtr<FJsonObject> StrictErrorData = MonolithAsset::GetErrorDataObject(StrictFixup))
+		{
+			FString Status;
+			double CandidateCount = 0.0;
+			double AppliedCount = -1.0;
+			StrictErrorData->TryGetStringField(TEXT("status"), Status);
+			StrictErrorData->TryGetNumberField(TEXT("candidate_count"), CandidateCount);
+			StrictErrorData->TryGetNumberField(TEXT("applied_count"), AppliedCount);
+			TestEqual(TEXT("fixup_copied_references strict blocker status"), Status, FString(TEXT("preflight_failed")));
+			TestEqual(TEXT("fixup_copied_references strict preflight sees both candidates"), static_cast<int32>(CandidateCount), 2);
+			TestEqual(TEXT("fixup_copied_references strict preflight applies no references"), static_cast<int32>(AppliedCount), 0);
+		}
+		else
+		{
+			AddError(TEXT("fixup_copied_references strict preflight must return structured error data"));
+		}
+
+		FixupContainer->ExplicitAssets.SetNum(1);
+		FixupContainerPackage->SetDirtyFlag(false);
+		const FMonolithActionResult SuccessfulStrictFixup =
+			FMonolithAssetPackageGraphActions::FixupCopiedReferences(StrictFixupParams);
+		TestTrue(TEXT("fixup_copied_references applies after a clean strict preflight"), SuccessfulStrictFixup.bSuccess);
+		TestEqual(
+			TEXT("fixup_copied_references clean strict apply selects the remapped destination"),
+			FixupContainer->ExplicitAssets[0].ToSoftObjectPath().ToString(),
+			ExistingDestinationAsset->GetPathName());
+		TestTrue(TEXT("fixup_copied_references clean strict apply dirties the package"), FixupContainerPackage->IsDirty());
+		if (SuccessfulStrictFixup.Result.IsValid())
+		{
+			double AppliedCount = 0.0;
+			SuccessfulStrictFixup.Result->TryGetNumberField(TEXT("applied_count"), AppliedCount);
+			TestEqual(TEXT("fixup_copied_references clean strict apply rewrites one reference"), static_cast<int32>(AppliedCount), 1);
+		}
+
+		TSharedPtr<FJsonObject> TruncatedFixupParams = MakeShared<FJsonObject>();
+		TruncatedFixupParams->Values = StrictFixupParams->Values;
+		SetStringArray(
+			TruncatedFixupParams,
+			TEXT("package_paths"),
+			{ FixupContainerPackageName, FixupDestinationRoot + TEXT("/SecondPackage") });
+		TruncatedFixupParams->SetNumberField(TEXT("max_packages"), 1);
+		const FMonolithActionResult TruncatedFixup = FMonolithAssetPackageGraphActions::FixupCopiedReferences(TruncatedFixupParams);
+		TestFalse(TEXT("fixup_copied_references strict mutation rejects truncated preflight"), TruncatedFixup.bSuccess);
+		if (const TSharedPtr<FJsonObject> TruncatedErrorData = MonolithAsset::GetErrorDataObject(TruncatedFixup))
+		{
+			bool bTruncated = false;
+			double AppliedCount = -1.0;
+			TruncatedErrorData->TryGetBoolField(TEXT("truncated"), bTruncated);
+			TruncatedErrorData->TryGetNumberField(TEXT("applied_count"), AppliedCount);
+			TestTrue(TEXT("fixup_copied_references strict cap reports truncated"), bTruncated);
+			TestEqual(TEXT("fixup_copied_references strict cap applies no references"), static_cast<int32>(AppliedCount), 0);
+		}
+		TestEqual(
+			TEXT("fixup_copied_references strict cap leaves the already-remapped reference untouched"),
+			FixupContainer->ExplicitAssets[0].ToSoftObjectPath().ToString(),
+			ExistingDestinationAsset->GetPathName());
+
+		const FString TypeSourcePackageName = FixupSourceRoot + TEXT("/TypeCheckedTexture");
+		const FString TypeDestinationPackageName = FixupDestinationRoot + TEXT("/TypeCheckedTexture");
+		const FString TypeContainerPackageName = FixupDestinationRoot + TEXT("/TypeCheckedFont");
+		UPackage* TypeSourcePackage = CreatePackage(*TypeSourcePackageName);
+		UPackage* TypeDestinationPackage = CreatePackage(*TypeDestinationPackageName);
+		UPackage* TypeContainerPackage = CreatePackage(*TypeContainerPackageName);
+		UTexture2D* SourceTexture = TypeSourcePackage
+			? NewObject<UTexture2D>(
+				TypeSourcePackage,
+				UTexture2D::StaticClass(),
+				TEXT("TypeCheckedTexture"),
+				RF_Public | RF_Standalone)
+			: nullptr;
+		UCurveFloat* WrongTypeDestination = TypeDestinationPackage
+			? NewObject<UCurveFloat>(
+				TypeDestinationPackage,
+				UCurveFloat::StaticClass(),
+				TEXT("TypeCheckedTexture"),
+				RF_Public | RF_Standalone)
+			: nullptr;
+		UFont* TypeContainer = TypeContainerPackage
+			? NewObject<UFont>(
+				TypeContainerPackage,
+				UFont::StaticClass(),
+				TEXT("TypeCheckedFont"),
+				RF_Public | RF_Standalone)
+			: nullptr;
+		TestNotNull(TEXT("type-mismatch source texture"), SourceTexture);
+		TestNotNull(TEXT("type-mismatch wrong destination object"), WrongTypeDestination);
+		TestNotNull(TEXT("type-mismatch reference container"), TypeContainer);
+		if (SourceTexture && WrongTypeDestination && TypeContainer)
+		{
+			TestAssetRegistry.AssetCreated(SourceTexture);
+			TestAssetRegistry.AssetCreated(WrongTypeDestination);
+			TestAssetRegistry.AssetCreated(TypeContainer);
+			TypeContainer->Textures.Add(SourceTexture);
+			TypeSourcePackage->SetDirtyFlag(false);
+			TypeDestinationPackage->SetDirtyFlag(false);
+			TypeContainerPackage->SetDirtyFlag(false);
+
+			TSharedPtr<FJsonObject> TypeMismatchParams = MakeShared<FJsonObject>();
+			TypeMismatchParams->SetObjectField(TEXT("root_remaps"), StrictFixupRemaps);
+			SetStringArray(TypeMismatchParams, TEXT("destination_roots"), { FixupDestinationRoot });
+			SetStringArray(TypeMismatchParams, TEXT("package_paths"), { TypeContainerPackageName });
+			TypeMismatchParams->SetBoolField(TEXT("confirm"), true);
+			TypeMismatchParams->SetBoolField(TEXT("save"), false);
+			TypeMismatchParams->SetBoolField(TEXT("strict"), true);
+			TypeMismatchParams->SetBoolField(TEXT("require_targets"), false);
+
+			const FMonolithActionResult TypeMismatchFixup =
+				FMonolithAssetPackageGraphActions::FixupCopiedReferences(TypeMismatchParams);
+			TestFalse(
+				TEXT("strict preflight rejects an incompatible hard-reference target"),
+				TypeMismatchFixup.bSuccess);
+			TestEqual(
+				TEXT("type mismatch leaves the source texture reference untouched"),
+				TypeContainer->Textures[0].Get(),
+				SourceTexture);
+			TestFalse(
+				TEXT("type mismatch leaves the reference package clean"),
+				TypeContainerPackage->IsDirty());
+			if (const TSharedPtr<FJsonObject> TypeErrorData =
+					MonolithAsset::GetErrorDataObject(TypeMismatchFixup))
+			{
+				FString Status;
+				TypeErrorData->TryGetStringField(TEXT("status"), Status);
+				TestEqual(
+					TEXT("type mismatch is reported during preflight"),
+					Status,
+					FString(TEXT("preflight_failed")));
+			}
+			else
+			{
+				AddError(TEXT("type-mismatch preflight must return structured error data"));
+			}
+
+			TestAssetRegistry.AssetDeleted(TypeContainer);
+			TestAssetRegistry.AssetDeleted(WrongTypeDestination);
+			TestAssetRegistry.AssetDeleted(SourceTexture);
+		}
+		if (TypeContainerPackage)
+		{
+			TypeContainerPackage->SetDirtyFlag(false);
+		}
+		if (TypeDestinationPackage)
+		{
+			TypeDestinationPackage->SetDirtyFlag(false);
+		}
+		if (TypeSourcePackage)
+		{
+			TypeSourcePackage->SetDirtyFlag(false);
+		}
+
+		TestAssetRegistry.AssetDeleted(FixupContainer);
+		TestAssetRegistry.AssetDeleted(ExistingDestinationAsset);
+		TestAssetRegistry.AssetDeleted(ExistingSourceAsset);
+	}
+	if (FixupContainerPackage)
+	{
+		FixupContainerPackage->SetDirtyFlag(false);
+	}
+	if (ExistingDestinationPackage)
+	{
+		ExistingDestinationPackage->SetDirtyFlag(false);
+	}
+	if (ExistingSourcePackage)
+	{
+		ExistingSourcePackage->SetDirtyFlag(false);
+	}
+	FPackageName::UnRegisterMountPoint(FixupSourceRootWithSlash, FixupSourceContent);
+	FPackageName::UnRegisterMountPoint(FixupDestinationRootWithSlash, FixupDestinationContent);
+	IFileManager::Get().DeleteDirectory(*FixupBaseDir, false, true);
 
 	TSharedPtr<FJsonObject> FixupDryRunParams = MakeShared<FJsonObject>();
 	TSharedPtr<FJsonObject> FixupRemaps = MakeShared<FJsonObject>();
