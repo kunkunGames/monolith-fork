@@ -1,5 +1,6 @@
 #include "CoreMinimal.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformFileManager.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
@@ -111,6 +112,93 @@ bool FMonolithInterchangeExportTransactionTest::RunTest(const FString& Parameter
 			TestEqual(TEXT("second original survives rollback"), ContentB, FString(TEXT("original-b")));
 		}
 		TestTrue(TEXT("unpromoted staged file remains available to caller cleanup"), IFileManager::Get().FileExists(*StagedB));
+	}
+
+	{
+		const FString DestinationA = FixtureRoot / TEXT("readonly-rollback-a.txt");
+		const FString DestinationB = FixtureRoot / TEXT("readonly-rollback-b.txt");
+		const FString StagedA = FixtureRoot / TEXT("readonly-rollback-a.staged.txt");
+		const FString StagedB = FixtureRoot / TEXT("readonly-rollback-b.staged.txt");
+		SaveFixture(DestinationA, TEXT("original-a"));
+		SaveFixture(DestinationB, TEXT("original-b"));
+		SaveFixture(StagedA, TEXT("read-only-replacement-a"));
+		SaveFixture(StagedB, TEXT("replacement-b"));
+		IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+		TestTrue(
+			TEXT("first staged replacement is made read-only"),
+			PlatformFile.SetReadOnly(*StagedA, true));
+
+		TArray<FMonolithInterchangeExportFileCommit> Files;
+		FMonolithInterchangeExportFileCommit& FileA = Files.AddDefaulted_GetRef();
+		FileA.StagedPath = StagedA;
+		FileA.DestinationPath = DestinationA;
+		FMonolithInterchangeExportFileCommit& FileB = Files.AddDefaulted_GetRef();
+		FileB.StagedPath = StagedB;
+		FileB.DestinationPath = DestinationB;
+
+		const FMonolithInterchangeExportCommitResult Result =
+			CommitMonolithInterchangeExportFiles(
+				Files,
+				true,
+				[&DestinationB, &StagedB](const FString& Destination, const FString& Source)
+				{
+					if (Destination == DestinationB && Source == StagedB)
+					{
+						return false;
+					}
+					return IFileManager::Get().Move(
+						*Destination,
+						*Source,
+						false,
+						false,
+						false,
+						true);
+				});
+
+		PlatformFile.SetReadOnly(*DestinationA, false);
+		PlatformFile.SetReadOnly(*StagedA, false);
+		TestFalse(TEXT("second promotion failure is reported for read-only rollback"), Result.bSucceeded);
+		TestTrue(TEXT("read-only promoted file is removed during rollback"), Result.bRollbackComplete);
+		TestEqual(TEXT("both originals are restored after read-only rollback"), Result.RestoredFileCount, 2);
+		TestTrue(TEXT("read-only rollback retains no recovery paths"), Result.RetainedPaths.IsEmpty());
+		FString ContentA;
+		if (LoadFixture(DestinationA, ContentA))
+		{
+			TestEqual(TEXT("read-only replacement does not block original restoration"), ContentA, FString(TEXT("original-a")));
+		}
+	}
+
+	{
+		const FString LinkRoot = FixtureRoot / TEXT("link-guard");
+		const FString ExpectedStagedPath = LinkRoot / TEXT("expected-output.bin");
+		const FString OutsidePath = FixtureRoot / TEXT("outside-output.bin");
+		int32 QueryCount = 0;
+		const bool bTraversesExpectedLeaf =
+			MonolithInterchangePathTraversesLinkBelowRoot(
+				ExpectedStagedPath,
+				LinkRoot,
+				[&ExpectedStagedPath, &QueryCount](const FString& Candidate)
+				{
+					++QueryCount;
+					return FPaths::IsSamePath(Candidate, ExpectedStagedPath)
+						? ESymlinkResult::Symlink
+						: ESymlinkResult::NonSymlink;
+				});
+		TestTrue(TEXT("expected staged-output symlink leaf is rejected"), bTraversesExpectedLeaf);
+		TestTrue(TEXT("staged-output link validation queries at least the leaf"), QueryCount > 0);
+
+		QueryCount = 0;
+		const bool bOutsideRootTraverses =
+			MonolithInterchangePathTraversesLinkBelowRoot(
+				OutsidePath,
+				LinkRoot,
+				[&QueryCount](const FString&)
+				{
+					++QueryCount;
+					return ESymlinkResult::Symlink;
+				});
+		TestFalse(TEXT("outside-root path is not classified by the below-root link helper"), bOutsideRootTraverses);
+		TestEqual(TEXT("outside-root path performs no filesystem link queries"), QueryCount, 0);
 	}
 
 	{

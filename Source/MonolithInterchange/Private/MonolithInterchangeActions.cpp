@@ -217,55 +217,10 @@ namespace
 		return Path.Equals(Root, PathCase) || FPaths::IsUnderDirectory(Path, Root);
 	}
 
-	bool PathTraversesLinkBelowRoot(FString Path, FString Root)
-	{
-		Path = FPaths::ConvertRelativePathToFull(Path);
-		Root = FPaths::ConvertRelativePathToFull(Root);
-		FPaths::NormalizeFilename(Path);
-		FPaths::NormalizeDirectoryName(Root);
-		if (!IsLexicallyUnderRoot(Path, Root))
-		{
-			return false;
-		}
-
-		FString RelativePath = Path;
-		FString RelativeBase = Root;
-		if (!RelativeBase.EndsWith(TEXT("/")))
-		{
-			RelativeBase += TEXT("/");
-		}
-		if (!FPaths::MakePathRelativeTo(RelativePath, *RelativeBase))
-		{
-			return true;
-		}
-
-		FPaths::NormalizeFilename(RelativePath);
-		TArray<FString> Components;
-		RelativePath.ParseIntoArray(Components, TEXT("/"), true);
-		FString CurrentPath = Root;
-		for (const FString& Component : Components)
-		{
-			if (Component.IsEmpty() || Component == TEXT("."))
-			{
-				continue;
-			}
-			if (Component == TEXT(".."))
-			{
-				return true;
-			}
-
-			CurrentPath /= Component;
-			if (FPlatformFileManager::Get().GetPlatformPhysical().IsSymlink(*CurrentPath) == ESymlinkResult::Symlink)
-			{
-				return true;
-			}
-		}
-		return false;
-	}
-
 	bool IsUnderRootWithoutLinkTraversal(const FString& Path, const FString& Root)
 	{
-		return IsLexicallyUnderRoot(Path, Root) && !PathTraversesLinkBelowRoot(Path, Root);
+		return IsLexicallyUnderRoot(Path, Root) &&
+			!MonolithInterchangePathTraversesLinkBelowRoot(Path, Root);
 	}
 
 	TArray<TSharedPtr<FJsonValue>> GetAllowedRootRows()
@@ -1163,6 +1118,21 @@ namespace
 			CleanupMonolithInterchangeExportStagingDirectory(
 				StagingDirectory,
 				MaxExportOutputFiles).bComplete;
+	}
+
+	void SetExportStagingCleanupEvidence(
+		const TSharedPtr<FJsonObject>& Result,
+		const FString& StagingDirectory,
+		bool bCleanupComplete)
+	{
+		Result->SetBoolField(TEXT("staging_cleanup_complete"), bCleanupComplete);
+		TArray<FString> RetainedPaths;
+		if (!bCleanupComplete &&
+			IFileManager::Get().DirectoryExists(*StagingDirectory))
+		{
+			RetainedPaths.Add(StagingDirectory);
+		}
+		Result->SetArrayField(TEXT("retained_paths"), StringArrayToJson(RetainedPaths));
 	}
 
 	TSharedPtr<FJsonObject> ImportOneSource(
@@ -2586,7 +2556,7 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 				: StagedResolveError);
 		const bool bCleanupComplete = DeleteExportStagingDirectory(StagingDirectory);
 		Result->SetStringField(TEXT("status"), TEXT("error"));
-		Result->SetBoolField(TEXT("staging_cleanup_complete"), bCleanupComplete);
+		SetExportStagingCleanupEvidence(Result, StagingDirectory, bCleanupComplete);
 		Result->SetArrayField(TEXT("messages"), Messages);
 		return FMonolithActionResult::Success(Result);
 	}
@@ -2608,7 +2578,7 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 	{
 		const bool bCleanupComplete = DeleteExportStagingDirectory(StagingDirectory);
 		Result->SetStringField(TEXT("status"), TEXT("error"));
-		Result->SetBoolField(TEXT("staging_cleanup_complete"), bCleanupComplete);
+		SetExportStagingCleanupEvidence(Result, StagingDirectory, bCleanupComplete);
 		Result->SetArrayField(TEXT("messages"), Messages);
 		return FMonolithActionResult::Success(Result);
 	}
@@ -2645,7 +2615,18 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 		for (const FString& StagedOutputPath : StagedOutputPaths)
 		{
 			ExpectedStagedPaths.Add(FilesystemPathKey(StagedOutputPath));
-			if (!IFileManager::Get().FileExists(*StagedOutputPath))
+			if (MonolithInterchangePathTraversesLinkBelowRoot(
+					StagedOutputPath,
+					StagingDirectory))
+			{
+				AddMessage(
+					Messages,
+					TEXT("staged_output_link_traversal"),
+					FString::Printf(
+						TEXT("Exporter produced a staged output that traverses a symlink or junction: %s"),
+						*StagedOutputPath));
+			}
+			else if (!IFileManager::Get().FileExists(*StagedOutputPath))
 			{
 				AddMessage(
 					Messages,
@@ -2710,13 +2691,7 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 		Result->SetBoolField(TEXT("commit_succeeded"), false);
 		Result->SetBoolField(TEXT("rollback_complete"), true);
 		Result->SetBoolField(TEXT("partial_mutation"), false);
-		Result->SetBoolField(TEXT("staging_cleanup_complete"), bCleanupComplete);
-		TArray<FString> RetainedPaths;
-		if (!bCleanupComplete)
-		{
-			RetainedPaths.Add(StagingDirectory);
-		}
-		Result->SetArrayField(TEXT("retained_paths"), StringArrayToJson(RetainedPaths));
+		SetExportStagingCleanupEvidence(Result, StagingDirectory, bCleanupComplete);
 		Result->SetArrayField(TEXT("messages"), Messages);
 		return FMonolithActionResult::Success(Result);
 	}
@@ -2739,7 +2714,10 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 	TArray<FString> RetainedPaths = Commit.RetainedPaths;
 	if (bPreserveStagingForRecovery)
 	{
-		RetainedPaths.AddUnique(StagingDirectory);
+		if (IFileManager::Get().DirectoryExists(*StagingDirectory))
+		{
+			RetainedPaths.AddUnique(StagingDirectory);
+		}
 		AddMessage(
 			Messages,
 			TEXT("staging_preserved_for_recovery"),
@@ -2749,7 +2727,10 @@ FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<
 	}
 	else if (!bCleanupComplete)
 	{
-		RetainedPaths.AddUnique(StagingDirectory);
+		if (IFileManager::Get().DirectoryExists(*StagingDirectory))
+		{
+			RetainedPaths.AddUnique(StagingDirectory);
+		}
 		AddMessage(
 			Messages,
 			TEXT("staging_cleanup_failed"),

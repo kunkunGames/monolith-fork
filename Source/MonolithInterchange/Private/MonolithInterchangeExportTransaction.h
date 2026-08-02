@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "HAL/PlatformFile.h"
 
 struct FMonolithInterchangeExportFileCommit
 {
@@ -43,6 +44,18 @@ struct FMonolithInterchangeStagingCleanupResult
 
 using FMonolithInterchangeMoveFile =
 	TFunctionRef<bool(const FString& Destination, const FString& Source)>;
+
+using FMonolithInterchangeSymlinkQuery =
+	TFunctionRef<ESymlinkResult(const FString& Path)>;
+
+bool MonolithInterchangePathTraversesLinkBelowRoot(
+	const FString& Path,
+	const FString& Root,
+	FMonolithInterchangeSymlinkQuery SymlinkQuery);
+
+bool MonolithInterchangePathTraversesLinkBelowRoot(
+	const FString& Path,
+	const FString& Root);
 
 FMonolithInterchangeExportCommitResult CommitMonolithInterchangeExportFiles(
 	TArray<FMonolithInterchangeExportFileCommit>& Files,

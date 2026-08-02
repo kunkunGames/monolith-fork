@@ -1,6 +1,7 @@
 #include "MonolithInterchangeExportTransaction.h"
 
 #include "HAL/FileManager.h"
+#include "HAL/PlatformFileManager.h"
 #include "Misc/Paths.h"
 
 namespace
@@ -13,6 +14,20 @@ namespace
 		Path.ToLowerInline();
 #endif
 		return Path;
+	}
+
+	bool IsLexicallyUnderRoot(FString Path, FString Root)
+	{
+		Path = FPaths::ConvertRelativePathToFull(Path);
+		Root = FPaths::ConvertRelativePathToFull(Root);
+		FPaths::NormalizeDirectoryName(Path);
+		FPaths::NormalizeDirectoryName(Root);
+#if PLATFORM_WINDOWS
+		constexpr ESearchCase::Type PathCase = ESearchCase::IgnoreCase;
+#else
+		constexpr ESearchCase::Type PathCase = ESearchCase::CaseSensitive;
+#endif
+		return Path.Equals(Root, PathCase) || FPaths::IsUnderDirectory(Path, Root);
 	}
 
 	void AddRetainedFileIfPresent(TArray<FString>& RetainedPaths, const FString& Path)
@@ -34,7 +49,7 @@ namespace
 			FMonolithInterchangeExportFileCommit& File = Files[Index];
 			if (File.bPromoted && FileManager.FileExists(*File.DestinationPath))
 			{
-				if (!FileManager.Delete(*File.DestinationPath, false, false, true))
+				if (!FileManager.Delete(*File.DestinationPath, false, true, true))
 				{
 					Result.bRollbackComplete = false;
 					AddRetainedFileIfPresent(Result.RetainedPaths, File.DestinationPath);
@@ -63,6 +78,70 @@ namespace
 			File.bBackedUp = false;
 		}
 	}
+}
+
+bool MonolithInterchangePathTraversesLinkBelowRoot(
+	const FString& Path,
+	const FString& Root,
+	FMonolithInterchangeSymlinkQuery SymlinkQuery)
+{
+	FString NormalizedPath = FPaths::ConvertRelativePathToFull(Path);
+	FString NormalizedRoot = FPaths::ConvertRelativePathToFull(Root);
+	FPaths::NormalizeFilename(NormalizedPath);
+	FPaths::NormalizeDirectoryName(NormalizedRoot);
+	if (!IsLexicallyUnderRoot(NormalizedPath, NormalizedRoot))
+	{
+		return false;
+	}
+
+	FString RelativePath = NormalizedPath;
+	FString RelativeBase = NormalizedRoot;
+	if (!RelativeBase.EndsWith(TEXT("/")))
+	{
+		RelativeBase += TEXT("/");
+	}
+	if (!FPaths::MakePathRelativeTo(RelativePath, *RelativeBase))
+	{
+		return true;
+	}
+
+	FPaths::NormalizeFilename(RelativePath);
+	TArray<FString> Components;
+	RelativePath.ParseIntoArray(Components, TEXT("/"), true);
+	FString CurrentPath = NormalizedRoot;
+	for (const FString& Component : Components)
+	{
+		if (Component.IsEmpty() || Component == TEXT("."))
+		{
+			continue;
+		}
+		if (Component == TEXT(".."))
+		{
+			return true;
+		}
+
+		CurrentPath /= Component;
+		if (SymlinkQuery(CurrentPath) == ESymlinkResult::Symlink)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool MonolithInterchangePathTraversesLinkBelowRoot(
+	const FString& Path,
+	const FString& Root)
+{
+	IPlatformFile& PhysicalPlatformFile =
+		FPlatformFileManager::Get().GetPlatformPhysical();
+	return MonolithInterchangePathTraversesLinkBelowRoot(
+		Path,
+		Root,
+		[&PhysicalPlatformFile](const FString& Candidate)
+		{
+			return PhysicalPlatformFile.IsSymlink(*Candidate);
+		});
 }
 
 FMonolithInterchangeExportCommitResult CommitMonolithInterchangeExportFiles(
