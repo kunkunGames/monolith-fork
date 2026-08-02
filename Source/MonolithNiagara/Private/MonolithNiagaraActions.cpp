@@ -10199,10 +10199,14 @@ FMonolithActionResult FMonolithNiagaraActions::HandleExportSystemSpec(const TSha
 FMonolithActionResult FMonolithNiagaraActions::HandleAddDynamicInput(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
-	FString InputName = Params->GetStringField(TEXT("input"));
-	FString DynInputPath = Params->GetStringField(TEXT("dynamic_input_script"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId)) return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"));
+	FString ModuleNodeGuid;
+	if (!Params->TryGetStringField(TEXT("module_node"), ModuleNodeGuid)) return FMonolithActionResult::Error(TEXT("Parameter 'module_node' must be a string"));
+	FString InputName;
+	if (!Params->TryGetStringField(TEXT("input"), InputName)) return FMonolithActionResult::Error(TEXT("Parameter 'input' must be a string"));
+	FString DynInputPath;
+	if (!Params->TryGetStringField(TEXT("dynamic_input_script"), DynInputPath)) return FMonolithActionResult::Error(TEXT("Parameter 'dynamic_input_script' must be a string"));
 
 	if (DynInputPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: dynamic_input_script"));
 
@@ -10337,10 +10341,14 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddDynamicInput(const TShar
 FMonolithActionResult FMonolithNiagaraActions::HandleSetDynamicInputValue(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString DynNodeGuid = Params->GetStringField(TEXT("dynamic_input_node"));
-	FString InputName = Params->GetStringField(TEXT("input"));
-	FString Value = Params->GetStringField(TEXT("value"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId)) return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"));
+	FString DynNodeGuid;
+	if (!Params->TryGetStringField(TEXT("dynamic_input_node"), DynNodeGuid)) return FMonolithActionResult::Error(TEXT("Parameter 'dynamic_input_node' must be a string"));
+	FString InputName;
+	if (!Params->TryGetStringField(TEXT("input"), InputName)) return FMonolithActionResult::Error(TEXT("Parameter 'input' must be a string"));
+	FString Value;
+	if (!Params->TryGetStringField(TEXT("value"), Value)) return FMonolithActionResult::Error(TEXT("Parameter 'value' must be a string"));
 
 	if (DynNodeGuid.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: dynamic_input_node"));
 
@@ -11569,8 +11577,10 @@ namespace
 FMonolithActionResult FMonolithNiagaraActions::HandleGetDynamicInputTree(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId)) return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"));
+	FString ModuleNodeGuid;
+	if (!Params->TryGetStringField(TEXT("module_node"), ModuleNodeGuid)) return FMonolithActionResult::Error(TEXT("Parameter 'module_node' must be a string"));
 	int32 MaxDepth = 10;
 	double MaxDepth_Double = MaxDepth;
 	if (Params->TryGetNumberField(TEXT("max_depth"), MaxDepth_Double)) MaxDepth = static_cast<int32>(MaxDepth_Double);
@@ -11682,10 +11692,14 @@ namespace
 FMonolithActionResult FMonolithNiagaraActions::HandleRemoveDynamicInput(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
-	FString InputName = Params->GetStringField(TEXT("input"));
-	FString DynNodeGuid = Params->GetStringField(TEXT("dynamic_input_node"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId)) return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"));
+	FString ModuleNodeGuid;
+	if (!Params->TryGetStringField(TEXT("module_node"), ModuleNodeGuid)) return FMonolithActionResult::Error(TEXT("Parameter 'module_node' must be a string"));
+	FString InputName;
+	if (!Params->TryGetStringField(TEXT("input"), InputName)) return FMonolithActionResult::Error(TEXT("Parameter 'input' must be a string"));
+	FString DynNodeGuid;
+	if (!Params->TryGetStringField(TEXT("dynamic_input_node"), DynNodeGuid)) return FMonolithActionResult::Error(TEXT("Parameter 'dynamic_input_node' must be a string"));
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -11814,9 +11828,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveDynamicInput(const TS
 FMonolithActionResult FMonolithNiagaraActions::HandleGetDynamicInputValue(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString DynNodeGuid = Params->GetStringField(TEXT("dynamic_input_node"));
-	FString InputName = Params->GetStringField(TEXT("input"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId)) return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"));
+	FString DynNodeGuid;
+	if (!Params->TryGetStringField(TEXT("dynamic_input_node"), DynNodeGuid)) return FMonolithActionResult::Error(TEXT("Parameter 'dynamic_input_node' must be a string"));
+	FString InputName;
+	if (!Params->TryGetStringField(TEXT("input"), InputName)) return FMonolithActionResult::Error(TEXT("Parameter 'input' must be a string"));
 
 	if (DynNodeGuid.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: dynamic_input_node"));
 	if (InputName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: input"));
