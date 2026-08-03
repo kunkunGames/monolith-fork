@@ -251,6 +251,21 @@ def check_uplugin_and_modules(ctx: CheckContext) -> None:
         ctx.block("uplugin-dependency", "Plugins must be a list", descriptor_path)
         plugin_references = []
 
+    plugin_reference_names: dict[str, list[str]] = {}
+    for reference in plugin_references:
+        if not isinstance(reference, dict):
+            continue
+        name = str(reference.get("Name", "")).strip()
+        if name:
+            plugin_reference_names.setdefault(name.casefold(), []).append(name)
+    for names in plugin_reference_names.values():
+        if len(names) > 1:
+            ctx.block(
+                "uplugin-dependency",
+                f"Plugin reference must appear exactly once: {names[0]}",
+                descriptor_path,
+            )
+
     required_plugins = uplugin_contract.get("required_plugin_references", [])
     if not isinstance(required_plugins, list):
         ctx.block(
@@ -2075,6 +2090,24 @@ def run_selftest() -> int:
             "release-version",
             lambda root: (root / "CHANGELOG.md").write_text(
                 "# Changelog\n\n## [9.9.9] - 2026-08-03\n",
+                encoding="utf-8",
+            ),
+        ),
+        (
+            "duplicate non-required plugin references",
+            "uplugin-dependency",
+            lambda root: (root / "Foo.uplugin").write_text(
+                json.dumps(
+                    {
+                        "VersionName": "1.2.3",
+                        "Modules": [{"Name": "Foo", "Type": "Editor"}],
+                        "Plugins": [
+                            {"Name": "GameplayAbilities", "Enabled": True},
+                            {"Name": "Paper2D", "Enabled": True},
+                            {"Name": "paper2d", "Enabled": True},
+                        ],
+                    }
+                ),
                 encoding="utf-8",
             ),
         ),
