@@ -16826,6 +16826,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleQueryNiagara(const TSharedP
 
 	struct FCond { FString Key; FString Op; FString Value; int32 IntValue = 0; };
 	TArray<FCond> Conds;
+	Conds.Reserve(RawConds.Num());
 	for (FString Raw : RawConds)
 	{
 		Raw.TrimStartAndEndInline();
