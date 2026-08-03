@@ -1,5 +1,6 @@
 #include "MonolithGASInputAssetActions.h"
 
+#include "MonolithAssetUtils.h"
 #include "MonolithGASInternal.h"
 #include "MonolithParamSchema.h"
 #include "MonolithParamUtils.h"
@@ -384,9 +385,11 @@ namespace
 		{
 			OutPackagePath = TEXT("/Game/") + OutPackagePath;
 		}
-		if (!OutPackagePath.StartsWith(TEXT("/Game/")))
+		if (!FMonolithAssetUtils::IsProjectOwnedPackage(OutPackagePath))
 		{
-			OutError = FString::Printf(TEXT("Input asset path '%s' must resolve under /Game"), *InputPath);
+			OutError = FString::Printf(
+				TEXT("Input asset path '%s' must resolve to a mounted package under the current project"),
+				*InputPath);
 			return false;
 		}
 
@@ -447,15 +450,17 @@ namespace
 			OutPath = TEXT("/Game/") + OutPath;
 		}
 		OutPath.RemoveFromEnd(TEXT("/"));
-		if (OutPath != TEXT("/Game") && !OutPath.StartsWith(TEXT("/Game/")))
+		FString ValidationPath = OutPath;
+		if (FPackageName::MountPointExists(OutPath + TEXT("/")))
 		{
-			OutError = FString::Printf(TEXT("Input asset search path '%s' must resolve under /Game"), *InputPath);
-			return false;
+			// Mount roots such as /Game and /SpeedBox are list boundaries rather than asset
+			// package names. A non-existent child probe validates the mount's filesystem owner
+			// without requiring a default asset or widening the search root.
+			ValidationPath += TEXT("/__MonolithInputSearchRoot");
 		}
-		if (OutPath != TEXT("/Game"))
 		{
 			FText InvalidReason;
-			if (!FPackageName::IsValidLongPackageName(OutPath, false, &InvalidReason))
+			if (!FPackageName::IsValidLongPackageName(ValidationPath, false, &InvalidReason))
 			{
 				OutError = FString::Printf(
 					TEXT("Invalid input asset search path '%s': %s"),
@@ -463,6 +468,13 @@ namespace
 					*InvalidReason.ToString());
 				return false;
 			}
+		}
+		if (!FMonolithAssetUtils::IsProjectOwnedPackage(ValidationPath))
+		{
+			OutError = FString::Printf(
+				TEXT("Input asset search path '%s' must resolve to a mounted package under the current project"),
+				*InputPath);
+			return false;
 		}
 		return true;
 	}
@@ -1406,7 +1418,7 @@ void FMonolithGASInputAssetActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("List Enhanced Input UInputAction assets"),
 		FMonolithActionHandler::CreateStatic(&HandleListInputActions),
 		FParamSchemaBuilder()
-			.OptionalAssetPath(TEXT("path"), TEXT("Optional package path root, e.g. /Game/Input"))
+			.OptionalAssetPath(TEXT("path"), TEXT("Optional current-project package root, e.g. /Game/Input or /SpeedBox/TagChase/Input"))
 			.Optional(TEXT("include_details"), TEXT("boolean"), TEXT("Load assets and include value type/triggers/modifiers"), TEXT("false"))
 			.Build());
 
@@ -1421,7 +1433,7 @@ void FMonolithGASInputAssetActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Create or update a UInputAction asset. Requires dry_run=true or confirm=true."),
 		FMonolithActionHandler::CreateStatic(&HandleCreateInputAction),
 		FParamSchemaBuilder()
-			.RequiredAssetPath(TEXT("asset_path"), TEXT("Package path, e.g. /Game/Input/IA_Jump"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Mounted current-project package path, e.g. /Game/Input/IA_Jump or /SpeedBox/TagChase/Input/IA_Action"))
 			.Optional(TEXT("value_type"), TEXT("string"), TEXT("Boolean, Axis1D, Axis2D, or Axis3D"), TEXT("Boolean"))
 			.Optional(TEXT("description"), TEXT("string"), TEXT("Localized description text"))
 			.Optional(TEXT("consume_input"), TEXT("boolean"), TEXT("Consume lower priority enhanced input mappings"), TEXT("true"))
@@ -1454,7 +1466,7 @@ void FMonolithGASInputAssetActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("List Enhanced Input UInputMappingContext assets"),
 		FMonolithActionHandler::CreateStatic(&HandleListInputMappingContexts),
 		FParamSchemaBuilder()
-			.OptionalAssetPath(TEXT("path"), TEXT("Optional package path root, e.g. /Game/Input"))
+			.OptionalAssetPath(TEXT("path"), TEXT("Optional current-project package root, e.g. /Game/Input or /SpeedBox/TagChase/Input"))
 			.Optional(TEXT("include_details"), TEXT("boolean"), TEXT("Load assets and include mappings"), TEXT("false"))
 			.Build());
 
@@ -1469,7 +1481,7 @@ void FMonolithGASInputAssetActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Create or update a UInputMappingContext asset and its registration ownership policy. Requires dry_run=true or confirm=true."),
 		FMonolithActionHandler::CreateStatic(&HandleCreateInputMappingContext),
 		FParamSchemaBuilder()
-			.RequiredAssetPath(TEXT("asset_path"), TEXT("Package path, e.g. /Game/Input/IMC_Default"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Mounted current-project package path, e.g. /Game/Input/IMC_Default or /SpeedBox/TagChase/Input/IMC_Context"))
 			.Optional(TEXT("description"), TEXT("string"), TEXT("Localized description text"))
 			.Optional(TEXT("registration_tracking_mode"), TEXT("string"), TEXT("Untracked or CountRegistrations"))
 			.Optional(TEXT("overwrite"), TEXT("boolean"), TEXT("Allow updating an existing context"), TEXT("false"))

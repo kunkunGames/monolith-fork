@@ -1,6 +1,6 @@
 ﻿# Monolith API Reference
 
-**Version:** v0.22.0 · **Last updated:** 2026-08-02
+**Version:** v0.22.0 · **Last updated:** 2026-08-04
 
 **In-tree action total is approximate: current source contains roughly 2126 in-tree `RegisterAction` registrations** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large and build-flag dependent to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `console` namespace adds live `IConsoleManager` registry discovery plus EngineSource.db/FTS5 snapshot search. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
@@ -2066,7 +2066,7 @@ MCP callers use read-only `ui.compute_widget_uispec_fingerprint(asset_paths)`, w
 | CommonFramework diagnostics/authoring | 7 | `get_common_framework_status` reports CommonUI/CommonGame/UIExtension/CommonUser/CommonLoadingScreen/GameSettings/GameplayMessageRouter/ModularGameplayActors/GameSubtitles plugin, module, reflected class, and reflected struct availability; `add_primary_game_layout_layer` adds CommonActivatable layer container widgets to PrimaryGameLayout WBPs; `describe_common_widget_blueprint` reports PrimaryGameLayout parentage, extension point tags, and CommonActivatableWidgetContainerBase layer candidates; `describe_common_messaging_flow`, `validate_common_dialog_contract`, `validate_common_layer_push_contract`, and `validate_frontend_menu_flow` report CommonGame messaging/dialog/modal-layer/frontend contract readiness without runtime edits |
 | Variable flags (v0.15.0) | 3 | `add_widget_variable`, `set_widget_is_variable`, `list_widget_property_enums` |
 | Root / reparent (v0.15.0) | 1 | `reparent_widget_root` |
-| Slot / layout | 4 | `set_slot_property` (v0.21.0: grid-slot `row`/`column`/`row_span`/`column_span`), `set_anchor_preset`, `move_widget`, `set_brush` (v0.21.0: `property_name` optional/auto-resolved, `color` alias for `tint_color`) |
+| Slot / layout | 4 | `set_slot_property` (v0.21.0: grid-slot `row`/`column`/`row_span`/`column_span`; `auto_size` and `compile` require native JSON booleans and are validated before mutation), `set_anchor_preset`, `move_widget`, `set_brush` (v0.21.0: `property_name` optional/auto-resolved, `color` alias for `tint_color`) |
 | Styling | 6 | `set_font`, `set_color_scheme`, `batch_style`, `set_text`, `set_image`, `setup_list_view` |
 | Post-copy repair | 3 | `copy_widget_subtree_with_class_remap` copies WBP widget subtrees into a destination WBP with class/object/root remaps and collision policy; `clone_composite_font_with_remapped_faces` clones a composite `UFont` into a new destination asset and remaps asset-backed `UFontFace` entries; `repair_slate_font_references` scans a copied UI asset package for serialized `FSlateFontInfo` values and remaps their `FontObject` `UFont` references |
 | Templates / scaffolds | 13 | `create_hud_element`, `create_menu`, `create_settings_panel`, `create_dialog`, `create_notification_toast`, `create_loading_screen`, `create_inventory_grid`, `create_save_slot_list`, `scaffold_game_user_settings`, `scaffold_save_game`, `scaffold_save_subsystem`, `scaffold_audio_settings`, `scaffold_input_remapping` |
@@ -4030,6 +4030,17 @@ List Water-like actors/components in the current editor world using reflected cl
 New public C++ symbols from the UnrealMCP-port slices. These are for sibling plugins / in-tree modules that produce async jobs, emit typed media, or contribute resource families. All are dark-by-default at the MCP wire level (flag-gated at the call site).
 
 `FMonolithAssetUtils::IsProjectOwnedPackage(const FString& PackageName)` (`Public/MonolithAssetUtils.h`) is the canonical mounted-package ownership boundary: it accepts valid long package names whose resolved asset filename is under `FPaths::ProjectDir()` (including `/Game` and project/GameFeature mounts such as `/SpeedCore` and `/SpeedBox`) and rejects `/Engine`, invalid/transient, and externally mounted packages.
+
+### `FParamSchemaBuilder` complex-value compatibility — `Public/MonolithParamSchema.h`
+
+`FMonolithToolRegistry::ExecuteAction` recovers a JSON-string-encoded value only when the registered schema declares that parameter as an `array` or `object`, then performs the normal required and typed validation. Invalid encodings remain strings and fail with JSON-RPC invalid params (`-32602`); native JSON values pass unchanged.
+
+| Builder/API | Contract |
+|-------------|----------|
+| `Required` / `Optional` with type `array` or `object` | Allow schema-bounded recovery for MCP clients that serialize the complex value as JSON text. |
+| `RequiredExactType` / `OptionalExactType` | Disable compatibility recovery for one complex parameter. |
+| `StrictComplexTypes` | Disable compatibility recovery for every array/object parameter in the schema. |
+| `FMonolithParamSchema::RecoverStringEncodedComplexParams` | Apply the same schema-bounded transform used by registry dispatch; returns the number of recovered values. |
 
 ### `FMonolithAsyncJobRegistry` — `Public/MonolithAsyncJobRegistry.h`
 

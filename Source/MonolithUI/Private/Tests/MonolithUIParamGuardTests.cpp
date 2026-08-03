@@ -9,6 +9,7 @@
 #include "Dom/JsonValue.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonReader.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Components/Image.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
@@ -437,22 +438,26 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithUIParamGuardSetSlotMissingNumericField
 bool FMonolithUIParamGuardSetSlotMissingNumericField::RunTest(const FString& Parameters)
 {
     const FString AssetPath = TEXT("/Game/Tests/Monolith/UI/WBP_SetSlotMissingNumericField");
-    UWidgetBlueprint* WBP = nullptr;
     UWidget* Child = nullptr;
     FString Error;
     if (!MonolithUI::TestUtils::CreateOrReuseTestWidgetBlueprint(
             AssetPath,
-            NAME_None,
-            UImage::StaticClass(),
-            UCanvasPanel::StaticClass(),
             TEXT("CanvasChild"),
-            WBP,
-            Child,
-            Error))
+            UImage::StaticClass(),
+            Error,
+            &Child))
     {
         AddError(Error);
         return false;
     }
+
+    UCanvasPanelSlot* CanvasSlot = Child ? Cast<UCanvasPanelSlot>(Child->Slot) : nullptr;
+    if (!TestNotNull(TEXT("Canvas child has a CanvasPanelSlot"), CanvasSlot))
+    {
+        return false;
+    }
+    const bool InitialAutoSize = CanvasSlot->GetAutoSize();
+    const int32 InitialZOrder = CanvasSlot->GetZOrder();
 
     TSharedPtr<FJsonObject> BadOffsetsParams = MakeShared<FJsonObject>();
     BadOffsetsParams->SetStringField(TEXT("asset_path"), AssetPath);
@@ -492,8 +497,34 @@ bool FMonolithUIParamGuardSetSlotMissingNumericField::RunTest(const FString& Par
     TestFalse(TEXT("set_slot_property correctly rejects malformed string for auto_size"), AutoSizeResult.bSuccess);
     if (!AutoSizeResult.bSuccess)
     {
-        TestTrue(TEXT("error message indicates auto_size must be a boolean"), AutoSizeResult.ErrorMessage.Contains(TEXT("auto_size must be a boolean")));
+        TestTrue(
+            TEXT("error message indicates auto_size must be a boolean"),
+            AutoSizeResult.ErrorMessage.Contains(TEXT("Parameter 'auto_size' must be a boolean")));
     }
+    TestEqual(
+        TEXT("malformed auto_size is rejected before slot mutation"),
+        CanvasSlot->GetAutoSize(),
+        InitialAutoSize);
+
+    TSharedPtr<FJsonObject> BadCompileParams = MakeShared<FJsonObject>();
+    BadCompileParams->SetStringField(TEXT("asset_path"), AssetPath);
+    BadCompileParams->SetStringField(TEXT("widget_name"), TEXT("CanvasChild"));
+    BadCompileParams->SetNumberField(TEXT("z_order"), InitialZOrder + 1);
+    BadCompileParams->SetStringField(TEXT("compile"), TEXT("yes"));
+
+    const FMonolithActionResult CompileResult =
+        FMonolithUISlotActions::HandleSetSlotProperty(BadCompileParams);
+    TestFalse(TEXT("set_slot_property rejects malformed string for compile"), CompileResult.bSuccess);
+    if (!CompileResult.bSuccess)
+    {
+        TestTrue(
+            TEXT("error message indicates compile must be a boolean"),
+            CompileResult.ErrorMessage.Contains(TEXT("Parameter 'compile' must be a boolean")));
+    }
+    TestEqual(
+        TEXT("malformed compile is rejected before any requested slot mutation"),
+        CanvasSlot->GetZOrder(),
+        InitialZOrder);
 
     return true;
 }

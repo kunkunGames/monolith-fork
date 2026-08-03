@@ -220,7 +220,13 @@ FMonolithActionResult FMonolithGuideTool::HandleGuide(const TSharedPtr<FJsonObje
 	FString RequestedSection;
 	if (Params.IsValid() && Params->HasField(TEXT("section")))
 	{
-		if (!Params->TryGetStringField(TEXT("section"), RequestedSection))
+		// FJsonValueNumber overrides TryGetString, so TryGetStringField would coerce a JSON
+		// number into "42" and report it as an unknown section instead of a type error.
+		// Gate on the declared JSON type so the wrong-type message stays accurate.
+		const TSharedPtr<FJsonValue> SectionValue = Params->TryGetField(TEXT("section"));
+		if (!SectionValue.IsValid() ||
+			SectionValue->Type != EJson::String ||
+			!SectionValue->TryGetString(RequestedSection))
 		{
 			return FMonolithActionResult::Error(TEXT("Parameter 'section' must be a string if provided."), FMonolithJsonUtils::ErrInvalidParams);
 		}

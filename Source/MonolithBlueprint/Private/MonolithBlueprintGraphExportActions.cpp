@@ -114,7 +114,7 @@ namespace
 	}
 
 	template <typename GraphArrayType>
-	TArray<FString> GraphNames(const GraphArrayType& Graphs)
+	TArray<FString> DuplicateGraphNames(const GraphArrayType& Graphs)
 	{
 		TArray<FString> Names;
 		Names.Reserve(Graphs.Num());
@@ -130,17 +130,17 @@ namespace
 		return Names;
 	}
 
-	TArray<FString> FunctionGraphNames(const UBlueprint* BP)
+	TArray<FString> DuplicateFunctionGraphNames(const UBlueprint* BP)
 	{
-		return BP ? GraphNames(BP->FunctionGraphs) : TArray<FString>();
+		return BP ? DuplicateGraphNames(BP->FunctionGraphs) : TArray<FString>();
 	}
 
-	TArray<FString> MacroGraphNames(const UBlueprint* BP)
+	TArray<FString> DuplicateMacroGraphNames(const UBlueprint* BP)
 	{
-		return BP ? GraphNames(BP->MacroGraphs) : TArray<FString>();
+		return BP ? DuplicateGraphNames(BP->MacroGraphs) : TArray<FString>();
 	}
 
-	FString BlueprintGraphKind(const UBlueprint* BP, const UEdGraph* Graph, FString* OutInterfaceName = nullptr)
+	FString DuplicateBlueprintGraphKind(const UBlueprint* BP, const UEdGraph* Graph, FString* OutInterfaceName = nullptr)
 	{
 		if (OutInterfaceName)
 		{
@@ -170,7 +170,7 @@ namespace
 		return TEXT("unknown");
 	}
 
-	void AddGraphCatalogEntry(const UBlueprint* BP, const UEdGraph* Graph, TArray<TSharedPtr<FJsonValue>>& OutGraphs)
+	void AddDuplicateGraphCatalogEntry(const UBlueprint* BP, const UEdGraph* Graph, TArray<TSharedPtr<FJsonValue>>& OutGraphs)
 	{
 		if (!BP || !Graph)
 		{
@@ -178,7 +178,7 @@ namespace
 		}
 
 		FString InterfaceName;
-		const FString Kind = BlueprintGraphKind(BP, Graph, &InterfaceName);
+		const FString Kind = DuplicateBlueprintGraphKind(BP, Graph, &InterfaceName);
 		TSharedPtr<FJsonObject> GraphObj = MakeShared<FJsonObject>();
 		GraphObj->SetStringField(TEXT("name"), Graph->GetName());
 		GraphObj->SetStringField(TEXT("graph_kind"), Kind);
@@ -190,7 +190,7 @@ namespace
 		OutGraphs.Add(MakeShared<FJsonValueObject>(GraphObj));
 	}
 
-	TArray<TSharedPtr<FJsonValue>> BlueprintGraphCatalogJsonValues(const UBlueprint* BP)
+	TArray<TSharedPtr<FJsonValue>> DuplicateBlueprintGraphCatalogJsonValues(const UBlueprint* BP)
 	{
 		TArray<TSharedPtr<FJsonValue>> Graphs;
 		if (!BP)
@@ -203,7 +203,7 @@ namespace
 		Graphs.Reserve(AllGraphs.Num());
 		for (const UEdGraph* Graph : AllGraphs)
 		{
-			AddGraphCatalogEntry(BP, Graph, Graphs);
+			AddDuplicateGraphCatalogEntry(BP, Graph, Graphs);
 		}
 		return Graphs;
 	}
@@ -220,12 +220,12 @@ namespace
 		for (const auto& GraphRef : BP->FunctionGraphs)
 		{
 			const UEdGraph* Graph = GraphRef;
-			AddGraphCatalogEntry(BP, Graph, Graphs);
+			AddDuplicateGraphCatalogEntry(BP, Graph, Graphs);
 		}
 		for (const auto& GraphRef : BP->MacroGraphs)
 		{
 			const UEdGraph* Graph = GraphRef;
-			AddGraphCatalogEntry(BP, Graph, Graphs);
+			AddDuplicateGraphCatalogEntry(BP, Graph, Graphs);
 		}
 		return Graphs;
 	}
@@ -263,9 +263,9 @@ namespace
 		ErrorData->SetObjectField(TEXT("accepted_aliases"), MakeShared<FJsonObject>());
 		ErrorData->SetArrayField(TEXT("supported_graph_kinds"), GraphExportStringsToJsonValues(DuplicateGraphSupportedGraphKinds()));
 		ErrorData->SetArrayField(TEXT("candidate_graphs"), DuplicableGraphCatalogJsonValues(BP));
-		ErrorData->SetArrayField(TEXT("available_graphs"), BlueprintGraphCatalogJsonValues(BP));
-		ErrorData->SetArrayField(TEXT("available_functions"), GraphExportStringsToJsonValues(FunctionGraphNames(BP)));
-		ErrorData->SetArrayField(TEXT("available_macros"), GraphExportStringsToJsonValues(MacroGraphNames(BP)));
+		ErrorData->SetArrayField(TEXT("available_graphs"), DuplicateBlueprintGraphCatalogJsonValues(BP));
+		ErrorData->SetArrayField(TEXT("available_functions"), GraphExportStringsToJsonValues(DuplicateFunctionGraphNames(BP)));
+		ErrorData->SetArrayField(TEXT("available_macros"), GraphExportStringsToJsonValues(DuplicateMacroGraphNames(BP)));
 		ErrorData->SetStringField(TEXT("read_action"), TEXT("blueprint.list_graphs"));
 		ErrorData->SetObjectField(TEXT("read_args"), DuplicateGraphReadArgs(AssetPath));
 		return ErrorData;
@@ -641,7 +641,7 @@ FMonolithActionResult FMonolithBlueprintGraphExportActions::HandleDuplicateGraph
 	if (!bIsFunction && !bIsMacro)
 	{
 		FString InterfaceName;
-		const FString GraphKind = BlueprintGraphKind(BP, SourceGraph, &InterfaceName);
+		const FString GraphKind = DuplicateBlueprintGraphKind(BP, SourceGraph, &InterfaceName);
 		TSharedPtr<FJsonObject> ErrorData = MakeDuplicateGraphErrorData(
 			BP, DuplicateGraphKindFailureCause(GraphKind), AssetPath, GraphName, NewName);
 		ErrorData->SetStringField(TEXT("graph_kind"), GraphKind);
@@ -667,7 +667,7 @@ FMonolithActionResult FMonolithBlueprintGraphExportActions::HandleDuplicateGraph
 	{
 		const FString SourceGraphKind = bIsFunction ? TEXT("function") : TEXT("macro");
 		FString ConflictingInterface;
-		const FString ConflictingGraphKind = BlueprintGraphKind(BP, ExistingGraph, &ConflictingInterface);
+		const FString ConflictingGraphKind = DuplicateBlueprintGraphKind(BP, ExistingGraph, &ConflictingInterface);
 		TSharedPtr<FJsonObject> ErrorData = MakeDuplicateGraphErrorData(
 			BP, TEXT("name_conflict"), AssetPath, GraphName, NewName);
 		ErrorData->SetStringField(TEXT("source_graph"), SourceGraph->GetName());

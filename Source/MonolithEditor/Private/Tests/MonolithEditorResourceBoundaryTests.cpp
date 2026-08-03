@@ -1,6 +1,9 @@
 #include "CoreMinimal.h"
-#include "Misc/AutomationTest.h"
 #include "Dom/JsonObject.h"
+#include "Editor/EditorPerformanceSettings.h"
+#include "Misc/AutomationTest.h"
+#include "Misc/ScopeExit.h"
+#include "MonolithAutomationSession.h"
 #include "MonolithToolRegistry.h"
 
 namespace
@@ -82,6 +85,50 @@ namespace
 		Test.TestEqual(TEXT("Busy rejection preserves last-run presence"), After.bHasLastRun, Before.bHasLastRun);
 		Test.TestEqual(TEXT("Busy rejection preserves last-run identity"), After.LastRunId, Before.LastRunId);
 	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorBackgroundCPUThrottleScope, "Monolith.Editor.Automation.BackgroundCPUThrottleScope", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithEditorBackgroundCPUThrottleScope::RunTest(const FString& Parameters)
+{
+	UEditorPerformanceSettings* PerformanceSettings = GetMutableDefault<UEditorPerformanceSettings>();
+	TestNotNull(TEXT("Editor performance settings are available"), PerformanceSettings);
+	if (!PerformanceSettings)
+	{
+		return true;
+	}
+
+	const bool bOriginalThrottleCPUWhenNotForeground = PerformanceSettings->bThrottleCPUWhenNotForeground;
+	ON_SCOPE_EXIT
+	{
+		PerformanceSettings->bThrottleCPUWhenNotForeground = bOriginalThrottleCPUWhenNotForeground;
+	};
+
+	PerformanceSettings->bThrottleCPUWhenNotForeground = true;
+	{
+		MonolithAutomationAsync::FBackgroundCPUThrottleScope Scope;
+		TestFalse(TEXT("Scope starts inactive"), Scope.IsActive());
+		Scope.Activate();
+		Scope.Activate();
+		TestTrue(TEXT("Repeated activation remains active"), Scope.IsActive());
+		TestTrue(TEXT("Scope records that it disabled background throttling"), Scope.DidDisableBackgroundThrottle());
+		TestFalse(TEXT("Active scope disables background throttling"), PerformanceSettings->bThrottleCPUWhenNotForeground);
+	}
+	TestTrue(TEXT("Destructor restores an enabled background throttle"), PerformanceSettings->bThrottleCPUWhenNotForeground);
+
+	PerformanceSettings->bThrottleCPUWhenNotForeground = false;
+	{
+		MonolithAutomationAsync::FBackgroundCPUThrottleScope Scope;
+		Scope.Activate();
+		TestTrue(TEXT("Scope is active when no setting override was required"), Scope.IsActive());
+		TestFalse(TEXT("Scope records that background throttling was already disabled"), Scope.DidDisableBackgroundThrottle());
+		TestTrue(TEXT("First restore reports that it restored the setting"), Scope.Restore());
+		TestFalse(TEXT("Repeated restore reports no second restoration"), Scope.Restore());
+		TestFalse(TEXT("Repeated restore remains inactive"), Scope.IsActive());
+		TestFalse(TEXT("Restore preserves an originally disabled background throttle"), PerformanceSettings->bThrottleCPUWhenNotForeground);
+	}
+
+	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAssetDeleteAssetsRejectsOversizedArray, "Monolith.LimitGuard.MonolithAsset.DeleteAssetsRejectsOversizedArray", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -440,11 +487,34 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorAutomationHistoryNoMatchRun, "Mo
 
 bool FMonolithEditorAutomationHistoryNoMatchRun::RunTest(const FString& Parameters)
 {
+	FMonolithAutomationRunSlotSnapshot Before;
+	const bool bReadBefore = ReadAutomationRunSlotSnapshot(Before);
+	TestTrue(TEXT("Run-slot state is readable before synchronous no-match start"), bReadBefore);
+	if (!bReadBefore)
+	{
+		return true;
+	}
+
 	TSharedPtr<FJsonObject> RunParams = MakeShared<FJsonObject>();
 	RunParams->SetStringField(TEXT("prefix"), TEXT("Monolith.Editor.Automation.DoesNotExist"));
 	RunParams->SetNumberField(TEXT("max_tests"), 1.0);
 
 	FMonolithActionResult RunResult = FMonolithToolRegistry::Get().ExecuteAction(TEXT("editor"), TEXT("run_automation_tests"), RunParams);
+	if (Before.bActive)
+	{
+		TestFalse(TEXT("Nested synchronous no-match run is rejected while a Monolith run is active"), RunResult.bSuccess);
+		TestTrue(TEXT("Nested synchronous rejection is explicit"), RunResult.ErrorMessage.Contains(TEXT("automation_busy")));
+
+		FMonolithAutomationRunSlotSnapshot After;
+		const bool bReadAfter = ReadAutomationRunSlotSnapshot(After);
+		TestTrue(TEXT("Run-slot state is readable after synchronous no-match rejection"), bReadAfter);
+		if (bReadAfter)
+		{
+			VerifyAutomationRunSlotIdentity(*this, Before, After);
+		}
+		return true;
+	}
+
 	TestTrue(TEXT("No-match automation run should return a structured result"), RunResult.bSuccess);
 	if (!RunResult.Result.IsValid())
 	{

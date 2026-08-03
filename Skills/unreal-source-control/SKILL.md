@@ -39,7 +39,7 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `[w] checkout_or_add` | `paths*` or `files*`, `dry_run?=false` | Prepare files for mutation by checking out existing source-controlled files or adding local files. |
 | `[w] delete` | `paths*` or `files*`, `confirm?=false`, `dry_run?=false` | Mark files for delete. Requires `confirm=true` unless `dry_run=true`. |
 | `[w] mark_for_delete` | `paths*` or `files*`, `confirm?=false`, `dry_run?=false` | Explicit mark-for-delete alias of `delete`. Requires `confirm=true` unless `dry_run=true`. |
-| `[w] revert` | `paths*` or `files*`, `confirm?=false`, `dry_run?=false` | Revert files. Requires `confirm=true` unless `dry_run=true`. |
+| `[w] revert` | `paths*` or `files*`, `confirm?=false`, `dry_run?=false`, `delete_new_files?=false` | Revert files. Requires `confirm=true` unless `dry_run=true`. Files opened for add are preserved unless `delete_new_files=true` is explicit. |
 | `[w] revert_unchanged` | `paths*` or `files*`, `confirm?=false`, `dry_run?=false` | Revert unchanged files. Requires `confirm=true` unless `dry_run=true`. |
 | `list_opened` | `changelist?` `resolve_packages?=true` `limit?=200` (`1..5000`) | Read-only bounded `p4 -ztag opened -m (limit + 1)`, optionally scoped to empty/`default`/ASCII-decimal changelist, with depot-to-local/package mapping and explicit exact-vs-lower-bound count fields. |
 | `map_depot_paths` | `paths*` or `files*` (max 5,000 raw entries) | Read-only mapping for depot, client, local filesystem, `/Game` package, or object paths. Uses at most 40 commands, 128 paths and 24,000 encoded characters per command; control characters are rejected before process launch. |
@@ -115,6 +115,7 @@ source_control_query("get_status", { paths: ["/Game/UI/Icons/T_icon_skill", "/Ga
 ## Gotchas / Rules
 
 - `delete`, `mark_for_delete`, `revert`, and `revert_unchanged` are destructive — they require `confirm=true` unless you pass `dry_run=true`. Run a `dry_run` first to preview the affected files.
+- `revert` does not inherit the editor-global "delete new files on revert" preference. Its action contract defaults `delete_new_files=false`; pass `delete_new_files=true` only when files opened for add should also be removed from disk.
 - This skill performs the source-control verb only. Editing the file content (`.ini`, asset package) is a separate step in **unreal-config** / **unreal-asset** after checkout.
 - `list_opened` and `map_depot_paths` are explicitly read-only, bounded mapping primitives. `list_opened` never performs an unbounded exact-count query; treat `count` as exact only when `count_is_lower_bound=false`. For validation workflows, prefer `editor.plan_content_validation_changeset` / `editor.validate_changeset_assets` after this layer proves the changelist or path mapping.
 - Prefer the canonical `paths` array for file lists. The schema also accepts `files` and a single path string for compatibility, and boolean options accept `true`/`false` booleans plus string literals `true`, `false`, `1`, `0`, `yes`, `no`, `on`, and `off`. `get_status` accepts both filesystem and `/Game` package paths; resolve `/Game` asset paths through the active provider rather than assuming a depot/disk layout.

@@ -7,6 +7,7 @@
 #include "MonolithSourceControlP4Batch.h"
 #include "MonolithTestSupport.h"
 #include "MonolithToolRegistry.h"
+#include "SourceControlPreferences.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -90,6 +91,27 @@ bool FMonolithSourceControlTypedParamsTest::RunTest(const FString& Parameters)
 	bOk &= TestEqual(TEXT("source_control.map_depot_paths is explicitly read-only"), MapDepotPathsPolicy.PolicyId, TEXT("read_only"));
 	bOk &= TestFalse(TEXT("source_control.map_depot_paths does not rely on name inference"), MapDepotPathsPolicy.bDefaulted);
 
+	bool bHasDeleteNewFilesParam = false;
+	bool bDeleteNewFilesDefaultsFalse = false;
+	for (const FMonolithActionInfo& ActionInfo : FMonolithToolRegistry::Get().GetActions(TEXT("source_control")))
+	{
+		if (ActionInfo.Action != TEXT("revert") || !ActionInfo.ParamSchema.IsValid())
+		{
+			continue;
+		}
+
+		const TSharedPtr<FJsonObject>* DeleteNewFiles = nullptr;
+		bHasDeleteNewFilesParam = ActionInfo.ParamSchema->TryGetObjectField(TEXT("delete_new_files"), DeleteNewFiles)
+			&& DeleteNewFiles && DeleteNewFiles->IsValid();
+		FString DefaultValue;
+		bDeleteNewFilesDefaultsFalse = bHasDeleteNewFilesParam
+			&& (*DeleteNewFiles)->TryGetStringField(TEXT("default"), DefaultValue)
+			&& DefaultValue == TEXT("false");
+		break;
+	}
+	bOk &= TestTrue(TEXT("source_control.revert exposes delete_new_files"), bHasDeleteNewFilesParam);
+	bOk &= TestTrue(TEXT("source_control.revert preserves added files by default"), bDeleteNewFilesDefaultsFalse);
+
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("source_control"));
 
 	bOk &= FMonolithTestSupport::RunParamGuardCases(
@@ -158,6 +180,16 @@ bool FMonolithSourceControlTypedParamsTest::RunTest(const FString& Parameters)
 				},
 				TEXT("confirm"),
 				TEXT("source_control.revert rejects malformed confirm string")
+			},
+			{
+				TEXT("revert"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					AddValidPathArray(Params);
+					Params->SetStringField(TEXT("delete_new_files"), TEXT("later"));
+				},
+				TEXT("delete_new_files"),
+				TEXT("source_control.revert rejects malformed delete_new_files string")
 			},
 			{
 				TEXT("revert_unchanged"),
@@ -310,6 +342,25 @@ bool FMonolithSourceControlInputToleranceTest::RunTest(const FString& Parameters
 		Params->SetStringField(TEXT("paths"), TEXT("Project.uproject"));
 		Params->SetStringField(TEXT("dry_run"), TEXT("1"));
 		bOk &= ExpectActionSuccess(*this, TEXT("checkout_or_add"), Params);
+	}
+
+	{
+		const bool bPreferenceBefore = USourceControlPreferences::ShouldDeleteNewFilesOnRevert();
+		TSharedRef<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("paths"), TEXT("Speed.uproject"));
+		Params->SetStringField(TEXT("dry_run"), TEXT("true"));
+		Params->SetStringField(TEXT("delete_new_files"), TEXT("no"));
+		const FMonolithActionResult Result =
+			FMonolithToolRegistry::Get().ExecuteAction(TEXT("source_control"), TEXT("revert"), Params);
+		bOk &= TestTrue(TEXT("source_control.revert accepts tolerant delete_new_files=false"), Result.bSuccess);
+		bool bDeleteNewFiles = true;
+		bOk &= TestTrue(TEXT("source_control.revert reports delete_new_files"),
+			Result.Result.IsValid() && Result.Result->TryGetBoolField(TEXT("delete_new_files"), bDeleteNewFiles));
+		bOk &= TestFalse(TEXT("source_control.revert reports added-file deletion disabled"), bDeleteNewFiles);
+		bOk &= TestEqual(
+			TEXT("source_control.revert restores the editor-global delete-new-files preference"),
+			USourceControlPreferences::ShouldDeleteNewFilesOnRevert(),
+			bPreferenceBefore);
 	}
 
 	{

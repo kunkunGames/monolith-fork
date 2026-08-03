@@ -1881,6 +1881,18 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 		SetPhaseMs(TEXT("alias_ms"), AliasStartSeconds);
 	}
 
+	// K4 — recover array/object values that compatible MCP clients encoded as
+	// JSON strings. The schema is the authority: undeclared values are untouched,
+	// malformed encoded values remain strings for typed validation to reject, and
+	// RequiredExactType / OptionalExactType / StrictComplexTypes opt out before
+	// any handler can observe a transformed value.
+	if (ActionInfo.ParamSchema.IsValid())
+	{
+		FMonolithParamSchema::RecoverStringEncodedComplexParams(
+			ActionInfo.ParamSchema,
+			EffectiveParams);
+	}
+
 	// Validate required params from schema before dispatching.
 	// asset_path is enforced like any other required param. K2 ApplyAliases (above) has
 	// already canonicalized any declared alias (e.g. system_path) into the asset_path key,

@@ -4,12 +4,48 @@
 #include "Containers/Ticker.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Editor/EditorPerformanceSettings.h"
 #include "IAutomationControllerManager.h"
 #include "IAutomationControllerModule.h"
 #include "IAutomationReport.h"
 #include "Misc/App.h"
 #include "Misc/AutomationTest.h"
 #include "Modules/ModuleManager.h"
+
+MonolithAutomationAsync::FBackgroundCPUThrottleScope::~FBackgroundCPUThrottleScope()
+{
+	Restore();
+}
+
+void MonolithAutomationAsync::FBackgroundCPUThrottleScope::Activate()
+{
+	check(IsInGameThread());
+	if (bActive)
+	{
+		return;
+	}
+
+	UEditorPerformanceSettings* PerformanceSettings = GetMutableDefault<UEditorPerformanceSettings>();
+	check(PerformanceSettings);
+	bPreviousThrottleCPUWhenNotForeground = PerformanceSettings->bThrottleCPUWhenNotForeground;
+	PerformanceSettings->bThrottleCPUWhenNotForeground = false;
+	bActive = true;
+}
+
+bool MonolithAutomationAsync::FBackgroundCPUThrottleScope::Restore()
+{
+	if (!bActive)
+	{
+		return false;
+	}
+
+	check(IsInGameThread());
+	UEditorPerformanceSettings* PerformanceSettings = GetMutableDefault<UEditorPerformanceSettings>();
+	check(PerformanceSettings);
+	PerformanceSettings->bThrottleCPUWhenNotForeground = bPreviousThrottleCPUWhenNotForeground;
+	bActive = false;
+	return true;
+}
 
 namespace MonolithAutomationAsync::Private
 {
@@ -150,6 +186,11 @@ namespace MonolithAutomationAsync::Private
 			bPreviousKeepPieOpen = Controller->KeepPIEOpen();
 			bPreviousDeveloperDirectoryIncluded = Controller->IsDeveloperDirectoryIncluded();
 			bPreviousSendAnalytics = Controller->IsSendAnalytics();
+			BackgroundCPUThrottleScope.Activate();
+			Run->SetBoolField(TEXT("background_cpu_throttle_scope_active"), BackgroundCPUThrottleScope.IsActive());
+			Run->SetBoolField(
+				TEXT("background_cpu_throttle_was_enabled"),
+				BackgroundCPUThrottleScope.DidDisableBackgroundThrottle());
 
 			BindControllerDelegates();
 			EnsureObserver();
@@ -383,6 +424,7 @@ namespace MonolithAutomationAsync::Private
 			}
 			else
 			{
+				BackgroundCPUThrottleScope.Restore();
 				UnbindControllerDelegates();
 				StopObserver();
 				Controller.Reset();
@@ -757,6 +799,9 @@ namespace MonolithAutomationAsync::Private
 			const TSharedPtr<FJsonObject> FinishedRun = Run;
 			FRunFinishedCallback FinishedCallback = MoveTemp(OnFinished);
 			RestoreControllerSettings();
+			const bool bBackgroundCPUThrottleRestored = BackgroundCPUThrottleScope.Restore();
+			Run->SetBoolField(TEXT("background_cpu_throttle_scope_active"), BackgroundCPUThrottleScope.IsActive());
+			Run->SetBoolField(TEXT("background_cpu_throttle_restored"), bBackgroundCPUThrottleRestored);
 			UnbindControllerDelegates();
 			StopObserver();
 
@@ -804,6 +849,7 @@ namespace MonolithAutomationAsync::Private
 		bool bPreviousKeepPieOpen = false;
 		bool bPreviousDeveloperDirectoryIncluded = false;
 		bool bPreviousSendAnalytics = false;
+		FBackgroundCPUThrottleScope BackgroundCPUThrottleScope;
 
 		FTSTicker::FDelegateHandle TickerHandle;
 		FDelegateHandle ControllerResetHandle;

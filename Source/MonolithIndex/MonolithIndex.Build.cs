@@ -91,10 +91,9 @@ public class MonolithIndex : ModuleRules
 			"EnhancedInput",
 			"Projects",
 			"CollectionManager",
-			// AssetCollectionActions owns dynamic-collection evaluation through
-			// FContentBrowserItem/UContentBrowserDataSubsystem. Declare the owner
-			// module directly; relying on an editor module's transitive link input
-			// breaks the supported UE 5.7 boundary.
+			// AssetCollectionActions calls exported FContentBrowserItem and
+			// UContentBrowserDataSubsystem members, so the implementation must link
+			// the owning module directly rather than relying on transitive imports.
 			"ContentBrowserData",
 			// PRD AssetSearchSemanticSearch UE5.8 #4: FPaper2DIndexer (UPaperFlipbook/UPaperSprite).
 			"Paper2D"

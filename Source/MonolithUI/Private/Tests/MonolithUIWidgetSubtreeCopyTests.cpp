@@ -10,8 +10,10 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/HorizontalBox.h"
 #include "Components/PanelWidget.h"
+#include "Components/RichTextBlock.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -71,6 +73,17 @@ namespace
         Label->SetText(FText::FromString(TEXT("Copied label")));
         SourcePanel->AddChild(Label);
         MonolithUI::RegisterCreatedWidget(SourceWBP, Label);
+
+        URichTextBlock* RichLabel = SourceWBP->WidgetTree->ConstructWidget<URichTextBlock>(URichTextBlock::StaticClass(), TEXT("RichLabel"));
+        if (!RichLabel)
+        {
+            OutError = TEXT("Failed to construct RichLabel RichTextBlock fixture widget");
+            return false;
+        }
+
+        RichLabel->SetText(FText::FromString(TEXT("Copied rich label")));
+        SourcePanel->AddChild(RichLabel);
+        MonolithUI::RegisterCreatedWidget(SourceWBP, RichLabel);
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(SourceWBP);
         FKismetEditorUtilities::CompileBlueprint(SourceWBP);
         SourceWBP->GetOutermost()->MarkPackageDirty();
@@ -214,6 +227,16 @@ bool FMonolithUIWidgetSubtreeCopyDryRunAndLiveSmokeTest::RunTest(const FString& 
         AddError(Error);
         return false;
     }
+    UVerticalBox* SourcePanel = Cast<UVerticalBox>(SourceWBP->WidgetTree->FindWidget(TEXT("SourcePanel")));
+    UTextBlock* SourceLabel = Cast<UTextBlock>(SourceWBP->WidgetTree->FindWidget(TEXT("Label")));
+    URichTextBlock* SourceRichLabel = Cast<URichTextBlock>(SourceWBP->WidgetTree->FindWidget(TEXT("RichLabel")));
+    TestNotNull(TEXT("source panel fixture remains available"), SourcePanel);
+    TestNotNull(TEXT("source label fixture remains available"), SourceLabel);
+    TestNotNull(TEXT("source rich label fixture remains available"), SourceRichLabel);
+    if (!SourcePanel || !SourceLabel || !SourceRichLabel)
+    {
+        return false;
+    }
 
     if (!MonolithUI::TestUtils::CreateOrReuseTestWidgetBlueprint(
         DestinationPath,
@@ -240,7 +263,9 @@ bool FMonolithUIWidgetSubtreeCopyDryRunAndLiveSmokeTest::RunTest(const FString& 
     Payload->SetStringField(TEXT("destination_asset_path"), DestinationPath);
     Payload->SetStringField(TEXT("source_widget_name"), TEXT("SourcePanel"));
     Payload->SetStringField(TEXT("destination_widget_name"), TEXT("CopiedPanel"));
-    Payload->SetObjectField(TEXT("class_remaps"), MakeClassRemapObject(TEXT("VerticalBox"), TEXT("HorizontalBox")));
+    TSharedPtr<FJsonObject> ClassRemaps = MakeClassRemapObject(TEXT("VerticalBox"), TEXT("HorizontalBox"));
+    ClassRemaps->SetStringField(TEXT("RichTextBlock"), TEXT("TextBlock"));
+    Payload->SetObjectField(TEXT("class_remaps"), ClassRemaps);
 
     const FMonolithActionResult DryRunResult = FMonolithToolRegistry::Get().ExecuteAction(
         TEXT("ui"),
@@ -259,6 +284,7 @@ bool FMonolithUIWidgetSubtreeCopyDryRunAndLiveSmokeTest::RunTest(const FString& 
     Payload->SetBoolField(TEXT("dry_run"), false);
     Payload->SetBoolField(TEXT("confirm"), true);
     Payload->SetBoolField(TEXT("compile"), false);
+    Payload->SetBoolField(TEXT("save"), true);
 
     const FMonolithActionResult ApplyResult = FMonolithToolRegistry::Get().ExecuteAction(
         TEXT("ui"),
@@ -280,19 +306,96 @@ bool FMonolithUIWidgetSubtreeCopyDryRunAndLiveSmokeTest::RunTest(const FString& 
         return false;
     }
 
-    TestEqual(TEXT("CopiedPanel retains one child"), CopiedPanel->GetChildrenCount(), 1);
+    TestEqual(TEXT("CopiedPanel retains two children"), CopiedPanel->GetChildrenCount(), 2);
     UWidget* CopiedLabel = CopiedPanel->GetChildAt(0);
+    UTextBlock* CopiedRichLabel = Cast<UTextBlock>(CopiedPanel->GetChildAt(1));
     TestNotNull(TEXT("Copied label exists"), CopiedLabel);
     TestTrue(TEXT("Copied label remains a TextBlock"), CopiedLabel && CopiedLabel->IsA<UTextBlock>());
+    TestNotNull(TEXT("RichLabel remaps from the larger RichTextBlock class to TextBlock"), CopiedRichLabel);
+    TestEqual(TEXT("RichLabel preserves its compatible Text property"),
+        CopiedRichLabel ? CopiedRichLabel->GetText().ToString() : FString(),
+        FString(TEXT("Copied rich label")));
+    TestTrue(TEXT("Copied panel is owned by destination WidgetTree"), CopiedPanel->GetOuter() == DestinationWBP->WidgetTree);
+    TestTrue(TEXT("Copied label is owned by destination WidgetTree"), CopiedLabel && CopiedLabel->GetOuter() == DestinationWBP->WidgetTree);
+    TestTrue(TEXT("Copied rich label is owned by destination WidgetTree"), CopiedRichLabel && CopiedRichLabel->GetOuter() == DestinationWBP->WidgetTree);
+    TestTrue(TEXT("Copied label is a distinct destination object"), CopiedLabel != SourceLabel);
+    TestTrue(TEXT("Copied rich label is a distinct destination object"),
+        static_cast<const UObject*>(CopiedRichLabel) != static_cast<const UObject*>(SourceRichLabel));
+
+    TestTrue(TEXT("Source panel remains owned by source WidgetTree"), SourcePanel->GetOuter() == SourceWBP->WidgetTree);
+    TestTrue(TEXT("Source label remains owned by source WidgetTree"), SourceLabel->GetOuter() == SourceWBP->WidgetTree);
+    TestTrue(TEXT("Source label remains attached to source panel"), SourceLabel->GetParent() == SourcePanel);
+    TestTrue(TEXT("Source rich label remains attached to source panel"), SourceRichLabel->GetParent() == SourcePanel);
+    TestTrue(TEXT("Source label remains discoverable in source WidgetTree"), SourceWBP->WidgetTree->FindWidget(TEXT("Label")) == SourceLabel);
+    TestTrue(TEXT("Source rich label remains discoverable in source WidgetTree"), SourceWBP->WidgetTree->FindWidget(TEXT("RichLabel")) == SourceRichLabel);
+
+    UVerticalBoxSlot* SourceRichSlot = Cast<UVerticalBoxSlot>(SourceRichLabel->Slot);
+    TestNotNull(TEXT("source rich label has a VerticalBoxSlot before same-asset replacement"), SourceRichSlot);
+    if (!SourceRichSlot)
+    {
+        return false;
+    }
+    SourceRichSlot->SetPadding(FMargin(3.0f, 4.0f, 5.0f, 6.0f));
+    SourceRichSlot->SetHorizontalAlignment(HAlign_Right);
+    SourceRichSlot->SetVerticalAlignment(VAlign_Center);
+    FSlateChildSize SourceRichSize;
+    SourceRichSize.Value = 0.37f;
+    SourceRichSize.SizeRule = ESlateSizeRule::Fill;
+    SourceRichSlot->SetSize(SourceRichSize);
+
+    TSharedPtr<FJsonObject> SameAssetPayload = MakeShared<FJsonObject>();
+    SameAssetPayload->SetStringField(TEXT("source_asset_path"), SourcePath);
+    SameAssetPayload->SetStringField(TEXT("destination_asset_path"), SourcePath);
+    SameAssetPayload->SetStringField(TEXT("source_widget_name"), TEXT("RichLabel"));
+    SameAssetPayload->SetStringField(TEXT("destination_widget_name"), TEXT("RichLabel"));
+    SameAssetPayload->SetStringField(TEXT("destination_parent_name"), TEXT("SourcePanel"));
+    SameAssetPayload->SetObjectField(TEXT("class_remaps"), MakeClassRemapObject(TEXT("RichTextBlock"), TEXT("TextBlock")));
+    SameAssetPayload->SetStringField(TEXT("existing_policy"), TEXT("replace"));
+    SameAssetPayload->SetBoolField(TEXT("dry_run"), false);
+    SameAssetPayload->SetBoolField(TEXT("confirm"), true);
+    SameAssetPayload->SetBoolField(TEXT("compile"), false);
+    SameAssetPayload->SetBoolField(TEXT("save"), false);
+
+    const FMonolithActionResult SameAssetResult = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("ui"),
+        TEXT("copy_widget_subtree_with_class_remap"),
+        SameAssetPayload);
+    TestTrue(TEXT("same-asset class replacement succeeds"), SameAssetResult.bSuccess);
+    if (!SameAssetResult.bSuccess)
+    {
+        AddError(SameAssetResult.ErrorMessage);
+        return false;
+    }
+
+    UTextBlock* SameAssetRichLabel = Cast<UTextBlock>(SourceWBP->WidgetTree->FindWidget(TEXT("RichLabel")));
+    UVerticalBoxSlot* SameAssetRichSlot = SameAssetRichLabel
+        ? Cast<UVerticalBoxSlot>(SameAssetRichLabel->Slot)
+        : nullptr;
+    TestNotNull(TEXT("same-asset replacement uses remapped TextBlock class"), SameAssetRichLabel);
+    TestNotNull(TEXT("same-asset replacement retains VerticalBoxSlot"), SameAssetRichSlot);
+    TestEqual(TEXT("same-asset replacement preserves Text"),
+        SameAssetRichLabel ? SameAssetRichLabel->GetText().ToString() : FString(),
+        FString(TEXT("Copied rich label")));
+    if (SameAssetRichSlot)
+    {
+        TestEqual(TEXT("same-asset replacement preserves slot padding"), SameAssetRichSlot->GetPadding(), FMargin(3.0f, 4.0f, 5.0f, 6.0f));
+        TestEqual(TEXT("same-asset replacement preserves horizontal alignment"), SameAssetRichSlot->GetHorizontalAlignment(), HAlign_Right);
+        TestEqual(TEXT("same-asset replacement preserves vertical alignment"), SameAssetRichSlot->GetVerticalAlignment(), VAlign_Center);
+        TestEqual(TEXT("same-asset replacement preserves fill rule"), SameAssetRichSlot->GetSize().SizeRule, ESlateSizeRule::Fill);
+        TestEqual(TEXT("same-asset replacement preserves fill weight"), SameAssetRichSlot->GetSize().Value, 0.37f);
+    }
 
     if (ApplyResult.Result.IsValid())
     {
         double CopiedWidgetCount = 0.0;
         double PlannedRemappedWidgetCount = 0.0;
+        bool bSaved = false;
         TestTrue(TEXT("apply result has copied_widget_count"), ApplyResult.Result->TryGetNumberField(TEXT("copied_widget_count"), CopiedWidgetCount));
         TestTrue(TEXT("apply result has planned_remapped_widget_count"), ApplyResult.Result->TryGetNumberField(TEXT("planned_remapped_widget_count"), PlannedRemappedWidgetCount));
-        TestTrue(TEXT("two widgets copied"), CopiedWidgetCount >= 2.0);
-        TestEqual(TEXT("one widget class remapped"), static_cast<int32>(PlannedRemappedWidgetCount), 1);
+        TestTrue(TEXT("apply result has saved"), ApplyResult.Result->TryGetBoolField(TEXT("saved"), bSaved));
+        TestTrue(TEXT("three widgets copied"), CopiedWidgetCount >= 3.0);
+        TestEqual(TEXT("two widget classes remapped"), static_cast<int32>(PlannedRemappedWidgetCount), 2);
+        TestTrue(TEXT("destination package saves without source-private references"), bSaved);
     }
 
     return true;

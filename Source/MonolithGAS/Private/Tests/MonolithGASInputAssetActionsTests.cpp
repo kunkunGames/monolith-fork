@@ -415,6 +415,50 @@ namespace MonolithGASInputAssetActionsTestDetail
 			return false;
 		}
 	};
+
+	struct FScopedProjectInputMount
+	{
+		FString MountPoint;
+		FString ContentDirectory;
+		FString Root;
+		FString Action;
+		FString Context;
+		bool bMounted = false;
+
+		FScopedProjectInputMount()
+		{
+			const FString Suffix = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+			MountPoint = FString::Printf(TEXT("/MonolithInputTest_%s/"), *Suffix);
+			ContentDirectory = FPaths::ConvertRelativePathToFull(
+				FPaths::Combine(FPaths::ProjectIntermediateDir(), TEXT("MonolithTests"), TEXT("InputMounts"), Suffix));
+			FPaths::NormalizeDirectoryName(ContentDirectory);
+			ContentDirectory += TEXT("/");
+
+			IFileManager::Get().MakeDirectory(*ContentDirectory, true);
+			FPackageName::RegisterMountPoint(MountPoint, ContentDirectory);
+			bMounted = FPackageName::MountPointExists(MountPoint);
+
+			Root = MountPoint.LeftChop(1) + TEXT("/Input");
+			Action = Root + TEXT("/IA_PluginAction");
+			Context = Root + TEXT("/IMC_PluginContext");
+		}
+
+		~FScopedProjectInputMount()
+		{
+			CleanupTestAsset(Context);
+			CleanupTestAsset(Action);
+			if (bMounted)
+			{
+				FPackageName::UnRegisterMountPoint(MountPoint, ContentDirectory);
+			}
+			IFileManager::Get().DeleteDirectory(*ContentDirectory, false, true);
+		}
+
+		bool IsReady() const
+		{
+			return bMounted && IFileManager::Get().DirectoryExists(*ContentDirectory);
+		}
+	};
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -625,7 +669,7 @@ bool FMonolithGASInputAssetStrictParamsTest::RunTest(const FString& /*Parameters
 	Cases.Add({
 		TEXT("outside Game path"),
 		TEXT("create_input_action"),
-		TEXT("/Game"),
+		TEXT("current project"),
 		OutsideGame
 	});
 
@@ -710,6 +754,117 @@ bool FMonolithGASInputAssetStrictParamsTest::RunTest(const FString& /*Parameters
 		TEXT("explicit empty context selection checks zero contexts"),
 		GetInt(EmptySelectionResult, TEXT("contexts_checked"), -1),
 		0);
+	return bPassed;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithGASInputAssetProjectMountPathTest,
+	"Monolith.ParamGuard.GAS.InputAssets.ProjectMountPaths",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithGASInputAssetProjectMountPathTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MonolithGASInputAssetActionsTestDetail;
+
+	FScopedProjectInputMount Assets;
+	if (!TestTrue(TEXT("project-owned input test mount is registered"), Assets.IsReady()))
+	{
+		return false;
+	}
+
+	bool bPassed = true;
+	TSharedPtr<FJsonObject> ActionParams = MakeCreateParams(Assets.Action, false, true);
+	ActionParams->SetStringField(TEXT("description"), TEXT("Project plugin mount action"));
+	const FMonolithActionResult CreateActionResult =
+		Execute(TEXT("create_input_action"), ActionParams);
+	bPassed &= TestTrue(
+		TEXT("InputAction creation accepts a mounted current-project plugin path"),
+		CreateActionResult.bSuccess);
+	bPassed &= TestNotNull(
+		TEXT("project-mounted InputAction is created at the requested path"),
+		FindTestAsset(Assets.Action));
+
+	TSharedPtr<FJsonObject> ContextParams = MakeCreateParams(Assets.Context, false, true);
+	ContextParams->SetStringField(TEXT("description"), TEXT("Project plugin mount context"));
+	ContextParams->SetStringField(TEXT("registration_tracking_mode"), TEXT("CountRegistrations"));
+	const FMonolithActionResult CreateContextResult =
+		Execute(TEXT("create_input_mapping_context"), ContextParams);
+	bPassed &= TestTrue(
+		TEXT("InputMappingContext creation accepts a mounted current-project plugin path"),
+		CreateContextResult.bSuccess);
+	bPassed &= TestEqual(
+		TEXT("project-mounted context preserves registration ownership mode"),
+		GetString(CreateContextResult, TEXT("registration_tracking_mode")),
+		TEXT("CountRegistrations"));
+
+	const FMonolithActionResult AddMappingResult = Execute(
+		TEXT("add_input_mapping"),
+		MakeMappingParams(Assets.Context, Assets.Action, TEXT("Left")));
+	bPassed &= TestTrue(
+		TEXT("mapping mutation resolves both assets through the project plugin mount"),
+		AddMappingResult.bSuccess);
+
+	TSharedPtr<FJsonObject> ActionListParams = MakeShared<FJsonObject>();
+	ActionListParams->SetStringField(TEXT("path"), Assets.Root);
+	const FMonolithActionResult ActionListResult =
+		Execute(TEXT("list_input_actions"), ActionListParams);
+	bPassed &= TestTrue(
+		TEXT("InputAction listing accepts a mounted current-project plugin root"),
+		ActionListResult.bSuccess);
+	bPassed &= TestTrue(
+		TEXT("project plugin root listing returns the mounted InputAction"),
+		ResultRowsContainPackage(ActionListResult, TEXT("actions"), Assets.Action));
+	TSharedPtr<FJsonObject> MountRootListParams = MakeShared<FJsonObject>();
+	MountRootListParams->SetStringField(TEXT("path"), Assets.MountPoint.LeftChop(1));
+	const FMonolithActionResult MountRootListResult =
+		Execute(TEXT("list_input_actions"), MountRootListParams);
+	bPassed &= TestTrue(
+		TEXT("InputAction listing accepts the project plugin mount root itself"),
+		MountRootListResult.bSuccess);
+	bPassed &= TestTrue(
+		TEXT("project plugin mount-root listing remains recursive and bounded to that mount"),
+		ResultRowsContainPackage(MountRootListResult, TEXT("actions"), Assets.Action));
+
+	TSharedPtr<FJsonObject> ContextListParams = MakeShared<FJsonObject>();
+	ContextListParams->SetStringField(TEXT("path"), Assets.Root);
+	const FMonolithActionResult ContextListResult =
+		Execute(TEXT("list_input_mapping_contexts"), ContextListParams);
+	bPassed &= TestTrue(
+		TEXT("InputMappingContext listing accepts a mounted current-project plugin root"),
+		ContextListResult.bSuccess);
+	bPassed &= TestTrue(
+		TEXT("project plugin root listing returns the mounted InputMappingContext"),
+		ResultRowsContainPackage(ContextListResult, TEXT("contexts"), Assets.Context));
+
+	TSharedPtr<FJsonObject> ValidationParams = MakeShared<FJsonObject>();
+	ValidationParams->SetArrayField(
+		TEXT("context_paths"),
+		MakeStringArray({ Assets.Context }));
+	ValidationParams->SetBoolField(TEXT("fail_on_unbound"), true);
+	const FMonolithActionResult ValidationResult =
+		Execute(TEXT("validate_input_mappings"), ValidationParams);
+	bPassed &= TestTrue(
+		TEXT("mapping validation accepts the mounted current-project context"),
+		ValidationResult.bSuccess);
+	bPassed &= TestEqual(
+		TEXT("mounted context validation checks exactly one context"),
+		GetInt(ValidationResult, TEXT("contexts_checked"), -1),
+		1);
+
+	const FMonolithActionResult EngineMutationResult = Execute(
+		TEXT("create_input_action"),
+		MakeCreateParams(TEXT("/Engine/MonolithTests/Input/IA_Forbidden"), true, false));
+	bPassed &= TestFalse(
+		TEXT("Engine content remains outside the input mutation boundary"),
+		EngineMutationResult.bSuccess);
+	bPassed &= TestEqual(
+		TEXT("Engine content rejection uses invalid-params"),
+		EngineMutationResult.ErrorCode,
+		FMonolithJsonUtils::ErrInvalidParams);
+	bPassed &= TestTrue(
+		TEXT("Engine content rejection identifies current-project ownership"),
+		EngineMutationResult.ErrorMessage.Contains(TEXT("current project")));
+
 	return bPassed;
 }
 
@@ -1227,10 +1382,12 @@ bool FMonolithGASInputAssetSaveFailureReportingTest::RunTest(const FString& /*Pa
 		TEXT("Failed to move"),
 		EAutomationExpectedErrorFlags::Contains,
 		3);
+	// The two new placeholder packages require linker opens. The two fixture
+	// packages are already loaded before their save blockers are installed.
 	AddExpectedError(
 		TEXT("Error opening file"),
 		EAutomationExpectedErrorFlags::Contains,
-		4);
+		2);
 	AddExpectedError(
 		TEXT("package was marked as deleted in editor"),
 		EAutomationExpectedErrorFlags::Contains,
@@ -1375,11 +1532,11 @@ bool FMonolithGASInputAssetIdempotencyConflictNoOpTest::RunTest(const FString& /
 		TEXT("repeated mapping does not dirty the package"),
 		Context->GetOutermost()->IsDirty());
 
-	const FMonolithActionResult ConflictingAdd = Execute(
+	const FMonolithActionResult SharedKeyAdd = Execute(
 		TEXT("add_input_mapping"),
 		MakeMappingParams(Assets.Context, Assets.ActionB, TEXT("SpaceBar")));
-	bPassed &= TestTrue(TEXT("second action on the same key is authored"), ConflictingAdd.bSuccess);
-	bPassed &= TestEqual(TEXT("conflicting mapping count"), Context->GetMappings().Num(), 2);
+	bPassed &= TestTrue(TEXT("second action on the same key is authored"), SharedKeyAdd.bSuccess);
+	bPassed &= TestEqual(TEXT("shared-key mapping count"), Context->GetMappings().Num(), 2);
 
 	TSharedPtr<FJsonObject> ValidateParams = MakeShared<FJsonObject>();
 	ValidateParams->SetArrayField(
@@ -1387,9 +1544,25 @@ bool FMonolithGASInputAssetIdempotencyConflictNoOpTest::RunTest(const FString& /
 		MakeStringArray({ Assets.Context }));
 	const FMonolithActionResult ValidateResult =
 		Execute(TEXT("validate_input_mappings"), ValidateParams);
-	bPassed &= TestTrue(TEXT("conflict validation action succeeds"), ValidateResult.bSuccess);
-	bPassed &= TestFalse(TEXT("same key on different actions is invalid"), GetBool(ValidateResult, TEXT("valid"), true));
-	bPassed &= TestEqual(TEXT("one duplicate-key conflict is reported"), GetInt(ValidateResult, TEXT("conflicts")), 1);
+	bPassed &= TestTrue(TEXT("shared-key validation action succeeds"), ValidateResult.bSuccess);
+	bPassed &= TestTrue(TEXT("same key on different actions is valid"), GetBool(ValidateResult, TEXT("valid"), false));
+	bPassed &= TestEqual(TEXT("shared key is not a duplicate conflict"), GetInt(ValidateResult, TEXT("conflicts")), 0);
+	bPassed &= TestEqual(TEXT("one shared-key group is reported"), GetInt(ValidateResult, TEXT("shared_key_groups")), 1);
+
+	TSharedPtr<FJsonObject> DuplicateParams =
+		MakeMappingParams(Assets.Context, Assets.ActionA, TEXT("SpaceBar"));
+	DuplicateParams->SetBoolField(TEXT("allow_duplicate"), true);
+	const FMonolithActionResult DuplicateAdd =
+		Execute(TEXT("add_input_mapping"), DuplicateParams);
+	bPassed &= TestTrue(TEXT("explicit exact duplicate is authored"), DuplicateAdd.bSuccess);
+	bPassed &= TestEqual(TEXT("exact-duplicate mapping count"), Context->GetMappings().Num(), 3);
+
+	const FMonolithActionResult DuplicateValidateResult =
+		Execute(TEXT("validate_input_mappings"), ValidateParams);
+	bPassed &= TestTrue(TEXT("exact-duplicate validation action succeeds"), DuplicateValidateResult.bSuccess);
+	bPassed &= TestFalse(TEXT("exact duplicate semantic rows are invalid"), GetBool(DuplicateValidateResult, TEXT("valid"), true));
+	bPassed &= TestEqual(TEXT("one exact duplicate conflict is reported"), GetInt(DuplicateValidateResult, TEXT("conflicts")), 1);
+	bPassed &= TestEqual(TEXT("shared-key reporting survives exact duplicate rows"), GetInt(DuplicateValidateResult, TEXT("shared_key_groups")), 1);
 
 	Context->GetOutermost()->SetDirtyFlag(false);
 	const FMonolithActionResult MissingRemove = Execute(
@@ -1399,7 +1572,7 @@ bool FMonolithGASInputAssetIdempotencyConflictNoOpTest::RunTest(const FString& /
 	bPassed &= TestFalse(TEXT("absent mapping removal reports no change"), GetBool(MissingRemove, TEXT("changed"), true));
 	bPassed &= TestEqual(TEXT("absent mapping removal removes nothing"), GetInt(MissingRemove, TEXT("removed_count")), 0);
 	bPassed &= TestEqual(TEXT("absent mapping removal predicts nothing"), GetInt(MissingRemove, TEXT("would_remove_count")), 0);
-	bPassed &= TestEqual(TEXT("absent mapping removal preserves mappings"), Context->GetMappings().Num(), 2);
+	bPassed &= TestEqual(TEXT("absent mapping removal preserves mappings"), Context->GetMappings().Num(), 3);
 	bPassed &= TestFalse(
 		TEXT("absent mapping removal does not dirty the package"),
 		Context->GetOutermost()->IsDirty());

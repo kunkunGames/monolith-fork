@@ -242,8 +242,16 @@ bool FProjectIndexSchemaAliasTest::RunTest(const FString& Parameters)
 {
 	auto ValidateAlias = [this](const FString& ActionName, TSharedPtr<FJsonObject> Schema)
 	{
+		if (!Schema.IsValid())
+		{
+			AddError(FString::Printf(TEXT("Action schema %s is invalid"), *ActionName));
+			return;
+		}
+
 		const TSharedPtr<FJsonObject>* AssetPathParam = nullptr;
-		if (!Schema->TryGetObjectField(TEXT("asset_path"), AssetPathParam) || !AssetPathParam || !(*AssetPathParam)->IsValid())
+		if (!Schema->TryGetObjectField(TEXT("asset_path"), AssetPathParam)
+			|| !AssetPathParam
+			|| !AssetPathParam->IsValid())
 		{
 			AddError(FString::Printf(TEXT("Action schema %s has no asset_path param"), *ActionName));
 			return;
@@ -263,7 +271,7 @@ bool FProjectIndexSchemaAliasTest::RunTest(const FString& Parameters)
 			}
 		}
 
-		TestTrue(FString::Printf(TEXT("%s param exists"), *ActionName), AssetPathParam && (*AssetPathParam)->IsValid());
+		TestTrue(FString::Printf(TEXT("%s param exists"), *ActionName), AssetPathParam->IsValid());
 		TestTrue(FString::Printf(TEXT("%s has package_path alias"), *ActionName), bHasPackagePathAlias);
 	};
 

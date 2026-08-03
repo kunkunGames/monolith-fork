@@ -116,6 +116,46 @@ bool FMonolithUIAllowlistTextBlockTextTest::RunTest(const FString& /*Parameters*
 }
 
 /**
+ * MonolithUI.Allowlist.CommonTextBlockInheritedTextMappings
+ *
+ * CommonUI's UCommonTextBlock inherits UTextBlock presentation properties.
+ * The allowlist is concrete-token based, so those reviewed paths must be
+ * projected explicitly instead of requiring raw_mode for Foundation widgets.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithUIAllowlistCommonTextBlockInheritedMappingsTest,
+    "MonolithUI.Allowlist.CommonTextBlockInheritedTextMappings",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIAllowlistCommonTextBlockInheritedMappingsTest::RunTest(const FString& /*Parameters*/)
+{
+    UMonolithUIRegistrySubsystem* Sub = UMonolithUIRegistrySubsystem::Get();
+    if (!TestNotNull(TEXT("UMonolithUIRegistrySubsystem available"), Sub))
+    {
+        return false;
+    }
+
+    const FName Token(TEXT("CommonTextBlock"));
+    if (!Sub->GetTypeRegistry().FindByToken(Token))
+    {
+        AddInfo(TEXT("CommonTextBlock is not registered in this stripped test target; skipping optional CommonUI mapping check"));
+        return true;
+    }
+
+    const FUIPropertyAllowlist& Allowlist = Sub->GetAllowlist();
+    TestTrue(TEXT("CommonTextBlock.Text is allowed"),
+        Allowlist.IsAllowed(Token, TEXT("Text")));
+    TestTrue(TEXT("CommonTextBlock.AutoWrapText is allowed"),
+        Allowlist.IsAllowed(Token, TEXT("AutoWrapText")));
+    TestTrue(TEXT("CommonTextBlock.Slot.Padding is allowed"),
+        Allowlist.IsAllowed(Token, TEXT("Slot.Padding")));
+    TestFalse(TEXT("CommonTextBlock.PrivateInternalCache is denied"),
+        Allowlist.IsAllowed(Token, TEXT("PrivateInternalCache")));
+
+    return true;
+}
+
+/**
  * MonolithUI.Allowlist.RoundedBorderCuratedMappings (B6)
  *
  * URoundedBorder lives in the optional EffectSurface provider lineage. The

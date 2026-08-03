@@ -337,6 +337,19 @@ namespace
         AddMappingTo(Registry, Token, TEXT("RenderOpacity"), TEXT("RenderOpacity"), TEXT("Common UWidget render opacity."));
         AddMappingTo(Registry, Token, TEXT("Visibility"), TEXT("Visibility"), TEXT("Common UWidget visibility token."));
     }
+
+    void AddTextBlockMappings(FUITypeRegistry& Registry, const FName& Token)
+    {
+        AddMappingTo(Registry, Token, TEXT("Text"), TEXT("Text"), TEXT("Display text."));
+        AddMappingTo(Registry, Token, TEXT("Font"), TEXT("Font"), TEXT("Font info (family, size, type face)."));
+        AddMappingTo(Registry, Token, TEXT("ColorAndOpacity"), TEXT("ColorAndOpacity"), TEXT("Foreground color and opacity."));
+        AddMappingTo(Registry, Token, TEXT("Justification"), TEXT("Justification"), TEXT("Horizontal text justification token."));
+        AddMappingTo(Registry, Token, TEXT("AutoWrapText"), TEXT("AutoWrapText"), TEXT("Whether the text wraps to fit the slot."));
+        AddMappingTo(Registry, Token, TEXT("LineHeightPercentage"), TEXT("LineHeightPercentage"), TEXT("Line height scale for text layout."));
+        AddMappingTo(Registry, Token, TEXT("ApplyLineHeightToBottomLine"), TEXT("ApplyLineHeightToBottomLine"), TEXT("Whether line height adds space below the final line."));
+        AddMappingTo(Registry, Token, TEXT("ShadowOffset"), TEXT("ShadowOffset"), TEXT("Drop shadow offset."));
+        AddMappingTo(Registry, Token, TEXT("ShadowColorAndOpacity"), TEXT("ShadowColorAndOpacity"), TEXT("Drop shadow color."));
+    }
 }
 
 void UMonolithUIRegistrySubsystem::RegisterCuratedMappings()
@@ -374,16 +387,11 @@ void UMonolithUIRegistrySubsystem::RegisterCuratedMappings()
 
     // ----- Leaves -----
 
-    // TextBlock — most-common spec leaf.
-    AddMappingTo(TypeRegistry, FName(TEXT("TextBlock")), TEXT("Text"),             TEXT("Text"),             TEXT("Display text."));
-    AddMappingTo(TypeRegistry, FName(TEXT("TextBlock")), TEXT("Font"),             TEXT("Font"),             TEXT("Font info (family, size, type face)."));
-    AddMappingTo(TypeRegistry, FName(TEXT("TextBlock")), TEXT("ColorAndOpacity"),  TEXT("ColorAndOpacity"),  TEXT("Foreground color and opacity."));
-    AddMappingTo(TypeRegistry, FName(TEXT("TextBlock")), TEXT("Justification"),    TEXT("Justification"),    TEXT("Horizontal text justification token."));
-    AddMappingTo(TypeRegistry, FName(TEXT("TextBlock")), TEXT("AutoWrapText"),     TEXT("AutoWrapText"),     TEXT("Whether the text wraps to fit the slot."));
-    AddMappingTo(TypeRegistry, FName(TEXT("TextBlock")), TEXT("LineHeightPercentage"), TEXT("LineHeightPercentage"), TEXT("Line height scale for text layout."));
-    AddMappingTo(TypeRegistry, FName(TEXT("TextBlock")), TEXT("ApplyLineHeightToBottomLine"), TEXT("ApplyLineHeightToBottomLine"), TEXT("Whether line height adds space below the final line."));
-    AddMappingTo(TypeRegistry, FName(TEXT("TextBlock")), TEXT("ShadowOffset"),     TEXT("ShadowOffset"),     TEXT("Drop shadow offset."));
-    AddMappingTo(TypeRegistry, FName(TEXT("TextBlock")), TEXT("ShadowColorAndOpacity"), TEXT("ShadowColorAndOpacity"), TEXT("Drop shadow color."));
+    // TextBlock and CommonTextBlock expose the same inherited UTextBlock state.
+    // Curated mappings are intentionally projected per concrete token because
+    // the allowlist denies inherited paths that were not explicitly reviewed.
+    AddTextBlockMappings(TypeRegistry, FName(TEXT("TextBlock")));
+    AddTextBlockMappings(TypeRegistry, FName(TEXT("CommonTextBlock")));
 
     // Image — brush + tint.
     AddMappingTo(TypeRegistry, FName(TEXT("Image")), TEXT("Brush"),            TEXT("Brush"),            TEXT("FSlateBrush — brush asset and draw type."));
@@ -512,6 +520,7 @@ void UMonolithUIRegistrySubsystem::RegisterCuratedMappings()
     {
         const TArray<FName> CommonChildren = {
             FName(TEXT("TextBlock")),
+            FName(TEXT("CommonTextBlock")),
             FName(TEXT("Image")),
             FName(TEXT("Button")),
             FName(TEXT("Border")),

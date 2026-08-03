@@ -180,7 +180,12 @@ bool FMonolithDescribeActionSchemaMissingParamsTest::RunTest(const FString& /*Pa
 	TSharedPtr<FJsonObject> NullParams;
 	const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("describe"), TEXT("action_schema"), NullParams);
 	TestFalse(TEXT("describe.action_schema with missing params fails"), Result.bSuccess);
-	TestTrue(TEXT("error names missing params"), Result.ErrorMessage.Contains(TEXT("describe.action_schema requires params")));
+	// Schema-driven required-param validation runs in the registry before dispatch, so a null
+	// param object is reported with every missing required name at once rather than the
+	// handler's own guard string. Assert that richer contract instead of the handler message.
+	TestTrue(TEXT("error names missing params"), Result.ErrorMessage.Contains(TEXT("Missing required param(s)")));
+	TestTrue(TEXT("error names the missing target_namespace param"), Result.ErrorMessage.Contains(TEXT("target_namespace")));
+	TestTrue(TEXT("error names the missing target_action param"), Result.ErrorMessage.Contains(TEXT("target_action")));
 	TestEqual(TEXT("error code is invalid params"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
 	return true;
 }

@@ -14,6 +14,27 @@ struct FMonolithAsyncAutomationTestDescriptor
 
 namespace MonolithAutomationAsync
 {
+	/**
+	 * Temporarily disable the editor's background CPU throttle while an
+	 * AutomationController session needs real interactive frames. The exact
+	 * prior setting is restored without persisting a config change.
+	 */
+	class FBackgroundCPUThrottleScope final
+	{
+	public:
+		~FBackgroundCPUThrottleScope();
+
+		void Activate();
+		bool Restore();
+
+		bool IsActive() const { return bActive; }
+		bool DidDisableBackgroundThrottle() const { return bPreviousThrottleCPUWhenNotForeground; }
+
+	private:
+		bool bActive = false;
+		bool bPreviousThrottleCPUWhenNotForeground = false;
+	};
+
 	using FRunFinishedCallback = TFunction<void(const TSharedPtr<FJsonObject>&)>;
 
 	/**

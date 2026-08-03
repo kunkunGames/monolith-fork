@@ -1953,7 +1953,10 @@ FMonolithActionResult FMonolithCoreTools::HandleFind(const TSharedPtr<FJsonObjec
 				for (const TSharedPtr<FJsonValue>& Value : *FieldArr)
 				{
 					FString S;
-					if (Value.IsValid() && Value->TryGetString(S))
+					// FJsonValueNumber overrides TryGetString, so a JSON number would stringify
+					// silently and defeat the declared 'array of strings' contract. Gate on the
+					// declared JSON type first, matching MonolithParamUtils::IsJsonString.
+					if (Value.IsValid() && Value->Type == EJson::String && Value->TryGetString(S))
 					{
 						S.TrimStartAndEndInline();
 						if (!S.IsEmpty())
@@ -1967,7 +1970,7 @@ FMonolithActionResult FMonolithCoreTools::HandleFind(const TSharedPtr<FJsonObjec
 					}
 				}
 			}
-			else if (FieldsValue->TryGetString(FieldsCsv))
+			else if (FieldsValue->Type == EJson::String && FieldsValue->TryGetString(FieldsCsv))
 			{
 				if (!FieldsCsv.IsEmpty())
 				{

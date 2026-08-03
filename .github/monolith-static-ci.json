@@ -308,6 +308,10 @@
       {
         "name": "StaticOfflineParityExeSelection",
         "script": "Scripts/tests/test_ci_static_offline_parity.py"
+      },
+      {
+        "name": "ReleaseSha256MarkerContract",
+        "script": "Scripts/tests/test_release_sha256_marker_contract.py"
       }
     ]
   },

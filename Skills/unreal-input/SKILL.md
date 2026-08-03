@@ -50,7 +50,7 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 - Every write requires either `dry_run: true` or `confirm: true`. Calls with neither are rejected before an asset is created, loaded for mutation, or dirtied.
 - `dry_run: true` predicts `would_create`, `would_update`, or `would_change` with `preview_state: "proposed"` without creating/loading modifier or trigger packages/classes/CDOs, constructing UObjects, creating packages, or modifying assets. It takes precedence if `confirm` is also present.
 - `save` defaults to `false`. A confirmed in-memory change marks the package dirty; `save: true` additionally writes it immediately. If that save fails, inspect structured `error.data`: the in-memory mutation is already committed, `retry_safe` is false, and a blind retry can duplicate intent. Dry-runs and semantic no-ops never dirty or save a package.
-- Asset paths and list roots must resolve under `/Game`. Omitted list roots default to `/Game`; malformed or non-`/Game` paths are rejected rather than redirected to a fallback asset or widened to Engine/plugin content.
+- Asset paths and explicit list roots may resolve under `/Game` or a mounted project/GameFeature plugin such as `/SpeedBox`. Omitted list roots still default narrowly to `/Game`; Engine content, external mounts, unregistered roots, and malformed paths are rejected rather than redirected or widened.
 - `add_input_mapping` reuses the existing action+key mapping by default. Set `allow_duplicate: true` only when a deliberate duplicate row is required.
 - `source_context_path`, `source_action_path`, and `source_key` form one clone selector and must be supplied together. If they match duplicate rows, inspect the context first and pass `source_mapping_index` for the exact row; the action rejects an ambiguous first-match guess.
 - When `modifier_classes` or `trigger_classes` is present, the array replaces cloned/existing entries; an empty array explicitly clears that side. Dry-run validates soft path syntax and already-loaded class compatibility, returns `class_resolution: "deferred_until_confirm"`, and performs full class loading/validation only on confirmation.
@@ -77,6 +77,19 @@ input_query({ action: "add_input_mapping", params: {
   key: "SpaceBar",
   trigger_classes: ["/Script/EnhancedInput.InputTriggerHold"],
   confirm: true
+}})
+```
+
+For a project GameFeature, keep the same workflow under its mounted content root instead of moving mode-owned input into `/Game`:
+
+```
+input_query({ action: "create_input_action", params: {
+  asset_path: "/SpeedBox/TagChase/Input/IA_RunnerSpectatorPreviousCamera",
+  value_type: "Boolean", dry_run: true
+}})
+input_query({ action: "create_input_mapping_context", params: {
+  asset_path: "/SpeedBox/TagChase/Input/IMC_RunnerSpectator",
+  registration_tracking_mode: "CountRegistrations", dry_run: true
 }})
 ```
 

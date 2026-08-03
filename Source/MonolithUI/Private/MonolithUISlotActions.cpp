@@ -2,6 +2,7 @@
 #include "MonolithUISlotActions.h"
 #include "MonolithUIInternal.h"
 #include "MonolithUIMoveWidgetTransaction.h"
+#include "MonolithParamUtils.h"
 #include "MonolithParamSchema.h"
 #include "Components/UniformGridSlot.h"
 #include "Components/GridSlot.h"
@@ -285,6 +286,34 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
     FString WidgetName;
     if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("widget_name"), WidgetName, ParamError)) return ParamError;
 
+    // UE's JSON string values implement TryGetBool via FString::ToBool, so a
+    // direct TryGetBoolField call accepts inputs such as "yes". Validate the
+    // exact wire type before loading or mutating the Widget Blueprint.
+    FString BoolParamError;
+    const bool bHasAutoSize = Params->HasField(TEXT("auto_size"));
+    bool bAutoSize = false;
+    if (bHasAutoSize
+        && !MonolithParamUtils::GetOptionalBoolParam(
+            Params,
+            TEXT("auto_size"),
+            bAutoSize,
+            BoolParamError,
+            false))
+    {
+        return FMonolithActionResult::Error(BoolParamError, FMonolithJsonUtils::ErrInvalidParams);
+    }
+
+    bool bCompile = false;
+    if (!MonolithParamUtils::GetOptionalBoolParam(
+        Params,
+        TEXT("compile"),
+        bCompile,
+        BoolParamError,
+        false))
+    {
+        return FMonolithActionResult::Error(BoolParamError, FMonolithJsonUtils::ErrInvalidParams);
+    }
+
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
     if (!WBP) return Err;
@@ -442,10 +471,8 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
             PropsSet++;
         }
 
-        bool bAutoSize;
-        if (Params->HasField(TEXT("auto_size")))
+        if (bHasAutoSize)
         {
-            if (!Params->TryGetBoolField(TEXT("auto_size"), bAutoSize)) return FMonolithActionResult::Error(TEXT("Invalid param: auto_size must be a boolean"));
             CS->SetAutoSize(bAutoSize);
             PropsSet++;
         }
@@ -564,8 +591,6 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
 
     FBlueprintEditorUtils::MarkBlueprintAsModified(WBP);
 
-    bool bCompile = false;
-    Params->TryGetBoolField(TEXT("compile"), bCompile);
     if (bCompile) FKismetEditorUtilities::CompileBlueprint(WBP);
 
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();

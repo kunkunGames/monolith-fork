@@ -1134,7 +1134,6 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
-		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		// Preserve Saved/ from backup
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		// Cleanup
@@ -1195,7 +1194,6 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		// Touch step
 		*PluginDir,
 		// Preserve .git from backup
-		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,

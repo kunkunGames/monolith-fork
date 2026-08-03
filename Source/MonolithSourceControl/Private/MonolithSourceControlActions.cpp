@@ -14,6 +14,7 @@
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "SourceControlOperations.h"
+#include "SourceControlPreferences.h"
 
 namespace
 {
@@ -526,13 +527,14 @@ void FMonolithSourceControlActions::RegisterActions()
 			.Build());
 
 	Registry.RegisterAction(TEXT("source_control"), TEXT("revert"),
-		TEXT("Revert files through the active Unreal source-control provider. Requires confirm=true unless dry_run=true."),
+		TEXT("Revert files through the active Unreal source-control provider. New files are preserved unless delete_new_files=true. Requires confirm=true unless dry_run=true."),
 		FMonolithActionHandler::CreateStatic(&HandleRevert),
 		FParamSchemaBuilder()
 			.EnableValidation()
 			.Required(TEXT("paths"), TEXT("array|string"), TEXT("Filesystem paths or /Game package/object paths. Alias: files."), { TEXT("files") })
 			.Optional(TEXT("dry_run"), TEXT("bool|string"), TEXT("Preview states without executing. String literals true/false/1/0/yes/no/on/off are accepted."), TEXT("false"))
 			.Optional(TEXT("confirm"), TEXT("bool|string"), TEXT("Required to execute revert. String literals true/false/1/0/yes/no/on/off are accepted."), TEXT("false"))
+			.Optional(TEXT("delete_new_files"), TEXT("bool|string"), TEXT("Delete files opened for add while reverting. Defaults false so revert never inherits the editor-global delete-new-files preference implicitly."), TEXT("false"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("source_control"), TEXT("revert_unchanged"),
@@ -1004,7 +1006,30 @@ FMonolithActionResult FMonolithSourceControlActions::HandleMarkForDelete(const T
 
 FMonolithActionResult FMonolithSourceControlActions::HandleRevert(const TSharedPtr<FJsonObject>& Params)
 {
-	return ExecuteFileOperation(Params, TEXT("revert"), ISourceControlOperation::Create<FRevert>(), true);
+	bool bDeleteNewFiles = false;
+	FString Error;
+	if (!TryReadTolerantBoolField(Params, TEXT("delete_new_files"), bDeleteNewFiles, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	USourceControlPreferences* Preferences = GetMutableDefault<USourceControlPreferences>();
+	if (!Preferences)
+	{
+		return FMonolithActionResult::Error(TEXT("Could not resolve source-control preferences for revert."));
+	}
+
+	TGuardValue<bool> DeleteNewFilesGuard(Preferences->bShouldDeleteNewFilesOnRevert, bDeleteNewFiles);
+	FMonolithActionResult Result = ExecuteFileOperation(
+		Params,
+		TEXT("revert"),
+		ISourceControlOperation::Create<FRevert>(),
+		true);
+	if (Result.Result.IsValid())
+	{
+		Result.Result->SetBoolField(TEXT("delete_new_files"), bDeleteNewFiles);
+	}
+	return Result;
 }
 
 FMonolithActionResult FMonolithSourceControlActions::HandleRevertUnchanged(const TSharedPtr<FJsonObject>& Params)

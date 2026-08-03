@@ -7,6 +7,7 @@
 #include "Components/Widget.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Engine/Engine.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/PackageName.h"
@@ -48,6 +49,14 @@ namespace MonolithUI::WidgetCopy
         FString MatchedRule;
     };
 
+    struct FSourceWidgetAttachment
+    {
+        UWidget* Widget = nullptr;
+        UPanelWidget* Parent = nullptr;
+        UPanelSlot* Slot = nullptr;
+        int32 ChildIndex = INDEX_NONE;
+    };
+
     struct FCopyOptions
     {
         FString SourceAssetPath;
@@ -73,10 +82,20 @@ namespace MonolithUI::WidgetCopy
         FName DestinationWidgetName;
         int32 SourceChildIndex = INDEX_NONE;
         TArray<UWidget*> SourceSubtree;
+        TArray<FSourceWidgetAttachment> SourceAttachments;
         TArray<UWidget*> DestinationCollisions;
         TArray<FResolvedWidgetClass> ResolvedClasses;
         bool bSkip = false;
         FString SkipReason;
+    };
+
+    struct FDestinationSlotBinding
+    {
+        UPanelSlot* SourceSlot = nullptr;
+        UPanelSlot* DestinationSlot = nullptr;
+        UPanelWidget* DestinationParent = nullptr;
+        UWidget* DestinationContent = nullptr;
+        bool bCopySlotProperties = false;
     };
 
     static FString NormalizeReferencePath(FString Path)
@@ -856,6 +875,16 @@ namespace MonolithUI::WidgetCopy
             }
 
             CollectWidgetSubtree(SourceWidget, Plan.SourceSubtree);
+            Plan.SourceAttachments.Reserve(Plan.SourceSubtree.Num());
+            for (UWidget* SubtreeWidget : Plan.SourceSubtree)
+            {
+                FSourceWidgetAttachment& Attachment = Plan.SourceAttachments.AddDefaulted_GetRef();
+                Attachment.Widget = SubtreeWidget;
+                Attachment.Parent = SubtreeWidget
+                    ? UWidgetTree::FindWidgetParent(SubtreeWidget, Attachment.ChildIndex)
+                    : nullptr;
+                Attachment.Slot = SubtreeWidget ? SubtreeWidget->Slot : nullptr;
+            }
             if (!ValidateSourceSubtreeClasses(Options, Plan.SourceSubtree, Plan.ResolvedClasses, OutError))
             {
                 return false;
@@ -915,45 +944,64 @@ namespace MonolithUI::WidgetCopy
         return SourceParent && DestinationParent && SourceParent->GetClass() == DestinationParent->GetClass();
     }
 
-    static void RenameDetachedWidgetSubtreeToTransient(UWidget* Widget)
+    static bool DuplicateStateIntoExistingObject(
+        UObject* SourceObject,
+        UObject* DestinationObject,
+        const TMap<UObject*, UObject*>& ReplacementObjects,
+        FString& OutError)
     {
-        if (!Widget)
+        if (!SourceObject || !DestinationObject)
         {
-            return;
+            OutError = TEXT("Cannot copy state between null objects.");
+            return false;
         }
 
-        TArray<UWidget*> Widgets;
-        CollectWidgetSubtree(Widget, Widgets);
-        for (UWidget* SubtreeWidget : Widgets)
+        if (SourceObject->GetClass() != DestinationObject->GetClass())
         {
-            if (SubtreeWidget)
-            {
-                SubtreeWidget->Rename(nullptr, GetTransientPackage(), REN_DontCreateRedirectors | REN_DoNotDirty | REN_AllowPackageLinkerMismatch);
-            }
-        }
-    }
+            // StaticDuplicateObjectEx requires the destination class to be at least as large as
+            // the source class. Class remaps are explicitly allowed to target a smaller unrelated
+            // class (for example RichTextBlock -> TextBlock), so use Unreal's name-based unrelated
+            // object copier for that contract instead of relying on class memory layout.
+            TMap<UObject*, UObject*> UnrelatedObjectReplacements = ReplacementObjects;
+            UEngine::FCopyPropertiesForUnrelatedObjectsParams CopyParams;
+            CopyParams.bDoDelta = false;
+            CopyParams.bReplaceObjectClassReferences = false;
+            CopyParams.bCopyDeprecatedProperties = false;
+            CopyParams.bPreserveRootComponent = true;
+            CopyParams.bPerformDuplication = false;
+            CopyParams.bOnlyHandleDirectSubObjects = false;
+            CopyParams.bSkipCompilerGeneratedDefaults = false;
+            CopyParams.bNotifyObjectReplacement = false;
+            CopyParams.bClearReferences = true;
+            CopyParams.bReplaceInternalReferenceUponRead = true;
+            CopyParams.OptionalReplacementMappings = &UnrelatedObjectReplacements;
+            UEngine::CopyPropertiesForUnrelatedObjects(SourceObject, DestinationObject, CopyParams);
 
-    static void ClearDuplicatedPanelChildren(UPanelWidget* Panel)
-    {
-        if (!Panel)
-        {
-            return;
+            DestinationObject->SetFlags(RF_Transactional);
+            DestinationObject->Modify();
+            return true;
         }
 
-        TArray<UWidget*> DuplicatedChildren;
-        for (int32 ChildIndex = 0; ChildIndex < Panel->GetChildrenCount(); ++ChildIndex)
+        FObjectDuplicationParameters DuplicationParameters(SourceObject, DestinationObject->GetOuter());
+        DuplicationParameters.DestName = DestinationObject->GetFName();
+        DuplicationParameters.DestClass = DestinationObject->GetClass();
+        DuplicationParameters.FlagMask = RF_AllFlags;
+        DuplicationParameters.ApplyFlags = RF_Transactional;
+        DuplicationParameters.bAssignExternalPackages = false;
+        DuplicationParameters.DuplicationSeed = ReplacementObjects;
+
+        if (StaticDuplicateObjectEx(DuplicationParameters) != DestinationObject)
         {
-            if (UWidget* Child = Panel->GetChildAt(ChildIndex))
-            {
-                DuplicatedChildren.Add(Child);
-            }
+            OutError = FString::Printf(
+                TEXT("Failed to copy '%s' into the pre-created destination object '%s'."),
+                *SourceObject->GetPathName(),
+                *DestinationObject->GetPathName());
+            return false;
         }
 
-        Panel->ClearChildren();
-        for (UWidget* Child : DuplicatedChildren)
-        {
-            RenameDetachedWidgetSubtreeToTransient(Child);
-        }
+        DestinationObject->SetFlags(RF_Transactional);
+        DestinationObject->Modify();
+        return true;
     }
 
     static bool FixupSoftObjectPathValue(
@@ -1108,128 +1156,271 @@ namespace MonolithUI::WidgetCopy
         return FixupCount;
     }
 
-    static UWidget* DuplicateWidgetSubtree(
-        UWidgetBlueprint* DestinationBlueprint,
+    static TSharedPtr<FJsonValue> MakeCopiedWidgetRow(
         UWidget* SourceWidget,
-        const FName& DestinationName,
-        bool bIsRootOfCopiedSubtree,
-        const FCopyOptions& Options,
-        const TMap<UObject*, UObject*>& ReplacementObjects,
-        int32& OutSoftReferenceFixups,
-        TArray<TSharedPtr<FJsonValue>>& OutCopiedRows,
-        FString& OutError)
+        UWidget* DestinationWidget,
+        const FResolvedWidgetClass& ResolvedClass)
     {
-        if (!DestinationBlueprint || !DestinationBlueprint->WidgetTree || !SourceWidget)
-        {
-            OutError = TEXT("Invalid widget copy context.");
-            return nullptr;
-        }
-
-        const FResolvedWidgetClass ResolvedClass = ResolveDestinationClassForWidget(SourceWidget, Options);
-        if (!ResolvedClass.Class)
-        {
-            OutError = FString::Printf(TEXT("Could not resolve destination widget class for '%s'."), *SourceWidget->GetName());
-            return nullptr;
-        }
-
-        UWidget* CopiedWidget = Cast<UWidget>(StaticDuplicateObject(
-            SourceWidget,
-            DestinationBlueprint->WidgetTree,
-            bIsRootOfCopiedSubtree ? DestinationName : SourceWidget->GetFName(),
-            RF_AllFlags,
-            ResolvedClass.Class));
-        if (!CopiedWidget)
-        {
-            OutError = FString::Printf(TEXT("Failed to duplicate widget '%s' as class '%s'."), *SourceWidget->GetName(), *ResolvedClass.Class->GetPathName());
-            return nullptr;
-        }
-
-        CopiedWidget->SetFlags(RF_Transactional);
-        CopiedWidget->Modify();
-
-        if (!ReplacementObjects.IsEmpty())
-        {
-            FArchiveReplaceObjectRef<UObject> ReplaceArchive(
-                CopiedWidget,
-                const_cast<TMap<UObject*, UObject*>&>(ReplacementObjects),
-                EArchiveReplaceObjectFlags::IgnoreOuterRef | EArchiveReplaceObjectFlags::IncludeClassGeneratedByRef);
-        }
-        OutSoftReferenceFixups += FixupSoftReferencesInObject(CopiedWidget, Options.ReferenceRemaps);
-
-        if (UPanelWidget* SourcePanel = Cast<UPanelWidget>(SourceWidget))
-        {
-            UPanelWidget* CopiedPanel = Cast<UPanelWidget>(CopiedWidget);
-            if (!CopiedPanel && SourcePanel->GetChildrenCount() > 0)
-            {
-                OutError = FString::Printf(
-                    TEXT("Copied widget '%s' cannot receive children because destination class '%s' is not a panel."),
-                    *SourceWidget->GetName(),
-                    *CopiedWidget->GetClass()->GetPathName());
-                return nullptr;
-            }
-
-            if (CopiedPanel)
-            {
-                ClearDuplicatedPanelChildren(CopiedPanel);
-                CopiedPanel->SetFlags(RF_Transactional);
-                CopiedPanel->Modify();
-
-                for (int32 ChildIndex = 0; ChildIndex < SourcePanel->GetChildrenCount(); ++ChildIndex)
-                {
-                    UWidget* SourceChild = SourcePanel->GetChildAt(ChildIndex);
-                    if (!SourceChild)
-                    {
-                        continue;
-                    }
-
-                    UWidget* CopiedChild = DuplicateWidgetSubtree(
-                        DestinationBlueprint,
-                        SourceChild,
-                        SourceChild->GetFName(),
-                        false,
-                        Options,
-                        ReplacementObjects,
-                        OutSoftReferenceFixups,
-                        OutCopiedRows,
-                        OutError);
-                    if (!CopiedChild)
-                    {
-                        return nullptr;
-                    }
-
-                    UPanelSlot* NewSlot = nullptr;
-                    if (IsPanelSlotTemplateCompatible(SourcePanel, CopiedPanel) && SourceChild->Slot)
-                    {
-                        NewSlot = CopiedPanel->InsertChildAt(ChildIndex, CopiedChild, SourceChild->Slot);
-                    }
-                    if (!NewSlot)
-                    {
-                        NewSlot = CopiedPanel->InsertChildAt(ChildIndex, CopiedChild);
-                    }
-                    if (!NewSlot)
-                    {
-                        OutError = FString::Printf(TEXT("Failed to attach copied child '%s' to copied parent '%s'."), *CopiedChild->GetName(), *CopiedPanel->GetName());
-                        return nullptr;
-                    }
-                }
-            }
-        }
-
-        MonolithUI::RegisterCreatedWidget(DestinationBlueprint, CopiedWidget);
-
         TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
-        Row->SetStringField(TEXT("source_widget"), SourceWidget->GetName());
-        Row->SetStringField(TEXT("destination_widget"), CopiedWidget->GetName());
-        Row->SetStringField(TEXT("source_class"), SourceWidget->GetClass()->GetPathName());
-        Row->SetStringField(TEXT("destination_class"), CopiedWidget->GetClass()->GetPathName());
+        Row->SetStringField(TEXT("source_widget"), SourceWidget ? SourceWidget->GetName() : FString());
+        Row->SetStringField(TEXT("destination_widget"), DestinationWidget ? DestinationWidget->GetName() : FString());
+        Row->SetStringField(TEXT("source_class"), SourceWidget && SourceWidget->GetClass() ? SourceWidget->GetClass()->GetPathName() : FString());
+        Row->SetStringField(TEXT("destination_class"), DestinationWidget && DestinationWidget->GetClass() ? DestinationWidget->GetClass()->GetPathName() : FString());
         Row->SetBoolField(TEXT("class_remapped"), ResolvedClass.bRemapped);
         if (!ResolvedClass.MatchedRule.IsEmpty())
         {
             Row->SetStringField(TEXT("matched_class_remap"), ResolvedClass.MatchedRule);
         }
-        OutCopiedRows.Add(MakeShared<FJsonValueObject>(Row));
+        return MakeShared<FJsonValueObject>(Row);
+    }
 
-        return CopiedWidget;
+    static bool CreateDestinationWidgetObjects(
+        UWidgetBlueprint* DestinationBlueprint,
+        const TArray<FCopyPlan>& Plans,
+        TMap<UWidget*, UWidget*>& OutWidgetCopies,
+        TMap<UObject*, UObject*>& InOutReplacementObjects,
+        TArray<TSharedPtr<FJsonValue>>& OutCopiedRows,
+        FString& OutError)
+    {
+        if (!DestinationBlueprint || !DestinationBlueprint->WidgetTree)
+        {
+            OutError = TEXT("Destination Widget Blueprint has no WidgetTree.");
+            return false;
+        }
+
+        for (const FCopyPlan& Plan : Plans)
+        {
+            if (Plan.bSkip)
+            {
+                continue;
+            }
+
+            for (int32 WidgetIndex = 0; WidgetIndex < Plan.SourceSubtree.Num(); ++WidgetIndex)
+            {
+                UWidget* SourceWidget = Plan.SourceSubtree[WidgetIndex];
+                const FResolvedWidgetClass& ResolvedClass = Plan.ResolvedClasses[WidgetIndex];
+                const FName DestinationName = WidgetIndex == 0
+                    ? Plan.DestinationWidgetName
+                    : SourceWidget->GetFName();
+
+                if (OutWidgetCopies.Contains(SourceWidget))
+                {
+                    OutError = FString::Printf(TEXT("Source widget '%s' appears in more than one copy plan."), *SourceWidget->GetPathName());
+                    return false;
+                }
+
+                UWidget* DestinationWidget = DestinationBlueprint->WidgetTree->ConstructWidget<UWidget>(
+                    ResolvedClass.Class,
+                    DestinationName);
+                if (!DestinationWidget)
+                {
+                    OutError = FString::Printf(
+                        TEXT("Failed to construct destination widget '%s' as class '%s'."),
+                        *DestinationName.ToString(),
+                        ResolvedClass.Class ? *ResolvedClass.Class->GetPathName() : TEXT("<null>"));
+                    return false;
+                }
+
+                DestinationWidget->SetFlags(RF_Transactional);
+                DestinationWidget->Modify();
+                MonolithUI::RegisterCreatedWidget(DestinationBlueprint, DestinationWidget);
+                OutWidgetCopies.Add(SourceWidget, DestinationWidget);
+                AddReplacementObject(SourceWidget, DestinationWidget, InOutReplacementObjects);
+                OutCopiedRows.Add(MakeCopiedWidgetRow(SourceWidget, DestinationWidget, ResolvedClass));
+            }
+        }
+
+        return true;
+    }
+
+    static bool AttachDestinationWidget(
+        UPanelWidget* DestinationParent,
+        UWidget* DestinationContent,
+        UPanelWidget* SourceParent,
+        UWidget* SourceContent,
+        UPanelSlot* SourceSlot,
+        int32 InsertIndex,
+        TMap<UObject*, UObject*>& InOutReplacementObjects,
+        TArray<FDestinationSlotBinding>& OutSlotBindings,
+        FString& OutError)
+    {
+        if (!DestinationParent || !DestinationContent || !SourceContent)
+        {
+            OutError = TEXT("Invalid widget attachment context.");
+            return false;
+        }
+
+        DestinationParent->SetFlags(RF_Transactional);
+        DestinationParent->Modify();
+
+        UPanelSlot* DestinationSlot = InsertIndex == INDEX_NONE
+            ? DestinationParent->AddChild(DestinationContent)
+            : DestinationParent->InsertChildAt(InsertIndex, DestinationContent);
+        if (!DestinationSlot)
+        {
+            OutError = FString::Printf(
+                TEXT("Failed to attach copied widget '%s' to destination parent '%s'."),
+                *DestinationContent->GetName(),
+                *DestinationParent->GetName());
+            return false;
+        }
+
+        FDestinationSlotBinding& Binding = OutSlotBindings.AddDefaulted_GetRef();
+        Binding.SourceSlot = SourceSlot;
+        Binding.DestinationSlot = DestinationSlot;
+        Binding.DestinationParent = DestinationParent;
+        Binding.DestinationContent = DestinationContent;
+        Binding.bCopySlotProperties =
+            Binding.SourceSlot &&
+            IsPanelSlotTemplateCompatible(SourceParent, DestinationParent) &&
+            Binding.SourceSlot->GetClass() == DestinationSlot->GetClass();
+
+        AddReplacementObject(Binding.SourceSlot, DestinationSlot, InOutReplacementObjects);
+        return true;
+    }
+
+    static bool AttachDestinationWidgetTrees(
+        const TArray<FCopyPlan>& Plans,
+        const FCopyOptions& Options,
+        const TMap<UWidget*, UWidget*>& WidgetCopies,
+        TMap<UObject*, UObject*>& InOutReplacementObjects,
+        TArray<FDestinationSlotBinding>& OutSlotBindings,
+        FString& OutError)
+    {
+        for (const FCopyPlan& Plan : Plans)
+        {
+            if (Plan.bSkip)
+            {
+                continue;
+            }
+
+            if (Plan.SourceAttachments.Num() != Plan.SourceSubtree.Num() || Plan.SourceAttachments.IsEmpty())
+            {
+                OutError = TEXT("Source widget attachment snapshots do not match the planned subtree.");
+                return false;
+            }
+
+            // Use the pre-mutation attachment snapshot rather than the live source tree. With
+            // source_asset_path == destination_asset_path and existing_policy=replace, collision
+            // deletion intentionally detaches the source widgets before the destination hierarchy
+            // is assembled; consulting the live tree at that point would lose slot properties.
+            for (int32 AttachmentIndex = 1; AttachmentIndex < Plan.SourceAttachments.Num(); ++AttachmentIndex)
+            {
+                const FSourceWidgetAttachment& Attachment = Plan.SourceAttachments[AttachmentIndex];
+                UWidget* DestinationChild = WidgetCopies.FindRef(Attachment.Widget);
+                UPanelWidget* DestinationPanel = Cast<UPanelWidget>(WidgetCopies.FindRef(Attachment.Parent));
+                if (!Attachment.Widget || !Attachment.Parent || !DestinationChild || !DestinationPanel)
+                {
+                    OutError = FString::Printf(
+                        TEXT("Could not resolve the captured parent attachment for copied widget '%s'."),
+                        Attachment.Widget ? *Attachment.Widget->GetName() : TEXT("<null>"));
+                    return false;
+                }
+
+                if (!AttachDestinationWidget(
+                        DestinationPanel,
+                        DestinationChild,
+                        Attachment.Parent,
+                        Attachment.Widget,
+                        Attachment.Slot,
+                        Attachment.ChildIndex,
+                        InOutReplacementObjects,
+                        OutSlotBindings,
+                        OutError))
+                {
+                    return false;
+                }
+            }
+
+            const FSourceWidgetAttachment& RootAttachment = Plan.SourceAttachments[0];
+            UWidget* DestinationRoot = WidgetCopies.FindRef(Plan.SourceWidget);
+            const int32 InsertIndex = Options.InsertPolicy == TEXT("append") || Plan.SourceChildIndex == INDEX_NONE
+                ? INDEX_NONE
+                : FMath::Min(Plan.SourceChildIndex, Plan.DestinationParent->GetChildrenCount());
+            if (!AttachDestinationWidget(
+                    Plan.DestinationParent,
+                    DestinationRoot,
+                    RootAttachment.Parent,
+                    Plan.SourceWidget,
+                    RootAttachment.Slot,
+                    InsertIndex,
+                    InOutReplacementObjects,
+                    OutSlotBindings,
+                    OutError))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    static bool ApplyDestinationWidgetState(
+        UWidgetBlueprint* DestinationBlueprint,
+        const FCopyOptions& Options,
+        const TMap<UWidget*, UWidget*>& WidgetCopies,
+        const TMap<UObject*, UObject*>& ReplacementObjects,
+        const TArray<FDestinationSlotBinding>& SlotBindings,
+        int32& OutSoftReferenceFixups,
+        FString& OutError)
+    {
+        for (const TPair<UWidget*, UWidget*>& WidgetCopy : WidgetCopies)
+        {
+            if (!DuplicateStateIntoExistingObject(WidgetCopy.Key, WidgetCopy.Value, ReplacementObjects, OutError))
+            {
+                return false;
+            }
+
+            if (!ReplacementObjects.IsEmpty())
+            {
+                FArchiveReplaceObjectRef<UObject> ReplaceArchive(
+                    WidgetCopy.Value,
+                    const_cast<TMap<UObject*, UObject*>&>(ReplacementObjects),
+                    EArchiveReplaceObjectFlags::IgnoreOuterRef | EArchiveReplaceObjectFlags::IncludeClassGeneratedByRef);
+            }
+            OutSoftReferenceFixups += FixupSoftReferencesInObject(WidgetCopy.Value, Options.ReferenceRemaps);
+        }
+
+        for (const FDestinationSlotBinding& Binding : SlotBindings)
+        {
+            if (Binding.bCopySlotProperties &&
+                !DuplicateStateIntoExistingObject(Binding.SourceSlot, Binding.DestinationSlot, ReplacementObjects, OutError))
+            {
+                return false;
+            }
+
+            if (!Binding.DestinationSlot || !Binding.DestinationParent || !Binding.DestinationContent)
+            {
+                OutError = TEXT("A copied widget slot binding became invalid while applying state.");
+                return false;
+            }
+
+            Binding.DestinationSlot->Parent = Binding.DestinationParent;
+            Binding.DestinationSlot->Content = Binding.DestinationContent;
+            Binding.DestinationContent->Slot = Binding.DestinationSlot;
+            if (Binding.DestinationParent->GetChildIndex(Binding.DestinationContent) == INDEX_NONE)
+            {
+                OutError = FString::Printf(
+                    TEXT("Copied widget '%s' is not owned by its expected destination parent '%s' after state transfer."),
+                    *Binding.DestinationContent->GetName(),
+                    *Binding.DestinationParent->GetName());
+                return false;
+            }
+        }
+
+        for (const TPair<UWidget*, UWidget*>& WidgetCopy : WidgetCopies)
+        {
+            UWidget* DestinationWidget = WidgetCopy.Value;
+            if (!DestinationWidget || DestinationWidget->GetOuter() != DestinationBlueprint->WidgetTree)
+            {
+                OutError = FString::Printf(
+                    TEXT("Copied widget '%s' is not owned by the destination WidgetTree."),
+                    DestinationWidget ? *DestinationWidget->GetName() : TEXT("<null>"));
+                return false;
+            }
+        }
+
+        return true;
     }
 
     static bool DeleteDestinationCollisions(UWidgetBlueprint* DestinationBlueprint, const TArray<FCopyPlan>& Plans, FString& OutError)
@@ -1465,6 +1656,9 @@ FMonolithActionResult FMonolithUIWidgetCopyActions::HandleCopyWidgetSubtreeWithC
 
     TArray<TSharedPtr<FJsonValue>> CopiedRows;
     CopiedRows.Reserve(PlannedCopiedWidgets);
+    TMap<UWidget*, UWidget*> WidgetCopies;
+    WidgetCopies.Reserve(PlannedCopiedWidgets);
+    TArray<FDestinationSlotBinding> SlotBindings;
     int32 SoftReferenceFixups = 0;
     bool bChanged = false;
 
@@ -1479,56 +1673,41 @@ FMonolithActionResult FMonolithUIWidgetCopyActions::HandleCopyWidgetSubtreeWithC
         return FMonolithActionResult::Error(ErrorMsg);
     }
 
-    for (const FCopyPlan& Plan : Plans)
-    {
-        if (Plan.bSkip)
-        {
-            continue;
-        }
-
-        UWidget* CopiedRoot = DuplicateWidgetSubtree(
+    if (!CreateDestinationWidgetObjects(
             DestinationBlueprint,
-            Plan.SourceWidget,
-            Plan.DestinationWidgetName,
-            true,
-            Options,
+            Plans,
+            WidgetCopies,
             ReplacementObjects,
-            SoftReferenceFixups,
             CopiedRows,
-            ErrorMsg);
-        if (!CopiedRoot)
-        {
-            return FMonolithActionResult::Error(ErrorMsg);
-        }
-
-        Plan.DestinationParent->SetFlags(RF_Transactional);
-        Plan.DestinationParent->Modify();
-
-        UPanelSlot* NewSlot = nullptr;
-        const int32 InsertIndex = Options.InsertPolicy == TEXT("append") || Plan.SourceChildIndex == INDEX_NONE
-            ? INDEX_NONE
-            : FMath::Min(Plan.SourceChildIndex, Plan.DestinationParent->GetChildrenCount());
-
-        int32 SourceRootIndex = INDEX_NONE;
-        UPanelWidget* SourceParent = UWidgetTree::FindWidgetParent(Plan.SourceWidget, SourceRootIndex);
-        if (InsertIndex != INDEX_NONE && IsPanelSlotTemplateCompatible(SourceParent, Plan.DestinationParent) && Plan.SourceWidget->Slot)
-        {
-            NewSlot = Plan.DestinationParent->InsertChildAt(InsertIndex, CopiedRoot, Plan.SourceWidget->Slot);
-        }
-        if (!NewSlot)
-        {
-            NewSlot = InsertIndex == INDEX_NONE
-                ? Plan.DestinationParent->AddChild(CopiedRoot)
-                : Plan.DestinationParent->InsertChildAt(InsertIndex, CopiedRoot);
-        }
-        if (!NewSlot)
-        {
-            return FMonolithActionResult::Error(
-                FString::Printf(TEXT("Failed to attach copied widget '%s' to destination parent '%s'."), *CopiedRoot->GetName(), *Plan.DestinationParent->GetName()));
-        }
-
-        bChanged = true;
+            ErrorMsg))
+    {
+        return FMonolithActionResult::Error(ErrorMsg);
     }
+
+    if (!AttachDestinationWidgetTrees(
+            Plans,
+            Options,
+            WidgetCopies,
+            ReplacementObjects,
+            SlotBindings,
+            ErrorMsg))
+    {
+        return FMonolithActionResult::Error(ErrorMsg);
+    }
+
+    if (!ApplyDestinationWidgetState(
+            DestinationBlueprint,
+            Options,
+            WidgetCopies,
+            ReplacementObjects,
+            SlotBindings,
+            SoftReferenceFixups,
+            ErrorMsg))
+    {
+        return FMonolithActionResult::Error(ErrorMsg);
+    }
+
+    bChanged = !WidgetCopies.IsEmpty();
 
     bool bCompiled = false;
     if (bChanged)

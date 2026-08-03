@@ -896,6 +896,44 @@ bool FMonolithActionFailureValidationErrorsStructuredTest::RunTest(const FString
 	return bOk;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithStringEncodedComplexParamsRecoveryTest,
+	"Monolith.ParamValidation.StringEncodedComplexParamsRecovery",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithStringEncodedComplexParamsRecoveryTest::RunTest(const FString& Parameters)
+{
+	FMonolithScopedTestNamespace Scope(TEXT("compatible_complex_types"));
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	Registry.RegisterAction(
+		TEXT("compatible_complex_types"),
+		TEXT("consume"),
+		TEXT("Accepts native or compatibility-encoded JSON complex values."),
+		FMonolithActionHandler::CreateStatic(&MonolithFindScoringNoop),
+		FParamSchemaBuilder()
+			.Required(TEXT("items"), TEXT("array"), TEXT("JSON array"))
+			.Required(TEXT("config"), TEXT("object"), TEXT("JSON object"))
+			.Build());
+
+	TSharedPtr<FJsonObject> EncodedParams = MakeShared<FJsonObject>();
+	EncodedParams->SetStringField(TEXT("items"), TEXT("[{\"name\":\"Example\"}]"));
+	EncodedParams->SetStringField(TEXT("config"), TEXT("{\"enabled\":true}"));
+	const FMonolithActionResult EncodedResult =
+		Registry.ExecuteAction(TEXT("compatible_complex_types"), TEXT("consume"), EncodedParams);
+
+	bool bOk = true;
+	bOk &= TestTrue(TEXT("Compatible string-encoded array/object params dispatch"), EncodedResult.bSuccess);
+	bOk &= TestTrue(
+		TEXT("Encoded array is recovered before typed validation"),
+		EncodedParams->TryGetField(TEXT("items")).IsValid()
+			&& EncodedParams->TryGetField(TEXT("items"))->Type == EJson::Array);
+	bOk &= TestTrue(
+		TEXT("Encoded object is recovered before typed validation"),
+		EncodedParams->TryGetField(TEXT("config")).IsValid()
+			&& EncodedParams->TryGetField(TEXT("config"))->Type == EJson::Object);
+
+	return bOk;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithStringEncodedComplexParamsRejectedTest,
 	"Monolith.ParamValidation.StringEncodedComplexParamsRejected",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -912,6 +950,7 @@ bool FMonolithStringEncodedComplexParamsRejectedTest::RunTest(const FString& Par
 		FParamSchemaBuilder()
 			.Required(TEXT("items"), TEXT("array"), TEXT("Native JSON array"))
 			.Required(TEXT("config"), TEXT("object"), TEXT("Native JSON object"))
+			.StrictComplexTypes()
 			.Build());
 
 	TSharedPtr<FJsonObject> EncodedParams = MakeShared<FJsonObject>();
