@@ -42,6 +42,20 @@ namespace
 		return Query;
 	}
 
+	void AppendPropertyWarningsToResult(const TSharedPtr<FJsonObject>& Result, const TArray<FString>& PropErrors)
+	{
+		if (PropErrors.Num() > 0)
+		{
+			TArray<TSharedPtr<FJsonValue>> ErrArr;
+			ErrArr.Reserve(PropErrors.Num());
+			for (const FString& Err : PropErrors)
+			{
+				ErrArr.Add(MakeShared<FJsonValueString>(Err));
+			}
+			Result->SetArrayField(TEXT("property_warnings"), ErrArr);
+		}
+	}
+
 	bool ValidateOptionalNumberField(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, FString& OutError)
 	{
 		if (!Params.IsValid() || !Params->HasField(FieldName))
@@ -1091,16 +1105,7 @@ FMonolithActionResult FMonolithAIEQSActions::HandleAddEQSGenerator(const TShared
 	Result->SetBoolField(TEXT("saved"), true);
 	Result->SetStringField(TEXT("message"), TEXT("Generator added"));
 
-	if (PropErrors.Num() > 0)
-	{
-		TArray<TSharedPtr<FJsonValue>> ErrArr;
-		ErrArr.Reserve(PropErrors.Num());
-		for (const FString& Err : PropErrors)
-		{
-			ErrArr.Add(MakeShared<FJsonValueString>(Err));
-		}
-		Result->SetArrayField(TEXT("property_warnings"), ErrArr);
-	}
+	AppendPropertyWarningsToResult(Result, PropErrors);
 
 	return FMonolithActionResult::Success(Result);
 }
@@ -1213,16 +1218,7 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSGenerator(const T
 	Result->SetBoolField(TEXT("saved"), true);
 	Result->SetStringField(TEXT("message"), TEXT("Generator configured"));
 
-	if (PropErrors.Num() > 0)
-	{
-		TArray<TSharedPtr<FJsonValue>> ErrArr;
-		ErrArr.Reserve(PropErrors.Num());
-		for (const FString& Err : PropErrors)
-		{
-			ErrArr.Add(MakeShared<FJsonValueString>(Err));
-		}
-		Result->SetArrayField(TEXT("property_warnings"), ErrArr);
-	}
+	AppendPropertyWarningsToResult(Result, PropErrors);
 
 	return FMonolithActionResult::Success(Result);
 }
@@ -1297,16 +1293,7 @@ FMonolithActionResult FMonolithAIEQSActions::HandleAddEQSTest(const TSharedPtr<F
 	Result->SetBoolField(TEXT("saved"), true);
 	Result->SetStringField(TEXT("message"), TEXT("Test added"));
 
-	if (PropErrors.Num() > 0)
-	{
-		TArray<TSharedPtr<FJsonValue>> ErrArr;
-		ErrArr.Reserve(PropErrors.Num());
-		for (const FString& Err : PropErrors)
-		{
-			ErrArr.Add(MakeShared<FJsonValueString>(Err));
-		}
-		Result->SetArrayField(TEXT("property_warnings"), ErrArr);
-	}
+	AppendPropertyWarningsToResult(Result, PropErrors);
 
 	return FMonolithActionResult::Success(Result);
 }
@@ -1430,16 +1417,7 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSTest(const TShare
 	Result->SetBoolField(TEXT("saved"), true);
 	Result->SetStringField(TEXT("message"), TEXT("Test configured"));
 
-	if (PropErrors.Num() > 0)
-	{
-		TArray<TSharedPtr<FJsonValue>> ErrArr;
-		ErrArr.Reserve(PropErrors.Num());
-		for (const FString& Err : PropErrors)
-		{
-			ErrArr.Add(MakeShared<FJsonValueString>(Err));
-		}
-		Result->SetArrayField(TEXT("property_warnings"), ErrArr);
-	}
+	AppendPropertyWarningsToResult(Result, PropErrors);
 
 	return FMonolithActionResult::Success(Result);
 }

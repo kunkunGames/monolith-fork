@@ -82,8 +82,7 @@
 		},
 		{
 			"Name": "GameplayAbilities",
-			"Enabled": true,
-			"Optional": true
+			"Enabled": true
 		},
 		{
 			"Name": "GameplayBehaviors",
@@ -169,8 +168,7 @@
 		},
 		{
 			"Name": "Chooser",
-			"Enabled": true,
-			"Optional": true
+			"Enabled": true
 		},
 		{
 			"Name": "Paper2D",
