@@ -167,10 +167,6 @@
 			"Optional": true
 		},
 		{
-			"Name": "Chooser",
-			"Enabled": true
-		},
-		{
 			"Name": "Paper2D",
 			"Enabled": true
 		},
