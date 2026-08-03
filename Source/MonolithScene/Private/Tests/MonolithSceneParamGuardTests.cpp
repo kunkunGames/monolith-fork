@@ -26,6 +26,24 @@ bool FMonolithParamGuardSceneDecalMalformedParamsTest::RunTest(const FString& Pa
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardSceneCopyActorPropertiesMalformedParamsTest, "Monolith.ParamGuard.MonolithScene.CopyActorPropertiesRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardSceneCopyActorPropertiesMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithMeshVolumeActions::RegisterActions(FMonolithToolRegistry::Get());
+	TestTrue(TEXT("copy_actor_properties action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("scene"), TEXT("copy_actor_properties")));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("source_actor"), TEXT("SomeSourceActor"));
+	Params->SetStringField(TEXT("target_actors"), TEXT("not_an_array")); // Malformed: should be an array
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("scene"), TEXT("copy_actor_properties"), Params);
+	TestFalse(TEXT("copy_actor_properties rejects malformed target_actors parameter"), Result.bSuccess);
+	TestTrue(TEXT("copy_actor_properties reports the validation error"), Result.ErrorMessage.Contains(TEXT("target_actors")));
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardSceneLightingMalformedParamsTest, "Monolith.ParamGuard.MonolithScene.LightingActionsRejectMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithParamGuardSceneLightingMalformedParamsTest::RunTest(const FString& Parameters)
