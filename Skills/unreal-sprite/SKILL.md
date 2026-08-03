@@ -40,22 +40,22 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 |--------|--------|---------|
 | `validate_asset_spec` | `spec_path*` | Validate one `asset_spec.yaml` against the profile contract (profile, target surface, dimensions, frame contract, texture role, profile-specific fields). Read-only; no generation or asset mutation. |
 | `validate_guides` | `spec_path*` | Check that the pose/silhouette/composition guide PNGs required by the chosen profile exist and match the declared work canvas. |
-| `[w] build_candidate_plan` | `spec_path*` | Build a deterministic per-frame/per-seed candidate generation plan without calling a provider. |
+| `build_candidate_plan` | `spec_path*` | Build a deterministic per-frame/per-seed candidate generation plan without calling a provider. |
 
 ### M2 package/export (3)
 
 | Action | Params | Purpose |
 |--------|--------|---------|
 | `validate_sheet` | `spec_path*` `sheet_path*` `metadata_path?` | Verify the final sheet/atlas dimensions, cell grid, frame capacity, and alpha coverage against the spec. `metadata_path` is an optional JSON path checked for existence. |
-| `[w] export_metadata` | `spec_path*` `output_path?` `sheet_path?` | Export deterministic sheet/atlas metadata JSON (cell rects, pivots, frame ids, role, source spec path). `output_path` defaults to `export/<asset_id>_metadata.json`; `sheet_path` is the optional final PNG recorded in metadata. |
-| `[w] build_preview_contact_sheet` | `spec_path*` `output_path?` `thumbnail_size?=256` | Build a guide preview PNG from pose/silhouette/composition guides for review. `output_path` defaults to `export/<asset_id>_guide_preview.png`. Does not mutate Unreal assets. |
+| `export_metadata` | `spec_path*` `output_path?` `sheet_path?` | Export deterministic sheet/atlas metadata JSON (cell rects, pivots, frame ids, role, source spec path). `output_path` defaults to `export/<asset_id>_metadata.json`; `sheet_path` is the optional final PNG recorded in metadata. |
+| `build_preview_contact_sheet` | `spec_path*` `output_path?` `thumbnail_size?=256` | Build a guide preview PNG from pose/silhouette/composition guides for review. `output_path` defaults to `export/<asset_id>_guide_preview.png`. Does not mutate Unreal assets. |
 
 ### M3 orchestration (2)
 
 | Action | Params | Purpose |
 |--------|--------|---------|
-| `[w] prepare_imagegen_requests` | `spec_path*` | Prepare `imagegen.generate_image_via_ima2` request payloads from a validated spec. Does not call the provider. |
-| `[w] run_generation_batch` | `spec_path*` `execute?=false` `provider_action?` `max_requests?` `manifest_path?` `stop_on_error?` | Execute a prepared candidate batch by delegating each request to a provider, then write a generation manifest. `execute` must be `true` to call providers (false returns a dry-run plan); `provider_action` overrides the request action (e.g. `imagegen.generate_image_via_ima2`); `max_requests` caps requests (default all); `manifest_path` defaults to `export/<asset_id>_generation_manifest.json`; `stop_on_error` defaults true. |
+| `prepare_imagegen_requests` | `spec_path*` | Prepare `imagegen.generate_image_via_ima2` request payloads from a validated spec. Does not call the provider. |
+| `run_generation_batch` | `spec_path*` `execute?=false` `provider_action?` `max_requests?` `manifest_path?` `stop_on_error?` | Execute a prepared candidate batch by delegating each request to a provider, then write a generation manifest. `execute` must be `true` to call providers (false returns a dry-run plan); `provider_action` overrides the request action (e.g. `imagegen.generate_image_via_ima2`); `max_requests` caps requests (default all); `manifest_path` defaults to `export/<asset_id>_generation_manifest.json`; `stop_on_error` defaults true. |
 
 ## Common Workflows
 
