@@ -1489,7 +1489,7 @@ Find all assets that reference or are referenced by the given asset.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `asset_path` | string | **required** | Package path |
+| `asset_path` | string | **required** | Package path (Alias: `package_path`) |
 
 ### `project.find_by_type`
 
@@ -1510,7 +1510,7 @@ Deep details for a specific asset — nodes, variables, parameters, dependencies
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `asset_path` | string | **required** | Package path |
+| `asset_path` | string | **required** | Package path (Alias: `package_path`) |
 
 ### `project.list_gameplay_tags`
 

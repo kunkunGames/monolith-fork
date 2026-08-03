@@ -100,7 +100,7 @@ FMonolithActionResult FProjectImpactRadiusAction::Execute(const TSharedPtr<FJson
 TSharedPtr<FJsonObject> FProjectImpactRadiusAction::GetSchema()
 {
 	return FParamSchemaBuilder()
-		.Required(TEXT("asset_path"), TEXT("string"), TEXT("Package path of the seed asset"))
+		.Required(TEXT("asset_path"), TEXT("string"), TEXT("Package path of the seed asset"), { TEXT("package_path") })
 		.Optional(TEXT("direction"), TEXT("string"), TEXT("in|out|both (in=referencers, out=dependencies)"), TEXT("both"))
 		.Optional(TEXT("max_depth"), TEXT("integer"), TEXT("Max traversal hops"), TEXT("2"))
 		.Optional(TEXT("max_results"), TEXT("integer"), TEXT("Max impacted assets"), TEXT("200"))

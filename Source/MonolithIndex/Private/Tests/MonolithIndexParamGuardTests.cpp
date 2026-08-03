@@ -235,3 +235,41 @@ bool FProjectIndexSearchQueryAliasTest::RunTest(const FString& Parameters)
 
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectIndexSchemaAliasTest, "Monolith.Registry.Index.SchemaRequiresPackagePathAlias", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FProjectIndexSchemaAliasTest::RunTest(const FString& Parameters)
+{
+	auto ValidateAlias = [this](const FString& ActionName, TSharedPtr<FJsonObject> Schema)
+	{
+		const TSharedPtr<FJsonObject>* AssetPathParam = nullptr;
+		if (!Schema->TryGetObjectField(TEXT("asset_path"), AssetPathParam) || !AssetPathParam || !(*AssetPathParam)->IsValid())
+		{
+			AddError(FString::Printf(TEXT("Action schema %s has no asset_path param"), *ActionName));
+			return;
+		}
+
+		bool bHasPackagePathAlias = false;
+		const TArray<TSharedPtr<FJsonValue>>* AliasesArray = nullptr;
+		if ((*AssetPathParam)->TryGetArrayField(TEXT("aliases"), AliasesArray) && AliasesArray)
+		{
+			for (const TSharedPtr<FJsonValue>& AliasVal : *AliasesArray)
+			{
+				if (AliasVal.IsValid() && AliasVal->AsString() == TEXT("package_path"))
+				{
+					bHasPackagePathAlias = true;
+					break;
+				}
+			}
+		}
+
+		TestTrue(FString::Printf(TEXT("%s param exists"), *ActionName), AssetPathParam && (*AssetPathParam)->IsValid());
+		TestTrue(FString::Printf(TEXT("%s has package_path alias"), *ActionName), bHasPackagePathAlias);
+	};
+
+	ValidateAlias(TEXT("get_asset_details"), FProjectGetAssetDetailsAction::GetSchema());
+	ValidateAlias(TEXT("find_references"), FProjectFindReferencesAction::GetSchema());
+	ValidateAlias(TEXT("get_saved_asset_state"), FProjectGetSavedAssetStateAction::GetSchema());
+
+	return true;
+}
