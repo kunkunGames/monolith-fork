@@ -16,10 +16,10 @@ Thanks for your interest in contributing. This guide covers everything you need 
 ```bash
 # Clone into your project's Plugins directory
 cd YourProject/Plugins
-git clone https://github.com/tumourlove/monolith.git Monolith
+git clone https://github.com/kunkunGames/monolith.git Monolith
 
 # Or clone the standalone development repo
-git clone https://github.com/tumourlove/monolith.git C:\Projects\Monolith
+git clone https://github.com/kunkunGames/monolith.git C:\Projects\Monolith
 ```
 
 Generate project files and build from your UE project as usual. Monolith is an editor-facing plugin: every module is `Type: "Editor"` except the small `MonolithAudioRuntime` helper, which is `Type: "Runtime"`.
