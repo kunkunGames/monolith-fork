@@ -282,3 +282,79 @@ Screenshot verification and Discord upload remain **N/A** for this source,
 build, and repository-integration change. No visual presentation contract was
 modified, so `Build\BatchFiles\Script\UploadScreenshotTestsToDiscord.bat` was
 not invoked.
+
+---
+
+## 9. 2026-08-03 Fork-First Origin Refresh
+
+The follow-up synchronization treated `kunkunGames/monolith-fork:master` as the
+feature-priority line while retaining origin-only infrastructure that the fork
+does not implement. The fork tip
+`4bbb288c9b4bc5df7c700281af5d8efe102a36ab` was already fully contained in
+`kunkunGames/monolith:master`, so no synthetic replay or duplicate merge parent
+was required. Two high-ROI origin repairs completed before local integration:
+
+| Remote boundary | Commit | Result |
+|---|---|---|
+| PR #2060, `fix(release): preserve v0.22.0 metadata across syncs` | `ffe17da3f277c40426467ad0a3e7377d84ea3c96` | Restored `Monolith.uplugin` and documented release identity to `0.22.0`; added a cross-source release-version CI contract |
+| PR #2061, `fix(plugin): deduplicate Chooser dependency contract` | `b83917892962ab91dbc49c52bc5c2caf71d2ff4c` | Reduced `Chooser` to one required reference and added case-insensitive uniqueness validation for every plugin dependency |
+| Speed local fork-first merge | `056c8dfa6be567447b12708e13e097569f211622` | Parents are prior local head `424af6b4` and final origin head `b8391789`; both histories are retained |
+
+The four local merge conflicts were resolved by contract, not by whole-file
+selection. Current origin action-count metadata (`~2083`) was retained because
+the generated registry is authoritative; the fork's strict Material parameter
+validation and platform-specific legacy updater checksum markers were retained;
+the origin Niagara regression test and the single required `Chooser` entry were
+retained. The generated source catalog contains 2,079 registrations, including
+five local/fork actions beyond the 2,074-action clean origin snapshot.
+
+`Monolith.StartServer`, `Monolith.StopServer`, `Monolith.StartIndexing`, and
+`Monolith.StopIndexing` remain registered in `MonolithCoreModule.cpp` and
+`MonolithSourceModule.cpp`. Their persisted activation policy, recovery scripts,
+and documentation also remain present. Descriptor parsing confirmed
+`VersionName=0.22.0`, one `Chooser` reference, and zero case-insensitive plugin
+dependency duplicate groups.
+
+### 9.1 Static and local-byte verification
+
+| Verification | Result |
+|---|---|
+| Generated catalog | 2,079 declared actions and 2,079 action objects |
+| Python syntax | `ci_static_checks.py` and the catalog generator compiled successfully |
+| Static-checker self-test | Passed |
+| Full static checker | 7 benchmark-contract blockers and 25 advisories, matching the current clean-origin count and blocker families; no new release-version, catalog, or plugin-dependency blocker |
+| Merge hygiene | No unmerged index entries, conflict markers, duplicate plugin references, or `git diff --check` errors |
+
+Safety stash `53b84f9b67dbb198ca20b4fea68a25912b16a9bd`
+preserved 22 tracked and 2 untracked pre-existing local entries. After the local
+fast-forward, 23 non-overlap/untracked paths matched the stash objects byte for
+byte. The only overlapping file, `MonolithCoreTools.cpp`, contains both origin's
+recovery-plan capacity reservation and the pre-existing strict JSON-string
+validation. The stash remains retained and was not dropped.
+
+The 70-path Git integration delta was reconciled narrowly into pending CL 1441.
+After reconciliation, CL 1441 contains 122 Monolith paths and the default
+changelist remains empty. Pre-existing local working-tree files outside the Git
+integration delta were not bulk-reconciled or moved.
+
+### 9.2 Current-byte build boundary
+
+The live endpoint probe succeeded on an existing headless editor, PID 45144,
+with plugin version `0.22.0` and 1,903 registered actions. That process loaded
+pre-refresh binaries, so its live result is not current-source acceptance for
+the 2,079-action merged tree.
+
+The protected build was invoked with `P4_BUILD_CHANGELIST=1441` and
+`SKIP_EDITOR_LAUNCH=1`. `Build\BatchFiles\BuildGameEditorAndRun.bat` acquired and
+released the project build lock, then exited 1 at its same-project editor guard
+because PID 45144 still owns `Speed.uproject`. The existing editor was not
+terminated and `ALLOW_RUNNING_EDITOR=1` was not used. Therefore the new
+`056c8dfa` source is merged and statically verified, but a fresh linked-module
+build and focused editor automation remain **not run** until that externally
+owned editor exits.
+
+Screenshot verification and Discord upload are **N/A**. This refresh changes
+source, tests, scripts, descriptor metadata, and documentation but no visual,
+gameplay, UI-presentation, VFX, animation-presentation, or asset-presentation
+contract, so `Build\BatchFiles\Script\UploadScreenshotTestsToDiscord.bat` was
+not invoked.
