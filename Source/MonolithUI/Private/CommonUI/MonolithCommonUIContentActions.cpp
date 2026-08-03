@@ -129,6 +129,7 @@ namespace MonolithCommonUIContent
 		TArray<FText> Labels;
 		if (Params->TryGetArrayField(TEXT("labels"), LabelsArr))
 		{
+			Labels.Reserve(LabelsArr->Num());
 			for (const TSharedPtr<FJsonValue>& V : *LabelsArr)
 			{
 				FString S;

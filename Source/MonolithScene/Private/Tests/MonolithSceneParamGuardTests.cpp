@@ -26,6 +26,24 @@ bool FMonolithParamGuardSceneDecalMalformedParamsTest::RunTest(const FString& Pa
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardSceneCopyActorPropertiesMalformedParamsTest, "Monolith.ParamGuard.MonolithScene.CopyActorPropertiesRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardSceneCopyActorPropertiesMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithMeshVolumeActions::RegisterActions(FMonolithToolRegistry::Get());
+	TestTrue(TEXT("copy_actor_properties action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("scene"), TEXT("copy_actor_properties")));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("source_actor"), TEXT("SomeSourceActor"));
+	Params->SetStringField(TEXT("target_actors"), TEXT("not_an_array")); // Malformed: should be an array
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("scene"), TEXT("copy_actor_properties"), Params);
+	TestFalse(TEXT("copy_actor_properties rejects malformed target_actors parameter"), Result.bSuccess);
+	TestTrue(TEXT("copy_actor_properties reports the validation error"), Result.ErrorMessage.Contains(TEXT("target_actors")));
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardSceneLightingMalformedParamsTest, "Monolith.ParamGuard.MonolithScene.LightingActionsRejectMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithParamGuardSceneLightingMalformedParamsTest::RunTest(const FString& Parameters)
@@ -205,6 +223,52 @@ bool FMonolithParamGuardSceneAnalyzePropDensityMalformedParamsTest::RunTest(cons
 	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("scene"), TEXT("analyze_prop_density"), Params);
 	TestFalse(TEXT("analyze_prop_density rejects missing volume_name parameter"), Result.bSuccess);
 	TestTrue(TEXT("analyze_prop_density reports the validation error"), Result.ErrorMessage.Contains(TEXT("volume_name")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardSceneSpawnVolumeMalformedParamsTest, "Monolith.ParamGuard.MonolithScene.SpawnVolumeRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardSceneSpawnVolumeMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithMeshVolumeActions::RegisterActions(FMonolithToolRegistry::Get());
+	TestTrue(TEXT("spawn_volume action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("scene"), TEXT("spawn_volume")));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("type"), TEXT("trigger"));
+	Params->SetStringField(TEXT("location"), TEXT("not_a_vector"));
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("scene"), TEXT("spawn_volume"), Params);
+	TestFalse(TEXT("spawn_volume rejects malformed location parameter"), Result.bSuccess);
+	TestTrue(TEXT("spawn_volume reports the validation error"), Result.ErrorMessage.Contains(TEXT("location")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardSceneSpawnVolumeValidParamsTest, "Monolith.ParamGuard.MonolithScene.SpawnVolumeAcceptsValidParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardSceneSpawnVolumeValidParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithMeshVolumeActions::RegisterActions(FMonolithToolRegistry::Get());
+	TestTrue(TEXT("spawn_volume action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("scene"), TEXT("spawn_volume")));
+
+	TSharedPtr<FJsonObject> ValidParams = MakeShared<FJsonObject>();
+	ValidParams->SetStringField(TEXT("type"), TEXT("trigger"));
+
+	TArray<TSharedPtr<FJsonValue>> LocationArray;
+	LocationArray.Add(MakeShared<FJsonValueNumber>(0.0));
+	LocationArray.Add(MakeShared<FJsonValueNumber>(0.0));
+	LocationArray.Add(MakeShared<FJsonValueNumber>(0.0));
+	ValidParams->SetArrayField(TEXT("location"), LocationArray);
+
+	TArray<TSharedPtr<FJsonValue>> SizeArray;
+	SizeArray.Add(MakeShared<FJsonValueNumber>(200.0));
+	SizeArray.Add(MakeShared<FJsonValueNumber>(200.0));
+	SizeArray.Add(MakeShared<FJsonValueNumber>(200.0));
+	ValidParams->SetArrayField(TEXT("size"), SizeArray);
+
+	FMonolithActionResult ValidResult = FMonolithToolRegistry::Get().ExecuteAction(TEXT("scene"), TEXT("spawn_volume"), ValidParams);
+	TestTrue(TEXT("spawn_volume accepts valid params"), ValidResult.bSuccess || (!ValidResult.bSuccess && ValidResult.ErrorMessage.Contains(TEXT("No editor world"))));
 
 	return true;
 }

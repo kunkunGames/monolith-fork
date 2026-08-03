@@ -1670,7 +1670,6 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetLiveLinkStatus(const T
 	Root->SetStringField(TEXT("sample_utc"), FDateTime::UtcNow().ToIso8601());
 	Root->SetStringField(TEXT("status"), TEXT("read_only_capability_probe"));
 
-	TArray<TSharedPtr<FJsonValue>> Modules;
 	const TCHAR* ModuleNames[] =
 	{
 		TEXT("LiveLinkInterface"),
@@ -1679,6 +1678,9 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetLiveLinkStatus(const T
 		TEXT("LiveLinkAnimationCore"),
 		TEXT("LiveLinkEditor")
 	};
+
+	TArray<TSharedPtr<FJsonValue>> Modules;
+	Modules.Reserve(5);
 
 	bool bAnyLiveLinkModuleExists = false;
 	bool bAnyLiveLinkModuleLoaded = false;
@@ -1694,7 +1696,6 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetLiveLinkStatus(const T
 	Root->SetBoolField(TEXT("loaded"), bAnyLiveLinkModuleLoaded);
 	Root->SetBoolField(TEXT("livelink_namespace_registered"), FMonolithToolRegistry::Get().HasNamespace(TEXT("livelink")));
 
-	TArray<TSharedPtr<FJsonValue>> ReflectedTypes;
 	const TCHAR* TypePaths[] =
 	{
 		TEXT("/Script/LiveLinkInterface.LiveLinkRole"),
@@ -1703,6 +1704,10 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetLiveLinkStatus(const T
 		TEXT("/Script/LiveLinkInterface.LiveLinkSubjectName"),
 		TEXT("/Script/LiveLinkInterface.LiveLinkSourceHandle")
 	};
+
+	TArray<TSharedPtr<FJsonValue>> ReflectedTypes;
+	ReflectedTypes.Reserve(5);
+
 	for (const TCHAR* TypePath : TypePaths)
 	{
 		ReflectedTypes.Add(MakeShared<FJsonValueObject>(BuildReflectedTypeStatus(TypePath)));
@@ -8561,7 +8566,11 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetTransitionRule(const T
 	// Legacy form: a bare `variable_name` (string) meaning a bool-variable rule. New form: a
 	// structured `rule` object (or plain `rule` string). If both are absent, error.
 	FParsedTransitionRule ParsedRule;
-	FString LegacyVariableName = Params->GetStringField(TEXT("variable_name"));
+	FString LegacyVariableName;
+	if (Params->HasField(TEXT("variable_name")) && !Params->TryGetStringField(TEXT("variable_name"), LegacyVariableName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'variable_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (!Params->HasField(TEXT("rule")) && !LegacyVariableName.IsEmpty())
 	{
 		ParsedRule.Kind = FParsedTransitionRule::EKind::Bool;

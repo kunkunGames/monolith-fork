@@ -30,23 +30,35 @@ constexpr int32 MaxConditionRows = 64;
 constexpr int32 MaxSafeProperties = 64;
 constexpr int32 MaxTextValueLen = 256;
 
-int32 ReadLimit(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, int32 DefaultValue, int32 MaxValue)
+bool ReadLimit(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, int32 DefaultValue, int32 MaxValue, int32& OutLimit, FString& OutError)
 {
-	int32 Limit = DefaultValue;
-	if (Params.IsValid() && Params->HasTypedField<EJson::Number>(FieldName))
+	OutLimit = DefaultValue;
+	if (Params.IsValid() && Params->HasField(FieldName))
 	{
-		Limit = static_cast<int32>(Params->GetNumberField(FieldName));
+		double LimitDouble = 0.0;
+		if (!Params->TryGetNumberField(FieldName, LimitDouble))
+		{
+			OutError = FString::Printf(TEXT("Malformed parameter: %s must be a number"), FieldName);
+			return false;
+		}
+		OutLimit = static_cast<int32>(LimitDouble);
 	}
-	return FMath::Clamp(Limit, 1, MaxValue);
+	OutLimit = FMath::Clamp(OutLimit, 1, MaxValue);
+	return true;
 }
 
-FString ReadStringOrDefault(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, const FString& DefaultValue)
+bool ReadStringOrDefault(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, const FString& DefaultValue, FString& OutValue, FString& OutError)
 {
-	if (Params.IsValid() && Params->HasTypedField<EJson::String>(FieldName))
+	OutValue = DefaultValue;
+	if (Params.IsValid() && Params->HasField(FieldName))
 	{
-		return Params->GetStringField(FieldName);
+		if (!Params->TryGetStringField(FieldName, OutValue))
+		{
+			OutError = FString::Printf(TEXT("Malformed parameter: %s must be a string"), FieldName);
+			return false;
+		}
 	}
-	return DefaultValue;
+	return true;
 }
 
 FString NormalizePackagePath(FString Path)
@@ -554,8 +566,15 @@ FMonolithActionResult FMonolithWorldConditionsActions::HandleGetStatus(const TSh
 
 FMonolithActionResult FMonolithWorldConditionsActions::HandleListQueryOwners(const TSharedPtr<FJsonObject>& Params)
 {
+	FString PathFilter;
+	FString ReadError;
+	if (!ReadStringOrDefault(Params, TEXT("path_filter"), TEXT("/Game"), PathFilter, ReadError))
+	{
+		return FMonolithActionResult::Error(ReadError, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeBaseStatus();
-	Result->SetStringField(TEXT("path_filter"), NormalizePackagePath(ReadStringOrDefault(Params, TEXT("path_filter"), TEXT("/Game"))));
+	Result->SetStringField(TEXT("path_filter"), NormalizePackagePath(PathFilter));
 
 	if (!IsFeatureEnabled())
 	{
@@ -566,7 +585,12 @@ FMonolithActionResult FMonolithWorldConditionsActions::HandleListQueryOwners(con
 	}
 
 #if WITH_MONOLITH_WORLDCONDITIONS_SMARTOBJECTS
-	const int32 Limit = ReadLimit(Params, TEXT("limit"), DefaultOwnerLimit, MaxOwnerLimit);
+	int32 Limit = 0;
+	if (!ReadLimit(Params, TEXT("limit"), DefaultOwnerLimit, MaxOwnerLimit, Limit, ReadError))
+	{
+		return FMonolithActionResult::Error(ReadError, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	TArray<FAssetData> Assets = CollectSmartObjectDefinitionAssets(Result->GetStringField(TEXT("path_filter")), Limit);
 	TArray<TSharedPtr<FJsonValue>> Owners;
 	Owners.Reserve(Assets.Num());
@@ -591,6 +615,19 @@ FMonolithActionResult FMonolithWorldConditionsActions::HandleListQueryOwners(con
 
 FMonolithActionResult FMonolithWorldConditionsActions::HandleDescribeQuery(const TSharedPtr<FJsonObject>& Params)
 {
+	FString AssetPath;
+	FString ReadError;
+	if (!ReadStringOrDefault(Params, TEXT("asset_path"), FString(), AssetPath, ReadError))
+	{
+		return FMonolithActionResult::Error(ReadError, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FString QueryName;
+	if (!ReadStringOrDefault(Params, TEXT("query"), TEXT("preconditions"), QueryName, ReadError))
+	{
+		return FMonolithActionResult::Error(ReadError, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeBaseStatus();
 
 	if (!IsFeatureEnabled())
@@ -600,7 +637,6 @@ FMonolithActionResult FMonolithWorldConditionsActions::HandleDescribeQuery(const
 	}
 
 #if WITH_MONOLITH_WORLDCONDITIONS_SMARTOBJECTS
-	const FString AssetPath = ReadStringOrDefault(Params, TEXT("asset_path"), FString());
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"), FMonolithJsonUtils::ErrInvalidParams);
@@ -613,7 +649,6 @@ FMonolithActionResult FMonolithWorldConditionsActions::HandleDescribeQuery(const
 			.WithHint(TEXT("Use world_conditions.list_query_owners to discover valid SmartObjectDefinition assets."));
 	}
 
-	const FString QueryName = ReadStringOrDefault(Params, TEXT("query"), TEXT("preconditions"));
 	Result->SetStringField(TEXT("asset_path"), Definition->GetPathName());
 	Result->SetStringField(TEXT("owner_shape"), TEXT("SmartObjectDefinition"));
 	Result->SetStringField(TEXT("dependency_state"), TEXT("available"));
@@ -627,12 +662,13 @@ FMonolithActionResult FMonolithWorldConditionsActions::HandleDescribeQuery(const
 
 	if (QueryName == TEXT("slot_selection_preconditions"))
 	{
-		if (!Params.IsValid() || !Params->HasTypedField<EJson::Number>(TEXT("slot_index")))
+		double SlotIndexDouble = 0.0;
+		if (!Params.IsValid() || !Params->TryGetNumberField(TEXT("slot_index"), SlotIndexDouble))
 		{
 			return FMonolithActionResult::Error(TEXT("slot_index is required when query=slot_selection_preconditions"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 
-		const int32 SlotIndex = static_cast<int32>(Params->GetNumberField(TEXT("slot_index")));
+		const int32 SlotIndex = static_cast<int32>(SlotIndexDouble);
 		if (!Definition->IsValidSlotIndex(SlotIndex))
 		{
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid slot_index %d for %s"), SlotIndex, *Definition->GetPathName()), FMonolithJsonUtils::ErrInvalidParams);
@@ -652,6 +688,13 @@ FMonolithActionResult FMonolithWorldConditionsActions::HandleDescribeQuery(const
 
 FMonolithActionResult FMonolithWorldConditionsActions::HandleDescribeConditionTypes(const TSharedPtr<FJsonObject>& Params)
 {
+	int32 Limit = 0;
+	FString ReadError;
+	if (!ReadLimit(Params, TEXT("limit"), DefaultConditionTypeLimit, MaxConditionTypeLimit, Limit, ReadError))
+	{
+		return FMonolithActionResult::Error(ReadError, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeBaseStatus();
 
 	if (!IsFeatureEnabled())
@@ -663,7 +706,6 @@ FMonolithActionResult FMonolithWorldConditionsActions::HandleDescribeConditionTy
 	}
 
 #if WITH_MONOLITH_WORLDCONDITIONS
-	const int32 Limit = ReadLimit(Params, TEXT("limit"), DefaultConditionTypeLimit, MaxConditionTypeLimit);
 	TArray<const UScriptStruct*> Structs;
 	for (TObjectIterator<UScriptStruct> It; It; ++It)
 	{

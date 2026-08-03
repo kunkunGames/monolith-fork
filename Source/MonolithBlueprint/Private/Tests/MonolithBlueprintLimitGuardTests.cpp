@@ -42,8 +42,10 @@ bool FMonolithBlueprintSearchFunctionsLimitTest::RunTest(const FString& Paramete
 		const TArray<TSharedPtr<FJsonValue>>* Results = nullptr;
 		if (Result.Result.IsValid() && Result.Result->TryGetArrayField(TEXT("results"), Results) && Results && Results->Num() > 0)
 		{
-			const TSharedPtr<FJsonObject> FirstResult = (*Results)[0]->AsObject();
-			if (!FirstResult.IsValid() || FirstResult->HasField(TEXT("inputs")) || FirstResult->HasField(TEXT("outputs")))
+			const TSharedPtr<FJsonObject> FirstResult = (*Results)[0]->Type == EJson::Object ? (*Results)[0]->AsObject() : nullptr;
+			const TArray<TSharedPtr<FJsonValue>>* InputsArr = nullptr;
+			const TArray<TSharedPtr<FJsonValue>>* OutputsArr = nullptr;
+			if (!FirstResult.IsValid() || FirstResult->TryGetArrayField(TEXT("inputs"), InputsArr) || FirstResult->TryGetArrayField(TEXT("outputs"), OutputsArr))
 			{
 				AddError(TEXT("search_functions minimal detail should omit parameter arrays"));
 			}
@@ -61,7 +63,7 @@ bool FMonolithBlueprintSearchFunctionsLimitTest::RunTest(const FString& Paramete
 		const TArray<TSharedPtr<FJsonValue>>* Results = nullptr;
 		if (Result.Result.IsValid() && Result.Result->TryGetArrayField(TEXT("results"), Results) && Results && Results->Num() > 0)
 		{
-			const TSharedPtr<FJsonObject> FirstResult = (*Results)[0]->AsObject();
+			const TSharedPtr<FJsonObject> FirstResult = (*Results)[0]->Type == EJson::Object ? (*Results)[0]->AsObject() : nullptr;
 			if (!FirstResult.IsValid() || !FirstResult->HasTypedField(TEXT("inputs"), EJson::Array) || !FirstResult->HasTypedField(TEXT("outputs"), EJson::Array))
 			{
 				AddError(TEXT("search_functions detail_level=standard should include parameter arrays"));
@@ -86,7 +88,7 @@ bool FMonolithBlueprintSearchFunctionsPagingTest::RunTest(const FString& Paramet
 		const TArray<TSharedPtr<FJsonValue>>* Results = nullptr;
 		if (Result.Result.IsValid() && Result.Result->TryGetArrayField(TEXT("results"), Results) && Results && Results->Num() > 0)
 		{
-			return (*Results)[0]->AsObject();
+			return (*Results)[0]->Type == EJson::Object ? (*Results)[0]->AsObject() : nullptr;
 		}
 		return nullptr;
 	};
@@ -156,10 +158,14 @@ bool FMonolithBlueprintSearchFunctionsPagingTest::RunTest(const FString& Paramet
 	TestTrue(TEXT("projected row present"), ProjectedRow.IsValid());
 	if (ProjectedRow.IsValid())
 	{
-		TestTrue(TEXT("projected row keeps function_name"), ProjectedRow->HasField(TEXT("function_name")));
-		TestTrue(TEXT("projected row keeps class_name"), ProjectedRow->HasField(TEXT("class_name")));
-		TestFalse(TEXT("projected row drops category"), ProjectedRow->HasField(TEXT("category")));
-		TestFalse(TEXT("projected row drops is_pure"), ProjectedRow->HasField(TEXT("is_pure")));
+		FString FunctionName;
+		TestTrue(TEXT("projected row keeps function_name"), ProjectedRow->TryGetStringField(TEXT("function_name"), FunctionName));
+		FString ClassName;
+		TestTrue(TEXT("projected row keeps class_name"), ProjectedRow->TryGetStringField(TEXT("class_name"), ClassName));
+		FString Category;
+		TestFalse(TEXT("projected row drops category"), ProjectedRow->TryGetStringField(TEXT("category"), Category));
+		bool bIsPure = false;
+		TestFalse(TEXT("projected row drops is_pure"), ProjectedRow->TryGetBoolField(TEXT("is_pure"), bIsPure));
 	}
 	const TArray<TSharedPtr<FJsonValue>>* Warnings = nullptr;
 	bool bUnknownFieldWarning = false;
@@ -181,10 +187,14 @@ bool FMonolithBlueprintSearchFunctionsPagingTest::RunTest(const FString& Paramet
 	LegacyParams->SetStringField(TEXT("query"), TEXT("Get"));
 	LegacyParams->SetNumberField(TEXT("limit"), 2.0);
 	FMonolithActionResult Legacy = ExecuteSearchFunctions(LegacyParams);
-	TestTrue(TEXT("legacy matched_count still present"), Legacy.Result.IsValid() && Legacy.Result->HasField(TEXT("matched_count")));
-	TestTrue(TEXT("legacy returned_count still present"), Legacy.Result.IsValid() && Legacy.Result->HasField(TEXT("returned_count")));
-	TestTrue(TEXT("limits contract present"), Legacy.Result.IsValid() && Legacy.Result->HasField(TEXT("limits")));
-	TestTrue(TEXT("projection contract present"), Legacy.Result.IsValid() && Legacy.Result->HasField(TEXT("projection")));
+	double LegacyMatchedCount = 0;
+	TestTrue(TEXT("legacy matched_count still present"), Legacy.Result.IsValid() && Legacy.Result->TryGetNumberField(TEXT("matched_count"), LegacyMatchedCount));
+	double LegacyReturnedCount = 0;
+	TestTrue(TEXT("legacy returned_count still present"), Legacy.Result.IsValid() && Legacy.Result->TryGetNumberField(TEXT("returned_count"), LegacyReturnedCount));
+	const TSharedPtr<FJsonObject>* LimitsObj = nullptr;
+	TestTrue(TEXT("limits contract present"), Legacy.Result.IsValid() && Legacy.Result->TryGetObjectField(TEXT("limits"), LimitsObj));
+	const TSharedPtr<FJsonObject>* ProjectionObj = nullptr;
+	TestTrue(TEXT("projection contract present"), Legacy.Result.IsValid() && Legacy.Result->TryGetObjectField(TEXT("projection"), ProjectionObj));
 
 	return true;
 }

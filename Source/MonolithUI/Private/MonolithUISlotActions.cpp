@@ -395,10 +395,10 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
         if (Params->TryGetObjectField(TEXT("offsets"), OffsetObj))
         {
             double Left = 0.0, Top = 0.0, Right = 0.0, Bottom = 0.0;
-            (*OffsetObj)->TryGetNumberField(TEXT("left"), Left);
-            (*OffsetObj)->TryGetNumberField(TEXT("top"), Top);
-            (*OffsetObj)->TryGetNumberField(TEXT("right"), Right);
-            (*OffsetObj)->TryGetNumberField(TEXT("bottom"), Bottom);
+            if ((*OffsetObj)->HasField(TEXT("left")) && !(*OffsetObj)->TryGetNumberField(TEXT("left"), Left)) return FMonolithActionResult::Error(TEXT("Invalid param: offsets.left must be a number"));
+            if ((*OffsetObj)->HasField(TEXT("top")) && !(*OffsetObj)->TryGetNumberField(TEXT("top"), Top)) return FMonolithActionResult::Error(TEXT("Invalid param: offsets.top must be a number"));
+            if ((*OffsetObj)->HasField(TEXT("right")) && !(*OffsetObj)->TryGetNumberField(TEXT("right"), Right)) return FMonolithActionResult::Error(TEXT("Invalid param: offsets.right must be a number"));
+            if ((*OffsetObj)->HasField(TEXT("bottom")) && !(*OffsetObj)->TryGetNumberField(TEXT("bottom"), Bottom)) return FMonolithActionResult::Error(TEXT("Invalid param: offsets.bottom must be a number"));
             FMargin Offsets(Left, Top, Right, Bottom);
             CS->SetOffsets(Offsets);
             PropsSet++;
@@ -408,8 +408,8 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
         if (Params->TryGetObjectField(TEXT("position"), PosObj))
         {
             double X = 0.0, Y = 0.0;
-            (*PosObj)->TryGetNumberField(TEXT("x"), X);
-            (*PosObj)->TryGetNumberField(TEXT("y"), Y);
+            if ((*PosObj)->HasField(TEXT("x")) && !(*PosObj)->TryGetNumberField(TEXT("x"), X)) return FMonolithActionResult::Error(TEXT("Invalid param: position.x must be a number"));
+            if ((*PosObj)->HasField(TEXT("y")) && !(*PosObj)->TryGetNumberField(TEXT("y"), Y)) return FMonolithActionResult::Error(TEXT("Invalid param: position.y must be a number"));
             CS->SetPosition(FVector2D(X, Y));
             PropsSet++;
         }
@@ -418,8 +418,8 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
         if (Params->TryGetObjectField(TEXT("size"), SizeObj))
         {
             double X = 0.0, Y = 0.0;
-            (*SizeObj)->TryGetNumberField(TEXT("x"), X);
-            (*SizeObj)->TryGetNumberField(TEXT("y"), Y);
+            if ((*SizeObj)->HasField(TEXT("x")) && !(*SizeObj)->TryGetNumberField(TEXT("x"), X)) return FMonolithActionResult::Error(TEXT("Invalid param: size.x must be a number"));
+            if ((*SizeObj)->HasField(TEXT("y")) && !(*SizeObj)->TryGetNumberField(TEXT("y"), Y)) return FMonolithActionResult::Error(TEXT("Invalid param: size.y must be a number"));
             CS->SetSize(FVector2D(X, Y));
             PropsSet++;
         }
@@ -428,22 +428,24 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
         if (Params->TryGetObjectField(TEXT("alignment"), AlignObj))
         {
             double X = 0.0, Y = 0.0;
-            (*AlignObj)->TryGetNumberField(TEXT("x"), X);
-            (*AlignObj)->TryGetNumberField(TEXT("y"), Y);
+            if ((*AlignObj)->HasField(TEXT("x")) && !(*AlignObj)->TryGetNumberField(TEXT("x"), X)) return FMonolithActionResult::Error(TEXT("Invalid param: alignment.x must be a number"));
+            if ((*AlignObj)->HasField(TEXT("y")) && !(*AlignObj)->TryGetNumberField(TEXT("y"), Y)) return FMonolithActionResult::Error(TEXT("Invalid param: alignment.y must be a number"));
             CS->SetAlignment(FVector2D(X, Y));
             PropsSet++;
         }
 
         double ZOrderVal;
-        if (Params->TryGetNumberField(TEXT("z_order"), ZOrderVal))
+        if (Params->HasField(TEXT("z_order")))
         {
+            if (!Params->TryGetNumberField(TEXT("z_order"), ZOrderVal)) return FMonolithActionResult::Error(TEXT("Invalid param: z_order must be a number"));
             CS->SetZOrder(static_cast<int32>(ZOrderVal));
             PropsSet++;
         }
 
         bool bAutoSize;
-        if (Params->TryGetBoolField(TEXT("auto_size"), bAutoSize))
+        if (Params->HasField(TEXT("auto_size")))
         {
+            if (!Params->TryGetBoolField(TEXT("auto_size"), bAutoSize)) return FMonolithActionResult::Error(TEXT("Invalid param: auto_size must be a boolean"));
             CS->SetAutoSize(bAutoSize);
             PropsSet++;
         }

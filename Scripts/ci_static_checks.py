@@ -141,10 +141,99 @@ def discover_uplugin(ctx: CheckContext) -> tuple[Path | None, dict[str, Any] | N
     return descriptor_path, data
 
 
+def check_release_version_consistency(
+    ctx: CheckContext,
+    descriptor_path: Path,
+    descriptor: dict[str, Any],
+) -> None:
+    contract = ctx.config.get("release_version")
+    if contract is None:
+        return
+    if not isinstance(contract, dict):
+        ctx.block("release-version", "release_version config must be an object", ctx.config_path)
+        return
+
+    sources = contract.get("sources", [])
+    if not isinstance(sources, list) or not sources:
+        ctx.block(
+            "release-version",
+            "release_version.sources must be a non-empty list",
+            ctx.config_path,
+        )
+        return
+
+    descriptor_version = descriptor.get("VersionName")
+    if not isinstance(descriptor_version, str) or not descriptor_version.strip():
+        ctx.block(
+            "release-version",
+            "Plugin descriptor VersionName must be a non-empty string",
+            descriptor_path,
+        )
+        return
+    descriptor_version = descriptor_version.strip()
+
+    for index, source in enumerate(sources):
+        if not isinstance(source, dict):
+            ctx.block(
+                "release-version",
+                f"release_version.sources[{index}] must be an object",
+                ctx.config_path,
+            )
+            continue
+
+        path_value = source.get("path")
+        pattern = source.get("pattern")
+        if not isinstance(path_value, str) or not path_value:
+            ctx.block(
+                "release-version",
+                f"release_version.sources[{index}].path must be a non-empty string",
+                ctx.config_path,
+            )
+            continue
+        if not isinstance(pattern, str) or not pattern:
+            ctx.block(
+                "release-version",
+                f"release_version.sources[{index}].pattern must be a non-empty regex",
+                ctx.config_path,
+            )
+            continue
+
+        source_path = ctx.path(path_value)
+        if not source_path.is_file():
+            ctx.block("release-version", "Release version source is missing", source_path)
+            continue
+        try:
+            match = re.search(pattern, read_text(source_path), flags=re.MULTILINE)
+        except re.error as exc:
+            ctx.block(
+                "release-version",
+                f"Invalid release version regex: {exc}",
+                ctx.config_path,
+            )
+            continue
+        if match is None or match.lastindex is None:
+            ctx.block(
+                "release-version",
+                "Release version pattern must match and capture the version in group 1",
+                source_path,
+            )
+            continue
+
+        source_version = match.group(1).strip()
+        if source_version != descriptor_version:
+            ctx.block(
+                "release-version",
+                f"Release version {source_version!r} does not match plugin descriptor VersionName {descriptor_version!r}",
+                source_path,
+            )
+
+
 def check_uplugin_and_modules(ctx: CheckContext) -> None:
     descriptor_path, data = discover_uplugin(ctx)
     if not descriptor_path or data is None:
         return
+
+    check_release_version_consistency(ctx, descriptor_path, data)
 
     modules = data.get("Modules", [])
     module_names = [str(module.get("Name", "")) for module in modules if module.get("Name")]
@@ -161,6 +250,21 @@ def check_uplugin_and_modules(ctx: CheckContext) -> None:
     if not isinstance(plugin_references, list):
         ctx.block("uplugin-dependency", "Plugins must be a list", descriptor_path)
         plugin_references = []
+
+    plugin_reference_names: dict[str, list[str]] = {}
+    for reference in plugin_references:
+        if not isinstance(reference, dict):
+            continue
+        name = str(reference.get("Name", "")).strip()
+        if name:
+            plugin_reference_names.setdefault(name.casefold(), []).append(name)
+    for names in plugin_reference_names.values():
+        if len(names) > 1:
+            ctx.block(
+                "uplugin-dependency",
+                f"Plugin reference must appear exactly once: {names[0]}",
+                descriptor_path,
+            )
 
     required_plugins = uplugin_contract.get("required_plugin_references", [])
     if not isinstance(required_plugins, list):
@@ -1786,6 +1890,14 @@ def write_selftest_fixture(root: Path) -> tuple[dict[str, Any], Path]:
             "required_plugin_references": ["GameplayAbilities"],
             "forbidden_optional_plugin_references": ["Chooser"],
         },
+        "release_version": {
+            "sources": [
+                {
+                    "path": "CHANGELOG.md",
+                    "pattern": r"^## \[([0-9]+\.[0-9]+\.[0-9]+)\]",
+                }
+            ],
+        },
         "source_dir": "Source",
         "buildcs": {"release_guard_env": "RELEASE", "optional_dependency_tokens": []},
         "repo_hygiene": {"generated_or_binary_patterns": [r"(^|/)Binaries/"]},
@@ -1854,10 +1966,15 @@ def write_selftest_fixture(root: Path) -> tuple[dict[str, Any], Path]:
     (root / "Foo.uplugin").write_text(
         json.dumps(
             {
+                "VersionName": "1.2.3",
                 "Modules": [{"Name": "Foo", "Type": "Editor"}],
                 "Plugins": [{"Name": "GameplayAbilities", "Enabled": True}],
             }
         ),
+        encoding="utf-8",
+    )
+    (root / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## [1.2.3] - 2026-08-03\n",
         encoding="utf-8",
     )
     (root / "Source/Foo/Foo.Build.cs").write_text(
@@ -1968,6 +2085,32 @@ def run_selftest() -> int:
         return 1
 
     cases = [
+        (
+            "release version drift",
+            "release-version",
+            lambda root: (root / "CHANGELOG.md").write_text(
+                "# Changelog\n\n## [9.9.9] - 2026-08-03\n",
+                encoding="utf-8",
+            ),
+        ),
+        (
+            "duplicate non-required plugin references",
+            "uplugin-dependency",
+            lambda root: (root / "Foo.uplugin").write_text(
+                json.dumps(
+                    {
+                        "VersionName": "1.2.3",
+                        "Modules": [{"Name": "Foo", "Type": "Editor"}],
+                        "Plugins": [
+                            {"Name": "GameplayAbilities", "Enabled": True},
+                            {"Name": "Paper2D", "Enabled": True},
+                            {"Name": "paper2d", "Enabled": True},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            ),
+        ),
         (
             "module map drift",
             "module-map",

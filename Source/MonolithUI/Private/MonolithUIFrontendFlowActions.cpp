@@ -293,7 +293,8 @@ namespace
             }
             else
             {
-                const TSharedPtr<FJsonObject> Obj = Value.IsValid() ? Value->AsObject() : nullptr;
+                const TSharedPtr<FJsonObject>* ObjPtr = nullptr;
+                const TSharedPtr<FJsonObject> Obj = (Value.IsValid() && Value->TryGetObject(ObjPtr) && ObjPtr) ? *ObjPtr : nullptr;
                 if (!Obj.IsValid())
                 {
                     OutError = TEXT("required_layers entries must be strings or objects.");
@@ -355,7 +356,8 @@ namespace
         OutSpecs.Reserve(Values->Num());
         for (const TSharedPtr<FJsonValue>& Value : *Values)
         {
-            const TSharedPtr<FJsonObject> Obj = Value.IsValid() ? Value->AsObject() : nullptr;
+            const TSharedPtr<FJsonObject>* ObjPtr = nullptr;
+            const TSharedPtr<FJsonObject> Obj = (Value.IsValid() && Value->TryGetObject(ObjPtr) && ObjPtr) ? *ObjPtr : nullptr;
             if (!Obj.IsValid())
             {
                 OutError = TEXT("screens entries must be objects.");

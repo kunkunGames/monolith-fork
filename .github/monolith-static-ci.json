@@ -8,6 +8,26 @@
       "Chooser"
     ]
   },
+  "release_version": {
+    "sources": [
+      {
+        "path": "CHANGELOG.md",
+        "pattern": "^## \\[([0-9]+\\.[0-9]+\\.[0-9]+)\\]"
+      },
+      {
+        "path": "Docs/SPEC_CORE.md",
+        "pattern": "^\\*\\*Version:\\*\\* ([0-9]+\\.[0-9]+\\.[0-9]+)"
+      },
+      {
+        "path": "Docs/API_REFERENCE.md",
+        "pattern": "^\\*\\*Version:\\*\\* v([0-9]+\\.[0-9]+\\.[0-9]+)"
+      },
+      {
+        "path": "README.md",
+        "pattern": "\\(v([0-9]+\\.[0-9]+\\.[0-9]+) (?:public|source) release;"
+      }
+    ]
+  },
   "source_dir": "Source",
   "severity": {
     "line_endings": "advisory",

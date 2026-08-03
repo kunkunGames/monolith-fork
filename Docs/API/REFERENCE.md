@@ -1,8 +1,8 @@
 ﻿# Monolith API Reference
 
-**Version:** v0.22.0 · **Last updated:** 2026-08-02
+**Version:** v0.21.3 · **Last updated:** 2026-07-26
 
-**In-tree action total is approximate: current source contains roughly 2126 in-tree `RegisterAction` registrations** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large and build-flag dependent to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `console` namespace adds live `IConsoleManager` registry discovery plus EngineSource.db/FTS5 snapshot search. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
+**In-tree action total is approximate: current source contains roughly 2083 in-tree `RegisterAction` registrations** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large and build-flag dependent to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `console` namespace adds live `IConsoleManager` registry discovery plus EngineSource.db/FTS5 snapshot search. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
 The per-namespace numbers in the Table of Contents and body sections below are kept for structure, not precision — they drift with every action added and are no longer maintained to the unit. Treat them as ballpark; the live figure always comes from `monolith_discover()`.
 
@@ -10,11 +10,9 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 >
 > For the most current param schemas, call `monolith_discover({ "namespace": "<namespace>", "action": "<action>", "mode": "schema" })` at runtime — it returns live schemas straight out of the plugin. This document is a curated reference, not a source-of-truth substitute.
 >
-> **0.15.0:** the namespace counts in the Table of Contents and the per-namespace body sections below are a curated in-tree reference. The 2026-07-17 live Go snapshot is 2126 actions / 52 namespaces with sibling/private plugins loaded. For the exhaustive live param schema of any action, call `monolith_discover({ "namespace": "<namespace>", "action": "<action>", "mode": "schema" })` or `describe_query("action_schema", ...)`.
+> **0.15.0:** the namespace counts in the Table of Contents and the per-namespace body sections below are a curated in-tree reference. The 2026-07-17 live Go snapshot is 2083 actions / 52 namespaces with sibling/private plugins loaded. For the exhaustive live param schema of any action, call `monolith_discover({ "namespace": "<namespace>", "action": "<action>", "mode": "schema" })` or `describe_query("action_schema", ...)`.
 >
 > **Failure envelope (2026-07-04, `UMonolithSettings::bCompactErrorEnvelope=true` default):** error results carry exactly one machine-readable copy of `related_actions`/`hints`/`error_data`. With `bEnableStructuredToolResults=true` that copy lives in `structuredContent` and `content[0].text` is a one-line `"<message>; see structuredContent."` pointer; without structured results the copy stays in the top-level fields and `content[0].text` keeps the full error text. `error_data` fields are no longer flattened into the result's top level — read `error_data.<field>` instead of `<field>`. Set `bCompactErrorEnvelope=false` to reproduce the legacy duplicated/flattened shape.
->
-> **Native JSON-key compatibility:** C++ extensions should enumerate JSON-object field names through `FMonolithJsonUtils::FieldKeyToString`, `GetFieldNames`, or `GetFields`. `FieldKeyToString(const FString&)` is available on every supported engine; the `UE::FSharedString` overload is exposed only on UE 5.8+, matching the engine's `FJsonObject` key type without naming a 5.8-only alias in a UE 5.7 translation unit.
 
 ---
 
@@ -25,7 +23,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [monolith](#monolith) | 5 | Core server tools (discover, status, update, reindex, guide) |
 | [blueprint](#blueprint) | ~120 | Blueprint read/write, variable/component/graph CRUD, graph export/clone/remap, node ops, compile, auto-layout, spawn actors, dataset read/edit pack (DataTable/CurveTable/StringTable + `seed_data_asset`), cross-class property access, parent-function overrides |
 | [material](#material) | 49 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
-| [animation](#animation) | 145 | Curves, bone tracks, sync markers, root motion, compression, blend spaces (incl. baking + interpolation control), ABPs (incl. an AnimGraph-authoring pack — additive/slot/cached-pose/blend (by int + by enum)/sync/layered-blend/Control Rig/linked-layer/conduit nodes + output wiring — ABP-native animation layer graphs, custom anim-graph nodes + state-machine teardown + compound expression transition rules), montages, skeletons, PoseSearch, IKRig, Control Rig |
+| [animation](#animation) | 145 | Curves, bone tracks, sync markers, root motion, compression, blend spaces (incl. baking + interpolation control), ABPs (incl. an AnimGraph-authoring pack — additive/slot/cached-pose/blend (by int + by enum)/sync/layered-blend/Control Rig/linked-layer/conduit nodes + output wiring — custom anim-graph nodes + state-machine teardown + compound expression transition rules), montages, skeletons, PoseSearch, IKRig, Control Rig |
 | [cloth](#cloth) | 2 | Optional read-only Chaos Cloth/Outfit workflow discovery and asset listing |
 | [niagara](#niagara) | 119 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, effect types, event-aware summaries + validate_system event-chain reasoning, temporal-control composite writers + read aggregators, stateless-emitter factory) |
 | [editor](#editor) | 35 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map/world-settings authoring, DataValidation, changelist validation planning, module status, synchronous and asynchronous automation test execution, Python escape-hatch, persistent-level swap |
@@ -136,9 +134,9 @@ These releases added the `level_sequence` namespace, the `bulk_fill` / `describe
 
 | Command | Persistent effect | Immediate effect |
 |---------|-------------------|------------------|
-| `Monolith.StartServer` | Writes `[Monolith.UserActivation] ServerEnabled=True` to generated `Saved/Config/WindowsEditor/Monolith.ini` | Starts Monolith's `/mcp` and `/health` routes on the configured port |
-| `Monolith.StopServer` | Writes `ServerEnabled=False` | Removes the Monolith routes and sentinel immediately; unrelated UE HTTP routes/listeners are not globally stopped |
-| `Monolith.StartIndexing` | Writes `IndexingEnabled=True` | Enables source hot-reload and asset-registry hooks, starts project-source incremental/full bootstrap as needed, and starts the cheapest correct asset catch-up mode |
+| `Monolith.StartServer` | Writes `[Monolith.UserActivation] ServerEnabled=True` to generated `Saved/Config/WindowsEditor/Monolith.ini` | Starts Monolith's `/mcp` and `/health` routes on the configured port; an already-listening foreign process is rejected rather than accepted through a TCP-only probe |
+| `Monolith.StopServer` | Writes `ServerEnabled=False` | Removes the Monolith routes and caller-owned sentinel immediately; UE's process-owned listener may remain for unrelated routes and same-port restart/reload |
+| `Monolith.StartIndexing` | Writes `IndexingEnabled=True` | Enables source hot-reload and asset-registry hooks, explicitly permits a missing source DB bootstrap, and starts the cheapest correct asset catch-up mode |
 | `Monolith.StopIndexing` | Writes `IndexingEnabled=False` | Removes queued/automatic source and asset hooks immediately; an active run drains to its normal transaction/completion boundary |
 
 The native consumers share one compact `UMonolithSettings` API:
@@ -152,9 +150,9 @@ The native consumers share one compact `UMonolithSettings` API:
 
 `GetActivation()` caches the resolved value because some consumers are per-frame Slate attributes. Its request key contains both config paths and both project-default values; Start/Stop setters invalidate immediately, project-policy changes refresh immediately, and external edits to either generated `Monolith.ini` or the one-time legacy migration file are detected by bounded one-second timestamp checks.
 
-A missing user key inherits its matching project default; malformed user values fail closed to `false`. An explicit Stop therefore survives editor restarts and is local to that checkout/user, while project teams can change the initial policy without manufacturing user state. Older `Saved/Monolith/Activation.ini` choices migrate once into the generated config. `UMonolithSettings::bMcpServerEnabled`, `bEnableSource`, and `bEnableIndex` remain hard project-policy gates and cannot be overridden by a Start command.
+A missing user key inherits its matching project default; malformed or unreadable user state fails closed to `false`. Writes refuse to overwrite an unreadable existing file because doing so could discard the sibling activation key. An explicit Stop therefore survives editor restarts and is local to that checkout/user, while project teams can change the initial policy without manufacturing user state. Older readable `Saved/Monolith/Activation.ini` choices migrate once into the generated config; an unreadable legacy file is retained for an operator to repair. Durable editor hosts reconcile externally edited server activation after the bounded cache revalidation interval. `UMonolithSettings::bMcpServerEnabled`, `bEnableSource`, and `bEnableIndex` remain hard project-policy gates and cannot be overridden by a Start command.
 
-Index deactivation never blocks existing `ProjectIndex.db` or `EngineSource.db` reads. Reindex entry points return whether the writer actually accepted the request, and callers report a rejected start instead of optimistic success. Inherited default-on activation can run a project-source catch-up against a healthy existing DB but does not silently bootstrap a missing engine-wide DB; `Monolith.StartIndexing` is the explicit bootstrap request. An existing DB that cannot be opened is preserved rather than converted into an automatic clean rebuild. An active source reindex still owns the source DB until it completes because that writer intentionally closes and atomically reopens the database. The compatibility command `Monolith.StartIndex` does not enable indexing; after `Monolith.StartIndexing`, bare invocation resumes a recoverable schema-v3 full index or starts a fresh one, while `Monolith.StartIndex force` deliberately wipes and rebuilds.
+Index deactivation never blocks existing `ProjectIndex.db` or `EngineSource.db` reads. Reindex entry points return whether the writer actually accepted the request, and callers report a rejected start instead of optimistic success. Inherited default-on activation can run a project-source catch-up against a healthy existing DB but does not silently bootstrap a missing engine-wide DB; `Monolith.StartIndexing` is the explicit bootstrap request. An existing DB that cannot be opened is preserved rather than converted into an automatic clean rebuild. An active source reindex still owns the source DB until it completes because that writer intentionally closes and atomically reopens the database. The compatibility command `Monolith.StartIndex` does not enable indexing; it can request a full asset index only after `Monolith.StartIndexing`.
 
 ---
 
@@ -164,7 +162,7 @@ Core server management and introspection.
 
 ### `monolith.discover`
 
-List available tool namespaces and their actions. Pass `namespace` to filter; pass `category` to narrow further (e.g. `"CommonUI"` inside `ui`). Pass both `namespace` and `action` with `mode="schema"` to fetch one exact action schema without dumping the whole namespace.
+List available tool namespaces and their actions. Pass `namespace` to filter; pass `category` to narrow further (e.g. `"CommonUI"` inside `ui`). Pass `filter` without `namespace` to find which namespaces own a capability while keeping the existing deterministic registry order. Pass both `namespace` and `action` with `mode="schema"` to fetch one exact action schema without dumping the whole namespace.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -172,13 +170,16 @@ List available tool namespaces and their actions. Pass `namespace` to filter; pa
 | `action` | string | optional | Filter to a specific action inside `namespace`; most useful with `mode="schema"` |
 | `category` | string | optional | Filter actions within the namespace by category |
 | `mode` | enum | optional | `summary`, `actions`, or `schema`. Default is summary-style namespace discovery unless a legacy caller requests the namespace payload. |
+| `detail` | boolean | optional | Inline full internal param schemas in action listings. Default: `false` |
+| `verbose` | boolean | optional | Backward-compatible alias for `detail=true` |
 | `planning_detail` | enum | optional | `compact` or `full`. Namespace action listings default to `compact`, which keeps planning status/count fields but omits heavy `precondition_details` and `planning_signals` arrays; pass `full` when auditing those arrays. |
 | `schema_detail` | enum | optional | `compact` or `full`. Namespace action listings default to `compact`, which uses terse action descriptions and omits `search_metadata` plus per-param descriptions from inline `params`; focused `mode="schema"` defaults to `full`. |
+| `filter` | string | optional | Case-insensitive substring over action name or full description. Without `namespace`, searches the full live registry. |
 | `if_version` | string | optional | Catalog version from a prior `monolith.status`/`monolith.discover` response. When it matches the live catalog, the response is a small `{status:"unchanged", catalog_version, total_actions, namespaces}` payload (<1KB) instead of the full listing. |
 | `offset` | integer | optional | Pagination offset applied after category/filter. |
 | `limit` | integer | optional | Pagination limit. Defaults to `50`; `0` is accepted for older callers but normalized to the default bounded page. Namespace listings with `detail=true` are capped to the default page size even when a larger limit is requested; continue with `next_cursor`/`offset`. |
 
-**Returns:** Namespace summaries, action rows, or exact param schemas depending on `mode`; every non-short-circuit response also carries top-level `catalog_version`. Namespace action listings expose `planning_detail` / `schema_detail` plus hints when compact projections are active. AI clients also receive MCP tool schemas in `tools/list` at session start, so callers should request focused schema mode when they need exact params for one action. Recommended session routine: call `monolith.status` once, remember `catalog_version`, and pass it as `if_version` on repeat discovers.
+**Returns:** Namespace summaries, action rows, or exact param schemas depending on `mode`; every non-short-circuit response also carries top-level `catalog_version`. A `filter` without `namespace` returns `matched_namespaces` (`namespace`, pre-pagination `match_count`) plus the paginated `actions` rows (`namespace`, `action`, bounded `description`, optional category/schema), `total`, and `next_offset` when more rows remain. Namespace counts are not relevance scores. Namespace action listings expose `planning_detail` / `schema_detail` plus hints when compact projections are active. AI clients also receive MCP tool schemas in `tools/list` at session start, so callers should request focused schema mode when they need exact params for one action. Recommended session routine: call `monolith.status` once, remember `catalog_version`, and pass it as `if_version` on repeat discovers.
 
 ---
 
@@ -245,21 +246,13 @@ Check for or install Monolith updates from GitHub Releases. Auto-updater hits `h
 
 ### `monolith.reindex`
 
-Re-index the Monolith project database. Non-force mode resumes a recoverable interrupted full index first, otherwise uses incremental delta for a compatible completed DB and a fresh full index for a new/incompatible DB. Pass `force=true` for a deliberate full wipe + rebuild. The durable indexing state must already be enabled with `Monolith.StartIndexing`; this MCP action never changes operator activation.
+Re-index the Monolith project database. Incremental by default (delta only). Pass `force=true` for a full wipe + rebuild. The durable indexing state must already be enabled with `Monolith.StartIndexing`; this MCP action never changes operator activation.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `force` | bool | optional | Full wipe + rebuild instead of incremental delta. Default: `false` |
 
 **Returns:** `status:"indexing_disabled"` plus guidance when durable activation is off. With `UMonolithSettings::bEnableAsyncJobs=true` (default) and activation on, `status:"started"`, `legacy_status:"reindex_started"`, `job_id`, `poll_action:"monolith.get_job"`, `cancel_action:"monolith.cancel_job"`, `supports_progress:true`, and `cancellable:true`. Polling that job reaches an honest terminal state from the index subsystem: `completed` on successful full/incremental/no-change indexing, `failed` when the indexer cannot start or reports failure, and `cancelled` when cooperative job cancellation is observed. If async jobs are disabled, the legacy response remains `status:"reindex_started"` plus a message. If the async start is rejected before indexing begins, the action response uses `status:"reindex_not_started"` and the returned `job_id` contains the failure details.
-
-`MonolithCore` selects these reflected `UMonolithIndexSubsystem` entry points; each returns `bool` so a rejected request cannot be reported as started:
-
-| C++ API | Contract |
-|---------|----------|
-| `StartFullIndex()` / `StartFullIndexWithAsyncJob(JobId)` | Always reset schema/data and start a deliberate full rebuild |
-| `ResumeFullIndex()` / `ResumeFullIndexWithAsyncJob(JobId)` | Resume only when the global marker and physical schema-v3 checkpoint columns agree; otherwise reset and start a fresh full index |
-| `StartIncrementalIndex()` / `StartIncrementalIndexWithAsyncJob(JobId)` | Apply the compatible completed-DB delta path without resetting |
 
 ---
 
@@ -307,28 +300,6 @@ Full read/write access to Blueprint graphs, variables, components, functions, no
 - `set_anim_class`, `apply_movement_preset`, `add_engine_component_typed`, `scaffold_locomotion_input`, `validate_animbp_variable_contract`, `scaffold_motion_matching_character` — character/actor scaffolding for a motion-matching setup (adds an `EnhancedInput` dep).
 - `add_property_access_node` (reflective `K2Node_PropertyAccess` for thread-safe property reads), `set_function_thread_safe` (mark a Blueprint function `BlueprintThreadSafe`). `scaffold_locomotion_anim_values` now emits a fully-wired thread-safe body via Property Access and can target a named function graph.
 - `get_component_details` falls back to inherited native components (reports `is_inherited_native`, `skeletal_mesh`, `anim_class`, `animation_mode`); `get_blueprint_info` adds `native_component_count`; `get_inherited_component_override` reads the effective component template value + source; `seed_data_asset` gained `read_back_values`; `get_cdo_properties` routes through the shared reflection reader as the canonical verify-after-write path.
-
-**New in v0.22.0 (unified component resolver — issue #116, PR #102 part 1):**
-- **Component reads now report this Blueprint's values, not the C++ parent's.** `get_component_details` and
-  `get_components` read the Blueprint's OWN class-default object; they previously read `ParentClass`'s CDO, so
-  every inherited component reported Epic's native constructor defaults (a capsule overridden to 96 read back 88).
-- **New response fields.** `get_component_details` returns `source`, `resolved_component`, and `note`
-  (`is_inherited_native` is retained and equals `source == "cdo_native"`). `get_components` returns
-  `inherited_components[]` (components declared on a parent Blueprint's construction script, with
-  `defining_class` / `has_override` / `source`) and `native_components_source`. `set_component_property` returns
-  `source`, `resolved_component`, and `persisted`. `get_inherited_component_override`'s `source` values changed
-  from `cdo_native` / `ich` / `scs` to the five-value set below.
-- **`source` values:** `scs`, `cdo_native`, `ich_override`, `inherited_scs`, `parent_cdo_fallback`.
-  `parent_cdo_fallback` means the Blueprint has no compiled generated class and the values shown are native
-  defaults — the accompanying `note` says so.
-- **`set_component_property` can now write components inherited from a parent Blueprint**, via an Inheritable
-  Component Handler override on the child. `persisted: false` means the value equalled the inherited default and
-  the override record was pruned on compile.
-- **Aliases** resolve on all four actions and carry their own target class: `Mesh`/`SkeletalMesh`, `StaticMesh`,
-  `CharacterMovement`/`Movement`, `Capsule`/`CapsuleComponent`, `Root`/`RootComponent`. An alias matching more
-  than one component of its class is reported as an ambiguity with candidate names rather than silently
-  resolving to the first.
-- **`get_inherited_component_override` accepts `asset_path` as an alias for `bp_path`.**
 
 > For full param schemas, call `describe_query("action_schema", target_namespace="blueprint", target_action="<name>")` (or `monolith_discover("blueprint", detail=true)`). Plain `monolith_discover("blueprint")` is terse — action names + one-line descriptions only. The action surface is too broad to enumerate here without bloat — high-traffic actions are documented below; the rest are listed and discoverable.
 
@@ -605,12 +576,7 @@ Animation curves, bone tracks, sync markers, root motion, compression, blend spa
 - **Blend spaces:** `bake_blend_space` (rebuild a blend space's `FBlendSpaceData` triangulation via `ResampleData()` + mark dirty — repairs blend spaces authored externally or before the auto-bake fix; returns `has_blendspace_data`, `sample_count`, `baked`, and a `warning` when a 2D blend space has fewer than 3 samples), `set_blend_space_interpolation` (set `bInterpolateUsingGrid` via `use_grid` + a `preferred_triangulation_direction` of `None`/`Tangential`/`Radial`, then resample). In grid mode the triangulation is intentionally empty, so `has_blendspace_data` is `false` — correct, not a failure. The four blend space mutators (`add_blendspace_sample`, `edit_blendspace_sample`, `delete_blendspace_sample`, `set_blend_space_axis`) now auto-bake the triangulation after each edit, so MCP-authored blend spaces no longer ship empty and evaluate to the bind/reference pose at runtime.
 - **State machines:** `remove_anim_state` (remove a state + tear down its inner anim graph; `remove_dependent_transitions` default `true`; refuses to remove the machine's current entry state — re-point first), `set_anim_entry_state` (re-point the Entry node at an existing state; returns the previous target, `unchanged:true` fast-path), `remove_anim_transition` (remove a from→to transition; reports `matched_transition_count`).
 - **IKRig:** `remove_ik_solver` (remove a solver by 0-based `solver_index`, validated against the solver count; returns `removed_index`, `solver_count_after`). `add_ik_solver` now resolves `solver_type` against the live solver-struct table (friendly alias → exact struct name → unique substring; ambiguous input errors with the candidate list) instead of a hardcoded reflected path that did not resolve in UE 5.7, so Full Body IK now adds correctly and `root_bone` is meaningful for FBIK.
-- **AnimGraph authoring (14):** `add_apply_additive` / `add_apply_mesh_space_additive` (Apply Additive / mesh-space additive nodes), `add_slot_node` (slot name validated against the skeleton's slot groups), `add_save_cached_pose` / `add_use_cached_pose` (paired by `cache_name`), `set_output_pose_source` (wire a node into the AnimGraph Output / Root result pin), `set_state_result_source` (wire a node into a state machine state's result pin), `add_blend_by_int` (grown to `num_poses` pose pins), `add_blend_by_enum` (Blend Poses by Enum bound to a `UEnum` via `enum_path`; one pose pin per exposed enumerator plus a Default/else pin, skipping the auto `_MAX` sentinel and `Hidden` enumerators; optional `enumerators` exposes a subset), `set_sync_group` (player node sync group name / role / method), `set_layered_blend_bones` (per-bone branch filters on a Layered Blend Per Bone node), `add_anim_control_rig_node` (`control_rig_class`; IO pins regenerate), `add_linked_anim_layer` (`layer_name` + optional `interface_class` / `instance_class`; resolves interface-declared layers first and ABP-native layers as SELF layers otherwise — see below), `add_conduit` (a state-machine conduit whose bound graph is a transition-logic graph, not an anim graph). Plus 3 extensions: `set_anim_node_pin_binding` now bootstraps the binding object on previously-unbound nodes; `auto_layout` gained a Blueprint-Assist-free `builtin` formatter (also the `auto` fallback) so layout works in release builds where Blueprint Assist is compiled out; `set_transition_rule` gained an `expression` kind (compound multi-term `terms[]` — each `{lhs, op, rhs, abs?, negate?}` — folded through Boolean AND/OR via `combine`), extending the existing `bool` / `auto` / `compare` kinds.
-
-**New (Unreleased) — ABP-native animation layers:**
-- **`add_anim_layer_graph`** creates an animation layer that belongs to the Animation Blueprint itself: a `UAnimationGraph` carrying `UAnimationGraphSchema` in the ABP's own `FunctionGraphs`, which is what the editor's My Blueprint → **+** → Animation Layer button produces. No `UAnimLayerInterface` asset is required, so ABP variants need not share a layer signature. The anim schema is what makes the anim compiler emit a real `FAnimBlueprintFunction` (`blueprint add_function` yields an inert K2 graph instead), and the Output Pose root node is created for free. Params: `asset_path`, `layer_name`, optional `input_poses` (pose NAMES only — `["InPose"]` or `[{"name": "InPose"}]`, capped at 16, unique ABP-wide), optional `compile` (default `true`). Returns `asset_path`, `graph_name`, `graph_class`, `schema_class`, `node_count`, `input_poses`, `compiled`, `saved`. Refuses a duplicate graph name (it never renames or replaces an incumbent), the reserved name `AnimGraph`, child ABPs, macro libraries, and interface Blueprints.
-- **`add_linked_anim_layer` now resolves native layers.** When no implemented `UAnimLayerInterface` declares `layer_name`, it scans the ABP's own animation-schema graphs and binds a SELF layer (null Interface, invalid `InterfaceGuid`, null `InstanceClass`) — mirroring the engine, which derives "self" from interface-lookup failure rather than storing a flag. Interface layers win when a name exists in both; passing `interface_class` disables the native fallback; `instance_class` is rejected for a self layer. A self bind is discriminated in the payload by `interface_class: "<self>"` + `guid_resolved: false`, and `get_linked_layers` shows the node title `"<Layer>\nAnim Layer (self)"`.
-- **Ordering constraint:** self-layer pose pins resolve against the ABP's `SkeletonGeneratedClass`, so `add_anim_layer_graph(compile=false)` followed straight away by `add_linked_anim_layer` places a node with no pose pins. Keep the default `compile=true`, or recompile before placing.
+- **AnimGraph authoring (14):** `add_apply_additive` / `add_apply_mesh_space_additive` (Apply Additive / mesh-space additive nodes), `add_slot_node` (slot name validated against the skeleton's slot groups), `add_save_cached_pose` / `add_use_cached_pose` (paired by `cache_name`), `set_output_pose_source` (wire a node into the AnimGraph Output / Root result pin), `set_state_result_source` (wire a node into a state machine state's result pin), `add_blend_by_int` (grown to `num_poses` pose pins), `add_blend_by_enum` (Blend Poses by Enum bound to a `UEnum` via `enum_path`; one pose pin per exposed enumerator plus a Default/else pin, skipping the auto `_MAX` sentinel and `Hidden` enumerators; optional `enumerators` exposes a subset), `set_sync_group` (player node sync group name / role / method), `set_layered_blend_bones` (per-bone branch filters on a Layered Blend Per Bone node), `add_anim_control_rig_node` (`control_rig_class`; IO pins regenerate), `add_linked_anim_layer` (`layer_name` + optional `interface_class`), `add_conduit` (a state-machine conduit whose bound graph is a transition-logic graph, not an anim graph). Plus 3 extensions: `set_anim_node_pin_binding` now bootstraps the binding object on previously-unbound nodes; `auto_layout` gained a Blueprint-Assist-free `builtin` formatter (also the `auto` fallback) so layout works in release builds where Blueprint Assist is compiled out; `set_transition_rule` gained an `expression` kind (compound multi-term `terms[]` — each `{lhs, op, rhs, abs?, negate?}` — folded through Boolean AND/OR via `combine`), extending the existing `bool` / `auto` / `compare` kinds.
 
 **New (Unreleased) — retargeting + locomotion authoring + inspection:**
 - **Retarget pose + op-stack tuning (9):** `align_retarget_pose` (auto-align a source/target retarget pose via AutoAlign + SnapBoneToGround), `get_retarget_pose` / `set_retarget_pose` (read/edit a retarget pose — `set` `mode`: `from_reference` or `bone_deltas`; `from_animation` deferred), `get_retarget_chain_settings` / `set_retarget_chain_settings` (read/write a chain's FK & IK op-stack settings — rotation/translation modes, IK blend, etc.), `set_retarget_root_settings` (Pelvis Motion op: vertical scale, floor constraint, affect-IK), `enable_foot_ground_lock` (Speed Planting op foot ground-lock on named IK chains), `set_bone_translation_retargeting` / `get_bone_translation_retargeting` (per-bone `USkeleton` translation-retargeting modes — `Animation` / `Skeleton` / `AnimationScaled` / `AnimationRelative` / `OrientAndScale` — plus a `biped_locomotion` preset on the setter).
@@ -637,7 +603,7 @@ Animation curves, bone tracks, sync markers, root motion, compression, blend spa
 | ABPs | 9 | `get_abp_info`, `create_anim_blueprint`, `get_state_machines`, `get_state_info`, `get_transitions`, `get_blend_nodes`, `get_linked_layers`, `get_graphs`, `get_nodes`, `get_abp_variables`, `get_abp_linked_assets` |
 | State machines (write) | 6 | `add_state_to_machine`, `add_transition`, `set_transition_rule` (`bool` / `auto` / `compare` / `expression` kinds — `expression` folds multi-term `terms[]` through Boolean AND/OR), `remove_anim_state`, `set_anim_entry_state`, `remove_anim_transition` |
 | ABP graph (write) | 5 | `add_anim_graph_node` (aliases or generic `UAnimGraphNode_Base` class path/name via `node_type` / `node_class`), `connect_anim_graph_pins`, `set_state_animation`, `add_variable_get`, `set_anim_graph_node_property` |
-| ABP graph authoring (Unreleased) | 15 | `add_anim_layer_graph` (create an ABP-native animation layer graph — anim schema, auto Output Pose, optional `input_poses`), `add_apply_additive`, `add_apply_mesh_space_additive`, `add_slot_node`, `add_save_cached_pose`, `add_use_cached_pose`, `set_output_pose_source`, `set_state_result_source`, `add_blend_by_int`, `add_blend_by_enum` (Blend Poses by Enum bound to a `UEnum`; one pin per exposed enumerator + Default, skips `_MAX` + `Hidden`), `set_sync_group`, `set_layered_blend_bones`, `add_anim_control_rig_node`, `add_linked_anim_layer`, `add_conduit` |
+| ABP graph authoring (Unreleased) | 14 | `add_apply_additive`, `add_apply_mesh_space_additive`, `add_slot_node`, `add_save_cached_pose`, `add_use_cached_pose`, `set_output_pose_source`, `set_state_result_source`, `add_blend_by_int`, `add_blend_by_enum` (Blend Poses by Enum bound to a `UEnum`; one pin per exposed enumerator + Default, skips `_MAX` + `Hidden`), `set_sync_group`, `set_layered_blend_bones`, `add_anim_control_rig_node`, `add_linked_anim_layer`, `add_conduit` |
 | Composites | 3 | `get_composite_info`, `add_composite_segment`, `remove_composite_segment`, `create_composite` |
 | IKRig / Retarget | 10 | `get_ikrig_info`, `add_ik_solver`, `remove_ik_solver`, `set_ik_rig_bone_settings`, `get_ik_rig_bone_settings`, `get_retargeter_info` (emits `ops[]`), `set_retarget_chain_mapping`, `add_retarget_chain`, `remove_retarget_chain`, `set_retarget_chain_bones` |
 | Retarget pose + ops (Unreleased) | 9 | `align_retarget_pose`, `get_retarget_pose`, `set_retarget_pose`, `get_retarget_chain_settings`, `set_retarget_chain_settings`, `set_retarget_root_settings`, `enable_foot_ground_lock`, `set_bone_translation_retargeting`, `get_bone_translation_retargeting` |
@@ -750,7 +716,7 @@ The engine's normal `AutomationController` and `AutomationWorker` main-loop tick
 - **PIE smoke + capture:** `run_pie_smoke` / `poll_pie_smoke` / `stop_pie_smoke` (async session model), `capture_pie_movement_clip` (with `discard_first_frames` warm-up, label-aware `view_target_actor`, staged hooks, runtime-identity report + `expected_anim_class` assert), `capture_anim_frames` (preview AnimSequence / BlendSpace / AnimBlueprint to PNG), `list_dirty_packages`, `save_packages` (save-mode serialization preflight rejects cross-package private-object hard references, including native custom-serialized fields, plus `SAVE_NoError` non-fatal saver fallback), `list_errored_blueprints`.
 - **Profiling / actor setup:** a declarative `actor_setup` block (spawn N actors, copy a DataAsset's reflected fields, AIController MoveToLocation) plus `csv_profile` / `trace_channels` brackets scoped to the PIE window. `get_build_errors` gained `since_marker` / `since_iso` / `clear_baseline` + compile-vs-other buckets.
 - **Map authoring:** `author_map_settings` (WorldSettings GameMode override + PlayerStarts + actor instances), `set_world_settings_property` (generic reflected `AWorldSettings` property writer, including Lyra-style `DefaultGameplayExperience`), `create_nav_harness_map` (now with `game_mode_override` + `player_starts`).
-- **Validation:** `validate_assets` wraps `UEditorValidatorSubsystem::ValidateAssetsWithSettings` for explicit assets/packages or recursive package-path validation; `validator_messages_supported` distinguishes UE 5.8's top-level validator-message array from UE 5.7, where the engine does not expose that result member. Per-asset messages remain available on both engines. `plan_content_validation_changeset` and `validate_changeset_assets` map Perforce opened/changelist or explicit depot/local/package paths into validation packages before running the same wrapper.
+- **Validation:** `validate_assets` wraps `UEditorValidatorSubsystem::ValidateAssetsWithSettings` for explicit assets/packages or recursive package-path validation; `plan_content_validation_changeset` and `validate_changeset_assets` map Perforce opened/changelist or explicit depot/local/package paths into validation packages before running the same wrapper.
 
 ### `editor.trigger_build` / `editor.live_compile`
 
@@ -1449,33 +1415,6 @@ Export a StringTable to CSV under the project directory. Requires dry_run=true o
 | `dry_run` | boolean | optional | Preview without writing. Default: `false` |
 | `confirm` | boolean | optional | Required true for non-dry-run writes. Default: `false` |
 
-### `localization.set_target_text_search_directories`
-
-Set one existing project Localization Dashboard target's Gather Text From Source directories. The action runtime-loads the engine Localization module, rejects a stale live model, persists `DefaultEditor.ini`, and patches only the canonical `SearchDirectoryPaths` rows in the existing `<Target>_Gather.ini`. It never creates a missing config or auto-checks out a file.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `target` | string | **required** | Exact project localization target name |
-| `search_directories` | array | **required** | Unique existing `%LOCENGINEROOT%` or `%LOCPROJECTROOT%` rooted directories; traversal, wildcards, absolute paths, and other roots are rejected |
-| `source_control_policy` | string | **required** | Must be `require_checked_out` |
-| `target_changelist` | integer | **required** | Positive exact numbered changelist that already owns every write file; the default changelist is forbidden |
-| `dry_run` | boolean | optional | ForceUpdate source-control state and return the exact delta, per-file `actual_changelist`, readiness, and blockers without mutation. Default: `false` |
-| `confirm` | boolean | optional | Required true for non-dry-run writes. Confirm requires every write file to be a current, non-conflicted existing edit owned by this client in `target_changelist`, repeats ForceUpdate after acquiring its mutation flag but before snapshots/writes, and audits again after write. Default: `false` |
-
-The handler owns source-control preflight and rollback. Provider-disabled/unavailable, unknown, untracked, added, deleted, ignored, stale, conflicted, other-user, unopened, default-changelist, and changelist-mismatch states produce structured blockers. Dry-run returns transport success with `ready=false`; confirm fails before mutation. Gather-config input must have unique case-insensitive `GatherTextStepN` names, exact target source/destination scope, and one canonical `GatherTextFromSource` section. All non-directory text and line terminators are preserved character-for-character.
-
-### `localization.run_target_pipeline`
-
-Plan or run the selected Gather Text commandlet operations for one existing project target. The child process always runs with source control disabled (`-nop4`, no `-EnableSCC`); callers must pre-open any existing generated output files in the intended changelist.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `target` | string | **required** | Exact project localization target name |
-| `operations` | array | optional | Ordered subset of `gather` and `compile`; gather must precede compile |
-| `timeout_seconds` | integer | optional | Per-operation timeout |
-| `dry_run` | boolean | optional | Return config paths, outputs, readiness, and blockers without launching a child process. Default: `false` |
-| `confirm` | boolean | optional | Required true to launch the asynchronous pipeline. Default: `false` |
-
 ## collection
 
 Content Browser collection CRUD, dynamic query management, and asset association. Backed by the CollectionManager module.
@@ -1494,14 +1433,17 @@ Full-text search across all indexed project assets, nodes, variables, and parame
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `query` | string | **required** | FTS search query (automatically escaped and tokenized for prefix matching) |
-| `limit` | integer | optional | Default: `50` |
+| `limit` | integer | optional | Default: `50`; clamped to `1..1000`; fractional and non-finite numbers are rejected |
+| `offset` | integer | optional | Pagination offset in the fused result order. Default: `0`; fractional and non-finite numbers are rejected |
+| `cursor` | string | optional | Numeric offset cursor returned by a truncated response |
 | `include_content` | boolean | optional | Include variable/parameter/DataTable/actor/supplemental matches for discovery only. Default: `true` |
+| `detail` | boolean | optional | Return full `match_value` text. Default: `false` |
+| `projection` | string | optional | `compact` caps `match_value` at 240 Unicode code points; `full` returns complete values |
 | `asset_class` | string | optional | Scope results to this exact asset class (e.g. `Blueprint`, `WidgetBlueprint`). Empty = any |
 | `path_filter` | string | optional | Scope results to package paths containing this substring (e.g. `/Game/Combat`). Empty = any |
 
 Results are ranked by bm25 column weighting (name >> body) fused across FTS tables via RRF, with a de-spaced CamelCase streak superset and an `identifier_split` supplemental value for CamelCase/snake token recall.
 Compact results report `match_value_length` in Unicode code points and never split a UTF-16 surrogate pair or UTF-8 sequence at the 240-code-point boundary.
-All required FTS sources are queried atomically. If a table is missing or SQLite prepare, bind, or step fails, live MCP returns `-32603` with `project.health` guidance and the offline CLI exits with an error; neither path returns already-fused partial rows or disguises the failure as an empty successful search.
 
 ### `project.find_references`
 
@@ -1509,7 +1451,7 @@ Find all assets that reference or are referenced by the given asset.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `asset_path` | string | **required** | Package path (Alias: `package_path`) |
+| `asset_path` | string | **required** | Package path |
 
 ### `project.find_by_type`
 
@@ -1522,7 +1464,7 @@ Find all assets that reference or are referenced by the given asset.
 
 ### `project.get_stats`
 
-Project index stats — total counts by table, asset class breakdown, and full-index recovery diagnostics. `skipped_assets` and up to 50 `skipped_asset_paths` identify assets removed from automatic deep indexing after repeated interrupted attempts; an explicit force rebuild clears their counters and persisted path list. *No parameters.*
+Project index stats — total counts by table and asset class breakdown. *No parameters.*
 
 ### `project.get_asset_details`
 
@@ -1530,7 +1472,7 @@ Deep details for a specific asset — nodes, variables, parameters, dependencies
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `asset_path` | string | **required** | Package path (Alias: `package_path`) |
+| `asset_path` | string | **required** | Package path |
 
 ### `project.list_gameplay_tags`
 
@@ -1609,14 +1551,7 @@ Unreal Engine C++ source code navigation. 1M+ symbols indexed. **13 actions** (1
 | `ref_kind` | string | optional | (`find_references` only) Filter by reference kind |
 | `limit` | integer | optional | Default: `50` |
 
-`source.find_references` validates the complete request before consulting
-mutable source-index availability. Invalid `symbol`, `ref_kind`, or `limit`
-values therefore return `-32602` with
-`error.data.failure_cause=invalid_param` even while indexing or after a
-database-open failure; an availability condition never masks a caller contract
-error. A well-formed request whose symbol is not indexed returns
-`match_status=no_symbol`, `count=0`, and `next_actions`. Use
-`source.search_source` to discover the indexed spelling before retrying.
+`source.find_references` returns `match_status=no_symbol`, `count=0`, and `next_actions` when the requested symbol is not indexed. Use `source.search_source` to discover the indexed spelling before retrying.
 
 ### `source.search_source`
 
@@ -1663,21 +1598,7 @@ error. A well-formed request whose symbol is not indexed returns
 
 ### `source.trigger_reindex` · `source.trigger_project_reindex`
 
-`trigger_reindex` does a full clean build (engine + shaders + project). `trigger_project_reindex` is incremental (project Source/ + Plugins/ only). Both take *no parameters*, require prior durable activation through the editor-console command `Monolith.StartIndexing`, and never enable it implicitly. A success response means the subsystem worker actually started; disabled indexing, a missing bootstrap DB for the project-only action, or worker-start failure is a real `-32000` Action error with the rejected stage in `error_data`. Offline `monolith_query.exe source trigger_project_reindex` returns live-only guidance instead of an unknown-action error; actual indexing still requires the editor-backed MCP action.
-
-All live `source` handlers that require `EngineSource.db`, including `source.health`, share one fail-closed unavailability envelope. It distinguishes `indexing`, `reindex_required`, `missing`, `open_failed`, and subsystem-unavailable states. The structured fields are:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `error_data.failure_cause` | string | Stable `source_index_<state>` class, or a trigger-request failure class. |
-| `error_data.database_state` | string | `ready`, `indexing`, `reindex_required`, `missing`, `open_failed`, or `subsystem_unavailable`. |
-| `error_data.database_path` | string | Authoritative configured `EngineSource.db` path. |
-| `error_data.database_exists`, `database_open`, `indexing` | bool | Current file/handle/writer state. |
-| `error_data.requires_successful_reindex` | bool | True when a failed run has latched reads closed. |
-| `error_data.last_index_context`, `last_failure_stage`, `last_failure_detail` | string | Retained run context and the exact failure boundary/detail, such as `prune_project_rows` plus SQLite's corruption error. The first failing prune statement is retained across `ROLLBACK`; rollback's `"not an error"` state never replaces the root detail. |
-| `error_data.last_files_processed`, `last_symbols_extracted`, `last_errors` | integer | Last completion counters. |
-
-Recovery stays explicit: wait when `database_state=indexing`; otherwise follow `related_actions` to `source.trigger_reindex`, then verify with `source.health include_deep_checks=true`. The plugin never silently swaps, deletes, or reopens a partially written DB as a fallback.
+`trigger_reindex` does a full clean build (engine + shaders + project). `trigger_project_reindex` is incremental (project Source/ + Plugins/ only). Both take *no parameters*, require prior durable activation through the editor-console command `Monolith.StartIndexing`, and never enable it implicitly. Offline `monolith_query.exe source trigger_project_reindex` returns live-only guidance instead of an unknown-action error; actual indexing still requires the editor-backed MCP action.
 
 ### `source.impact_radius`
 
@@ -1713,8 +1634,6 @@ The response carries the common list-projection contract next to the legacy fiel
 Default `source.health` is a fast shallow check. It validates required tables, schema metadata, journal mode, triggers, and CRG structure without large row-count/parity scans.
 
 The result includes `maintenance_recommendation` with explicit `maintenance_required`, `expensive_maintenance_required`, `reindex_required`, `repair_fts_required`, `repair_crg_cache_required`, `repair_override_edges_required`, `deep_health_ran`, `routine_deep_health_recommended`, and `reason_codes`. When a shallow result is healthy, deep health is reported only as `maintenance_recommendation.optional_diagnostic_actions`, not as a required `next_actions` entry.
-
-If the DB is unavailable before health can run, the action returns the shared structured database envelope documented above. In particular, a failed incremental run preserves the indexer's failure stage and underlying SQLite detail instead of reducing corruption, a missing file, and an active writer to the same “database not available” string.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -1768,22 +1687,12 @@ Token-efficient source review package: seed symbol, risk, impact summary, compac
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `scan_root` | string | optional | Directory that bounds the recursive scan. Relative paths resolve from the project root; the default scans project `Source` and `Plugins`. |
-| `limit` | integer | optional | Page size, clamped to `1..200`. Default: `50`. Fractional and wrong-type values fail before DB access. |
+| `module_filter` | string | optional | Substring match against the **declaring** module's name. Empty scans all. Default: `""` |
+| `include_whitelist` | bool | optional | When `true`, also reports references to whitelisted implicit-dep modules (debug aid). Default: `false` |
+| `limit` | integer | optional | Page size. Hard cap `500`. Default: `100` |
 | `cursor` | string | optional | Opaque base64+JSON cursor from a prior `next_cursor` |
 
-**Returns:** `{ "violations": [ { "file", "line", "symbol", "expected_module", "currently_listed_modules" } ], "total_estimate": N, "next_cursor": "<opaque>" }`. `next_cursor` is present only when another page exists. Violations are sorted by `(file, line, symbol)`. Multi-argument templates extract only the first argument and typedef aliases aren't chased to the underlying type — both are documented heuristics.
-
-### `source.suggest_build_cs_deps`
-
-Read one `.h`/`.cpp` path and/or an explicit UE type-name list, resolve each used type to its owning module through `EngineSource.db`, and report the required modules missing from the declaring module's on-disk `Build.cs`. The handler validates the complete request before checking DB availability; malformed optional fields never become missing-input or DB errors.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `file_path` | string | one of `file_path`/`symbols` | Source file used both for on-disk symbol extraction and path-first declaring-module resolution. |
-| `symbols` | string array | one of `file_path`/`symbols` | Explicit non-empty UE type names. Any wrong-type or empty element rejects the complete request. |
-
-**Returns:** `{ "declaring_module", "build_cs" | "build_cs_note", "required_modules": [], "missing": [] }`. The action is read-only and live-only because it combines on-disk source/Build.cs reads with `EngineSource.db`.
+**Returns:** `{ "violations": [ { "declaring_module", "source_path", "source_line", "used_type", "missing_dep" } ], "scanned_modules": N, "scanned_declarations": N, "next_cursor": "<opaque>" }`. Violations are sorted by `(declaring_module, source_path, source_line)`. Multi-argument templates extract only the first argument and typedef aliases aren't chased to the underlying type — both are documented heuristics.
 
 ---
 
@@ -2493,9 +2402,7 @@ Optional Interchange framework discovery, validation, and asset import/export op
 | `update_reimport_path` | `asset_path` (required string), `source_file` (required string), `source_file_index` (optional integer), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean) |
 | `reimport_asset` | `asset_path` (required string), `source_file` (optional string), `source_file_index` (optional integer), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean) |
 | `reimport_assets` | `asset_paths` (required array), `confirm` (optional boolean), `dry_run` (optional boolean) |
-| `export_asset` | `asset_path` (required string), `file_path` (required string), `replace_existing` (optional boolean), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean); resolves at most 256 native exporter-declared outputs, stages them beside the destination, validates the complete output set, and promotes it atomically with rollback backups |
-
-`export_asset` rejects script exporters whose arbitrary filesystem side effects cannot be bounded. Native output planning requires every declared file to remain in the requested directory under the current host filesystem's path semantics. Directory names may be Unicode, while each exporter-owned filename is restricted to at most 255 ASCII letters, digits, `.`, `_`, and `-`, cannot end in `.`, and cannot use a Windows reserved device stem. Planning, staged-output inspection, and commit lowercase that complete locale-independent set before alias checks, so case-only filenames are rejected even before a destination exists and each observed staging identity can satisfy only one declaration. Requested-directory, staging-root, and ownership checks remain host-sensitive and do not use the portable alias key. After export, every expected staged path must exist without symlink or junction traversal, and no invalid, duplicate, undeclared file or directory may appear. Promotion and restoration use immediate no-retry/no-dialog moves; a failed promotion removes already-promoted read-only files and restores all backups. The stable response reports exporter, commit, rollback, cleanup, partial-mutation, promotion/restoration-count, and exact retained-path evidence. A bounded non-recursive cleanup deletes only a completely scanned flat staging directory; incomplete rollback or unsafe cleanup preserves recovery artifacts instead of hiding them.
+| `export_asset` | `asset_path` (required string), `file_path` (required string), `replace_existing` (optional boolean), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean) |
 
 
 ## ndisplay
@@ -2895,8 +2802,6 @@ Decode base64 image bytes and import them as a UTexture2D asset.
 
 `fail` guarantees the exact requested package path and errors on any existing package instead of silently suffixing it. Only `unique` may call Unreal unique-name resolution and return a different `asset_path`. `replace` updates the exact existing top-level `UTexture2D` in the same UObject and package identity; another class, missing top-level asset, or redirected identity is rejected. Before mutation, replacement moves the complete original `FTextureSource` object, caller-facing settings, PostEdit/save side-effect values, CPU-copy helper identity, and package dirty state into an armed RAII snapshot. Complete running/cooked platform ownership is moved with it, preserving mip bulk and derived-data handles, VT/CPU copies, encoder metadata, hashes, and DDC/fetch keys rather than rebuilding from pixel bytes. A failure restores and verifies that state and re-notifies dependent materials; failed new creation removes the object/package header and sidecars. `LODGroup`, `CompressionSettings`, `SRGB`, `MipGenSettings`, `AddressX`, and `AddressY` changes emit property-specific editor callbacks. Whole-object source transfer supports long-lat, compressed, blocked/layered, and missing-running-platform-data textures; a null original platform pointer is restored to null. Replacement rejects active running/cooked platform builds, non-null `ResourceMem`, and aliased/duplicate cooked platform ownership before mutation. The response distinguishes intent and outcome through `requested_asset_path`, `asset_path`, `created`, `replaced`, and `conflict_policy`.
 
-The action bounds allocations before image decompression: base64 payloads may decode to at most 256 MiB of compressed data, image axes may not exceed 16,384 pixels, and the expected BGRA8 surface may not exceed 512 MiB. DDS metadata is parsed header-only before `IImageWrapper`; arrays, cubemaps, and volume textures are rejected because this action materializes exactly one `UTexture2D` surface. Limit and DDS-surface violations return `-32602` before package creation or replacement mutation.
-
 ### `asset.import_font_family`
 
 Import a font family from one or more TTF files as a composite UFont plus UFontFace assets.
@@ -2908,10 +2813,7 @@ Import a font family from one or more TTF files as a composite UFont plus UFontF
 | `faces` | array | **required** | Typeface specs with `typeface` and absolute `source_path`; non-empty. |
 | `loading_policy` | string | optional | LazyLoad, Stream, or Inline. Default: `LazyLoad` |
 | `hinting` | string | optional | Default, Auto, AutoLight, Monochrome, or None. Default: `Default` |
-| `allow_unique_names` | bool | optional | Explicitly allow suffixed family/face package names when an exact requested path already exists. Default: `false` |
 | `save` | bool | optional | Save imported font assets. Default: `true` |
-
-The action accepts 1-64 faces, caps each `.ttf` source at 64 MiB and the aggregate family input at 256 MiB, and preflights every source plus every requested output package before creating a package. Accepted source bytes are retained across the mutation phase so a file cannot change between validation and `UFontFace` creation. Exact package names are the default; suffixing occurs only through `allow_unique_names=true`.
 
 ### `asset.save_asset`
 
@@ -3134,8 +3036,6 @@ Guarded reflected hard/soft reference rewrite inside copied destination packages
 | `confirm` | boolean | optional | Required for mutation when `dry_run=false`. Default: `false` |
 | `save` | boolean | optional | Save changed packages. Default: `true` |
 | `strict` | boolean | optional | Treat load/fixup blockers as errors. Default: `true` |
-
-Confirmed strict runs preflight over every candidate object and property before applying any rewrite, so a reference blocker cannot leave earlier objects partially mutated. A remapped hard-reference target with an incompatible reflected class is always a strict blocker even when `require_targets=false`; that option controls missing targets only. When `save=true`, the preflight also collects every package that would change, resolves every save filename, prepares all existing files through source control as one batch, creates or validates destination directories, and probes write access before the applying traversal begins. Any unavailable save target returns `status="preflight_failed"`, `applied_count=0`, `planned_changed_packages[]`, `planned_changed_package_count`, `save_preflight[]`, and (when package targets reached source-control preparation) `source_control_prepare`; this saveability gate also protects explicit `strict=false` best-effort writes from predictable partial-save failures.
 
 ### `asset.validate_dependency_closure`
 
@@ -3850,7 +3750,7 @@ Both invoke the same SQLite indexes the live MCP uses.
 
 **Reflection Intelligence offline parity.** All four RI namespaces are now fully servable offline — `cppreflect` (6 actions), `network` (4), `decision` (5), `risk` (5) — and emit JSON **byte-identical to the live MCP server** (same field names, types, ordering, row data, `%.17g` float formatting, and base64 cursor tokens). Earlier builds covered only 4 of the 20 with divergent shapes; the phantom `risk.list_hotspots` action has been removed. Two intentional, documented differences from the live payload remain (not bugs): the offline CLI adds a top-level `success` flag (its in-band status channel — the live MCP carries success/error out-of-band, so live has no `success` key; the nested DATA payload is byte-identical), and wall-clock fields (`cutoff_unix` / `since_unix` and the `risk.get_release_window_hotspots` cursor whose filter-hash includes them) differ by the run-time gap across process invocations on both live and offline.
 
-`Scripts/verify_offline_parity.py` byte-diffs exe vs py across the 20 RI actions as a ship-blocking gate in `make_release.ps1`; the immutable Query bundle manifest binds the full generated source identity and exact executable/catalog hashes. `Scripts/verify_release_body.ps1 -SelfTest` separately exercises the permanent pre-v2 SHA-marker rejection contract without network or release access; it is compatible with Windows PowerShell 5.1.
+`Scripts/verify_offline_parity.py` byte-diffs exe vs py across the 20 RI actions as a ship-blocking gate in `make_release.ps1`; `Scripts/check_offline_exe_fresh.py` flags a stale exe by comparing its `--version` `source_hash` against a fresh hash of `monolith_query.cpp`.
 
 ---
 
@@ -4005,23 +3905,6 @@ List Dataflow editor comment boxes with bounded node membership hints without mu
 |-----------|------|----------|-------------|
 | `asset_path` | string | **required** | Dataflow asset path, e.g. /Game/Geometry/DF_Fracture |
 | `node_limit` | integer | optional | Maximum contained-node rows per comment, clamped to 1..500. Default: `128` |
-
-### `water.get_status`
-
-Report Water/Landscape module availability and reflected Water-like actor counts. Read-only; no Water or Landscape hard dependency.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| (none) | | | |
-
-### `water.list_bodies`
-
-List Water-like actors/components in the current editor world using reflected class names only. Does not mutate actors, splines, landscapes, or zones.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `limit` | integer | optional | Maximum returned rows, clamped to 1..500. Default: `100` |
-| `actor_name_filter` | string | optional | Optional case-insensitive substring filter on actor label/name. |
 
 
 

@@ -3410,6 +3410,7 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::ListNodeTypes(const TSh
 
 	const TArray<FMonolithPCGSettingsTypeInfo> Types = FMonolithPCGSettingsResolver::ListTypes();
 	TArray<TSharedPtr<FJsonValue>> Rows;
+	Rows.Reserve(FMath::Min(Types.Num(), Limit));
 	int32 MatchedCount = 0;
 	for (const FMonolithPCGSettingsTypeInfo& Type : Types)
 	{
@@ -4607,6 +4608,7 @@ FMonolithActionResult FMonolithPCGGraphAuthoringActions::SetGraphUserParameters(
 	auto BuildRows = [&]()
 	{
 		TArray<TSharedPtr<FJsonValue>> Rows;
+		Rows.Reserve(Upserts.Num() + Removes.Num());
 		for (const FUpsertOperation& Operation : Upserts)
 		{
 			const FPropertyBagPropertyDesc* BeforeDesc = LiveBag->FindPropertyDescByName(Operation.Name);

@@ -182,6 +182,26 @@ namespace
         return Animation->GetName();
     }
 
+    static TSharedPtr<FJsonObject> MakeAnimationResponseBase(
+        const TCHAR* SchemaVersion,
+        const FString& AssetPath,
+        const UWidgetAnimation* Animation,
+        const TCHAR* OwnerAction)
+    {
+        TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+        Result->SetStringField(TEXT("schema_version"), SchemaVersion);
+        Result->SetStringField(TEXT("asset_path"), AssetPath);
+        if (Animation)
+        {
+            Result->SetStringField(TEXT("animation_name"), GetAnimationReadableName(Animation));
+        }
+        if (OwnerAction && FCString::Strlen(OwnerAction) > 0)
+        {
+            Result->SetStringField(TEXT("owner_action"), OwnerAction);
+        }
+        return Result;
+    }
+
     UWidgetAnimation* FindAnimationForRead(UWidgetBlueprint* WBP, const FString& AnimationName)
     {
         if (!WBP)
@@ -2420,12 +2440,10 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleGetAnimationOverview(co
         return Err;
     }
 
-    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-    Result->SetStringField(TEXT("schema_version"), TEXT("ui_animation_overview.v1"));
-    Result->SetStringField(TEXT("asset_path"), AssetPath);
+    TSharedPtr<FJsonObject> Result = MakeAnimationResponseBase(
+        TEXT("ui_animation_overview.v1"), AssetPath, nullptr, TEXT("ui.get_animation_overview"));
     Result->SetBoolField(TEXT("read_only"), true);
     Result->SetBoolField(TEXT("include_all"), bIncludeAll);
-    Result->SetStringField(TEXT("owner_action"), TEXT("ui.get_animation_overview"));
     TArray<TSharedPtr<FJsonValue>> ExternalAliases;
     ExternalAliases.Reserve(3);
     ExternalAliases.Add(MakeShared<FJsonValueString>(TEXT("animation_overview")));
@@ -2536,12 +2554,9 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleGetAnimationTimeline(co
 
     SortTimelineRows(Rows);
 
-    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-    Result->SetStringField(TEXT("schema_version"), TEXT("ui_animation_timeline.v1"));
-    Result->SetStringField(TEXT("asset_path"), AssetPath);
-    Result->SetStringField(TEXT("animation_name"), GetAnimationReadableName(Animation));
+    TSharedPtr<FJsonObject> Result = MakeAnimationResponseBase(
+        TEXT("ui_animation_timeline.v1"), AssetPath, Animation, TEXT("ui.get_animation_timeline"));
     Result->SetBoolField(TEXT("read_only"), true);
-    Result->SetStringField(TEXT("owner_action"), TEXT("ui.get_animation_timeline"));
     Result->SetStringField(TEXT("widget_filter"), WidgetFilter);
     Result->SetStringField(TEXT("property_filter"), PropertyFilter);
     Result->SetBoolField(TEXT("include_events"), bIncludeEvents);
@@ -2748,12 +2763,9 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleGetAnimationTimeSlice(c
         Samples.Add(MakeShared<FJsonValueObject>(Sample));
     }
 
-    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-    Result->SetStringField(TEXT("schema_version"), TEXT("ui_animation_time_slice.v1"));
-    Result->SetStringField(TEXT("asset_path"), AssetPath);
-    Result->SetStringField(TEXT("animation_name"), GetAnimationReadableName(Animation));
+    TSharedPtr<FJsonObject> Result = MakeAnimationResponseBase(
+        TEXT("ui_animation_time_slice.v1"), AssetPath, Animation, TEXT("ui.get_animation_time_slice"));
     Result->SetBoolField(TEXT("read_only"), true);
-    Result->SetStringField(TEXT("owner_action"), TEXT("ui.get_animation_time_slice"));
     Result->SetStringField(TEXT("widget_filter"), WidgetFilter);
     Result->SetStringField(TEXT("property_filter"), PropertyFilter);
     Result->SetNumberField(TEXT("event_tolerance_frames"), EventToleranceFrames);
@@ -3172,11 +3184,8 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleApplyAnimationDelta(con
     UnsupportedOps.Add(MakeShared<FJsonValueString>(TEXT("event key writes require endpoint/function validation and are deferred")));
     UnsupportedOps.Add(MakeShared<FJsonValueString>(TEXT("vector/object track delta is deferred")));
 
-    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-    Result->SetStringField(TEXT("schema_version"), TEXT("ui_animation_delta.v1"));
-    Result->SetStringField(TEXT("asset_path"), AssetPath);
-    Result->SetStringField(TEXT("animation_name"), GetAnimationReadableName(Animation));
-    Result->SetStringField(TEXT("owner_action"), TEXT("ui.apply_animation_delta"));
+    TSharedPtr<FJsonObject> Result = MakeAnimationResponseBase(
+        TEXT("ui_animation_delta.v1"), AssetPath, Animation, TEXT("ui.apply_animation_delta"));
     Result->SetArrayField(TEXT("external_aliases_not_registered"), MakeAnimationDeltaExternalAliases());
     Result->SetArrayField(TEXT("supported_operations"), SupportedOps);
     Result->SetArrayField(TEXT("supported_property_groups"), SupportedPropertyGroups);

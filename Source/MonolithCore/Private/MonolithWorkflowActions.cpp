@@ -998,6 +998,7 @@ namespace
 		bool bIncludeMaterialDiagnostics)
 	{
 		TArray<TSharedPtr<FJsonValue>> Steps;
+		Steps.Reserve(5);
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(
 			TEXT("plan_asset"),
 			TEXT("workflow.game_ready_asset_static_mesh"),
@@ -1048,6 +1049,7 @@ namespace
 	{
 		const FString ValidationStatus = bDryRun ? TEXT("planned") : TEXT("ready");
 		TArray<TSharedPtr<FJsonValue>> Steps;
+		Steps.Reserve(9);
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("plan_feature"), TEXT("workflow.gameplay_feature_manifest"), TEXT("planned"), TEXT("Normalize the cross-domain gameplay feature manifest."))));
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("validate_feature_manifest"), TEXT("workflow.gameplay_feature_manifest"), TEXT("planned"), TEXT("Check manifest sections and asset references before any authoring action."))));
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("input_preflight"), TEXT("input.get_input_action + input.get_input_mapping_context + input.validate_input_mappings"), ValidationStatus, TEXT("Inspect Enhanced Input assets and mapping conflicts."))));
@@ -1081,6 +1083,7 @@ namespace
 	{
 		const FString ReadStatus = bDryRun ? TEXT("planned") : TEXT("ready");
 		TArray<TSharedPtr<FJsonValue>> Steps;
+		Steps.Reserve(8);
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("widget_tree"), TEXT("ui.get_widget_tree"), ReadStatus, TEXT("Read the Widget Blueprint tree."))));
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("ui_spec"), TEXT("ui.dump_ui_spec"), ReadStatus, TEXT("Dump the UI spec for roundtrip/read-back proof."))));
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("binding_inventory"), TEXT("ui.get_widget_bindings"), ReadStatus, TEXT("Inventory property/data bindings."))));
@@ -1117,6 +1120,7 @@ namespace
 		const FString MutatingStatus = bDryRun ? TEXT("planned") : (bConfirm ? TEXT("ready") : TEXT("blocked"));
 		const FString ReadStatus = bDryRun ? TEXT("planned") : TEXT("ready");
 		TArray<TSharedPtr<FJsonValue>> Steps;
+		Steps.Reserve(11);
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("dirty_preflight"), TEXT("editor.list_dirty_packages"), ReadStatus, TEXT("Report dirty packages before touching a map."))));
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("create_and_load_map"), TEXT("editor.create_empty_map + editor.load_level"), MutatingStatus, TEXT("Create a blank map and load it only when confirm=true."))));
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("world_context"), TEXT("scene.get_world_context"), ReadStatus, TEXT("Read active editor world context."))));
@@ -1152,6 +1156,7 @@ namespace
 	{
 		const FString ReadStatus = bDryRun ? TEXT("planned") : TEXT("ready");
 		TArray<TSharedPtr<FJsonValue>> Steps;
+		Steps.Reserve(6);
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("sequence_bindings"), TEXT("level_sequence.list_bindings"), ReadStatus, TEXT("Read Level Sequence bindings and bound classes."))));
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("director_events"), TEXT("level_sequence.get_director_info + level_sequence.list_event_bindings"), ReadStatus, TEXT("Inspect Director Blueprint and event-track bindings."))));
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("anim_mixer_optional"), TEXT("level_sequence.get_anim_mixer_status + level_sequence.list_anim_mixer_tracks"), ReadStatus, TEXT("Inspect optional Sequencer Anim Mixer state without hard-linking the plugin."))));
@@ -1177,6 +1182,7 @@ namespace
 	{
 		const FString ReadStatus = bDryRun ? TEXT("planned") : TEXT("ready");
 		TArray<TSharedPtr<FJsonValue>> Steps;
+		Steps.Reserve(7);
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("asset_discovery"), TEXT("audio.search_audio_assets"), ReadStatus, TEXT("Find the requested audio asset and report candidate type context."))));
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("metasound_validation"), TEXT("audio.get_metasound_info + audio.validate_metasound"), AssetKind.Equals(TEXT("MetaSoundSource"), ESearchCase::IgnoreCase) ? ReadStatus : TEXT("planned"), TEXT("Inspect MetaSound graph and validation status when the target is a MetaSound."))));
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("sound_cue_validation"), TEXT("audio.get_sound_cue_graph + audio.validate_sound_cue"), AssetKind.Equals(TEXT("SoundCue"), ESearchCase::IgnoreCase) ? ReadStatus : TEXT("planned"), TEXT("Inspect SoundCue graph, duration, and validation status when the target is a SoundCue."))));
@@ -1203,6 +1209,7 @@ namespace
 	{
 		const FString ReadStatus = bDryRun ? TEXT("planned") : TEXT("ready");
 		TArray<TSharedPtr<FJsonValue>> Steps;
+		Steps.Reserve(5);
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("culture_inventory"), TEXT("localization.list_cultures"), ReadStatus, TEXT("Read available Unreal cultures."))));
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("string_table_readback"), TEXT("localization.get_string_table"), ReadStatus, TEXT("Read capped StringTable entries for proof."))));
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("string_table_validation"), TEXT("localization.validate_string_table"), ReadStatus, TEXT("Validate empty keys, empty strings, duplicate-looking keys, and large-output risks."))));
@@ -1227,6 +1234,7 @@ namespace
 	{
 		const FString ReadStatus = bDryRun ? TEXT("planned") : TEXT("ready");
 		TArray<TSharedPtr<FJsonValue>> Steps;
+		Steps.Reserve(7);
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("inspector_status"), TEXT("slate.get_inspector_status"), ReadStatus, TEXT("Read Slate inspector capability and test-mode readiness."))));
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("window_inventory"), TEXT("slate.list_windows"), ReadStatus, TEXT("List visible top-level Slate windows for target disambiguation."))));
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("widget_snapshot"), TEXT("slate.snapshot_widgets"), ReadStatus, TEXT("Capture a structured widget tree snapshot for the requested target."))));
@@ -1300,6 +1308,7 @@ namespace
 	{
 		const FString ApplyStatus = (!bDryRun && bConfirm) ? TEXT("ready") : TEXT("planned");
 		TArray<TSharedPtr<FJsonValue>> Steps;
+		Steps.Reserve(5);
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("boundary_policy"), TEXT("workflow.ui_bind_widget_event"), TEXT("ready"), TEXT("Reject direct gameplay Actor/Pawn/Controller calls and require a ViewModel command intent for runtime UI."))));
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("widget_event_resolve"), TEXT("blueprint.resolve_node"), bDryRun ? TEXT("planned") : TEXT("ready"), TEXT("Resolve the Widget Blueprint component-bound delegate node without mutating first."))));
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("viewmodel_resolve"), TEXT("blueprint.resolve_node"), bDryRun ? TEXT("planned") : TEXT("ready"), TEXT("Resolve ViewModel variable getter and command call node pins before wiring."))));
@@ -1660,6 +1669,7 @@ namespace
 	{
 		const FString ApplyStatus = (!bDryRun && bConfirm) ? TEXT("ready") : TEXT("planned");
 		TArray<TSharedPtr<FJsonValue>> Steps;
+		Steps.Reserve(10);
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("hlsl_lint"), TEXT("workflow.ui_material_hlsl_effect"), TEXT("ready"), TEXT("Lint the UI HLSL contract and parameter identifiers before touching assets."))));
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("material_create"), TEXT("material.create_material"), bCreateMaterial ? ApplyStatus : TEXT("not_requested"), TEXT("Optionally create the base material through the material owner action with material_domain=UI."))));
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("ui_domain_enforce"), TEXT("material.set_material_property"), ApplyStatus, TEXT("Force UI material domain and UI-safe blend/shading defaults through the material owner action."))));
@@ -1944,6 +1954,7 @@ namespace
 		const FString ApplyStatus = (!bDryRun && bConfirm) ? TEXT("ready") : TEXT("planned");
 		const FString ReadStatus = ((!bDryRun && bConfirm) || bRunReadOnlyChecks) ? TEXT("ready") : TEXT("planned");
 		TArray<TSharedPtr<FJsonValue>> Steps;
+		Steps.Reserve(7);
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("material_parameter_readback"), TEXT("material.get_material_parameters"), ReadStatus, TEXT("Read texture parameters from the effect material and require an exact Retainer texture-parameter match."))));
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("material_domain_readback"), TEXT("material.get_material_properties"), ReadStatus, TEXT("Read material domain and blend/shading details without duplicating material logic in UI."))));
 		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("retainer_binding"), TEXT("ui.set_retainer_effect_material"), ApplyStatus, TEXT("Bind the effect material and texture parameter through the RetainerBox owner API, not raw reflection."))));

@@ -55,6 +55,6 @@ FMonolithActionResult FProjectGetAssetDetailsAction::Execute(const TSharedPtr<FJ
 TSharedPtr<FJsonObject> FProjectGetAssetDetailsAction::GetSchema()
 {
 	return FParamSchemaBuilder()
-		.Required(TEXT("asset_path"), TEXT("string"), TEXT("Package path of the asset (e.g. /Game/Characters/BP_Hero)"))
+		.Required(TEXT("asset_path"), TEXT("string"), TEXT("Package path of the asset (e.g. /Game/Characters/BP_Hero)"), { TEXT("package_path") })
 		.Build();
 }

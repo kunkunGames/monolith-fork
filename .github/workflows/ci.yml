@@ -15,6 +15,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: Plugins/Monolith
 
       - uses: actions/setup-python@v5
         with:
@@ -31,21 +33,26 @@ jobs:
 
       - name: Python syntax
         run: python -m compileall Scripts MCP Analyzer
+        working-directory: Plugins/Monolith
 
       - name: Ruff critical lint
         run: ruff check Scripts/ MCP/ Analyzer/ --select E9,F63,F7,F82
+        working-directory: Plugins/Monolith
 
       - name: Generate offline catalog snapshot
         run: >-
           python Tools/MonolithQuery/generate_monolith_catalog_snapshot.py
           --root .
           --out Tools/MonolithQuery/Generated/monolith_catalog_snapshot.json
+        working-directory: Plugins/Monolith
 
       - name: Monolith static checker
         run: python Scripts/ci_static_checks.py --config .github/monolith-static-ci.json --github check
+        working-directory: Plugins/Monolith
 
       - name: Bash syntax
         run: bash -n Scripts/monolith_proxy.sh
+        working-directory: Plugins/Monolith
 
       - name: Install ShellCheck
         run: |
@@ -54,9 +61,11 @@ jobs:
 
       - name: ShellCheck
         run: shellcheck Scripts/monolith_proxy.sh
+        working-directory: Plugins/Monolith
 
       - name: PowerShell syntax
         shell: pwsh
+        working-directory: Plugins/Monolith
         run: |
           $hasErrors = $false
           Get-ChildItem -Path Scripts -Filter "*.ps1" -Recurse | ForEach-Object {
@@ -77,6 +86,7 @@ jobs:
       - name: PSScriptAnalyzer advisory
         continue-on-error: true
         shell: pwsh
+        working-directory: Plugins/Monolith
         run: |
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
           Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
@@ -86,11 +96,13 @@ jobs:
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
       - name: actionlint
+        working-directory: Plugins/Monolith
         run: |
           "$HOME/go/bin/actionlint" -config-file .github/actionlint.yaml -ignore 'SC2129'
 
       - name: Markdown lint advisory
         continue-on-error: true
+        working-directory: Plugins/Monolith
         run: |
           npm install -g markdownlint-cli2
           markdownlint-cli2 > markdownlint.log 2>&1 || {
@@ -105,11 +117,13 @@ jobs:
           }
 
       - name: TruffleHog verified secret scan
+        working-directory: Plugins/Monolith
         run: |
           docker run --rm -v "$PWD:/repo" ghcr.io/trufflesecurity/trufflehog:3.95.2 \
             filesystem /repo --results=verified --fail
 
       - name: Validate .uplugin and .uproject JSON
+        working-directory: Plugins/Monolith
         run: |
           find . -maxdepth 2 \( -name "*.uplugin" -o -name "*.uproject" \) -print0 | while IFS= read -r -d "" f; do
             echo "Checking $f"

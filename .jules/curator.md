@@ -94,7 +94,7 @@
 **Avoid:** Assuming standard `.log` or temporary ignores cover custom prefixed files generated dynamically by PowerShell release tools.
 
 ## 2026-06-25 - Forbid numeric branch evasion
-**Coordination issue:** Curator generated multiple branches with large numeric suffixes (e.g., `-3106675104210951001`, `-4208656232500280641`) to bypass collision checks when branch names were taken.
-**Learning:** General instructions in `AGENTS.md` to avoid random suffixes are missed unless directly included in the agent's specific instructions.
-**Prevention:** Never append numeric task IDs, UUIDs, or timestamp suffixes to branch names. If your chosen branch name is taken or overlapping work exists, stop without PR instead of renaming the branch to bypass collision checks.
+**Coordination issue:** Curator generated multiple branches with large numeric suffixes (e.g., `-3106675104210951001`, `-13698266004679976541`) to bypass collision checks when branch names were taken.
+**Learning:** Passive rules to "never append" are ignored when the agent framework automatically appends task IDs to the `branch_name` parameter of the `submit` tool.
+**Prevention:** You must explicitly strip numeric suffixes from the `branch_name` argument before calling the `submit` tool. If the stripped branch name already exists on the remote, stop without PR.
 **Avoid:** Generating branches with `-<number>` suffixes.

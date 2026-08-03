@@ -4853,7 +4853,10 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddAnimLayerGraph(const TS
 	bool bCompile = true;
 	if (Params->HasField(TEXT("compile")))
 	{
-		bCompile = Params->GetBoolField(TEXT("compile"));
+		if (!Params->TryGetBoolField(TEXT("compile"), bCompile))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'compile' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 
 	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);

@@ -34,6 +34,17 @@ bool IsSafeIdentifier(const FString& Value)
     }
     return true;
 }
+
+static void AddAccessibilityIssue(TArray<TSharedPtr<FJsonValue>>& Issues, const FString& WidgetName, const FString& IssueText, const FString& Recommendation, const FString& Severity = TEXT("warning"))
+{
+    TSharedPtr<FJsonObject> Issue = MakeShared<FJsonObject>();
+    Issue->SetStringField(TEXT("widget_name"), WidgetName);
+    Issue->SetStringField(TEXT("issue"), IssueText);
+    Issue->SetStringField(TEXT("severity"), Severity);
+    Issue->SetStringField(TEXT("recommendation"), Recommendation);
+    Issues.Add(MakeShared<FJsonValueObject>(Issue));
+}
+
 }
 // ============================================================================
 // Registration
@@ -304,13 +315,9 @@ FMonolithActionResult FMonolithUIAccessibilityActions::HandleAuditAccessibility(
             const FSlateFontInfo& FontInfo = TextBlock->GetFont();
             if (FontInfo.Size < 18)
             {
-                TSharedPtr<FJsonObject> Issue = MakeShared<FJsonObject>();
-                Issue->SetStringField(TEXT("widget_name"), WidgetName);
-                Issue->SetStringField(TEXT("issue"),
-                    FString::Printf(TEXT("Font size %.0f is below recommended minimum of 18pt for accessibility"), FontInfo.Size));
-                Issue->SetStringField(TEXT("severity"), TEXT("warning"));
-                Issue->SetStringField(TEXT("recommendation"), TEXT("Increase font size to at least 18pt, or ensure FontScale accessibility setting is applied"));
-                Issues.Add(MakeShared<FJsonValueObject>(Issue));
+                AddAccessibilityIssue(Issues, WidgetName,
+                    FString::Printf(TEXT("Font size %.0f is below recommended minimum of 18pt for accessibility"), FontInfo.Size),
+                    TEXT("Increase font size to at least 18pt, or ensure FontScale accessibility setting is applied"));
             }
         }
 
@@ -320,13 +327,9 @@ FMonolithActionResult FMonolithUIAccessibilityActions::HandleAuditAccessibility(
             const FSlateFontInfo& FontInfo = RichText->GetDefaultTextStyle().Font;
             if (FontInfo.Size < 18)
             {
-                TSharedPtr<FJsonObject> Issue = MakeShared<FJsonObject>();
-                Issue->SetStringField(TEXT("widget_name"), WidgetName);
-                Issue->SetStringField(TEXT("issue"),
-                    FString::Printf(TEXT("Default font size %.0f is below recommended minimum of 18pt"), FontInfo.Size));
-                Issue->SetStringField(TEXT("severity"), TEXT("warning"));
-                Issue->SetStringField(TEXT("recommendation"), TEXT("Increase default text style font size to at least 18pt"));
-                Issues.Add(MakeShared<FJsonValueObject>(Issue));
+                AddAccessibilityIssue(Issues, WidgetName,
+                    FString::Printf(TEXT("Default font size %.0f is below recommended minimum of 18pt"), FontInfo.Size),
+                    TEXT("Increase default text style font size to at least 18pt"));
             }
         }
 
@@ -336,24 +339,19 @@ FMonolithActionResult FMonolithUIAccessibilityActions::HandleAuditAccessibility(
             FText Tooltip = Button->GetToolTipText();
             if (Tooltip.IsEmpty())
             {
-                TSharedPtr<FJsonObject> Issue = MakeShared<FJsonObject>();
-                Issue->SetStringField(TEXT("widget_name"), WidgetName);
-                Issue->SetStringField(TEXT("issue"), TEXT("Button has no tooltip — screen readers and hover descriptions won't work"));
-                Issue->SetStringField(TEXT("severity"), TEXT("warning"));
-                Issue->SetStringField(TEXT("recommendation"), TEXT("Set ToolTipText to describe the button's action"));
-                Issues.Add(MakeShared<FJsonValueObject>(Issue));
+                AddAccessibilityIssue(Issues, WidgetName,
+                    TEXT("Button has no tooltip — screen readers and hover descriptions won't work"),
+                    TEXT("Set ToolTipText to describe the button's action"));
             }
 
             // Check if Normal and Hovered styles are identical — indicates no visual feedback for focus/hover
             // Note: FButtonStyle has Normal/Hovered/Pressed/Disabled — no Focused member exists
             if (Button->GetStyle().Normal == Button->GetStyle().Hovered)
             {
-                TSharedPtr<FJsonObject> Issue = MakeShared<FJsonObject>();
-                Issue->SetStringField(TEXT("widget_name"), WidgetName);
-                Issue->SetStringField(TEXT("issue"), TEXT("Button Normal and Hovered styles are identical — no visible hover/focus indicator"));
-                Issue->SetStringField(TEXT("severity"), TEXT("error"));
-                Issue->SetStringField(TEXT("recommendation"), TEXT("Set a distinct Hovered style (e.g. border color or tint) so keyboard/gamepad users can see which button is selected"));
-                Issues.Add(MakeShared<FJsonValueObject>(Issue));
+                AddAccessibilityIssue(Issues, WidgetName,
+                    TEXT("Button Normal and Hovered styles are identical — no visible hover/focus indicator"),
+                    TEXT("Set a distinct Hovered style (e.g. border color or tint) so keyboard/gamepad users can see which button is selected"),
+                    TEXT("error"));
             }
         }
 
@@ -363,12 +361,9 @@ FMonolithActionResult FMonolithUIAccessibilityActions::HandleAuditAccessibility(
             FText Tooltip = Widget->GetToolTipText();
             if (Tooltip.IsEmpty())
             {
-                TSharedPtr<FJsonObject> Issue = MakeShared<FJsonObject>();
-                Issue->SetStringField(TEXT("widget_name"), WidgetName);
-                Issue->SetStringField(TEXT("issue"), TEXT("Interactive widget has no tooltip"));
-                Issue->SetStringField(TEXT("severity"), TEXT("warning"));
-                Issue->SetStringField(TEXT("recommendation"), TEXT("Set ToolTipText to describe the widget's purpose"));
-                Issues.Add(MakeShared<FJsonValueObject>(Issue));
+                AddAccessibilityIssue(Issues, WidgetName,
+                    TEXT("Interactive widget has no tooltip"),
+                    TEXT("Set ToolTipText to describe the widget's purpose"));
             }
         }
 
@@ -402,12 +397,9 @@ FMonolithActionResult FMonolithUIAccessibilityActions::HandleAuditAccessibility(
 
                 if (!bHasExplicitNav)
                 {
-                    TSharedPtr<FJsonObject> Issue = MakeShared<FJsonObject>();
-                    Issue->SetStringField(TEXT("widget_name"), WidgetName);
-                    Issue->SetStringField(TEXT("issue"), TEXT("Focusable widget has no explicit navigation rules — gamepad/keyboard navigation may be unpredictable"));
-                    Issue->SetStringField(TEXT("severity"), TEXT("warning"));
-                    Issue->SetStringField(TEXT("recommendation"), TEXT("Set Up/Down/Left/Right navigation rules to Explicit or Wrap for predictable focus traversal"));
-                    Issues.Add(MakeShared<FJsonValueObject>(Issue));
+                    AddAccessibilityIssue(Issues, WidgetName,
+                        TEXT("Focusable widget has no explicit navigation rules — gamepad/keyboard navigation may be unpredictable"),
+                        TEXT("Set Up/Down/Left/Right navigation rules to Explicit or Wrap for predictable focus traversal"));
                 }
             }
         }

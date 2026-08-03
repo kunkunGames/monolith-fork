@@ -129,6 +129,6 @@ FMonolithActionResult FProjectGetSavedAssetStateAction::Execute(const TSharedPtr
 TSharedPtr<FJsonObject> FProjectGetSavedAssetStateAction::GetSchema()
 {
 	return FParamSchemaBuilder()
-		.Required(TEXT("asset_path"), TEXT("string"), TEXT("Package path of the asset (e.g. /Game/Tests/Monolith/Foo)"))
+		.Required(TEXT("asset_path"), TEXT("string"), TEXT("Package path of the asset (e.g. /Game/Tests/Monolith/Foo)"), { TEXT("package_path") })
 		.Build();
 }

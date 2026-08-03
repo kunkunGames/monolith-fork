@@ -1497,6 +1497,7 @@ static TSharedPtr<FJsonObject> BuildMonolithRecoveryPlan(
 	EditorCandidate->SetBoolField(TEXT("headless_editor_command_exists"), bHeadlessCommandExists);
 
 	TArray<TSharedPtr<FJsonValue>> Steps;
+	Steps.Reserve(3);
 	const FString ProbeCommand = FString::Printf(
 		TEXT("powershell -ExecutionPolicy Bypass -File %s -ProbeOnly"),
 		*QuoteForReadinessCommand(RecoverScript));

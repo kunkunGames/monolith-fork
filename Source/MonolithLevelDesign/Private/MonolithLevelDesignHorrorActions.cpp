@@ -181,6 +181,10 @@ FMonolithActionResult FMonolithLevelDesignHorrorActions::AnalyzeSightlines(const
 	double RayCountD;
 	if (Params->TryGetNumberField(TEXT("ray_count"), RayCountD))
 	{
+		if (RayCountD > 128.0)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("ray_count %g exceeds the maximum allowed (128)"), RayCountD));
+		}
 		RayCount = FMath::Clamp(static_cast<int32>(RayCountD), 4, 128);
 	}
 

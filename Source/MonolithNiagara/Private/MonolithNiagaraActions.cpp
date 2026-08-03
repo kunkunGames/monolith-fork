@@ -2693,6 +2693,7 @@ static void CollectParametersFromStore(const FNiagaraParameterStore& Store, cons
 	TArray<TSharedPtr<FJsonValue>>& OutArray)
 {
 	TArrayView<const FNiagaraVariableWithOffset> Variables = Store.ReadParameterVariables();
+	OutArray.Reserve(OutArray.Num() + Variables.Num());
 	for (const FNiagaraVariableWithOffset& VWO : Variables)
 	{
 		const FNiagaraVariable& Var = VWO;
@@ -6411,7 +6412,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetUserParameters(const TSh
 FMonolithActionResult FMonolithNiagaraActions::HandleGetParameterValue(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString ParamName = Params->GetStringField(TEXT("parameter"));
+	FString ParamName = FString();
+	if (Params->HasField(TEXT("parameter")) && !Params->TryGetStringField(TEXT("parameter"), ParamName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'parameter' must be a string"));
+	}
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -6439,7 +6444,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetParameterValue(const TSh
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetParameterType(const TSharedPtr<FJsonObject>& Params)
 {
-	FString TypeName = Params->GetStringField(TEXT("type"));
+	FString TypeName = FString();
+	if (Params->HasField(TEXT("type")) && !Params->TryGetStringField(TEXT("type"), TypeName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'type' must be a string"));
+	}
 	FNiagaraTypeDefinition TD = ResolveNiagaraType(TypeName);
 
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
@@ -6457,7 +6466,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetParameterType(const TSha
 FMonolithActionResult FMonolithNiagaraActions::HandleTraceParameterBinding(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString ParamName = Params->GetStringField(TEXT("parameter"));
+	FString ParamName = FString();
+	if (Params->HasField(TEXT("parameter")) && !Params->TryGetStringField(TEXT("parameter"), ParamName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'parameter' must be a string"));
+	}
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -6797,7 +6810,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddUserParameter(const TSha
 FMonolithActionResult FMonolithNiagaraActions::HandleRemoveUserParameter(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString ParamName = Params->GetStringField(TEXT("name"));
+	FString ParamName = FString();
+	if (Params->HasField(TEXT("name")) && !Params->TryGetStringField(TEXT("name"), ParamName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'name' must be a string"));
+	}
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -6889,22 +6906,29 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetParameterDefault(const T
 				if (O.IsValid())
 				{
 					float V_A = 1.0f;
-		double V_A_Double = V_A;
-		if (O->TryGetNumberField(TEXT("a"), V_A_Double)) V_A = static_cast<float>(V_A_Double);
-		FLinearColor V(static_cast<float>(O->GetNumberField(TEXT("r"))), static_cast<float>(O->GetNumberField(TEXT("g"))), static_cast<float>(O->GetNumberField(TEXT("b"))), V_A);
+						double V_A_Double = V_A;
+						if (O->TryGetNumberField(TEXT("a"), V_A_Double)) V_A = static_cast<float>(V_A_Double);
+						double OutR = 0.0, OutG = 0.0, OutB = 0.0;
+						if (!O->TryGetNumberField(TEXT("r"), OutR)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Color) must have numeric 'r' field"), FMonolithJsonUtils::ErrInvalidParams);
+						if (!O->TryGetNumberField(TEXT("g"), OutG)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Color) must have numeric 'g' field"), FMonolithJsonUtils::ErrInvalidParams);
+						if (!O->TryGetNumberField(TEXT("b"), OutB)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Color) must have numeric 'b' field"), FMonolithJsonUtils::ErrInvalidParams);
+						FLinearColor V(static_cast<float>(OutR), static_cast<float>(OutG), static_cast<float>(OutB), V_A);
 					WriteVar.SetValue<FLinearColor>(V);
 				}
 			}
 			else if (FTD == FNiagaraTypeDefinition::GetFloatDef())
 			{
+					if (JV->Type != EJson::Number) return FMonolithActionResult::Error(TEXT("Parameter 'value' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 				WriteVar.SetValue<float>(static_cast<float>(JV->AsNumber()));
 			}
 			else if (FTD == FNiagaraTypeDefinition::GetIntDef())
 			{
+					if (JV->Type != EJson::Number) return FMonolithActionResult::Error(TEXT("Parameter 'value' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 				WriteVar.SetValue<int32>(static_cast<int32>(JV->AsNumber()));
 			}
 			else if (FTD == FNiagaraTypeDefinition::GetBoolDef())
 			{
+					if (JV->Type != EJson::Boolean) return FMonolithActionResult::Error(TEXT("Parameter 'value' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 				FNiagaraBool BV; BV.SetValue(JV->AsBool());
 				WriteVar.SetValue<FNiagaraBool>(BV);
 			}
@@ -6913,9 +6937,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetParameterDefault(const T
 				TSharedPtr<FJsonObject> O = AsObjectOrParseString(JV);
 				if (O.IsValid())
 				{
-					FVector3f V(static_cast<float>(O->GetNumberField(TEXT("x"))),
-						static_cast<float>(O->GetNumberField(TEXT("y"))),
-						static_cast<float>(O->GetNumberField(TEXT("z"))));
+						double OutX = 0.0, OutY = 0.0, OutZ = 0.0;
+						if (!O->TryGetNumberField(TEXT("x"), OutX)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Vec3) must have numeric 'x' field"), FMonolithJsonUtils::ErrInvalidParams);
+						if (!O->TryGetNumberField(TEXT("y"), OutY)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Vec3) must have numeric 'y' field"), FMonolithJsonUtils::ErrInvalidParams);
+						if (!O->TryGetNumberField(TEXT("z"), OutZ)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Vec3) must have numeric 'z' field"), FMonolithJsonUtils::ErrInvalidParams);
+						FVector3f V(static_cast<float>(OutX), static_cast<float>(OutY), static_cast<float>(OutZ));
 					WriteVar.SetValue<FVector3f>(V);
 				}
 			}
@@ -6924,8 +6950,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetParameterDefault(const T
 				TSharedPtr<FJsonObject> O = AsObjectOrParseString(JV);
 				if (O.IsValid())
 				{
-					FVector2f V(static_cast<float>(O->GetNumberField(TEXT("x"))),
-						static_cast<float>(O->GetNumberField(TEXT("y"))));
+						double OutX = 0.0, OutY = 0.0;
+						if (!O->TryGetNumberField(TEXT("x"), OutX)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Vec2) must have numeric 'x' field"), FMonolithJsonUtils::ErrInvalidParams);
+						if (!O->TryGetNumberField(TEXT("y"), OutY)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Vec2) must have numeric 'y' field"), FMonolithJsonUtils::ErrInvalidParams);
+						FVector2f V(static_cast<float>(OutX), static_cast<float>(OutY));
 					WriteVar.SetValue<FVector2f>(V);
 				}
 			}
@@ -6934,10 +6962,15 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetParameterDefault(const T
 				TSharedPtr<FJsonObject> O = AsObjectOrParseString(JV);
 				if (O.IsValid())
 				{
-					FVector4f V(static_cast<float>(O->GetNumberField(TEXT("x"))),
-						static_cast<float>(O->GetNumberField(TEXT("y"))),
-						static_cast<float>(O->GetNumberField(TEXT("z"))),
-						static_cast<float>(O->GetNumberField(TEXT("w"))));
+						double OutX = 0.0, OutY = 0.0, OutZ = 0.0, OutW = 0.0;
+						if (!O->TryGetNumberField(TEXT("x"), OutX)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Vec4) must have numeric 'x' field"), FMonolithJsonUtils::ErrInvalidParams);
+						if (!O->TryGetNumberField(TEXT("y"), OutY)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Vec4) must have numeric 'y' field"), FMonolithJsonUtils::ErrInvalidParams);
+						if (!O->TryGetNumberField(TEXT("z"), OutZ)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Vec4) must have numeric 'z' field"), FMonolithJsonUtils::ErrInvalidParams);
+						if (!O->TryGetNumberField(TEXT("w"), OutW)) return FMonolithActionResult::Error(TEXT("Parameter 'value' (Vec4) must have numeric 'w' field"), FMonolithJsonUtils::ErrInvalidParams);
+						FVector4f V(static_cast<float>(OutX),
+							static_cast<float>(OutY),
+							static_cast<float>(OutZ),
+							static_cast<float>(OutW));
 					WriteVar.SetValue<FVector4f>(V);
 				}
 			}
@@ -10151,10 +10184,14 @@ FMonolithActionResult FMonolithNiagaraActions::HandleExportSystemSpec(const TSha
 FMonolithActionResult FMonolithNiagaraActions::HandleAddDynamicInput(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
-	FString InputName = Params->GetStringField(TEXT("input"));
-	FString DynInputPath = Params->GetStringField(TEXT("dynamic_input_script"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId)) return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"));
+	FString ModuleNodeGuid;
+	if (!Params->TryGetStringField(TEXT("module_node"), ModuleNodeGuid)) return FMonolithActionResult::Error(TEXT("Parameter 'module_node' must be a string"));
+	FString InputName;
+	if (!Params->TryGetStringField(TEXT("input"), InputName)) return FMonolithActionResult::Error(TEXT("Parameter 'input' must be a string"));
+	FString DynInputPath;
+	if (!Params->TryGetStringField(TEXT("dynamic_input_script"), DynInputPath)) return FMonolithActionResult::Error(TEXT("Parameter 'dynamic_input_script' must be a string"));
 
 	if (DynInputPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: dynamic_input_script"));
 
@@ -10289,10 +10326,14 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddDynamicInput(const TShar
 FMonolithActionResult FMonolithNiagaraActions::HandleSetDynamicInputValue(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString DynNodeGuid = Params->GetStringField(TEXT("dynamic_input_node"));
-	FString InputName = Params->GetStringField(TEXT("input"));
-	FString Value = Params->GetStringField(TEXT("value"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId)) return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"));
+	FString DynNodeGuid;
+	if (!Params->TryGetStringField(TEXT("dynamic_input_node"), DynNodeGuid)) return FMonolithActionResult::Error(TEXT("Parameter 'dynamic_input_node' must be a string"));
+	FString InputName;
+	if (!Params->TryGetStringField(TEXT("input"), InputName)) return FMonolithActionResult::Error(TEXT("Parameter 'input' must be a string"));
+	FString Value;
+	if (!Params->TryGetStringField(TEXT("value"), Value)) return FMonolithActionResult::Error(TEXT("Parameter 'value' must be a string"));
 
 	if (DynNodeGuid.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: dynamic_input_node"));
 
@@ -11521,8 +11562,10 @@ namespace
 FMonolithActionResult FMonolithNiagaraActions::HandleGetDynamicInputTree(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId)) return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"));
+	FString ModuleNodeGuid;
+	if (!Params->TryGetStringField(TEXT("module_node"), ModuleNodeGuid)) return FMonolithActionResult::Error(TEXT("Parameter 'module_node' must be a string"));
 	int32 MaxDepth = 10;
 	double MaxDepth_Double = MaxDepth;
 	if (Params->TryGetNumberField(TEXT("max_depth"), MaxDepth_Double)) MaxDepth = static_cast<int32>(MaxDepth_Double);
@@ -11634,10 +11677,14 @@ namespace
 FMonolithActionResult FMonolithNiagaraActions::HandleRemoveDynamicInput(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
-	FString InputName = Params->GetStringField(TEXT("input"));
-	FString DynNodeGuid = Params->GetStringField(TEXT("dynamic_input_node"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId)) return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"));
+	FString ModuleNodeGuid;
+	if (!Params->TryGetStringField(TEXT("module_node"), ModuleNodeGuid)) return FMonolithActionResult::Error(TEXT("Parameter 'module_node' must be a string"));
+	FString InputName;
+	if (!Params->TryGetStringField(TEXT("input"), InputName)) return FMonolithActionResult::Error(TEXT("Parameter 'input' must be a string"));
+	FString DynNodeGuid;
+	if (!Params->TryGetStringField(TEXT("dynamic_input_node"), DynNodeGuid)) return FMonolithActionResult::Error(TEXT("Parameter 'dynamic_input_node' must be a string"));
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -11766,9 +11813,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveDynamicInput(const TS
 FMonolithActionResult FMonolithNiagaraActions::HandleGetDynamicInputValue(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString DynNodeGuid = Params->GetStringField(TEXT("dynamic_input_node"));
-	FString InputName = Params->GetStringField(TEXT("input"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId)) return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"));
+	FString DynNodeGuid;
+	if (!Params->TryGetStringField(TEXT("dynamic_input_node"), DynNodeGuid)) return FMonolithActionResult::Error(TEXT("Parameter 'dynamic_input_node' must be a string"));
+	FString InputName;
+	if (!Params->TryGetStringField(TEXT("input"), InputName)) return FMonolithActionResult::Error(TEXT("Parameter 'input' must be a string"));
 
 	if (DynNodeGuid.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: dynamic_input_node"));
 	if (InputName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: input"));
@@ -14351,6 +14401,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 		for (auto& P : MapA) AllNames.Add(P.Key);
 		for (auto& P : MapB) AllNames.Add(P.Key);
 
+		ParamDiffs.Reserve(AllNames.Num());
 		for (const FString& Name : AllNames)
 		{
 			TSharedPtr<FJsonObject>* PA = MapA.Find(Name);
@@ -14394,6 +14445,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 		for (auto& P : EmMapA) AllEmitters.Add(P.Key);
 		for (auto& P : EmMapB) AllEmitters.Add(P.Key);
 
+		EmitterDiffs.Reserve(AllEmitters.Num());
 		for (const FString& EmName : AllEmitters)
 		{
 			TSharedPtr<FJsonObject>* EmA = EmMapA.Find(EmName);
@@ -14410,6 +14462,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 			{
 				TArray<FString> SimpleProps = { TEXT("sim_target"), TEXT("local_space"), TEXT("determinism"), TEXT("calculate_bounds_mode"), TEXT("allocation_mode") };
 				TArray<TSharedPtr<FJsonValue>> PropDiffs;
+				PropDiffs.Reserve(SimpleProps.Num());
 				for (const FString& Prop : SimpleProps)
 				{
 					TSharedPtr<FJsonValue> VA = (*EmA)->TryGetField(Prop);
@@ -14478,6 +14531,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 					for (auto& P : ScriptMapA) AllScripts.Add(P.Key);
 					for (auto& P : ScriptMapB) AllScripts.Add(P.Key);
 
+					ModDiffs.Reserve(ModDiffs.Num() + AllScripts.Num());
 					for (const FString& Script : AllScripts)
 					{
 						TSharedPtr<FJsonObject>* MA = ScriptMapA.Find(Script);
@@ -14560,6 +14614,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 				else if (RendA && RendB)
 				{
 					TArray<TSharedPtr<FJsonValue>> RendDiffs;
+					RendDiffs.Reserve(RendCountA);
 					for (int32 ri = 0; ri < RendCountA; ++ri)
 					{
 						auto RA = (*RendA)[ri]->AsObject();
@@ -15682,8 +15737,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleScriptInputs(const
 	if (ScriptPath.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Missing required param: script_path"));
 
-	UNiagaraScript* Script = LoadObject<UNiagaraScript>(nullptr, *ScriptPath);
-	if (!Script)
+	UNiagaraScript* Script = nullptr;
+	FString ResolvedPath, LoadError;
+	if (!FMonolithAssetUtils::TryLoadAssetByPath<UNiagaraScript>(ScriptPath, Script, ResolvedPath, LoadError))
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load script '%s'"), *ScriptPath));
 
 	// Get the latest source and cast to UNiagaraScriptSource to access the NodeGraph
@@ -16738,6 +16794,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleQueryNiagara(const TSharedP
 
 	struct FCond { FString Key; FString Op; FString Value; int32 IntValue = 0; };
 	TArray<FCond> Conds;
+	Conds.Reserve(RawConds.Num());
 	for (FString Raw : RawConds)
 	{
 		Raw.TrimStartAndEndInline();

@@ -1856,7 +1856,7 @@ void MonolithUI::FEffectSurfaceActions::Register(FMonolithToolRegistry& Registry
         FParamSchemaBuilder()
             .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
             .Required(TEXT("widget_name"), TEXT("string"), TEXT("EffectSurface widget name"))
-            .Optional(TEXT("offset"), TEXT("number"), TEXT("Inset highlight offset"))
+            .Optional(TEXT("offset"), TEXT("array"), TEXT("Inset highlight offset [x,y] or object"))
             .Optional(TEXT("blur"), TEXT("number"), TEXT("Inset highlight blur"))
             .Optional(TEXT("color"), TEXT("string"), TEXT("Inset highlight color"))
             .Optional(TEXT("intensity"), TEXT("number"), TEXT("Inset highlight intensity"))

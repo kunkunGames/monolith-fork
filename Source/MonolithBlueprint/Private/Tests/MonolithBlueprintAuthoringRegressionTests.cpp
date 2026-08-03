@@ -137,7 +137,7 @@ namespace MonolithBlueprintAuthoringRegressionTests
 		}
 		for (const TSharedPtr<FJsonValue>& PinValue : *Pins)
 		{
-			const TSharedPtr<FJsonObject> Pin = PinValue.IsValid() ? PinValue->AsObject() : nullptr;
+			const TSharedPtr<FJsonObject> Pin = PinValue.IsValid() && PinValue->Type == EJson::Object ? PinValue->AsObject() : nullptr;
 			FString Name;
 			if (Pin.IsValid() && Pin->TryGetStringField(TEXT("name"), Name) && Name == PinName)
 			{
@@ -202,7 +202,7 @@ namespace MonolithBlueprintAuthoringRegressionTests
 
 		for (const TSharedPtr<FJsonValue>& Value : *Values)
 		{
-			const TSharedPtr<FJsonObject> Object = Value.IsValid() ? Value->AsObject() : nullptr;
+			const TSharedPtr<FJsonObject> Object = Value.IsValid() && Value->Type == EJson::Object ? Value->AsObject() : nullptr;
 			FString Actual;
 			if (Object.IsValid()
 				&& Object->TryGetStringField(ObjectField, Actual)
@@ -925,7 +925,11 @@ bool FMonolithBlueprintRecursiveGraphDiscoveryRegressionTest::RunTest(const FStr
 	TestEqual(TEXT("Nested getter appears once in search results"), NestedSearchCount, 1);
 	TestEqual(
 		TEXT("Nested search result has subgraph provenance"),
-		NestedSearchMatch.IsValid() ? NestedSearchMatch->GetStringField(TEXT("graph_type")) : FString(),
+		[&]() -> FString {
+			FString OutStr;
+			if (NestedSearchMatch.IsValid()) { NestedSearchMatch->TryGetStringField(TEXT("graph_type"), OutStr); }
+			return OutStr;
+		}(),
 		FString(TEXT("subgraph")));
 
 	TSharedPtr<FJsonObject> ReferenceParams = MakeShared<FJsonObject>();
@@ -940,7 +944,11 @@ bool FMonolithBlueprintRecursiveGraphDiscoveryRegressionTest::RunTest(const FStr
 	TestEqual(TEXT("Nested variable reference appears exactly once"), NestedReferenceCount, 1);
 	TestEqual(
 		TEXT("Nested reference has parent provenance"),
-		NestedReference.IsValid() ? NestedReference->GetStringField(TEXT("parent_graph")) : FString(),
+		[&]() -> FString {
+			FString OutStr;
+			if (NestedReference.IsValid()) { NestedReference->TryGetStringField(TEXT("parent_graph"), OutStr); }
+			return OutStr;
+		}(),
 		EventGraph->GetName());
 
 	return true;

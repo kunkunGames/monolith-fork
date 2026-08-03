@@ -924,6 +924,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleValidateComboGraph(const
 	UClass* NodeSequenceClass = FindComboNodeSequenceClass();
 
 	TSet<UObject*> ReachableNodes;
+	ReachableNodes.Reserve(Nodes.Num());
 	// BFS from entry/first node to find reachable nodes
 	if (FirstNode)
 	{
@@ -1508,6 +1509,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeEffects(cons
 
 		// Build container text
 		TArray<FString> ContainerParts;
+		ContainerParts.Reserve(4);
 		const TSharedPtr<FJsonObject>& ContainerData = *ContainerObj;
 
 		// effect_classes -> TargetGameplayEffectClasses
@@ -1680,6 +1682,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeCues(const T
 				const TSharedPtr<FJsonObject>& Def = DefVal->AsObject();
 
 				TArray<FString> DefParts;
+				DefParts.Reserve(3);
 
 				// gameplay_cue_tags -> GameplayCueTags
 				const TArray<TSharedPtr<FJsonValue>>* CueTags = nullptr;

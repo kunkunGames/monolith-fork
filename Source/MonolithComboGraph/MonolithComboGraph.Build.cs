@@ -57,7 +57,9 @@ public class MonolithComboGraph : ModuleRules
 
 		// Release builds: set MONOLITH_RELEASE_BUILD=1 to force all optional deps off.
 		bool bReleaseBuild = System.Environment.GetEnvironmentVariable("MONOLITH_RELEASE_BUILD") == "1";
-		bool bHasComboGraph = !bReleaseBuild && IsPluginEnabled(Target, "ComboGraph");
+		// ComboGraph uses GameplayAbilities (GAS). We must ensure GAS is enabled before linking against it.
+		bool bHasComboGraph = !bReleaseBuild && IsPluginEnabled(Target, "ComboGraph")
+			&& IsPluginEnabled(Target, "GameplayAbilities");
 
 		if (bHasComboGraph)
 		{
