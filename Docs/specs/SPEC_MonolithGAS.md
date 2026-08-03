@@ -15,7 +15,7 @@
 
 MonolithGAS provides full MCP coverage of the Gameplay Ability System. It covers ability CRUD, attribute set management, gameplay effect authoring, ASC (Ability System Component) inspection and manipulation, gameplay tag operations, gameplay cue management, target data, input binding, runtime inspection, scaffolding of common GAS patterns, and Widget→Attribute binding via class-extension authoring.
 
-Related follow-up: [SPEC_MonolithGAS_GoWorkflowImprovements.md](SPEC_MonolithGAS_GoWorkflowImprovements.md) captures DataAsset-driven skill, tag-based input, held/channel policy, runtime cue/event proof, and offline GAS validation improvements discovered during the Go GAS enhancement pass. The implementation adds DataAsset GAS profile describe/validate actions, manifest embedding, release-input ability validation, safe dry-run-first DataAsset profile writes, runtime event/cue probe actions, and readiness fields on `get_runtime_summary`. A dedicated offline `monolith_query.exe gas` namespace remains deferred to preserve CLI routing cohesion.
+Related follow-up: [SPEC_MonolithGAS_DataAssetWorkflowImprovements.md](SPEC_MonolithGAS_DataAssetWorkflowImprovements.md) captures DataAsset-driven skill, tag-based input, held/channel policy, runtime cue/event proof, and offline GAS validation improvements discovered during the Go GAS enhancement pass. The implementation adds DataAsset GAS profile describe/validate actions, manifest embedding, release-input ability validation, safe dry-run-first DataAsset profile writes, runtime event/cue probe actions, and readiness fields on `get_runtime_summary`. A dedicated offline `monolith_query.exe gas` namespace remains deferred to preserve CLI routing cohesion.
 
 ### Action Categories
 
