@@ -191,7 +191,7 @@ namespace MonolithUI::SpecActionsInternal
         if (Obj->TryGetObjectField(TEXT("position"), Sub) && Sub) OutSlot.Position = ParseVec2(*Sub);
         if (Obj->TryGetObjectField(TEXT("size"), Sub)     && Sub) OutSlot.Size     = ParseVec2(*Sub);
         if (Obj->TryGetObjectField(TEXT("alignment"), Sub) && Sub) OutSlot.Alignment = ParseVec2(*Sub);
-        OutSlot.bPaddingSpecified = Obj->HasTypedField<EJson::Object>(TEXT("padding"));
+        OutSlot.bPaddingSpecified = Obj->HasTypedField(TEXT("padding"), EJson::Object);
         OutSlot.Padding = ParseMargin(Obj, TEXT("padding"));
     }
 
@@ -231,7 +231,7 @@ namespace MonolithUI::SpecActionsInternal
         OutStyle.Visibility   = GetFNameField(Obj, TEXT("visibility"));
         OutStyle.Background   = ParseColor(Obj, TEXT("background"));
         OutStyle.BorderColor  = ParseColor(Obj, TEXT("borderColor"));
-        OutStyle.bPaddingSpecified = Obj->HasTypedField<EJson::Object>(TEXT("padding"));
+        OutStyle.bPaddingSpecified = Obj->HasTypedField(TEXT("padding"), EJson::Object);
         OutStyle.Padding      = ParseMargin(Obj, TEXT("padding"));
     }
 
@@ -455,8 +455,8 @@ namespace MonolithUI::SpecActionsInternal
                 const bool bObject = ShadowOffsetValue->TryGetObject(ShadowOffset)
                     && ShadowOffset
                     && ShadowOffset->IsValid();
-                const bool bHasX = bObject && (*ShadowOffset)->HasTypedField<EJson::Number>(TEXT("x"));
-                const bool bHasY = bObject && (*ShadowOffset)->HasTypedField<EJson::Number>(TEXT("y"));
+                const bool bHasX = bObject && (*ShadowOffset)->HasTypedField(TEXT("x"), EJson::Number);
+                const bool bHasY = bObject && (*ShadowOffset)->HasTypedField(TEXT("y"), EJson::Number);
                 if (!bHasX || !bHasY)
                 {
                     AddContentParseError(

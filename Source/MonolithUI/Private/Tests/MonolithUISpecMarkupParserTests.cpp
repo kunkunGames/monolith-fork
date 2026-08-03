@@ -689,7 +689,7 @@ bool FMonolithUISpecZeroBorderPaddingConvergenceTest::RunTest(const FString& /*P
 	const TSharedPtr<FJsonObject> DesiredSpec = ConvertResult.Result->GetObjectField(TEXT("spec"));
 	const TSharedPtr<FJsonObject> DesiredRoot = DesiredSpec->GetObjectField(TEXT("rootWidget"));
 	TestTrue(TEXT("converter retains explicit zero Border style padding"),
-		DesiredRoot->GetObjectField(TEXT("style"))->HasTypedField<EJson::Object>(TEXT("padding")));
+		DesiredRoot->GetObjectField(TEXT("style"))->HasTypedField(TEXT("padding"), EJson::Object));
 	TSharedPtr<FJsonObject> DesiredLabel;
 	if (!TestTrue(TEXT("converted spec contains Label"),
 		FindNodeById(DesiredRoot, TEXT("Label"), DesiredLabel)))
@@ -697,7 +697,7 @@ bool FMonolithUISpecZeroBorderPaddingConvergenceTest::RunTest(const FString& /*P
 		return false;
 	}
 	TestTrue(TEXT("converter retains explicit zero BorderSlot padding"),
-		DesiredLabel->GetObjectField(TEXT("slot"))->HasTypedField<EJson::Object>(TEXT("padding")));
+		DesiredLabel->GetObjectField(TEXT("slot"))->HasTypedField(TEXT("padding"), EJson::Object));
 
 	TSharedPtr<FJsonObject> BuildParams = MakeShared<FJsonObject>();
 	BuildParams->SetStringField(TEXT("asset_path"), AssetPath);
