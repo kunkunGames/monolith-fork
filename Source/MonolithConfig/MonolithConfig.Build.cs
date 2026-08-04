@@ -17,6 +17,7 @@ public class MonolithConfig : ModuleRules
 		{
 			"MonolithCore",
 			"UnrealEd",
+			"AssetRegistry",
 			"Json",
 			"JsonUtilities",
 			// `DeveloperSettings` is its OWN module (NOT part of Engine) — required

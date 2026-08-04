@@ -1,6 +1,6 @@
 # Monolith API Reference
 
-**Version:** v0.22.0 · **Last updated:** 2026-08-01
+**Version:** v0.22.0 · **Last updated:** 2026-08-04
 
 **In-tree action total is approximate: ~1,400+ actions across 25+ in-tree namespaces** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
@@ -24,7 +24,8 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [animation](#animation) | 145 | Curves, bone tracks, sync markers, root motion, compression, blend spaces (incl. baking + interpolation control), ABPs (incl. an AnimGraph-authoring pack — additive/slot/cached-pose/blend (by int + by enum)/sync/layered-blend/Control Rig/linked-layer/conduit nodes + output wiring — ABP-native animation layer graphs, custom anim-graph nodes + state-machine teardown + compound expression transition rules), montages, skeletons, PoseSearch, IKRig, Control Rig |
 | [niagara](#niagara) | 119 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, effect types, event-aware summaries + validate_system event-chain reasoning, temporal-control composite writers + read aggregators, stateless-emitter factory) |
 | [editor](#editor) | 29 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, Python escape-hatch, persistent-level swap |
-| [config](#config) | 6 | INI config inspection and search |
+| [config](#config) | 7 | INI config inspection, search, and developer-setting authoring |
+| [localization](#localization) | 4 | Read-only culture discovery plus bounded StringTable inspection and validation |
 | [project](#project) | 7 | Project-wide asset index (SQLite + FTS5) |
 | [source](#source) | 11 | Unreal Engine C++ source code navigation |
 | [mesh](#mesh) | 194 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, mesh import (incl. skeletal + animation). +45 town gen registers only with `bEnableProceduralTownGen=true` (experimental, not in the public count) |
@@ -43,7 +44,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [network](#network) | 4 | **New v0.17.0.** Reflection Intelligence — UE 5.7 replication inspection (replicated classes, RPCs, OnRep handlers, unbalanced-OnRep audit) |
 | [pipeline](#pipeline) | 2 | **New v0.17.0.** Reflection Intelligence — read-only composer actions (`pr_review`, `release_readiness`) |
 | [reflect](#reflect) | 1 | **New v0.19.0.** Reflection Intelligence — index maintenance (`rebuild_reflection_index`, project-only force-rebuild of the RI reflection tables; WRITE/maintenance) |
-| **In-tree subtotal** | **1406** | (all default-active; +45 experimental town gen → 1451 when registered) |
+| **In-tree subtotal** | **1410** | (all default-active; +45 experimental town gen → 1455 when registered) |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -654,7 +655,7 @@ Close the current persistent level (without saving) and load the specified level
 
 ## config
 
-INI config file inspection and search. **6 actions.** Read-only.
+INI config file inspection, search, and developer-setting authoring. **7 actions.** The first six actions below are read-only; `set_developer_setting` is an editor-only write.
 
 ### `config.resolve_setting`
 
@@ -711,6 +712,40 @@ List all config files with their hierarchy level.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `category` | string | optional | Filter to a specific category |
+
+### `config.set_developer_setting`
+
+Set one reflected property on a `UDeveloperSettings` class default object. This editor-only action accepts a short or fully qualified class name, parses the requested value through the property's Unreal text importer, and optionally persists it through `SaveConfig`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `class` | string | **required** | `UDeveloperSettings` class name or path |
+| `property` | string | **required** | Reflected property name |
+| `value` | string | **required** | Unreal text representation accepted by the property |
+| `save_config` | boolean | optional | Persist to the class config file. Default: `false` |
+
+---
+
+## localization
+
+Read-only culture discovery plus bounded StringTable discovery, readback, and validation. The namespace is registered by `MonolithConfig` independently of the config-authoring toggle and advertises read-only and idempotent dispatcher hints.
+
+All asset inputs require canonical mounted package paths or matching top-level object paths. Pagination, cursor continuation, metadata budgets, text truncation, validation scan limits, and issue pagination are explicit so a partial result is never presented as complete.
+
+| Action | Parameters | Returns |
+|---|---|---|
+| `list_cultures` | `culture_names?` (max 256), `include_derived=true`, `offset=0`, `limit=100` (1–500) | Current culture/language/locale plus a stable culture page and unresolved explicit names |
+| `list_string_tables` | `path=/Game`, `offset=0`, `limit=200` (1–1000), `include_details=false` | Stable Asset Registry page; optional details load only returned assets and include namespace/entry count |
+| `get_string_table` | `asset_path`, `after_key?`, `entry_limit=200` (1–1000), `include_metadata=false`, `metadata_limit=512` (0–4096), `text_limit=4096` (1–65536) | Stable exclusive-key page with independent entry, metadata, and text completeness fields |
+| `validate_string_table` | `asset_path`, `scan_limit=4096` (1–10000), `issue_offset=0`, `issue_limit=200` (1–1000) | Empty-table and scan-cutoff errors; key-edge-whitespace and empty-source warnings; deterministic issue page plus `valid` and `complete` |
+
+For `get_string_table`, continue with `next_after_key` only when `has_more_entries=true`. `all_entries_covered` is true only for a first page that reaches the end; `metadata_complete` independently reports whether the shared metadata budget covered every metadata row on the returned entries. Global `complete` requires both conditions.
+
+For validation, `valid=true` requires `complete=true` and zero errors. A scan cutoff is itself an error. Issue pagination does not change the total error/warning counts or validation verdict.
+
+The existing `blueprint` StringTable actions remain the authoring surface. The `localization` namespace intentionally contains no create, set, remove, import, export, transaction, dirty, or save action.
+
+See `Plugins/Monolith/Skills/unreal-localization/SKILL.md` for routing and bounded workflow examples.
 
 ---
 
