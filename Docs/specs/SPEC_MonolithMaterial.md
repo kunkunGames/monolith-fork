@@ -15,7 +15,7 @@
 | Class | Responsibility |
 |-------|---------------|
 | `FMonolithMaterialModule` | Registers 63 material actions |
-| `FMonolithMaterialActions` | Static handlers + helpers for loading materials and serializing expressions |
+| `FMonolithMaterialActions` | Static handlers + helpers for loading materials and serializing expressions. Texture metadata routes sampler recommendation through the shared `MonolithMaterialSamplerCompat` UE 5.7/5.8 boundary. |
 
 ### Actions (63 — namespace: "material")
 

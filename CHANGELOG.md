@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Material sampler discovery now uses the supported API on each engine version.** The material and generic-asset index paths share one compatibility boundary that calls `UMaterialExpressionTextureBase` on UE 5.7 and `MaterialExpressionUtils` on UE 5.8+, removing both sampler deprecation warnings without duplicating version branches.
+
 ## [0.22.0] - 2026-08-01
 
 ### Internal

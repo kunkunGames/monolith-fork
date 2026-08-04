@@ -27,7 +27,7 @@
 | `FGameplayTagIndexer` | GameplayTag containers — tag hierarchies and references |
 | `FConfigIndexer` | Config/INI files — sections, keys, values across config hierarchy |
 | `FCppIndexer` | C++ source files — classes, functions, includes (project-level source) |
-| `FGenericAssetIndexer` | StaticMesh, SkeletalMesh, Texture2D, SoundWave, etc. — metadata nodes |
+| `FGenericAssetIndexer` | StaticMesh, SkeletalMesh, Texture2D, SoundWave, etc. — metadata nodes. Texture `recommended_sampler_type` uses the shared `MonolithMaterialSamplerCompat` UE 5.7/5.8 boundary. |
 | `FDependencyIndexer` | Hard + Soft package dependencies (runs after all other indexers) |
 | `FMonolithIndexNotification` | Slate notification bar with throbber + percentage |
 
