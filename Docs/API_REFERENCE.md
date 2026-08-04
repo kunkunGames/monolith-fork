@@ -1,6 +1,6 @@
 # Monolith API Reference
 
-**Version:** v0.22.0 · **Last updated:** 2026-08-01
+**Version:** v0.22.0 · **Last updated:** 2026-08-04
 
 **In-tree action total is approximate: ~1,400+ actions across 25+ in-tree namespaces** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
@@ -22,6 +22,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [blueprint](#blueprint) | 111 | Blueprint read/write, variable/component/graph CRUD, node ops, compile, auto-layout, spawn actors, dataset read/edit pack (DataTable/CurveTable/StringTable + `seed_data_asset`), cross-class property access, parent-function overrides |
 | [material](#material) | 63 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
 | [animation](#animation) | 145 | Curves, bone tracks, sync markers, root motion, compression, blend spaces (incl. baking + interpolation control), ABPs (incl. an AnimGraph-authoring pack — additive/slot/cached-pose/blend (by int + by enum)/sync/layered-blend/Control Rig/linked-layer/conduit nodes + output wiring — ABP-native animation layer graphs, custom anim-graph nodes + state-machine teardown + compound expression transition rules), montages, skeletons, PoseSearch, IKRig, Control Rig |
+| [chooser](#chooser) | 16 | Bounded ChooserTable discovery/readback/validation plus deep inspection, reference editing, and authoring |
 | [niagara](#niagara) | 119 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, effect types, event-aware summaries + validate_system event-chain reasoning, temporal-control composite writers + read aggregators, stateless-emitter factory) |
 | [editor](#editor) | 29 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, Python escape-hatch, persistent-level swap |
 | [config](#config) | 6 | INI config inspection and search |
@@ -436,6 +437,36 @@ Animation curves, bone tracks, sync markers, root motion, compression, blend spa
 | Layout / batch | 2 | `auto_layout`, `batch_execute` |
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithAnimation.md` for the deep dive.
+
+---
+
+## chooser
+
+ChooserTable discovery, bounded reflection readback, non-mutating structural validation, deep inspection/reference editing, and authoring. The namespace is owned by `MonolithAnimation`; query `monolith_discover("chooser")` for the live roster and `describe_query("action_schema", target_namespace="chooser", target_action="<name>")` for the authoritative schema.
+
+### Bounded readback and validation
+
+These six actions accept only canonical mounted package or top-level object paths. They do not compile, transact, mutate, save, or dirty Chooser packages. Pagination and reflected serialization have independent hard limits, and every incomplete result carries explicit truncation/completeness metadata.
+
+| Action | Parameters | Result |
+|---|---|---|
+| `list_chooser_tables` | `path_filter?`, `offset=0`, `limit=200` (1–1000) | Stable AssetRegistry identities, `count`, `total`, and `has_more` |
+| `get_chooser_table` | `asset_path`, `include_rows=false`, `row_limit=50` (1–500) | Row/column/result/context counts, bounded columns and references, fallback result, and optional bounded rows |
+| `list_chooser_columns` | `asset_path` | Column types, input/output classification, disabled state, row-value property/type/count, and bounded reflected fields |
+| `list_chooser_rows` | `asset_path`, `start_row=0`, `limit=100` (1–500) | Result payload, disabled state, and at most 512 reflected cells per row; reports partial rows explicitly |
+| `list_chooser_references` | `asset_path`, `offset=0`, `limit=200` (1–1000) | Stable hard/soft references, exact object-existence evidence, and depth/visit/result scan completeness |
+| `validate_chooser_table` | `asset_path` | Row-array/column alignment, known result targets, reference resolution, and bounded-scan completeness; errors set `valid=false`, warnings do not |
+
+`validate_chooser_table` differs from the existing `validate_chooser`: the former is strictly read-only structural validation, while the latter intentionally compiles the table and can validate expected context/result contracts.
+
+### Remaining Chooser actions
+
+| Category | Actions |
+|---|---|
+| Deep inspection/reference editing | `inspect_chooser`, `duplicate_chooser_tree`, `set_context_object_class`, `set_result_asset_reference`, `set_evaluate_chooser_result_reference`, `validate_chooser` |
+| Authoring | `create_chooser_table`, `add_chooser_column`, `add_chooser_row`, `set_chooser_cell` |
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithAnimation.md` and `Plugins/Monolith/Skills/unreal-chooser/SKILL.md` for bounds, exact path semantics, and the recommended read-before-write workflow.
 
 ---
 
