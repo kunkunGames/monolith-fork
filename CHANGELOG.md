@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Native proxy publication now fails closed.** Both Windows build entry points share one implementation that compiles in private staging, validates a destination-side candidate, and checks final replacement before reporting success. Compile or publication failures return non-zero, preserve an existing proxy before replacement, and clean only invocation-owned staging and candidate files.
+
 ## [0.22.0] - 2026-08-01
 
 ### Internal
