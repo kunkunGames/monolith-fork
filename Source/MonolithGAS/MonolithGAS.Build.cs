@@ -23,7 +23,9 @@ public class MonolithGAS : ModuleRules
 			"UnrealEd", "BlueprintGraph",
 			"GameplayAbilitiesEditor", "GameplayTasksEditor",
 			"GameplayTagsEditor",
+			"AssetRegistry",
 			"EnhancedInput",
+			"InputCore",
 			"EditorScriptingUtilities",
 			"Json", "JsonUtilities",
 			// UMGEditor: editor-side UWidgetBlueprintExtension + FWidgetBlueprintCompilerContext

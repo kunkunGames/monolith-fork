@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Enhanced Input assets now have a bounded read-only preflight surface.** Five `input` actions list and inspect `UInputAction` / `UInputMappingContext` assets and validate missing actions, invalid keys, duplicate-key warnings, and scan completeness. Canonical path checks, stable pagination, independent mapping/instanced-object caps, and explicit truncation prevent guessed paths or silently partial results; the namespace stays available when GAS authoring is disabled and never compiles, saves, mutates, transacts, or dirties an asset.
+
 ## [0.22.0] - 2026-08-01
 
 ### Internal

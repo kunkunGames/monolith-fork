@@ -1,6 +1,6 @@
 # Monolith API Reference
 
-**Version:** v0.22.0 · **Last updated:** 2026-08-01
+**Version:** v0.22.0 · **Last updated:** 2026-08-04
 
 **In-tree action total is approximate: ~1,400+ actions across 25+ in-tree namespaces** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
@@ -30,6 +30,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [mesh](#mesh) | 194 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, mesh import (incl. skeletal + animation). +45 town gen registers only with `bEnableProceduralTownGen=true` (experimental, not in the public count) |
 | [ui](#ui) | 138 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, headline scaffolders, navigation/conversion gap-closure, accessibility, CommonUI, GAS UI bindings |
 | [gas](#gas) | 135 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold |
+| [input](#input) | 5 | Read-only Enhanced Input Action and Mapping Context discovery, bounded inspection, and validation |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
 | [ai](#ai) | 221 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
@@ -984,6 +985,26 @@ Gameplay Ability System integration. **135 actions** across 11 categories — co
 Grant a `UGameplayAbility` to a pawn's `UAbilitySystemComponent` directly without scaffold-side wiring or `apply_effect` ceremony. See `describe_query("action_schema", target_namespace="gas", target_action="grant_ability_to_pawn")` for params.
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithGAS.md` for the deep dive.
+
+---
+
+## input
+
+Read-only Enhanced Input asset discovery, bounded inspection, and validation. The namespace is registered by `MonolithGAS` but remains available when GAS authoring is disabled. Its dispatcher is advertised as read-only and idempotent.
+
+All asset inputs require canonical mounted package paths or matching top-level object paths. List and mapping responses expose explicit pagination; trigger/modifier arrays and validation scans expose explicit truncation/completeness rather than silently dropping data.
+
+| Action | Parameters | Returns |
+|---|---|---|
+| `list_input_actions` | `path=/Game`, `offset=0`, `limit=200` (1–1000), `include_details=false` | Stable Input Action page with `total`, `count`, and `has_more`; optional bounded detail rows |
+| `get_input_action` | `asset_path` | Value type, description, behavior flags, accumulation policy, and bounded trigger/modifier class arrays |
+| `list_input_mapping_contexts` | `path=/Game`, `offset=0`, `limit=200` (1–1000), `include_details=false`, `mapping_limit=100` (1–500) | Stable context page; optional details load only returned contexts and cap mappings per context |
+| `get_input_mapping_context` | `asset_path`, `mapping_offset=0`, `mapping_limit=100` (1–500) | Context metadata and a bounded stable mapping page |
+| `validate_input_mappings` | `context_paths` or `path=/Game`, `offset=0`, `limit=200` (1–1000), `mapping_scan_limit=4096` (1–10000) | Missing-action/invalid-key errors, duplicate-key warnings, and per-context/global `valid` + `complete` evidence |
+
+`context_paths` and `path` are mutually exclusive. Duplicate-key assignments are warnings because they may be deliberate Enhanced Input layouts; missing actions, invalid keys, load failures, or a mapping scan cutoff are errors. `page_complete` covers mapping scans in the returned context page, while `all_contexts_covered` covers context pagination. Global `complete` requires both, and `valid=true` additionally requires zero errors.
+
+See `Plugins/Monolith/Skills/unreal-input/SKILL.md` for routing and bounded workflow examples.
 
 ---
 

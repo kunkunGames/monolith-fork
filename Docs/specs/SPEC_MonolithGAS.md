@@ -8,12 +8,12 @@
 
 ## MonolithGAS
 
-**Dependencies:** Core, CoreUObject, Engine, MonolithCore, GameplayAbilities, GameplayTags
-**Namespace:** `gas` (135 actions) + 4 cross-namespace aliases into `ui` | **Tool:** `gas_query(action, params)` | **Actions:** 135 (Phase J F8: +`grant_ability_to_pawn`)
-**Conditional:** GBA (Blueprint Attributes) features wrapped in `#if WITH_GBA`. Core GAS engine modules (GameplayAbilities, GameplayTags, GameplayTasks) are always available. When GBA is absent, Blueprint AttributeSet creation is disabled but all 135 actions still register and compile cleanly. When `bEnableGAS` is disabled in settings, 0 actions registered.
+**Dependencies:** Core, CoreUObject, Engine, MonolithCore, AssetRegistry, EnhancedInput, InputCore, GameplayAbilities, GameplayTags
+**Namespaces:** `gas` (135 actions) + 4 cross-namespace aliases into `ui`; `input` (5 read-only actions) | **Tools:** `gas_query(action, params)`, `input_query(action, params)`
+**Conditional:** GBA (Blueprint Attributes) features are wrapped in `#if WITH_GBA`. Core GAS engine modules remain available. When GBA is absent, Blueprint AttributeSet creation is disabled but the `gas` schemas still compile cleanly. When `bEnableGAS` is disabled, GAS authoring actions are not registered; the five Enhanced Input asset inspection actions remain registered because they do not depend on GAS authoring.
 **Settings toggle:** `bEnableGAS` (default: True)
 
-MonolithGAS provides full MCP coverage of the Gameplay Ability System. It covers ability CRUD, attribute set management, gameplay effect authoring, ASC (Ability System Component) inspection and manipulation, gameplay tag operations, gameplay cue management, target data, input binding, runtime inspection, scaffolding of common GAS patterns, and Widget→Attribute binding via class-extension authoring.
+MonolithGAS provides full MCP coverage of the Gameplay Ability System. It covers ability CRUD, attribute set management, gameplay effect authoring, ASC (Ability System Component) inspection and manipulation, gameplay tag operations, gameplay cue management, target data, input binding, runtime inspection, scaffolding of common GAS patterns, and Widget→Attribute binding via class-extension authoring. A separate `input` namespace owns read-only Enhanced Input asset preflight so IA/IMC inspection is not coupled to the GAS settings toggle.
 
 ### Action Categories
 
@@ -53,6 +53,26 @@ See [SPEC_CORE.md §11 Recent Fixes](../SPEC_CORE.md#recent-fixes-phase-j--shipp
 > **UI Binding cooked-build caveat.** `UMonolithGASAttributeBindingClassExtension` is an editor-only class — content WBPs that reference it will fail to apply bindings in cooked Steam builds. See [COOKED_BUILD_TODO.md](../COOKED_BUILD_TODO.md) for the resolution path (Option A/B/C deferred to pre-Steam-launch checkpoint).
 >
 > **Unity-safe file-local helpers (#68).** Internal-linkage helpers (anonymous-namespace functions/types, file-`static`s) must carry file-unique names or live in per-file named namespaces — matching the MonolithUI model — so they don't collide when adaptive/full unity concatenates same-module `.cpp`s into one translation unit.
+
+---
+
+### Enhanced Input Asset Inspection (`input`, 5 actions)
+
+`FMonolithGASInputAssetActions` registers five read-only actions before the GAS settings gate. The namespace uses direct `AssetRegistry`, `EnhancedInput`, and `InputCore` dependencies and advertises `readOnlyHint=true` plus `idempotentHint=true`.
+
+| Action | Contract |
+|---|---|
+| `list_input_actions` | Stable AssetRegistry page under a canonical package root. `offset` is non-negative; `limit` is 1–1000. `include_details` loads only the returned page. |
+| `get_input_action` | Exact type-checked `UInputAction` readback: value type, description, behavior flags, accumulation, player-mappable presence, and trigger/modifier class identities. Each instanced-object array is capped at 256 with explicit count/truncation fields. |
+| `list_input_mapping_contexts` | Stable context page with the same asset bounds. Optional details cap each context to `mapping_limit` 1–500. |
+| `get_input_mapping_context` | Exact type-checked context readback with independent `mapping_offset` and `mapping_limit` pagination. Each mapping's trigger/modifier array is capped at 64 with explicit metadata. |
+| `validate_input_mappings` | Validates a bounded context page and at most `mapping_scan_limit` 1–10000 mappings per context. Missing actions, invalid keys, load failures, and scan cutoffs are errors. Multiple actions on one key are warnings because that layout can be intentional. |
+
+Asset parameters accept only canonical mounted package paths or matching top-level object paths. Filesystem paths, subobjects, whitespace aliases, and mismatched object leaves return `-32602`; no alternate asset, widened search, or path guess is used. `context_paths` and `path` are mutually exclusive, and an explicit empty or duplicate context list is rejected.
+
+Every list result reports `total`, `offset`, `limit`, `count`, and `has_more`. Mapping pages report their own offsets/counts/truncation. Validation reports `page_complete` for mapping traversal and `all_contexts_covered` for context pagination; global `complete` requires both, and `valid=true` additionally requires zero errors. None of these handlers calls `Modify`, opens a transaction, saves, compiles, or dirties a package.
+
+Focused verification lives in `Docs/testing/2026-08-04-enhanced-input-asset-inspection.md`; routing guidance lives in `Skills/unreal-input/SKILL.md`.
 
 ---
 
