@@ -17,6 +17,10 @@ MonolithAudio provides MCP coverage of audio asset creation, inspection, batch m
 
 **No overlap with runtime audio playback plugins** — a runtime audio plugin owns footstep/surface/movement audio playback; MonolithAudio owns editor-time asset creation, management, and inspection.
 
+### Runtime packaging contract
+
+`MonolithAudioRuntime` must compile independently in both modular Editor targets and monolithic packaged-game targets. Each runtime translation unit therefore includes the public header that owns every engine symbol it uses: `Modules/ModuleManager.h` for `IMPLEMENT_MODULE`, and `Engine/Engine.h` for `GEngine`, `UEngine::GetWorldFromContextObject`, and `EGetWorldErrorMode`. The runtime module must not rely on Editor shared-PCH or unity-build transitive includes.
+
 ### Action Categories
 
 | Category | Actions | Source file | Description |

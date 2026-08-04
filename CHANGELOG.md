@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`MonolithAudioRuntime` now compiles as a self-contained packaged-target module.** Its translation units include the owning public headers for `IMPLEMENT_MODULE`, `GEngine`, `UEngine::GetWorldFromContextObject`, and `EGetWorldErrorMode` instead of relying on Editor shared-PCH or unity-build transitive includes.
+
 ## [0.22.0] - 2026-08-01
 
 ### Internal
