@@ -1,5 +1,6 @@
 #include "MonolithAudioQueryActions.h"
 #include "MonolithAssetUtils.h"
+#include "AssetRegistry/AssetData.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 #include "MonolithJsonUtils.h"

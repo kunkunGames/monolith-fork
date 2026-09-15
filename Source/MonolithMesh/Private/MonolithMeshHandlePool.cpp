@@ -1,6 +1,7 @@
 #include "MonolithMeshHandlePool.h"
 
 #if !WITH_GEOMETRYSCRIPT
+#include "Dom/JsonObject.h"
 // Stub implementations when GeometryScript is not available
 void UMonolithMeshHandlePool::Initialize() {}
 void UMonolithMeshHandlePool::Teardown() {}
@@ -226,7 +227,10 @@ bool UMonolithMeshHandlePool::SaveHandle(const FString& HandleName, const FStrin
 		{
 			FString TrashedName = FString::Printf(TEXT("/Temp/__monolith_evicted_%s_%s"),
 				*AssetName, *FGuid::NewGuid().ToString(EGuidFormats::Short));
-			ExistingPackage->Rename(*TrashedName, nullptr, REN_DontCreateRedirectors | REN_NonTransactional | REN_AllowPackageLinkerMismatch);
+			// REN_ForceNoResetLoaders omitted: Rename no longer calls ResetLoaders
+			// (the flag is already inert on UE 5.7 and deprecated on UE 5.8), and the
+			// explicit ResetLoaders above already covers this package.
+			ExistingPackage->Rename(*TrashedName, nullptr, REN_DontCreateRedirectors | REN_NonTransactional);
 		}
 	}
 

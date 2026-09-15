@@ -56,6 +56,12 @@ Then restart Claude Code.
 - **Backend:** Script proxies connect only to the Monolith HTTP server running in the Unreal Editor. The native proxy accepts a live endpoint only after validating the `/health` JSON contract and binding `monolith_status` to the expected host-project root. Plain HTTP is loopback-only and HTTPS requests use WinHTTP secure transport. A failed known-up request immediately opens the offline circuit, so later reads do not each pay the live timeout. The background poller honors transport backoff, while a successful validated MCP request closes the circuit; either validated state transition announces `tools/list_changed`.
 - **Editor-down startup:** The native proxy advertises exactly four stable control-plane tools: `monolith_query`, `monolith_discover`, `monolith_status`, and `monolith_find`. It does not replay stale cached live/profile tools. Legacy `*_query` names remain accepted for existing clients but are not advertised while offline.
 
+## Native Proxy Build
+
+Run \uild_proxy.bat\ from \Tools\\MonolithProxy\; \uild.bat\ is a compatibility entry point that delegates to the same implementation. Compilation happens in a private staging directory. Publication copies the completed executable to a unique candidate beside the destination, verifies its size, and renames that candidate over \Binaries\\monolith_proxy.exe\. A failure returns non-zero without printing success and preserves any existing proxy.
+
+For isolated verification, \MONOLITH_PROXY_SOURCE_FILE\, \MONOLITH_PROXY_OUTPUT_DIR\, and \MONOLITH_PROXY_STAGING_DIR\ override the source, destination, and staging directory. Run \powershell -NoProfile -ExecutionPolicy Bypass -File Scripts\\test_proxy_build.ps1\ to verify both entry points plus compile- and publication-failure preservation.
+
 ## Native Offline Fallback
 
 The native proxy keeps useful Monolith work available while the editor is closed, restarting, or unavailable during a build:

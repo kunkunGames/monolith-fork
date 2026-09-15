@@ -1,5 +1,6 @@
 #include "Indexers/BlueprintIndexer.h"
 #include "Utility/MonolithSearchValueWriter.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
 #include "Engine/Blueprint.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"

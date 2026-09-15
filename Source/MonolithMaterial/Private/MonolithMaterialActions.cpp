@@ -2,6 +2,7 @@
 #include "MonolithMaterialValidation.h"
 #include "MonolithParamUtils.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithMaterialSamplerCompat.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 #include "MonolithPackagePathValidator.h"
@@ -12092,11 +12093,7 @@ static void PopulateTextureMetadata(UTexture* Tex, const TSharedPtr<FJsonObject>
 #endif
 
 	// Recommended sampler type for material usage
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
-	const EMaterialSamplerType SamplerType = MaterialExpressionUtils::GetSamplerTypeForTexture(Tex);
-#else
-	const EMaterialSamplerType SamplerType = UMaterialExpressionTextureBase::GetSamplerTypeForTexture(Tex);
-#endif
+	const EMaterialSamplerType SamplerType = MonolithMaterialSamplerCompat::GetSamplerTypeForTexture(Tex);
 	UEnum* SamplerEnum = StaticEnum<EMaterialSamplerType>();
 	if (SamplerEnum)
 	{

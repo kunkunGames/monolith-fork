@@ -1,6 +1,6 @@
 ﻿# Monolith API Reference
 
-**Version:** v0.22.0 · **Last updated:** 2026-08-04
+**Version:** v0.23.0 · **Last updated:** 2026-09-15
 
 **In-tree action total is approximate: current source contains roughly 2126 in-tree `RegisterAction` registrations** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large and build-flag dependent to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `console` namespace adds live `IConsoleManager` registry discovery plus EngineSource.db/FTS5 snapshot search. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
@@ -330,6 +330,11 @@ Full read/write access to Blueprint graphs, variables, components, functions, no
   resolving to the first.
 - **`get_inherited_component_override` accepts `asset_path` as an alias for `bp_path`.**
 
+**New in v0.23.0:**
+- **User Defined Structs are editable after creation** — `get_struct_fields`, `add_struct_field`, `remove_struct_field`, `rename_struct_field`, `set_struct_field_type`. See the deep dive below.
+- **`add_node` places unpositioned nodes in clear space.** Omitting `position` used to default to `[0,0]`, stacking every MCP-authored node on the origin (#132). An explicit `position` is still authoritative and the first node in an empty graph still lands at `[0,0]`; the response now reports the chosen position plus `position_source` (`"explicit"` / `"auto"`).
+- **`auto_layout(layout_mode: "new_only")` unpins piles, not just the origin.** A node counts as new if it is at the origin *or* piled on another node (intersection area against the smaller node, 25% threshold), so edge contact in a hand-laid graph is left alone. The response gained `nodes_pinned`. **Consequence:** because `add_node` now lands unpositioned nodes in clear space, those nodes are *not* `new_only` candidates — use `layout_mode: "all"` to fold them into the flow.
+
 > For full param schemas, call `describe_query("action_schema", target_namespace="blueprint", target_action="<name>")` (or `monolith_discover("blueprint", detail=true)`). Plain `monolith_discover("blueprint")` is terse — action names + one-line descriptions only. The action surface is too broad to enumerate here without bloat — high-traffic actions are documented below; the rest are listed and discoverable.
 
 **Action categories:**
@@ -350,6 +355,7 @@ Full read/write access to Blueprint graphs, variables, components, functions, no
 | Dataset — CurveTable (0.15.0) | 5 | `read_curve_table`, `set_curve_table_keys`, `add_curve_table_row`, `remove_curve_table_row`, `rename_curve_table_row` |
 | Dataset — StringTable (0.15.0) | 3 | `read_string_table`, `set_string_table_entries`, `remove_string_table_entry` |
 | Dataset — DataAsset (0.15.0) | 1 | `seed_data_asset` (create + bulk-fill in one atomic call) |
+| Dataset — User Defined Struct (0.23.0) | 5 | `get_struct_fields`, `add_struct_field`, `remove_struct_field`, `rename_struct_field`, `set_struct_field_type` |
 | Cross-class / overrides (0.15.0) | 3 | `add_property_access`, `override_parent_function`, `save_dirty_assets` |
 | CDO | 2 | `get_cdo_properties`, `set_cdo_property` |
 | Templates / spec | 4 | `build_blueprint_from_spec`, `apply_template`, `list_templates`, `compare_blueprints` |
@@ -548,6 +554,65 @@ Save ALL currently-dirty Blueprint and Widget Blueprint packages in one sweep �
 
 Returns `saved[]`, `failed[]`, `count`.
 
+### User Defined Struct fields (5) · NEW in v0.23.0
+
+`create_user_defined_struct` authored a struct once; nothing could read or change one afterwards. These five close that, driven by `FStructureEditorUtils` — the same engine surface `create_user_defined_struct` already used.
+
+**Fields are targeted by display name** (`Mobility`), not the serialized `VarName` (`Mobility_36_31089BED...`) — though either resolves, and a miss lists the names that do exist.
+
+#### `blueprint.get_struct_fields`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | User Defined Struct asset path, e.g. `/Game/Data/S_MyStruct` |
+
+Returns fields in declaration order with `name`, `type`, `guid`, `var_name`, `default_value`, `tooltip`. **Types are reported in the same grammar the writers accept**, containers included, so the output feeds straight back into `add_struct_field`.
+
+#### `blueprint.add_struct_field`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | User Defined Struct asset path |
+| `name` | string | **required** | Display name for the new field |
+| `type` | string | **required** | Same grammar as `add_variable`: `bool`, `int`, `int64`, `float`, `double`, `string`, `name`, `text`, `byte`, `struct:Vector`, `object:ClassName`, `class:ClassName`, `enum:E_Name`, `softobject:Texture2D`, `array:int`, `set:name`, `map:string:int` |
+| `default_value` | string | optional | Applied via `ChangeVariableDefaultValue`. The engine validates it against the field type and silently keeps the type default if it does not parse — the response reports whether it took |
+| `after` | string | optional | Insert directly after this existing field instead of appending |
+| `skip_save` | boolean | optional | Skip the synchronous package save. Default: `false` |
+
+#### `blueprint.remove_struct_field`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | User Defined Struct asset path |
+| `name` | string | **required** | Display name of the field to remove |
+| `skip_save` | boolean | optional | Default: `false` |
+
+**A struct cannot be left empty**, so removing the last remaining field is refused. Recompiling drops the member from every Blueprint the removal breaks — audit `dependents` first.
+
+#### `blueprint.rename_struct_field`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | User Defined Struct asset path |
+| `name` | string | **required** | Current display name |
+| `new_name` | string | **required** | New display name |
+| `skip_save` | boolean | optional | Default: `false` |
+
+The underlying GUID is preserved, so existing Break/Make nodes keep their connections. Names compare case-insensitively, so a case-only rename is refused by the engine.
+
+#### `blueprint.set_struct_field_type`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | User Defined Struct asset path |
+| `name` | string | **required** | Display name of the field |
+| `type` | string | **required** | New type, same grammar as `add_variable` |
+| `skip_save` | boolean | optional | Default: `false` |
+
+**This is a MIGRATION, not a rename.** The field's default value is cleared by the engine and pins of the old type on existing Break/Make nodes are disconnected by the recompile. The response reports the discarded default.
+
+**Common response fields (writers).** Each writer reports what it recompiled, what it dirtied, and `dependents` — the assets that reference the struct. Those dependents are **not** recompiled by the call.
+
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithBlueprint.md` for the deep dive.
 
 ---
@@ -721,6 +786,11 @@ The Tranche 2 search/discovery actions are backed by strict `FParamSchemaBuilder
 
 `add_event_handler` now returns `handler_index` + `usage_id` + `usage`; for inter-emitter handlers `source_emitter` must resolve or the handler is rejected. It does not auto-add `Receive<Event>` modules. `add_simulation_stage` materializes the matching `particle_simulation_stage` output node and returns `usage_id` / `stage_id` / `graph_outputs`. `create_module_from_hlsl` generates a ParameterMap bridge graph, preserves DI input types (NeighborGrid3D / Grid3D / ParticleRead), and strictly validates HLSL input/output types (unknown types hard-fail). **Before writing custom HLSL, read `Plugins/Monolith/Docs/NIAGARA_HLSL_GUIDE.md`.**
 
+**New in v0.23.0 — module input reads and colour writes.**
+
+- `get_module_input_value` / `get_module_inputs` no longer report `(default)` for inputs set in the Niagara **stack editor** (#143). An input set there does not necessarily have a graph override pin — the engine may store it in the owning script's rapid-iteration parameter store. Both actions now fall back to that store and report `source: "rapid_iteration"`. **Only values differing from the module's declared default are reported as set**, since the engine seeds the store with defaults at compile time. Values are formatted with the engine's own pin-literal writer, so they round-trip through `set_module_input_value`.
+- `set_module_input_value` writes LinearColor correctly (#122, #143). The JSON object form (`{"r":..,"g":..,"b":..,"a":..}`) emitted a comma-separated literal that the engine's colour pin parser rejects, silently substituting black-with-alpha-1 — the "only the alpha applied" symptom. Colour now emits `(R=..,G=..,B=..,A=..)` and vec2 emits `X=.. Y=..`. Object values arriving as a serialized JSON string are also accepted.
+
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithNiagara.md`.
 
 ---
@@ -803,7 +873,11 @@ Render an asset in a preview scene and screenshot it. Supported `asset_type` val
 | `scale` | number | optional | Widget only: DPI multiplier. Default: `1.0` |
 | `camera` | object | optional | `{location:[x,y,z], rotation:[p,y,r], fov:60}` |
 | `resolution` | array | optional | `[width, height]`. Default: `[512, 512]` |
+| `width` | number | optional | **New v0.23.0.** Capture width in pixels (1-8192). Default: `512`. Overrides `resolution[0]` when both are given |
+| `height` | number | optional | **New v0.23.0.** Capture height in pixels (1-8192). Default: `512`. Overrides `resolution[1]` when both are given |
 | `output_path` | string | optional | Output PNG path |
+
+`width` / `height` are now declared in the action schema — previously they came back as `Unknown param` warnings while the capture silently stayed 512x512 (#141, reported by @Alexbeav). Use them to match a widget's design frame (e.g. `width=1200, height=760`); a square capture yields false layout conclusions. Non-positive sizes and sides beyond 8192 px are rejected as `-32602`, and the widget branch's scale-adjusted physical target is clamped to the same ceiling.
 
 ### `editor.capture_sequence_frames`
 
@@ -879,6 +953,10 @@ Create a fully blank `UWorld` asset at the given `/Game/...` path. Saves immedia
 |-----------|------|----------|-------------|
 | `path` | string | **required** | Asset path under `/Game/...` (e.g. `/Game/Tests/Monolith/Audio/Map_Test`) |
 | `map_template` | string | optional | `blank` (default). Reserved: `vr_basic`, `thirdperson_basic` — return error in v1; UE 5.7 templates are populated client-side, not via `UWorldFactory`. |
+| `open` | boolean | optional | **New v0.23.0.** Open the new map after creating it, with the exact semantics of `editor.load_level` (same dirty-current-map refusal, PIE-teardown guard and stale-resident-world guard). Default: `false` |
+| `dirty_policy` | string | optional | **New v0.23.0.** Forwarded to `editor.load_level` when `open=true`: `refuse` (default) aborts the open if the CURRENT level has unsaved changes; `discard` opens anyway and loses them. Ignored when `open=false` |
+
+> **Creation alone does NOT change the open world.** It saves a `UWorld` asset and leaves the editor on whatever level was already loaded, so a following spawn/populate call edits *that* world. As of v0.23.0 the response always reports `current_world` (the editor world after the call, as a package name directly comparable to `path`) and `opened`. If the map is created but the open is refused, the call still **succeeds** with `opened=false` and an `open_error` explaining why — the asset exists on disk either way, so retrying would just collide. Thanks @whalemenace.
 
 ### `editor.get_module_status` · NEW in Phase J F8
 
@@ -898,7 +976,13 @@ Execute a console command. Routes to the first PIE `PlayerController` found (so 
 
 ### `editor.start_pie` · `editor.stop_pie` · NEW in v0.14.10
 
-`start_pie` queues an in-viewport Play-In-Editor session (refuses to queue a duplicate when a PIE world is already alive); response includes `mode: 'in_viewport'`. `stop_pie` calls `RequestEndPlayMap` when a PIE world exists, no-op (`stopped: false`) otherwise. Both take *no parameters*. Pairs with `run_python` / `load_level` for fully automated in-game test flows.
+`start_pie` queues an in-viewport Play-In-Editor session (refuses to queue a duplicate when a PIE world is already alive); response includes `mode: 'in_viewport'`. `stop_pie` calls `RequestEndPlayMap` when a PIE world exists, no-op (`stopped: false`) otherwise. `stop_pie` takes *no parameters*. Pairs with `run_python` / `load_level` for fully automated in-game test flows.
+
+| `start_pie` parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `on_compile_errors` | string | optional | **New v0.23.0.** `refuse` (default) or `suppress`. Any other value is `-32602`, rejected *before* any editor-state check |
+
+Starting PIE with a Blueprint in an unresolved error state raises the engine's blocking compile-error modal, which runs a nested modal loop on the game thread and **starves the in-process MCP server** — the session hangs rather than returning. `start_pie` now pre-flights every loaded Blueprint against the engine's own condition (`BS_Error && bDisplayCompilePIEWarning`, the exact test `FInternalPlayLevelUtils::ResolveDirtyBlueprints` uses). `refuse` returns an error with the offending `{name, path}` list and does not start PIE; `suppress` starts anyway under a scoped `GIsRunningUnattendedScript` guard so `ShowBlueprintErrorDialog` early-outs. Successful starts report `compile_error_policy`, `errored_blueprint_count` and `errored_blueprints`. Thanks @Hvizeu.
 
 ### `editor.run_python` · NEW in v0.14.9
 
@@ -1480,6 +1564,68 @@ Plan or run the selected Gather Text commandlet operations for one existing proj
 
 Content Browser collection CRUD, dynamic query management, and asset association. Backed by the CollectionManager module.
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithIndex.md` for the deep dive.
+
+---
+
+## localization
+
+**New v0.23.0.** Read-only culture discovery and StringTable inspection. **4 actions**, all read-only + idempotent.
+
+Registered from `MonolithConfig` **ahead of the `bEnableConfig` gate**, so these stay available when config authoring is switched off. Every action requires a canonical mounted package path (or the matching top-level object path) and never transacts, saves, mutates or dirties a package. StringTable *authoring* lives on the `blueprint` namespace.
+
+### `localization.list_cultures`
+
+List Unreal cultures with bounded pagination. Without `culture_names` it pages every known culture; with them it resolves those roots and reports the ones that did not resolve.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `culture_names` | array | optional | Culture roots to resolve, e.g. `["en","fr"]`. Max 256. Omit to list every known culture |
+| `include_derived` | boolean | optional | Include cultures derived from each requested root. Only used with `culture_names`. Default: `true` |
+| `offset` | integer | optional | Zero-based result offset. Default: `0` |
+| `limit` | integer | optional | Max cultures to return (1-500). Default: `100` |
+
+Returns `current_culture`, `current_language`, `current_locale`, `unresolved_names`, `cultures[{name, native_name, english_name, display_name, two_letter_iso, three_letter_iso}]`, `total`, `offset`, `limit`, `count`, `has_more`.
+
+### `localization.list_string_tables`
+
+Discover `UStringTable` assets under a mounted package root via the AssetRegistry.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | optional | Canonical mounted package root, searched recursively. Default: `/Game` |
+| `offset` | integer | optional | Zero-based result offset. Default: `0` |
+| `limit` | integer | optional | Max tables to return (1-1000). Default: `200` |
+| `include_details` | boolean | optional | Load **only the returned page** and add namespace, table id, internal flag and entry count. Default: `false` |
+
+Discovery itself is registry-only; nothing is loaded unless `include_details` is set.
+
+### `localization.get_string_table`
+
+Read one bounded page of entries in stable key order, resuming from an exclusive `after_key` cursor.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Canonical StringTable package path or matching top-level object path |
+| `after_key` | string | optional | Exclusive cursor: return keys sorting strictly after this one. Max 4096 chars |
+| `entry_limit` | integer | optional | Max entries to return (1-1000). Default: `200` |
+| `include_metadata` | boolean | optional | Include per-entry metadata rows, within the shared `metadata_limit` budget. Default: `false` |
+| `metadata_limit` | integer | optional | Total metadata rows across the **whole page**, not per entry (0-4096). Default: `512` |
+| `text_limit` | integer | optional | Max characters per source string or metadata value (1-65536). Default: `4096` |
+
+Returns `entry_count`, `entries_after_cursor`, `entries[{key, source_string, source_string_length, source_string_truncated, metadata?}]`, and three independent completeness fields — `has_more_entries` (this page), `all_entries_covered` (the table), `metadata_complete` (the metadata budget) — plus `next_after_key?` and `complete`.
+
+### `localization.validate_string_table`
+
+Validate a bounded prefix of a StringTable's keys and source strings, with paginated issues.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Canonical StringTable package path or matching top-level object path |
+| `scan_limit` | integer | optional | Max entries validated, in key order (1-10000). A larger table reports `complete=false`. Default: `4096` |
+| `issue_offset` | integer | optional | Zero-based issue offset. Default: `0` |
+| `issue_limit` | integer | optional | Max issues to return (1-1000). Default: `200` |
+
+**Errors:** empty key, empty table, `scan_limit` exceeded. **Warnings:** edge whitespace, empty source string. `valid=true` **only** when the scan covered every entry AND found zero errors — a truncated scan is itself an error, so a partial pass never reads as a clean one.
 
 ---
 
@@ -2211,6 +2357,21 @@ Scan a copied UI asset package for serialized `FSlateFontInfo` values and remap 
 
 > **Phase J F2/F3:** these four actions now reject empty `widget_path`, missing `attribute`, or unresolvable ASC up-front with structured errors instead of writing junk via reflection.
 > **Phase J F5:** the response shape is `{ bindings: [...], count: N }`, not a bare array. Wrap your client parsers.
+
+### `ui.build_ui_from_spec` build modes · NEW in v0.23.0 (#139)
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `mode` | string | optional | `rebuild` (default, unchanged behaviour) or `patch`. An unrecognised value is rejected with `-32602` — it **never** falls back to rebuild |
+
+`build_ui_from_spec` had exactly one behaviour: tear the widget tree down and recreate it. That is correct for authoring a screen from nothing and silently destructive for iterating on one — every property the spec schema does not model reset to its class default, with nothing in the response saying so.
+
+- **`patch`** matches spec nodes to existing widgets by **id + exact class**, reuses those widget and slot objects, reorders them to spec order, and adds or removes only what the spec adds or removes. Custom `WidgetStyle` tints, `BackgroundBlur.BlurStrength`, tooltips, render transforms and unmodelled slot fields survive. An `FText` whose value is unchanged is left untouched, preserving its localization namespace and key. `overwrite` is ignored in this mode.
+- **`rebuild`** now runs a pre-teardown **data-loss audit**: every editable property that differs from its class default and is not restored by the spec builders is reported as a warning naming the widget and dotted path (e.g. `Button_Play.WidgetStyle.Normal.TintColor`), plus one warning per keyed `FText` whose loc key the rebuild would reassign. **The audit runs on `dry_run: true` too**, so the loss can be inspected before it happens.
+
+**New response fields:** `mode`, `teardown`, top-level `error_count` / `warning_count`, `node_counts.reused`, `node_counts.semantics` (a prose string spelling out what the counts mean for the mode that ran — `created:N / modified:0 / removed:N` reads like bookkeeping when it actually means the whole tree was destroyed), and a `data_loss { property_count, widget_count, widgets_audited, localization_keys_reset, suppressed, advice, properties[{kind, widget, widget_class, property_path, current_value, resets_to}] }` block, present only when a teardown was about to drop something. `warnings[]` now includes validator-surface findings, so its length matches `warning_count`.
+
+`ui.build_menu_from_spec` takes the same `mode` and reports `aggregate_data_loss`; `ui.dump_ui_spec_schema` documents both modes under `build_modes`.
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithUI.md` for the deep dive including style-creator-as-data Blueprint pattern and conditional CommonUI gating.
 
@@ -3209,6 +3370,8 @@ Stamp a `UMonolithSoundPerceptionUserData` onto a `USoundBase` (Cue / MetaSoundS
 | `require_owning_actor` | boolean | optional | Skip 2D / no-owner sounds. Default: `true` |
 
 > **Phase J F11:** `loudness <= 0`, `max_range < 0`, and unknown `sense_class` values now reject up-front instead of writing junk userdata.
+
+> **v0.23.0 — Sound Cue edits no longer crash the editor when the cue's asset editor is closed (#125, reported by @M0rtaI).** A `USoundCue` whose editor has never been opened has no editor graph, and `FinalizeCue` called `LinkGraphNodesFromSoundNodes()` unconditionally — an engine implementation that `CastChecked`s every sound node's editor graph-node back pointer, i.e. a fatal assert rather than a soft failure. `connect_sound_cue_nodes` crashed earlier still, inside `InsertChildNode`. Sound Cue edits now rebuild a missing editor graph before touching it, and skip the graph link entirely when it still cannot be linked safely. **The runtime node chain — the part that plays — is updated either way.** All twelve Sound Cue mutation actions report `graph_link_skipped: true` (and log a warning) when the visual link had to be skipped.
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithAudio.md`.
 

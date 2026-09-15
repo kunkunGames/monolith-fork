@@ -1,4 +1,5 @@
 #include "MonolithAudioRuntimeModule.h"
+#include "Modules/ModuleManager.h"
 
 #include "Modules/ModuleManager.h"
 

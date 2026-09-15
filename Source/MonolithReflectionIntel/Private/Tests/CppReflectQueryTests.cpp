@@ -24,6 +24,7 @@
 #include "CppReflect/FCppReflectQueryAdapter.h"
 #include "CppReflect/FUHTArtefactReader.h"
 #include "MonolithJsonUtils.h"
+#include "FScopedTestDb.h"
 
 #include "HAL/FileManager.h"
 #include "HAL/PlatformFileManager.h"
@@ -37,6 +38,8 @@
 
 namespace MonolithCppReflectTestDetail
 {
+	using MonolithReflectionIntelTests::FScopedTestDb;
+
 	static FString GetFixtureDir()
 	{
 		TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("Monolith"));
@@ -49,15 +52,6 @@ namespace MonolithCppReflectTestDetail
 		return FPaths::ProjectPluginsDir()
 			/ TEXT("Monolith") / TEXT("Source") / TEXT("MonolithReflectionIntel")
 			/ TEXT("Private") / TEXT("Tests") / TEXT("Fixtures") / TEXT("CppReflectCorpus");
-	}
-
-	static bool OpenTempDb(FSQLiteDatabase& OutDb, FString& OutPath)
-	{
-		const FString Dir = FPaths::AutomationTransientDir();
-		FPlatformFileManager::Get().GetPlatformFile().CreateDirectoryTree(*Dir);
-		OutPath = Dir / FString::Printf(TEXT("cppreflect-test-%s.db"), *FGuid::NewGuid().ToString());
-		IFileManager::Get().Delete(*OutPath, /*bRequireExists=*/false, /*bEvenReadOnly=*/true);
-		return OutDb.Open(*OutPath, ESQLiteDatabaseOpenMode::ReadWriteCreate);
 	}
 
 	static int32 CountRows(FSQLiteDatabase& Db, const TCHAR* Table)
@@ -155,14 +149,14 @@ bool FCppReflectUHTArtefactParseTest::RunTest(const FString& /*Parameters*/)
 		return false;
 	}
 
-	FSQLiteDatabase Db;
-	FString DbPath;
-	if (!OpenTempDb(Db, DbPath))
+	FScopedTestDb ScopedDb;
+	if (!ScopedDb.Open(TEXT("cppreflect-test")))
 	{
-		AddError(TEXT("OpenTempDb failed"));
+		AddError(TEXT("Failed to open the transient test database"));
 		IFileManager::Get().DeleteDirectory(*WorkRoot, false, true);
 		return false;
 	}
+	FSQLiteDatabase& Db = ScopedDb.Get();
 
 	FUHTArtefactReader Reader;
 	FString Status;
@@ -226,8 +220,6 @@ bool FCppReflectUHTArtefactParseTest::RunTest(const FString& /*Parameters*/)
 		}
 	}
 
-	Db.Close();
-	IFileManager::Get().Delete(*DbPath, false, true);
 	IFileManager::Get().DeleteDirectory(*WorkRoot, false, true);
 	return true;
 }
@@ -246,13 +238,13 @@ bool FCppReflectEmptyRootsDegradedTest::RunTest(const FString& /*Parameters*/)
 {
 	using namespace MonolithCppReflectTestDetail;
 
-	FSQLiteDatabase Db;
-	FString DbPath;
-	if (!OpenTempDb(Db, DbPath))
+	FScopedTestDb ScopedDb;
+	if (!ScopedDb.Open(TEXT("cppreflect-test")))
 	{
-		AddError(TEXT("OpenTempDb failed"));
+		AddError(TEXT("Failed to open the transient test database"));
 		return false;
 	}
+	FSQLiteDatabase& Db = ScopedDb.Get();
 
 	const FString GhostRoot = FPaths::AutomationTransientDir()
 		/ FString::Printf(TEXT("ghost-%s"), *FGuid::NewGuid().ToString());
@@ -266,8 +258,6 @@ bool FCppReflectEmptyRootsDegradedTest::RunTest(const FString& /*Parameters*/)
 	TestTrue(TEXT("reflect_uclasses still bootstrapped"), TableExists(Db, TEXT("reflect_uclasses")));
 	TestEqual(TEXT("Zero UClass rows on missing root"), CountRows(Db, TEXT("reflect_uclasses")), 0);
 
-	Db.Close();
-	IFileManager::Get().Delete(*DbPath, false, true);
 	return true;
 }
 
@@ -291,13 +281,13 @@ bool FCppReflectCursorPaginationTest::RunTest(const FString& /*Parameters*/)
 {
 	using namespace MonolithCppReflectTestDetail;
 
-	FSQLiteDatabase Db;
-	FString DbPath;
-	if (!OpenTempDb(Db, DbPath))
+	FScopedTestDb ScopedDb;
+	if (!ScopedDb.Open(TEXT("cppreflect-test")))
 	{
-		AddError(TEXT("OpenTempDb failed"));
+		AddError(TEXT("Failed to open the transient test database"));
 		return false;
 	}
+	FSQLiteDatabase& Db = ScopedDb.Get();
 
 	// Bootstrap the schema by running the reader on no roots — table-create only.
 	{
@@ -355,8 +345,6 @@ bool FCppReflectCursorPaginationTest::RunTest(const FString& /*Parameters*/)
 	}
 	TestEqual(TEXT("150 distinct rows across 3 pages"), AllNames.Num(), 150);
 
-	Db.Close();
-	IFileManager::Get().Delete(*DbPath, false, true);
 	return true;
 }
 
@@ -382,14 +370,16 @@ bool FCppReflectFindSpecifierTest::RunTest(const FString& /*Parameters*/)
 		return false;
 	}
 
-	FSQLiteDatabase Db;
-	FString DbPath;
-	if (!OpenTempDb(Db, DbPath))
+	// Declared before the prepared statements below: they are destroyed first, so the
+	// holder's Close() cannot hit SQLITE_BUSY on a still-live statement.
+	FScopedTestDb ScopedDb;
+	if (!ScopedDb.Open(TEXT("cppreflect-test")))
 	{
-		AddError(TEXT("OpenTempDb failed"));
+		AddError(TEXT("Failed to open the transient test database"));
 		IFileManager::Get().DeleteDirectory(*WorkRoot, false, true);
 		return false;
 	}
+	FSQLiteDatabase& Db = ScopedDb.Get();
 
 	FUHTArtefactReader Reader;
 	FString Status;
@@ -447,8 +437,6 @@ bool FCppReflectFindSpecifierTest::RunTest(const FString& /*Parameters*/)
 	TestTrue(TEXT("ASampleActor surfaces under lowercase specifier 'abstract' (COLLATE NOCASE)"),
 		bFoundASampleActorCaseInsensitive);
 
-	Db.Close();
-	IFileManager::Get().Delete(*DbPath, false, true);
 	IFileManager::Get().DeleteDirectory(*WorkRoot, false, true);
 	return true;
 }

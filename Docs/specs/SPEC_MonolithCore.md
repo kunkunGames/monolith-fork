@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.22.0 (Beta)
+**Version:** 0.23.0 (Beta)
 
 ---
 
@@ -87,6 +87,16 @@ Every non-durable role logs `Monolith — MCP host role=<role>; registered actio
 | `MonolithMcpSchemaUtils::BuildInputSchema` | `MonolithMcpSchemaUtils.h` (private) | Converts a full internal Monolith param schema into a standard JSON Schema object for MCP-facing `inputSchema` fields. It skips internal root markers such as `_validate_types`, moves per-param `required: true` into the root `required` array, and delegates every property through `BuildJsonSchemaProperty`. |
 | `MonolithPinTypeGrammar::{TryParsePinType, ParsePinTypeFromString, PinTypeToString, ContainerPrefix, ResolveEnumByNameOrPath}` | `MonolithPinTypeGrammar.h` (header-only inline) | The single implementation of the MCP-friendly pin-type token grammar and its inverse — `bool` / `int` / `struct:Vector` / `enum:ESlateVisibility` / `array:object:StaticMesh` / `map:string:int` and so on. It previously existed twice (MonolithBlueprint + MonolithUI) and the copies drifted, which is what shipped enum widget variables that compiled to `int` (issue #115). `TryParsePinType` is the preferred entry point: it fails **by token** — an `object:` / `class:` / `struct:` / `enum:` / `softobject:` / `softclass:` sub-object that does not resolve, an unknown base token, or a bad container value type is a hard `false` with a caller-facing reason, and `Out` is left untouched. `ParsePinTypeFromString` keeps the historical best-effort shape (bool fallback, null sub-object) for un-migrated call sites. **Linkage invariant:** MonolithCore does not link `BlueprintGraph`, so this header is inline-only and must NEVER be included from a MonolithCore `.cpp` (or a MonolithCore test) — the `UEdGraphSchema_K2::PC_*` constants are dllimport'd from `BlueprintGraph` and referencing them from a MonolithCore translation unit is an LNK2019. Same pattern, and same reason, as `MonolithPropertyAccessReader.h` and `MonolithAnimNodeBindingReader.h`. The modules that do link `BlueprintGraph` and may include it from a `.cpp`: MonolithAI, MonolithAnimation, MonolithBlueprint, MonolithComboGraph, MonolithGAS, MonolithIndex, MonolithLevelSequence, MonolithLogicDriver, MonolithUI. |
 | `MonolithCore::ValidatePackagePath(const FString&)` | `MonolithPackagePathValidator.h` (inline) | Wraps `FPackageName::IsValidLongPackageName` with an empty-string-on-success / error-msg-on-failure contract. Rejects empty input, double-slash (`//Game/...`), missing `/Game/` root, trailing slash, illegal chars. Added `dv.367` after a fatal `UObjectGlobals.cpp:1012` ensure from a malformed `//Game/...` JSON payload reaching `CreatePackage`. Routing is incremental and module-keyed. Current owners: MonolithUI (`HandleCreateWidgetBlueprint`, the original crash site), MonolithAI (`MonolithAIInternal::GetOrCreatePackage`), MonolithGAS (`MonolithGASInternal::GetOrCreatePackage`); MonolithBlueprint, MonolithMaterial and MonolithNiagara are being wired now. Grep the Source tree for `ValidatePackagePath` for the current owner list rather than trusting a count here. |
+
+### Engine-version compat headers
+
+UE 5.7 is the compile floor and every change must build on both 5.7 and 5.8. Version gates for APIs called from more than one place live in `MonolithCore/Public` rather than at every call site.
+
+| Header | Resolves | Why it exists |
+|--------|----------|---------------|
+| `MonolithCoreDelegates.h` | `MonolithCoreDelegates::GetPostEngineInit()` | Canonical post-engine-init accessor. UE 5.8 uses `FCoreDelegates::GetOnPostEngineInit()`; UE 5.7 uses the `OnPostEngineInit` data member. |
+| `MonolithCoreDelegatesCompat.h` | `MonolithCoreDelegatesCompat::GetOnPostEngineInit()` | v0.23 incoming alias that forwards to `MonolithCoreDelegates`. |
+| `MonolithMaterialSamplerCompat.h` | `MonolithMaterialSamplerCompat::GetSamplerTypeForTexture` | UE 5.8 moved `GetSamplerTypeForTexture` into `MaterialExpressionUtils`; UE 5.7 does not ship that header. |
 
 ### Actions (curated public shortcuts — namespace: "monolith")
 

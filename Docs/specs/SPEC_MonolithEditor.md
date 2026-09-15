@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.22.0 (Beta)
+**Version:** 0.23.0 (Beta)
 
 ---
 
@@ -125,6 +125,32 @@ Pattern table:
 | `start_pie` | Begin a PIE session pinned to in-viewport mode (`EPlaySessionWorldType::PlayInEditor` + first active level viewport via `FLevelEditorModule::GetFirstActiveViewport`). Independent of the user's `LastExecutedPlayModeType` toolbar choice. Returns `started: true, mode: 'in_viewport'`. Refuses to queue duplicates when PIE is already running. |
 | `stop_pie` | End the active PIE session via `GUnrealEd->RequestEndPlayMap()`. No-op (returns `stopped: false`) if PIE not active. |
 | `run_console_command` | Execute a console command. Routes to the first PIE PlayerController found (multi-client PIE not disambiguated); falls back to `GEngine->Exec` (with null-guard) when no PIE session is active. |
+
+### `start_pie` compile-error policy (v0.23.0, thanks @Hvizeu)
+
+Starting PIE with a Blueprint in an unresolved error state raises the engine's blocking compile-error modal. That modal runs a nested modal loop on the game thread, which **starves the in-process MCP server** — the session hangs rather than returning a result.
+
+`start_pie` now pre-flights every loaded Blueprint against the engine's own unresolved-error condition (`BS_Error && bDisplayCompilePIEWarning` — the exact test `FInternalPlayLevelUtils::ResolveDirtyBlueprints` uses) and applies `on_compile_errors`:
+
+| Value | Effect |
+|-------|--------|
+| `"refuse"` | **Default.** Returns an error with the offending `{name, path}` list and does NOT start PIE. |
+| `"suppress"` | Starts PIE anyway under a scoped `GIsRunningUnattendedScript` guard, so `ShowBlueprintErrorDialog` early-outs instead of running the nested modal loop. |
+
+An unrecognised policy is rejected as `-32602` **before any editor-state check**. A successful start reports `compile_error_policy`, `errored_blueprint_count` and `errored_blueprints`.
+
+### Capturing UMG in a PIE clip (`include_ui`, v0.23.0)
+
+`capture_pie_movement_clip`'s default path is `FViewport::ReadPixels` (scene render target only). `include_ui: true` routes frames through `FScreenshotRequest::RequestScreenshot` so Slate composites UMG into the PNG. Those frames are written asynchronously at end of frame (`uniformity_checked: false`). Docked PIE captures the whole editor window; use new-window PIE for a clean game+UI clip.
+
+### `create_empty_map` does not change the open world (v0.23.0, thanks @whalemenace)
+
+The action saves a `UWorld` **asset** and leaves the editor on whatever level was already loaded. It always did — but the response did not say so, and agents chaining create -> populate silently edited the wrong world.
+
+- The response now **always** carries `current_world` (the editor world after the call, as a package name directly comparable to `path`) and `opened`, and the success message states outright that the open world is unchanged and how to switch.
+- `open: true` (default `false`) loads the new map by delegating to `editor::load_level`, inheriting its dirty-current-map refusal, PIE-teardown guard and stale-resident-world guard.
+- `dirty_policy` (`"refuse"` default, or `"discard"`) is forwarded to `load_level` when `open=true`, and ignored otherwise.
+- **If the map is created but the open is refused, the call still SUCCEEDS** with `opened=false` and `open_error` explaining why. The asset exists on disk either way, so retrying `create_empty_map` would just collide.
 
 **Preview & Inspection (4 — v0.16.0)**
 

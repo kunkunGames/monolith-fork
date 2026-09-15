@@ -1,4 +1,5 @@
 #include "MonolithRetargetSettingsActions.h"
+#include "Runtime/Launch/Resources/Version.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithParamSchema.h"
 
@@ -818,6 +819,11 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleSetRetargetChainSe
 
 		if (bIKChainFound)
 		{
+			// FIKRetargetOpBase::SetSettings is deprecated on UE 5.8. Its body is
+			// GetSettings()->CopySettingsAtRuntime() on both engines, and the
+			// IK-chains specialisation lives on the settings struct in 5.7 and 5.8
+			// alike, so this needs no version gate.
+			IKOp->GetSettings()->CopySettingsAtRuntime(IKBaseSettings);
 			bAnyApplied = true;
 		}
 	}
@@ -929,9 +935,28 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleSetRetargetRootSet
 	if (Params->TryGetNumberField(TEXT("rotation_alpha"), V))          { Settings->RotationAlpha = V; }
 	if (Params->TryGetNumberField(TEXT("translation_alpha"), V))       { Settings->TranslationAlpha = V; }
 	if (Params->TryGetNumberField(TEXT("blend_to_source_translation"), V)) { Settings->BlendToSourceTranslation = V; }
-	if (bHasTranslationOffset) { Settings->TranslationOffsetGlobal = TranslationOffset; }
-	if (!SourcePelvis.IsEmpty()) { PelvisController->SetSourcePelvisBone(FName(*SourcePelvis)); }
-	if (!TargetPelvis.IsEmpty()) { PelvisController->SetTargetPelvisBone(FName(*TargetPelvis)); }
+
+	const TSharedPtr<FJsonObject>* OffsetObjPtr = nullptr;
+	if (Params->TryGetObjectField(TEXT("translation_offset_global"), OffsetObjPtr) && OffsetObjPtr->IsValid())
+	{
+		FVector Offset;
+		if (TryReadVector(*OffsetObjPtr, Offset)) { Settings->TranslationOffsetGlobal = Offset; }
+	}
+
+	// FIKRetargetOpBase::SetSettings is deprecated on UE 5.8; its body is exactly
+	// this call on both engines.
+	PelvisOp->GetSettings()->CopySettingsAtRuntime(PelvisBaseSettings);
+
+	// Optional pelvis bone reassignment (separate setters on the controller).
+	FString SourcePelvis, TargetPelvis;
+	if (Params->TryGetStringField(TEXT("source_pelvis_bone"), SourcePelvis) && !SourcePelvis.IsEmpty())
+	{
+		PelvisController->SetSourcePelvisBone(FName(*SourcePelvis));
+	}
+	if (Params->TryGetStringField(TEXT("target_pelvis_bone"), TargetPelvis) && !TargetPelvis.IsEmpty())
+	{
+		PelvisController->SetTargetPelvisBone(FName(*TargetPelvis));
+	}
 
 	Controller->GetAsset()->MarkPackageDirty();
 

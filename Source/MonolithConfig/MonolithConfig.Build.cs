@@ -17,7 +17,10 @@ public class MonolithConfig : ModuleRules
 		{
 			"MonolithCore",
 			"UnrealEd",
-			"AssetTools",
+			// Direct dep for the `localization` namespace's StringTable
+			// discovery (FARFilter / IAssetRegistry). MonolithCore re-exports it,
+			// but this module queries the registry itself.
+			"AssetRegistry",
 			"Json",
 			"JsonUtilities",
 			"Projects",

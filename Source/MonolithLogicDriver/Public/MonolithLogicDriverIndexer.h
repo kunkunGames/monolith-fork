@@ -1,6 +1,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "AssetRegistry/AssetData.h"
+
 #if WITH_LOGICDRIVER
 #include "MonolithIndexer.h"
 

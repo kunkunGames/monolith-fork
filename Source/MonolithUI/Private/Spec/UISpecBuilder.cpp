@@ -27,8 +27,10 @@
 // partially mutated.
 
 #include "Spec/UISpecBuilder.h"
+#include "Runtime/Launch/Resources/Version.h"
 
 #include "Spec/UISpecValidator.h"
+#include "Spec/UISpecLossAudit.h"
 #include "Spec/UIBuildContext.h"
 #include "Spec/Builders/PanelBuilder.h"
 #include "Spec/Builders/LeafBuilder.h"
@@ -333,6 +335,148 @@ namespace MonolithUI::SpecBuilderInternal
             if (Child.IsValid())
             {
                 PreCreateStylesRecurse(*Child, Context, SeenNamedRefs);
+            }
+        }
+    }
+
+    /**
+     * Run the pre-teardown data-loss audit and fold it into the result
+     * (issue #139).
+     *
+     * The findings land in `Result.Validation.Warnings` rather than
+     * `Result.Warnings` on purpose: `FUISpecValidationResult::ToLLMReport`
+     * renders the `warning_count:` line the caller reads, and that line said
+     * `0` for every lossy rebuild before this existed. Appending here does not
+     * flip `bIsValid`, so a rebuild that the caller genuinely wants still runs
+     * -- it is now just impossible to run one without being told what it costs.
+     */
+    static void RunTeardownAudit(const UWidgetBlueprint* Existing, FUISpecBuilderResult& Result)
+    {
+        Result.bTeardown = true;
+        Result.LossAudit = FUISpecLossAudit::Audit(Existing);
+        FUISpecLossAudit::AppendAsWarnings(Result.LossAudit, Result.Validation.Warnings);
+    }
+
+    /**
+     * Patch mode: snapshot every widget currently reachable from the tree root,
+     * keyed by variable name. The sub-builders consume matching entries instead
+     * of constructing; the post-walk sweep removes whatever went unclaimed.
+     */
+    static void CapturePatchReusables(UWidgetBlueprint* WBP, FUIBuildContext& Context)
+    {
+        if (!WBP || !WBP->WidgetTree)
+        {
+            return;
+        }
+        TArray<UWidget*> Existing;
+        WBP->WidgetTree->GetAllWidgets(Existing);
+        for (UWidget* W : Existing)
+        {
+            if (W && !W->GetFName().IsNone())
+            {
+                Context.ReusableWidgets.Add(W->GetFName(), W);
+            }
+        }
+    }
+
+    /**
+     * Patch mode post-walk reconciliation. Two steps:
+     *   1. Each panel the walk visited has a spec-order cursor; children at or
+     *      beyond it are the ones the spec stopped naming, so trim them.
+     *   2. Anything captured up front that is no longer reachable from the root
+     *      is an orphan -- rename it into the transient package, the same
+     *      recipe the rebuild teardown uses.
+     *
+     * Returns the number of widgets removed.
+     */
+    static int32 SweepPatchOrphans(UWidgetBlueprint* WBP, FUIBuildContext& Context)
+    {
+        if (!WBP || !WBP->WidgetTree)
+        {
+            return 0;
+        }
+
+        for (const TPair<TWeakObjectPtr<UPanelWidget>, int32>& Pair : Context.PatchChildCursor)
+        {
+            UPanelWidget* Panel = Pair.Key.Get();
+            if (!Panel)
+            {
+                continue;
+            }
+            if (Panel->GetChildrenCount() > Pair.Value)
+            {
+                Panel->Modify();
+                for (int32 Index = Panel->GetChildrenCount() - 1; Index >= Pair.Value; --Index)
+                {
+                    Panel->RemoveChildAt(Index);
+                }
+            }
+        }
+
+        TArray<UWidget*> LiveWidgets;
+        WBP->WidgetTree->GetAllWidgets(LiveWidgets);
+        TSet<const UWidget*> Live;
+        Live.Reserve(LiveWidgets.Num());
+        for (const UWidget* W : LiveWidgets)
+        {
+            Live.Add(W);
+        }
+
+        int32 Removed = 0;
+        for (const TPair<FName, TWeakObjectPtr<UWidget>>& Pair : Context.ReusableWidgets)
+        {
+            UWidget* W = Pair.Value.Get();
+            if (!W || Live.Contains(W))
+            {
+                continue;
+            }
+            // REN_ForceNoResetLoaders is omitted: Rename stopped calling ResetLoaders
+            // before UE 5.7 (the flag is already a no-op there) and 5.8 deprecates it.
+            W->Rename(nullptr, GetTransientPackage(),
+                REN_DoNotDirty | REN_DontCreateRedirectors);
+            Context.DiffLines.Add(FString::Printf(TEXT("remove: %s"), *Pair.Key.ToString()));
+            ++Removed;
+        }
+        return Removed;
+    }
+
+    /**
+     * Dry-run node accounting for patch mode. The rebuild counter below reports
+     * every node as a create because every node IS re-created; a patch pass
+     * only creates what is genuinely new, so it needs its own tally or the
+     * preview would lie in the opposite direction.
+     */
+    static void CountPatchDryRunNodesRecurse(
+        const FUISpecNode& Node,
+        const TSet<FName>& ExistingNames,
+        TSet<FName>& OutSpecIds,
+        FUIBuildContext& Context)
+    {
+        const bool bExists = !Node.Id.IsNone() && ExistingNames.Contains(Node.Id);
+        if (bExists)
+        {
+            ++Context.NodesModified;
+            ++Context.NodesReused;
+            Context.DiffLines.Add(FString::Printf(
+                TEXT("modify: %s (%s)"), *Node.Id.ToString(), *Node.Type.ToString()));
+            OutSpecIds.Add(Node.Id);
+        }
+        else
+        {
+            ++Context.NodesCreated;
+            Context.DiffLines.Add(FString::Printf(
+                TEXT("create: %s (%s)"), *Node.Id.ToString(), *Node.Type.ToString()));
+            if (!Node.Id.IsNone())
+            {
+                OutSpecIds.Add(Node.Id);
+            }
+        }
+
+        for (const TSharedPtr<FUISpecNode>& Child : Node.Children)
+        {
+            if (Child.IsValid())
+            {
+                CountPatchDryRunNodesRecurse(*Child, ExistingNames, OutSpecIds, Context);
             }
         }
     }
@@ -777,6 +921,12 @@ FUISpecBuilderResult FUISpecBuilder::Build(const FUISpecBuilderInputs& Inputs)
     FUISpecBuilderResult Result;
     Result.AssetPath  = Inputs.AssetPath;
     Result.RequestId  = Inputs.RequestId;
+    Result.Mode       = Inputs.Mode;
+
+    // Patch never destroys the asset, so "an asset already exists here" is the
+    // normal case for it rather than an overwrite the caller must opt into.
+    const bool bPatch = (Inputs.Mode == EUISpecBuildMode::Patch);
+    const bool bAllowExisting = Inputs.bOverwrite || bPatch;
 
     // ---------- 1. Document presence -----------------------------------
     if (!Inputs.Document)
@@ -837,6 +987,7 @@ FUISpecBuilderResult FUISpecBuilder::Build(const FUISpecBuilderInputs& Inputs)
     Context.bDryRun     = Inputs.bDryRun;
     Context.bTreatWarningsAsErrors = Inputs.bTreatWarningsAsErrors;
     Context.bRawMode    = Inputs.bRawMode;
+    Context.bPatchMode  = bPatch;
     if (RegistrySub)
     {
         Context.Allowlist = &RegistrySub->GetAllowlist();
@@ -863,6 +1014,7 @@ FUISpecBuilderResult FUISpecBuilder::Build(const FUISpecBuilderInputs& Inputs)
         FAssetRegistryModule& ARM =
             FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
         const FAssetData ExistingAsset = ARM.Get().GetAssetByObjectPath(FSoftObjectPath(FullObjectPath));
+        TSet<FName> ExistingWidgetNames;
         if (ExistingAsset.IsValid())
         {
             UWidgetBlueprint* Existing = Cast<UWidgetBlueprint>(ExistingAsset.GetAsset());
@@ -878,7 +1030,7 @@ FUISpecBuilderResult FUISpecBuilder::Build(const FUISpecBuilderInputs& Inputs)
                 Result.Errors.Add(MoveTemp(E));
                 return Result;
             }
-            if (!Inputs.bOverwrite)
+            if (!bAllowExisting)
             {
                 FUISpecError E;
                 E.Severity = EUISpecErrorSeverity::Error;
@@ -887,6 +1039,7 @@ FUISpecBuilderResult FUISpecBuilder::Build(const FUISpecBuilderInputs& Inputs)
                 E.Message = FString::Printf(
                     TEXT("Asset already exists at '%s' and overwrite=false."),
                     *Inputs.AssetPath);
+                E.SuggestedFix = TEXT("Pass overwrite=true to rebuild it, or mode=\"patch\" to update it in place.");
                 Result.Errors.Add(MoveTemp(E));
                 return Result;
             }
@@ -904,11 +1057,24 @@ FUISpecBuilderResult FUISpecBuilder::Build(const FUISpecBuilderInputs& Inputs)
                 Result.Errors.Add(MoveTemp(E));
                 return Result;
             }
-            if (Inputs.bOverwrite && Existing->WidgetTree)
+            if (Existing->WidgetTree)
             {
                 TArray<UWidget*> ExistingWidgets;
                 Existing->WidgetTree->GetAllWidgets(ExistingWidgets);
-                Context.NodesRemoved = ExistingWidgets.Num();
+                for (const UWidget* W : ExistingWidgets)
+                {
+                    if (W && !W->GetFName().IsNone())
+                    {
+                        ExistingWidgetNames.Add(W->GetFName());
+                    }
+                }
+                if (!bPatch)
+                {
+                    // A rebuild removes every one of them. Audit first, so the
+                    // dry-run preview names what would be reset (issue #139).
+                    Context.NodesRemoved = ExistingWidgets.Num();
+                    RunTeardownAudit(Existing, Result);
+                }
             }
         }
 
@@ -916,7 +1082,24 @@ FUISpecBuilderResult FUISpecBuilder::Build(const FUISpecBuilderInputs& Inputs)
         if (Doc.Root.IsValid())
         {
             PreCreateStylesRecurse(*Doc.Root, Context, SeenNamedRefs);
-            CountDryRunNodesRecurse(*Doc.Root, Context);
+            if (bPatch)
+            {
+                TSet<FName> SpecIds;
+                CountPatchDryRunNodesRecurse(*Doc.Root, ExistingWidgetNames, SpecIds, Context);
+                for (const FName& ExistingName : ExistingWidgetNames)
+                {
+                    if (!SpecIds.Contains(ExistingName))
+                    {
+                        ++Context.NodesRemoved;
+                        Context.DiffLines.Add(FString::Printf(
+                            TEXT("remove: %s"), *ExistingName.ToString()));
+                    }
+                }
+            }
+            else
+            {
+                CountDryRunNodesRecurse(*Doc.Root, Context);
+            }
         }
         for (const TPair<FName, FUISpecStyle>& Pair : Doc.Styles)
         {
@@ -938,6 +1121,7 @@ FUISpecBuilderResult FUISpecBuilder::Build(const FUISpecBuilderInputs& Inputs)
             Result.NodesCreated = Context.NodesCreated;
             Result.NodesModified = Context.NodesModified;
             Result.NodesRemoved = Context.NodesRemoved;
+            Result.NodesReused = Context.NodesReused;
             Result.DiffLines = MoveTemp(Context.DiffLines);
             return Result;
         }
@@ -948,6 +1132,7 @@ FUISpecBuilderResult FUISpecBuilder::Build(const FUISpecBuilderInputs& Inputs)
         Result.NodesCreated = Context.NodesCreated;
         Result.NodesModified = Context.NodesModified;
         Result.NodesRemoved = Context.NodesRemoved;
+        Result.NodesReused = Context.NodesReused;
         Result.DiffLines = MoveTemp(Context.DiffLines);
         return Result;
     }
@@ -957,7 +1142,7 @@ FUISpecBuilderResult FUISpecBuilder::Build(const FUISpecBuilderInputs& Inputs)
     UPackage* Package = nullptr;
     FString CreateErr;
     UWidgetBlueprint* WBP = GetOrCreateWBP(
-        Inputs.AssetPath, ParentClass, Inputs.bOverwrite,
+        Inputs.AssetPath, ParentClass, bAllowExisting,
         bPreExisting, Package, CreateErr);
     if (!WBP)
     {
@@ -993,15 +1178,61 @@ FUISpecBuilderResult FUISpecBuilder::Build(const FUISpecBuilderInputs& Inputs)
         }
     }
 
-    // Clear the factory/default source widgets before rebuild as well as the
-    // overwrite case. The UMG compiler validates every source widget under the
-    // WidgetTree outer, not only WidgetTree::RootWidget/GetAllWidgets().
-    if (WBP->WidgetTree)
+    // Pre-existing WBP, patch mode: no teardown at all. Snapshot the tree so
+    // the sub-builders can match spec nodes to the widgets already there; the
+    // post-walk sweep handles whatever the spec stopped naming. Widget and slot
+    // UObjects survive, and with them every property the spec cannot model.
+    if (bPreExisting && bPatch && !Inputs.bDryRun)
     {
-        const int32 RemovedSourceWidgets = ResetWidgetTreeForRebuild(WBP);
-        if (bPreExisting && Inputs.bOverwrite)
+        CapturePatchReusables(WBP, Context);
+    }
+
+    // Existing WBP + rebuild path: clear the tree + animations so we
+    // start from a clean slate.
+    if (bPreExisting && !bPatch && Inputs.bOverwrite && !Inputs.bDryRun)
+    {
+        // Audit BEFORE anything is destroyed -- this is the only moment the
+        // pre-teardown state still exists to be read (issue #139).
+        RunTeardownAudit(WBP, Result);
+
+        if (WBP->WidgetTree)
         {
-            Context.NodesRemoved = RemovedSourceWidgets;
+            // Count what we're nuking so the diff/response reflects it.
+            TArray<UWidget*> Existing;
+            WBP->WidgetTree->GetAllWidgets(Existing);
+            Context.NodesRemoved = Existing.Num();
+
+            // Reset the tree by reparenting children into the transient
+            // package — same recipe MonolithUITestFixtureUtils uses, which
+            // is the recipe that survives WBP recompile cleanly.
+            if (UPanelWidget* RootPanel = Cast<UPanelWidget>(WBP->WidgetTree->RootWidget))
+            {
+                RootPanel->ClearChildren();
+            }
+            TArray<UWidget*> Orphans;
+            ForEachObjectWithOuter(WBP->WidgetTree, [&Orphans](UObject* Obj)
+            {
+                if (UWidget* W = Cast<UWidget>(Obj))
+                {
+                    Orphans.Add(W);
+                }
+            },
+            // Direct children only. UE 5.8 replaced the bIncludeNestedObjects
+            // boolean with EGetObjectsFlags, which UE 5.7 does not ship.
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+            EGetObjectsFlags::None);
+#else
+            /*bIncludeNestedObjects=*/false);
+#endif
+            for (UWidget* W : Orphans)
+            {
+                // REN_ForceNoResetLoaders is omitted: Rename stopped calling ResetLoaders
+                // before UE 5.7 (the flag is already a no-op there) and 5.8 deprecates it.
+                W->Rename(nullptr, GetTransientPackage(),
+                    REN_DoNotDirty | REN_DontCreateRedirectors);
+            }
+            WBP->WidgetTree->RootWidget = nullptr;
+            WBP->WidgetVariableNameToGuidMap.Empty();
         }
     }
 
@@ -1048,6 +1279,7 @@ FUISpecBuilderResult FUISpecBuilder::Build(const FUISpecBuilderInputs& Inputs)
             Result.NodesCreated   = Context.NodesCreated;
             Result.NodesModified  = Context.NodesModified;
             Result.NodesRemoved   = Context.NodesRemoved;
+            Result.NodesReused    = Context.NodesReused;
             Result.DiffLines      = MoveTemp(Context.DiffLines);
             Transaction.Cancel();
             if (!bPreExisting)
@@ -1056,6 +1288,16 @@ FUISpecBuilderResult FUISpecBuilder::Build(const FUISpecBuilderInputs& Inputs)
             }
             return Result;
         }
+    }
+
+    // ---------- 9b. Patch reconciliation (issue #139) -------------------
+    // Trim children the spec stopped naming and evict orphans. Runs only for
+    // patch mode; the rebuild path already emptied the tree in step 7.
+    if (bPatch && !Inputs.bDryRun && Context.Errors.Num() == 0)
+    {
+        Context.NodesRemoved += SweepPatchOrphans(WBP, Context);
+        Context.NodesModified = Context.NodesReused;
+        Context.NodesCreated  = FMath::Max(0, Context.NodesCreated - Context.NodesReused);
     }
 
     // ---------- 10. Bail if errors accumulated mid-walk -----------------
@@ -1067,6 +1309,7 @@ FUISpecBuilderResult FUISpecBuilder::Build(const FUISpecBuilderInputs& Inputs)
         Result.NodesCreated   = Context.NodesCreated;
         Result.NodesModified  = Context.NodesModified;
         Result.NodesRemoved   = Context.NodesRemoved;
+        Result.NodesReused    = Context.NodesReused;
         Result.DiffLines      = MoveTemp(Context.DiffLines);
         Transaction.Cancel();
         if (!bPreExisting && !Inputs.bDryRun)
@@ -1131,6 +1374,7 @@ FUISpecBuilderResult FUISpecBuilder::Build(const FUISpecBuilderInputs& Inputs)
                 Result.NodesCreated   = Context.NodesCreated;
                 Result.NodesModified  = Context.NodesModified;
                 Result.NodesRemoved   = Context.NodesRemoved;
+                Result.NodesReused    = Context.NodesReused;
                 Result.DiffLines      = MoveTemp(Context.DiffLines);
                 Transaction.Cancel();
                 if (!bPreExisting)
@@ -1157,6 +1401,7 @@ FUISpecBuilderResult FUISpecBuilder::Build(const FUISpecBuilderInputs& Inputs)
             Result.NodesCreated   = Context.NodesCreated;
             Result.NodesModified  = Context.NodesModified;
             Result.NodesRemoved   = Context.NodesRemoved;
+            Result.NodesReused    = Context.NodesReused;
             Result.DiffLines      = MoveTemp(Context.DiffLines);
             Transaction.Cancel();
             if (!bPreExisting)
@@ -1173,6 +1418,7 @@ FUISpecBuilderResult FUISpecBuilder::Build(const FUISpecBuilderInputs& Inputs)
     Result.NodesCreated   = Context.NodesCreated;
     Result.NodesModified  = Context.NodesModified;
     Result.NodesRemoved   = Context.NodesRemoved;
+    Result.NodesReused    = Context.NodesReused;
     Result.DiffLines      = MoveTemp(Context.DiffLines);
     return Result;
 }

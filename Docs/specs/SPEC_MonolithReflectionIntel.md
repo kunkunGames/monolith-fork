@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.22.0 (Beta) — actions shipped across Phases 1–4a (decision + risk + a source-namespace module-dep audit + cppreflect + network + pipeline + audit actions on existing namespaces: material/niagara/blueprint/project), plus the `cppreflect_query("list_class_specifiers")` and `reflect_query("rebuild_reflection_index")` (new `reflect` namespace, WRITE/maintenance) follow-ups. Counts are approximate — query `monolith_discover()` for the live figure. The network-completeness workstream also makes `list_replicated_classes` capture bare `UPROPERTY(Replicated)` (now WORKS, verified E2E), switches `list_rpc_functions` to specifier-based detection, and widens the indexer scan scope from the game module alone to an `IPluginManager`-driven ladder — game module + project plugins by default, marketplace plugins gated, Epic engine built-ins excluded (§5.2). With project plugins in scope, `list_rpc_functions` now returns the project's actual RPCs (the project's project-plugin Server RPCs, verified E2E) — the prior "empty due to game-module-only scan scope" limitation is resolved.
+**Version:** 0.23.0 (Beta) — actions shipped across Phases 1–4a (decision + risk + a source-namespace module-dep audit + cppreflect + network + pipeline + audit actions on existing namespaces: material/niagara/blueprint/project), plus the `cppreflect_query("list_class_specifiers")` and `reflect_query("rebuild_reflection_index")` (new `reflect` namespace, WRITE/maintenance) follow-ups. Counts are approximate — query `monolith_discover()` for the live figure. The network-completeness workstream also makes `list_replicated_classes` capture bare `UPROPERTY(Replicated)` (now WORKS, verified E2E), switches `list_rpc_functions` to specifier-based detection, and widens the indexer scan scope from the game module alone to an `IPluginManager`-driven ladder — game module + project plugins by default, marketplace plugins gated, Epic engine built-ins excluded (§5.2). With project plugins in scope, `list_rpc_functions` now returns the project's actual RPCs (the project's project-plugin Server RPCs, verified E2E) — the prior "empty due to game-module-only scan scope" limitation is resolved.
 
 ---
 
@@ -84,7 +84,7 @@ The indexer emits at most one row per markdown header (or one per file in the fr
 |------|---------|------------|----------------|
 | **YAML frontmatter** | Leading `---` block with `decision: true` OR any `status:` key | `0.90` | from `status:` value (lowercased), else `accepted` |
 | **ADR-style header** | Line matches `(?i)^#+\s*(?:ADR[-\s]?\d+|Architectural\s+Decision)\b` | `0.85` | `open` |
-| **Header + rationale marker** | Markdown header (H2–H6 only — H1 skipped unless ADR-style) followed within 8 lines by a paragraph containing `because` / `rationale` / `evidence` / `decision:` | `0.65` | `open` |
+| **Header + rationale marker** | Markdown header (H2–H6 only — H1 skipped unless ADR-style) followed within 8 lines **of the same section** (the scan stops at the next header) by a rationale marker: bare `because`, or `rationale` / `evidence` / `decision` in colon-label form (`Rationale:`). A marker hugged by quotes or backticks is treated as mentioned, not used. | `0.65` | `open` |
 
 Files matching neither tier contribute zero rows. Headers without rationale markers and without ADR shape are skipped — the indexer is conservative by design.
 

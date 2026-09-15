@@ -9,6 +9,7 @@
 
 #include "MonolithBlueprintStringTableActions.h"
 #include "MonolithStringTableCompat.h"
+#include "Runtime/Launch/Resources/Version.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithParamSchema.h"
 #include "Internationalization/StringTable.h"

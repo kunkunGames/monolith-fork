@@ -10,6 +10,7 @@
 #include "Spec/Builders/LeafBuilder.h"
 
 #include "MonolithAssetUtils.h"
+#include "Spec/Builders/WidgetReuse.h"
 #include "Spec/UIBuildContext.h"
 #include "Spec/UISpec.h"
 #include "MonolithUICommon.h"
@@ -127,6 +128,49 @@ namespace MonolithUI::LeafBuilderInternal
         }
     }
 
+    /**
+     * Patch-mode (#139) guard on FText writes.
+     *
+     * `FText::FromString` produces a culture-invariant text: no namespace, no
+     * key. Re-writing an FText that already renders the same string therefore
+     * destroys its localization mapping for nothing. In patch mode we skip
+     * that no-op write so the existing key survives; rebuild mode is
+     * unaffected (the widget is brand new — there is no key to preserve).
+     */
+    static bool NeedsTextWrite(
+        const FUIBuildContext& Context,
+        const FText& Existing,
+        const FString& Desired)
+    {
+        if (Desired.IsEmpty())
+        {
+            return false;
+        }
+        if (!Context.bPatchMode)
+        {
+            return true;
+        }
+        return !Existing.ToString().Equals(Desired, ESearchCase::CaseSensitive);
+    }
+
+    /**
+     * Patch-mode guard for writes that carry no "was this authored?" signal.
+     *
+     * FUISpecStyle / FUISpecContent have no per-field presence bit, so the
+     * builder's standing convention is that a field left at its struct default
+     * counts as unset -- that is already how HAlign (IsNone), Text (IsEmpty),
+     * Padding (HasAnyPadding) and Background (HasAuthoredColor) behave. Two
+     * writes ignored the convention and always fired: RenderOpacity and
+     * TextBlock ColorAndOpacity. In rebuild mode that is harmless (the widget
+     * is brand new and sitting on its class defaults anyway); in patch mode it
+     * would clobber an authored value the spec never mentioned, which is the
+     * class of bug patch mode exists to avoid. So apply the convention there.
+     */
+    static bool ShouldWriteUnflaggedField(const FUIBuildContext& Context, bool bIsSpecDefault)
+    {
+        return !Context.bPatchMode || !bIsSpecDefault;
+    }
+
     static FSlateChildSize MakeBoxSlotSize(const FUISpecSlot& S)
     {
         const FString Rule = S.SizeRule.ToString();
@@ -183,6 +227,18 @@ namespace MonolithUI::LeafBuilderInternal
             return nullptr;
         }
 
+        // Patch mode (#139): an existing widget with this id and class is
+        // reused, so everything the spec cannot model stays on the object.
+        if (UWidget* Reused = MonolithUI::WidgetReuse::TakeReusable(Context, Node, WidgetClass))
+        {
+            if (!MonolithUI::WidgetReuse::PlaceInPatchMode(Context, Node, Reused, ParentPanel))
+            {
+                return nullptr;
+            }
+            MonolithUI::RegisterCreatedWidget(Context.TargetWBP, Reused);
+            return Reused;
+        }
+
         UWidget* Constructed = Context.TargetWBP->WidgetTree->ConstructWidget<UWidget>(
             WidgetClass, Node.Id);
         if (!Constructed)
@@ -198,7 +254,16 @@ namespace MonolithUI::LeafBuilderInternal
             return nullptr;
         }
 
-        if (ParentPanel)
+        if (ParentPanel && Context.bPatchMode)
+        {
+            // New node inside a patch pass — place it at the spec-order cursor
+            // so it lands where the spec says, not appended at the end.
+            if (!MonolithUI::WidgetReuse::PlaceInPatchMode(Context, Node, Constructed, ParentPanel))
+            {
+                return nullptr;
+            }
+        }
+        else if (ParentPanel)
         {
             UPanelSlot* Slot = ParentPanel->AddChild(Constructed);
             if (!Slot)
@@ -366,7 +431,7 @@ namespace MonolithUI::LeafBuilderInternal
 
         if (UTextBlock* T = Cast<UTextBlock>(Widget))
         {
-            if (!C.Text.IsEmpty())
+            if (NeedsTextWrite(Context, T->GetText(), C.Text))
             {
                 T->SetText(FText::FromString(C.Text));
             }
@@ -401,7 +466,10 @@ namespace MonolithUI::LeafBuilderInternal
             Font.OutlineSettings.OutlineSize = C.OutlineSize;
             Font.OutlineSettings.OutlineColor = C.OutlineColor;
             T->SetFont(Font);
-            T->SetColorAndOpacity(FSlateColor(C.FontColor));
+            if (ShouldWriteUnflaggedField(Context, C.FontColor.Equals(FLinearColor::White)))
+            {
+                T->SetColorAndOpacity(FSlateColor(C.FontColor));
+            }
             ETextJustify::Type Justification = ETextJustify::Left;
             if (!TryParseTextJustification(C.Justification, Justification))
             {
@@ -431,7 +499,7 @@ namespace MonolithUI::LeafBuilderInternal
         }
         if (URichTextBlock* RT = Cast<URichTextBlock>(Widget))
         {
-            if (!C.Text.IsEmpty())
+            if (NeedsTextWrite(Context, RT->GetText(), C.Text))
             {
                 RT->SetText(FText::FromString(C.Text));
             }
@@ -502,11 +570,11 @@ namespace MonolithUI::LeafBuilderInternal
         }
         if (UEditableText* ET = Cast<UEditableText>(Widget))
         {
-            if (!C.Placeholder.IsEmpty())
+            if (NeedsTextWrite(Context, ET->GetHintText(), C.Placeholder))
             {
                 ET->SetHintText(FText::FromString(C.Placeholder));
             }
-            if (!C.Text.IsEmpty())
+            if (NeedsTextWrite(Context, ET->GetText(), C.Text))
             {
                 ET->SetText(FText::FromString(C.Text));
             }
@@ -514,11 +582,11 @@ namespace MonolithUI::LeafBuilderInternal
         }
         if (UEditableTextBox* ETB = Cast<UEditableTextBox>(Widget))
         {
-            if (!C.Placeholder.IsEmpty())
+            if (NeedsTextWrite(Context, ETB->GetHintText(), C.Placeholder))
             {
                 ETB->SetHintText(FText::FromString(C.Placeholder));
             }
-            if (!C.Text.IsEmpty())
+            if (NeedsTextWrite(Context, ETB->GetText(), C.Text))
             {
                 ETB->SetText(FText::FromString(C.Text));
             }
@@ -535,11 +603,14 @@ namespace MonolithUI::LeafBuilderInternal
      * shape as PanelBuilder::ApplyCommonStyle, kept inline so the leaf path
      * doesn't have to depend on the panel header.
      */
-    static void ApplyCommonStyle(UWidget* Widget, const FUISpecNode& Node)
+    static void ApplyCommonStyle(FUIBuildContext& Context, const FUISpecNode& Node, UWidget* Widget)
     {
         if (!Widget) return;
         const FUISpecStyle& S = Node.Style;
-        Widget->SetRenderOpacity(FMath::Clamp(S.Opacity, 0.f, 1.f));
+        if (ShouldWriteUnflaggedField(Context, FMath::IsNearlyEqual(S.Opacity, 1.f)))
+        {
+            Widget->SetRenderOpacity(FMath::Clamp(S.Opacity, 0.f, 1.f));
+        }
         if (!S.Visibility.IsNone())
         {
             const FString V = S.Visibility.ToString();
@@ -615,7 +686,7 @@ UWidget* MonolithUI::LeafBuilder::BuildLeafOrContent(
 
     ApplySlotFields(Node, Constructed);
     ApplyContent(Context, Node, Constructed);
-    ApplyCommonStyle(Constructed, Node);
+    ApplyCommonStyle(Context, Node, Constructed);
 
     return Constructed;
 }

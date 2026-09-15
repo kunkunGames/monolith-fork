@@ -10,16 +10,25 @@
 
 void FMonolithConfigModule::StartupModule()
 {
-	if (!GetDefault<UMonolithSettings>()->bEnableConfig) return;
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 
-	FMonolithConfigActions::RegisterActions(FMonolithToolRegistry::Get());
-	FMonolithLocalizationActions::RegisterActions(FMonolithToolRegistry::Get());
+	// Localization is read-only and stays available when config authoring is off.
+	FMonolithLocalizationActions::RegisterActions(Registry);
 	FMonolithActionExecutionGuard::Get().RegisterHandlerOwnedSourceControlActions(
 		TEXT("localization"),
 		{TEXT("set_target_text_search_directories")});
+
+	if (!GetDefault<UMonolithSettings>()->bEnableConfig)
+	{
+		UE_LOG(LogMonolith, Log, TEXT("Monolith - Config actions disabled (%d localization actions still registered)"),
+			Registry.GetNamespaceActionCount(TEXT("localization")));
+		return;
+	}
+
+	FMonolithConfigActions::RegisterActions(Registry);
 	UE_LOG(LogMonolith, Log, TEXT("Monolith - Config module loaded (%d config actions, %d localization actions)"),
-		FMonolithToolRegistry::Get().GetNamespaceActionCount(TEXT("config")),
-		FMonolithToolRegistry::Get().GetNamespaceActionCount(TEXT("localization")));
+		Registry.GetNamespaceActionCount(TEXT("config")),
+		Registry.GetNamespaceActionCount(TEXT("localization")));
 }
 
 void FMonolithConfigModule::ShutdownModule()
